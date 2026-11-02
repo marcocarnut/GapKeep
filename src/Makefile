@@ -17,7 +17,8 @@ APPSDIRS  += ../tests/apps
 endif
 
 OBJS	= main.o kernel.o kbdindev.o \
-	  runtime/apphost.o runtime/js_ui.o runtime/js_sys.o \
+	  runtime/apphost.o runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
+	  crypto/sha256.o crypto/hwrng.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o \
 	  generated/apps_bundle.o
 
@@ -42,6 +43,6 @@ generated/apps_bundle.c: FORCE
 
 FORCE:
 
-EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d
+EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d
 
 -include $(DEPS)

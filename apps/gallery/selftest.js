@@ -3,6 +3,7 @@
 
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
+import * as crypto from "zg:crypto";
 import { double } from "./lib/util.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -228,6 +229,34 @@ export async function runSelfTest(parent) {
       err = e;
     }
     if (!err) throw new Error("bare import worked");
+  });
+
+  const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+
+  await test("sha256 vectors", () => {
+    eq(hex(crypto.sha256("")), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "empty");
+    eq(hex(crypto.sha256("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "abc");
+    eq(hex(crypto.sha256(new Uint8Array([0x61, 0x62, 0x63]))), hex(crypto.sha256("abc")), "bytes");
+    const buf = new Uint8Array([0, 0x61, 0x62, 0x63, 0]);
+    eq(hex(crypto.sha256(buf.subarray(1, 4))), hex(crypto.sha256("abc")), "subarray");
+    eq(hex(crypto.sha256(buf.buffer.slice(1, 4))), hex(crypto.sha256("abc")), "ArrayBuffer");
+    eq(hex(crypto.sha256("\u00e9")), hex(crypto.sha256(new Uint8Array([0xc3, 0xa9]))), "UTF-8");
+    throws(() => crypto.sha256(42), TypeError, "number");
+  });
+
+  await test("random bytes", () => {
+    eq(crypto.rngStatus().healthy, true, "healthy");
+    const a = crypto.randomBytes(32), b = crypto.randomBytes(32);
+    eq(a.length, 32);
+    eq(a instanceof Uint8Array, true);
+    if (hex(a) === hex(b)) throw new Error("two draws are equal");
+    const big = crypto.randomBytes(4096);
+    const seen = new Set(big);
+    if (seen.size < 200) throw new Error("only " + seen.size + " distinct byte values in 4096");
+    const u = new Uint32Array(4);
+    eq(crypto.getRandomValues(u), u, "in place");
+    if (u.every((x) => x === 0)) throw new Error("not filled");
+    throws(() => crypto.randomBytes(70000), RangeError, "too many");
   });
 
   await test("modern JS", () => {

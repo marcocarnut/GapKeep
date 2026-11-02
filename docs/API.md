@@ -7,6 +7,7 @@ modules below, imported by name:
 | --- | --- | --- |
 | [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
 | [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
+| [`zg:crypto`](#zgcrypto) | every app | SHA-256, hardware random bytes |
 | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -323,6 +324,42 @@ import * as sys from "zg:sys";
 
 ---
 
+## zg:crypto
+
+```js
+import * as crypto from "zg:crypto";
+```
+
+| Name | Description |
+| --- | --- |
+| `sha256(data)` | SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous. |
+| `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
+| `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
+| `rngStatus()` | `{ healthy, failure, rawBytes }`. |
+
+**Where the randomness comes from.** The BCM2835's hardware random number
+generator, treated as a noise source of unknown quality. Every raw byte
+passes NIST SP 800-90B's continuous health tests (Repetition Count and
+Adaptive Proportion, tuned for an assumed 1 bit of entropy per byte), 4096
+bytes are tested at boot, and each 32 output bytes are SHA-256 of 256 raw
+bytes. If a test ever fails, the generator shuts off until reboot:
+`randomBytes` and `getRandomValues` then throw an `InternalError`, and never
+return weak bytes.
+
+The hardware RNG is undocumented. Apps handling secrets should treat it as a
+supplement to entropy the person provides (dice, coins), not a replacement.
+
+To run code written for WebCrypto unchanged, give it a small adapter:
+
+```js
+globalThis.crypto = {
+  getRandomValues: zgcrypto.getRandomValues,
+  subtle: { digest: async (alg, data) => zgcrypto.sha256(data).buffer },
+};
+```
+
+---
+
 ## zg:apps
 
 Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
@@ -344,8 +381,8 @@ throws a `ReferenceError`. Used by the launcher.
 | `clearTimeout(id)`, `clearInterval(id)` | Unknown ids are ignored. |
 
 Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage`,
-`require`, `process`, the DOM, `crypto.getRandomValues` (a native,
-health-checked random source is planned).
+`require`, `process`, the DOM, and the global `crypto` object (use
+[`zg:crypto`](#zgcrypto)).
 
 ---
 

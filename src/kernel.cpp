@@ -70,6 +70,13 @@ boolean CKernel::Initialize (void)
 
 	if (bOK)
 	{
+		// a failing RNG is reported and disables zg:crypto's random
+		// functions, but does not stop the system
+		m_Random.Initialize ();
+	}
+
+	if (bOK)
+	{
 		bOK = m_GUI.Initialize ();
 	}
 

@@ -84,6 +84,13 @@ handler" safe.
 All properties are described by one table; constructors, `set()` and the
 per-type property accessors all go through it, with strict validation.
 
+### Cryptography (`src/crypto/`)
+
+SHA-256 written from FIPS 180-4, self-tested at boot and testable on the
+development machine (`tests/native/test_sha256.c`). The hardware RNG wrapper
+(`hwrng.*`) applies NIST SP 800-90B health tests to every raw byte and
+conditions output through SHA-256; see `zg:crypto` in [API.md](API.md).
+
 ### C runtime
 
 QuickJS is a hosted C program. zerogap provides only what it needs:

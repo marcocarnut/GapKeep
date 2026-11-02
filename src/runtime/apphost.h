@@ -120,10 +120,11 @@ private:
 
 // --- shared with the JS modules (js_ui.cpp, js_sys.cpp) ---
 
-// Creates the "zg:ui", "zg:sys" and "zg:apps" native modules.
+// Creates the "zg:ui", "zg:sys", "zg:apps" and "zg:crypto" native modules.
 JSModuleDef *ZgInitUIModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitSysModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitAppsModule (JSContext *pContext, const char *pName);
+JSModuleDef *ZgInitCryptoModule (JSContext *pContext, const char *pName);
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void ZgInitGlobals (JSContext *pContext);

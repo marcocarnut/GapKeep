@@ -20,6 +20,7 @@
 #include <circle/types.h>
 #include "kbdindev.h"
 #include "runtime/apphost.h"
+#include "crypto/hwrng.h"
 
 enum TShutdownMode
 {
@@ -51,6 +52,7 @@ private:
 	CLogger			m_Logger;
 	CUSBHCIDevice		m_USBHCI;
 
+	CZgRandom		m_Random;
 	CLVGL			m_GUI;
 	CKeyboardIndev		m_Keyboard;
 	CAppHost		m_AppHost;

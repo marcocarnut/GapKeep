@@ -83,7 +83,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 
 - [x] Step 1: LVGL on the framebuffer, USB keyboard and mouse
 - [x] Step 2: QuickJS app runtime, `zg:ui` widget API, launcher, docs, tests
-- [ ] Step 3: native SHA-256 and a health-checked hardware RNG, with test vectors
+- [x] Step 3: native SHA-256 and a health-checked hardware RNG, with test vectors (`zg:crypto`)
 - [ ] Step 4: dice39 logic extracted and checked against the web version
 - [ ] Step 5: dice39 user interface
 - [ ] Step 6: hardening (remove unused drivers), reproducible builds, real-hardware tests
