@@ -106,6 +106,14 @@ QuickJS is a hosted C program. zerogap provides only what it needs:
 QuickJS's own OS layer (`quickjs-libc.c`: files, processes, sockets) is not
 built.
 
+QuickJS is compiled with `-fno-strict-aliasing`. On `arm-none-eabi`,
+`uint32_t` is `unsigned long`, and QuickJS passes such variables through
+`int *` in places; under strict aliasing GCC miscompiled the string
+iterator (`for (const ch of "abc")` never ended). QuickJS's own test suite
+(`test_language`, `test_builtin`, `test_bigint`, `test_closure`,
+`test_loop`) runs on the target in test builds (`tests/qjstests.txt`) to
+catch this class of problem.
+
 ## Security model
 
 Goal: a machine on which secrets are created and handled without any channel
@@ -145,6 +153,6 @@ published image hash can be checked; see the README.
 | `lib/lvgl/` | Builds LVGL with `zg_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `src/` | Kernel and runtime. `src/generated/` is build output. |
-| `tests/` | QEMU scenarios; `tests/apps/` holds test-only apps (`make TEST=1`). |
+| `tests/` | QEMU scenarios; `tests/apps/` holds test-only apps (`make TEST=1`); `tests/native`, `tests/dice39` host tests. |
 | `tools/` | App bundler, QEMU harness, test runner. |
 | `docs/` | This file, the API reference and the app guide. |

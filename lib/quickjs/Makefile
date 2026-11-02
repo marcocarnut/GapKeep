@@ -32,4 +32,11 @@ include $(CIRCLEHOME)/Rules.mk
 # from src/runtime/libc_shim.c.
 CFLAGS := $(filter-out -ffreestanding,$(CFLAGS))
 
+# On arm-none-eabi, uint32_t/int32_t are (unsigned) long, not int. QuickJS
+# passes such variables through int pointers (e.g. string_getc(p, (int *)&idx)
+# in the string iterator), which under strict aliasing GCC may - and at -O2
+# does - miscompile: "for (const ch of str)" never ended. Type punning between
+# int and long is fine with strict aliasing off.
+CFLAGS += -fno-strict-aliasing
+
 -include $(DEPS)

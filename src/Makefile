@@ -39,6 +39,9 @@ include $(CIRCLEHOME)/Rules.mk
 # Apps are bundled into the image. The script only rewrites its output when
 # something changed, so this runs every time but rebuilds only when needed.
 generated/apps_bundle.c: FORCE
+ifeq ($(strip $(TEST)),1)
+	@python3 ../tools/make_qjstests.py $(QJSDIR) ../tests/apps/qjstests/suites.js
+endif
 	@python3 ../tools/bundle_apps.py $@ $(APPSDIRS)
 
 FORCE:

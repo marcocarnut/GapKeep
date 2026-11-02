@@ -82,6 +82,8 @@ private:
 	volatile unsigned m_nTail;
 
 	u32 m_nPressedKey;		// key currently reported as pressed, 0 if none
+	lv_group_t *m_pPressedGroup;	// focus at the time of the press
+	lv_obj_t *m_pPressedObj;	// (compared only, never dereferenced)
 
 	TKeyHook *m_pKeyHook;
 	void *m_pKeyHookParam;

@@ -280,6 +280,8 @@ export async function runSelfTest(parent) {
     eq([1, [2, [3]]].flat(Infinity).join(), "1,2,3");
     eq("x".padStart(3, "-"), "--x");
     eq(new Uint8Array([1, 2, 3]).reduce((s, v) => s + v), 6);
+    // regression: miscompiled under strict aliasing on arm-none-eabi
+    eq([..."héllo"].join("|"), "h|é|l|l|o", "string iteration");
   });
 
   box.delete();

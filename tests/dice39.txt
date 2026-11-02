@@ -1,0 +1,87 @@
+# dice39: enter 12 words (dice codes and words), generate a 24-word phrase,
+# check the results, the QR exports and a codex32 split.
+expect Keyboard attached 60
+expect launcher ready 60
+# tiles sorted by id: dice39 first
+key ret
+expect dice39 selftest: \d+ passed, 0 failed 60
+wait 1
+shot 01-start
+key ret
+wait 1
+# word 1: dice code with table (a1111 would be a REROLL cell); word 2: table B
+type a1112
+key ret
+type b1112
+key ret
+# word 3: a unique prefix, completed on Enter
+type aban
+key ret
+type zoo
+key ret
+type a3526
+key ret
+type t6543
+key ret
+type legal
+key ret
+type winner
+key ret
+type thank
+key ret
+type year
+key ret
+type wave
+key ret
+type 3526
+wait 1
+shot 02-entry
+# the four-dice code offers both tables: pick with the mouse later; type a word instead
+key backspace backspace backspace backspace
+type sausage
+key ret
+wait 1
+shot 03-entry-done
+# focus is on word 13 (empty): Enter goes to Generate, Enter again generates
+key ret
+key ret
+expect dice39: generated a 24-word phrase, 132 bits from dice, 124 from the device 30
+expect dice39: verbatim check ok
+wait 1
+shot 04-results
+# "QR codes" button is focused
+key ret
+wait 1
+# confirm the warning (Tab to "Show QR codes")
+key tab
+key ret
+expect dice39: QR SeedQR 29x29
+wait 1
+shot 05-seedqr
+# format dropdown is focused: Down opens it, Down selects the next, Enter picks
+key down
+key down
+key ret
+expect dice39: QR Compact SeedQR 25x25
+wait 1
+shot 06-compact
+key down
+key down
+key ret
+expect dice39: QR Words
+wait 1
+shot 07-words
+key tab
+key ret
+wait 1
+# back on results; Tab to "Split into shares"
+key tab
+key ret
+wait 1
+# scheme dropdown focused; Tab, Tab to "Split"
+key tab
+key tab
+key ret
+expect dice39: split 2 of 3, self-check 3 subsets
+wait 1
+shot 08-split

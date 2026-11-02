@@ -1,0 +1,1 @@
+{ "id": "qjstests", "name": "QuickJS Tests", "version": "0.1.0", "description": "Test builds only: QuickJS's own test suite on the target.", "icon": "ok" }

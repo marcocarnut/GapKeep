@@ -1,0 +1,7 @@
+{
+  "id": "dice39",
+  "name": "dice39",
+  "version": "0.1.0",
+  "description": "Entropy you see: dice and a coin to a BIP-39 seed phrase.",
+  "icon": "shuffle"
+}

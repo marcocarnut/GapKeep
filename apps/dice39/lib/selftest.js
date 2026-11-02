@@ -60,7 +60,7 @@ export async function runDice39SelfTest() {
       await fn();
       passed++;
     } catch (e) {
-      failed.push(name + ": " + (e && e.message ? e.message : e));
+      failed.push(name + ": " + (e && e.message ? e.message : e) + (e && e.stack ? "\n" + e.stack : ""));
     }
   }
   function eq(a, b, what) {

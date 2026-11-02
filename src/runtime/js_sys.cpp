@@ -251,7 +251,7 @@ static JSValue js_sys_uptime (JSContext *ctx, JSValueConst this_val, int argc, J
 	unsigned nSec, nUsec;
 	CTimer::Get ()->GetUptime (&nSec, &nUsec);
 
-	return JS_NewFloat64 (ctx, nSec * 1000.0 + nUsec / 1000);
+	return JS_NewFloat64 (ctx, nSec * 1000.0 + nUsec / 1000.0);	// microsecond resolution
 }
 
 static JSValue js_sys_memory (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)

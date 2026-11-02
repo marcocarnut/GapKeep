@@ -1,7 +1,8 @@
 #!/bin/sh
 #
-# Runs every QEMU scenario in tests/. Normal scenarios run against the
-# production app set; tests/crash.txt needs the test-only apps (make TEST=1).
+# Runs every QEMU scenario in tests/, plus the native and Node tests.
+# Normal scenarios run against the production app set; those marked
+# "Needs a test build" against the test-only apps too (make TEST=1).
 # Leaves a production kernel.img behind.
 #
 # Usage: tools/run_tests.sh [output-dir]
@@ -22,13 +23,30 @@ run() {
 	fi
 }
 
+# scenarios whose first line says "Needs a test build" run against make TEST=1
+needs_test_build() { head -1 "$1" | grep -q "Needs a test build"; }
+
+check() {	# name, command...
+	name=$1; shift
+	if "$@" > "$OUT/$name.log" 2>&1; then echo "PASS  $name"; else echo "FAIL  $name   (see $OUT/$name.log)"; FAILED=1; fi
+}
+check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/crypto/sha256.c -o "$0/sha256test" && "$0/sha256test"' "$OUT"
+check dice39_node node tests/dice39/run_node.mjs
+
 make -C src -s -j"$(nproc)" >/dev/null
 for t in tests/*.txt; do
-	[ "$t" = tests/crash.txt ] || run "$t"
+	needs_test_build "$t" || run "$t"
 done
 
+# dice39's three QR exports, decoded from the screenshots, must agree
+if [ -f "$OUT/dice39/07-words.png" ]; then
+	check dice39_qr python3 tests/dice39/check_qr.py "$OUT/dice39" apps/dice39/vendor/wordlist.js
+fi
+
 make -C src -s -j"$(nproc)" TEST=1 >/dev/null
-run tests/crash.txt
+for t in tests/*.txt; do
+	! needs_test_build "$t" || run "$t"
+done
 
 make -C src -s -j"$(nproc)" >/dev/null	# back to the production app set
 

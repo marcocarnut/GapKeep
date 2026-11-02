@@ -4,6 +4,8 @@ expect Keyboard attached 60
 expect launcher ready 60
 wait 1
 shot 01-launcher
+# tiles sorted by id: dice39, gallery, hello
+key right
 key ret
 expect Starting gallery
 expect selftest: \d+ passed, 0 failed 30

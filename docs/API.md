@@ -323,7 +323,7 @@ import * as sys from "zg:sys";
 | `app` | This app's manifest data: `{ id, name, version, description, icon, permissions }`. |
 | `version` | `{ zerogap, quickjs, lvgl, circle }` version strings. |
 | `log(...args)` | Same as `console.log`. |
-| `uptime()` | Milliseconds since boot (a float). |
+| `uptime()` | Milliseconds since boot, as a float with microsecond resolution. |
 | `memory()` | `{ used, limit, objects }`: this app's JS heap in bytes and its object count. |
 | `gc()` | Run the garbage collector now. |
 | `exit()` | Leave the app and return to the launcher (after the current handler returns). |

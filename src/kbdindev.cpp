@@ -23,6 +23,8 @@ CKeyboardIndev::CKeyboardIndev (void)
 	m_nHead (0),
 	m_nTail (0),
 	m_nPressedKey (0),
+	m_pPressedGroup (0),
+	m_pPressedObj (0),
 	m_pKeyHook (0),
 	m_pKeyHookParam (0),
 	m_pHomeHandler (0),
@@ -149,6 +151,16 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 
 	if (pThis->m_nPressedKey != 0)
 	{
+		// If handling the press moved the focus (Enter in a text field that
+		// jumps to a button, say), the release must not act on the newly
+		// focused widget: LVGL would "click" it. One key press, one action.
+		lv_group_t *pGroup = lv_indev_get_group (pIndev);
+		lv_obj_t *pFocused = pGroup ? lv_group_get_focused (pGroup) : 0;
+		if (pGroup != pThis->m_pPressedGroup || pFocused != pThis->m_pPressedObj)
+		{
+			lv_indev_wait_release (pIndev);
+		}
+
 		pData->key = pThis->m_nPressedKey;
 		pData->state = LV_INDEV_STATE_RELEASED;
 		pThis->m_nPressedKey = 0;
@@ -187,6 +199,8 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 		}
 
 		pThis->m_nPressedKey = Key.nLVKey;
+		pThis->m_pPressedGroup = lv_indev_get_group (pIndev);
+		pThis->m_pPressedObj = pThis->m_pPressedGroup ? lv_group_get_focused (pThis->m_pPressedGroup) : 0;
 		pData->key = Key.nLVKey;
 		pData->state = LV_INDEV_STATE_PRESSED;
 		pData->continue_reading = true;

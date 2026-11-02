@@ -58,7 +58,8 @@ bundles the test-only apps in `tests/apps/`.
 
 ```sh
 python3 tools/qemu_harness.py --interactive     # boot, print the serial log
-tools/run_tests.sh                              # all scenarios in tests/
+tools/run_tests.sh                              # everything: QEMU scenarios, QuickJS's
+                                                # own tests on the target, native and Node tests
 ```
 
 The harness boots the kernel on QEMU's Pi Zero model with a USB keyboard and
@@ -84,8 +85,8 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Step 1: LVGL on the framebuffer, USB keyboard and mouse
 - [x] Step 2: QuickJS app runtime, `zg:ui` widget API, launcher, docs, tests
 - [x] Step 3: native SHA-256 and a health-checked hardware RNG, with test vectors (`zg:crypto`)
-- [ ] Step 4: dice39 logic extracted and checked against the web version
-- [ ] Step 5: dice39 user interface
+- [x] Step 4: dice39 logic extracted verbatim (`tools/extract_dice39.py`) and checked: BIP-39 and BIP-93 test vectors, under Node and on the target
+- [x] Step 5: dice39 user interface: dice-code entry, results with verbatim proof, mistake detectors, SeedQR / Compact SeedQR / words QR, codex32 shares
 - [ ] Step 6: hardening (remove unused drivers), reproducible builds, real-hardware tests
 
 So far everything has run under QEMU only, not on a real Pi Zero.
@@ -94,7 +95,7 @@ So far everything has run under QEMU only, not on a real Pi Zero.
 
 | Path | What |
 | --- | --- |
-| `apps/` | Bundled apps: `launcher`, `hello`, `gallery` (all widgets plus a runtime self-test). |
+| `apps/` | Bundled apps: `launcher`, `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test). |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `zg_lv_conf.h`) and QuickJS (with compat headers). |
 | `circle/`, `third_party/quickjs/` | Pinned submodules, unmodified. |

@@ -9,3 +9,4 @@
 src/generated/
 # local
 __pycache__/
+tests/apps/qjstests/suites.js
