@@ -1,0 +1,31 @@
+From: zerogap
+Subject: usbmouse: zero the report layout before decoding the descriptor
+
+CUSBMouseDevice::DecodeReport() fills in only the items the HID report
+descriptor describes. A mouse without a wheel (e.g. a plain boot-protocol
+mouse) left the wheel item as heap garbage, so ExtractSigned() asserted
+(length <= 32) on the first report, or read random bits with NDEBUG.
+
+diff --git a/lib/usb/usbmouse.cpp b/lib/usb/usbmouse.cpp
+index 9cac434..b1835a3 100644
+--- a/lib/usb/usbmouse.cpp
++++ b/lib/usb/usbmouse.cpp
+@@ -23,6 +23,7 @@
+ #include <circle/usb/usbmouse.h>
+ #include <circle/usb/usbhid.h>
+ #include <circle/logger.h>
++#include <circle/util.h>
+ #include <assert.h>
+ 
+ // HID Report Items from HID 1.11 Section 6.2.2
+@@ -236,6 +237,10 @@ void CUSBMouseDevice::DecodeReport (void)
+ 	boolean foundMouseUsage = FALSE;
+ 	u32 itemIndexes[MouseItemCount] = {0};
+ 
++	// items the descriptor does not describe (no wheel, say) must read as
++	// absent, not as whatever was on the heap
++	memset (&m_MouseReport, 0, sizeof m_MouseReport);
++
+ 	assert (m_pHIDReportDescriptor != 0);
+ 	s8 *pHIDReportDescriptor = (s8 *) m_pHIDReportDescriptor;
+ 

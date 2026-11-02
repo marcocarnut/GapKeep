@@ -33,7 +33,7 @@ check() {	# name, command...
 check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/crypto/sha256.c -o "$0/sha256test" && "$0/sha256test"' "$OUT"
 check dice39_node node tests/dice39/run_node.mjs
 
-make -C src -s -j"$(nproc)" >/dev/null
+tools/build.sh qemu >/dev/null
 for t in tests/*.txt; do
 	needs_test_build "$t" || run "$t"
 done
@@ -43,12 +43,12 @@ if [ -f "$OUT/dice39/07-words.png" ]; then
 	check dice39_qr python3 tests/dice39/check_qr.py "$OUT/dice39" apps/dice39/vendor/wordlist.js
 fi
 
-make -C src -s -j"$(nproc)" TEST=1 >/dev/null
+tools/build.sh qemu TEST=1 >/dev/null
 for t in tests/*.txt; do
 	! needs_test_build "$t" || run "$t"
 done
 
-make -C src -s -j"$(nproc)" >/dev/null	# back to the production app set
+tools/build.sh qemu >/dev/null	# back to the production app set
 
 echo "screenshots and logs: $OUT"
 exit $FAILED

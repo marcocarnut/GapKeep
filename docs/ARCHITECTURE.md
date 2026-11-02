@@ -155,7 +155,7 @@ published image hash can be checked; see the README.
 | Path | Contents |
 | --- | --- |
 | `apps/` | Apps bundled into the image. |
-| `circle/` | Circle (submodule, unmodified). Its LVGL submodule supplies the LVGL sources. |
+| `circle/` | Circle (submodule) plus the fixes in `patches/circle/`, applied by `tools/build.sh`. Its LVGL submodule supplies the LVGL sources. |
 | `third_party/quickjs/` | QuickJS (submodule, unmodified). |
 | `lib/lvgl/` | Builds LVGL with `zg_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |

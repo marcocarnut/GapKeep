@@ -4,7 +4,7 @@ expect Keyboard attached 60
 expect launcher ready 60
 wait 1
 shot 01-launcher
-# tiles sorted by id: dice39, gallery, hello
+# tiles: dice39, gallery, hello (test builds: then crashtest, qjstests)
 key right
 key ret
 expect Starting gallery
@@ -22,7 +22,7 @@ key spc
 expect switch: true
 shot 03-inputs
 # self-test tab: click its header (5th tab of 5)
-moveto 576 20
+moveto 90% 20
 click
 wait 1
 shot 04-selftest

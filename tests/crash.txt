@@ -1,7 +1,10 @@
 # Needs a test build (make TEST=1). The system must survive misbehaving apps.
 expect Keyboard attached 60
 expect launcher ready 60
-# tiles are sorted by id: crashtest, dice39, gallery, hello, qjstests
+# tiles: dice39, gallery, hello, then the test apps crashtest, qjstests
+key right
+key right
+key right
 key ret
 expect crashtest ready
 key ret
@@ -27,6 +30,9 @@ shot 03-memory
 key meta_l
 expect launcher ready
 # again, and this time leak everything and exit
+key right
+key right
+key right
 key ret
 expect crashtest ready
 key tab

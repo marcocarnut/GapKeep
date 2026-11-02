@@ -102,6 +102,7 @@ boolean CKernel::Initialize (void)
 		m_Keyboard.Initialize ();
 
 		m_Logger.Write (FromKernel, LogNotice, "zerogap " ZEROGAP_VERSION ", built " __DATE__ " " __TIME__);
+		m_Logger.Write (FromKernel, LogNotice, "Screen %ux%u", m_Screen.GetWidth (), m_Screen.GetHeight ());
 
 		bOK = m_AppHost.Initialize ();
 	}

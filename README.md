@@ -25,6 +25,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 - [Writing apps](docs/APPS.md): start here.
 - [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:apps`, globals.
 - [Architecture and security model](docs/ARCHITECTURE.md)
+- [Hardware test rig](docs/RIG.md)
 
 ## Building
 
@@ -35,24 +36,20 @@ Needs `arm-none-eabi-gcc` (tested 13.2.1; Circle recommends 15.2.Rel1),
 git submodule update --init                              # Circle, QuickJS
 git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
 
-cd circle
-./configure -r 1 --qemu --keymap US --kernel-max-size 8 \
-            -d KERNEL_STACK_SIZE=0x100000 -f            # see below
-./makeall -j"$(nproc)"
-cd ..
-
-make -C lib/lvgl -j"$(nproc)"
-make -C lib/quickjs -j"$(nproc)"
-make -C src -j"$(nproc)"                                 # -> src/kernel.img
+tools/build.sh qemu          # -> src/kernel.img for QEMU
+tools/build.sh pi            # -> src/kernel.img for a real Pi Zero
+tools/build.sh pi TEST=1     # ... with the test-only apps and serial screenshots
 ```
 
-`--qemu` disables a few things QEMU doesn't emulate. For the real Pi Zero,
-configure without it, then `./makeall clean`, rebuild Circle, `lib/lvgl` and
-`src`. The other options are required: zerogap needs an 8 MB kernel limit and
-a 1 MB stack.
+`build.sh` applies zerogap's fixes to Circle (`patches/circle/`), configures
+Circle for the target (QEMU lacks a few peripherals, so the two need
+different Circle libraries) and builds Circle, LVGL, QuickJS and the kernel.
+Switching targets rebuilds everything (about 40 s); otherwise builds are
+incremental. zerogap needs Circle's 8 MB kernel limit and a 1 MB stack, which
+`build.sh` sets.
 
-Apps in `apps/` are bundled automatically. `make -C src TEST=1` also
-bundles the test-only apps in `tests/apps/`.
+Apps in `apps/` are bundled automatically. Test builds also bundle the
+test-only apps in `tests/apps/`, listed after the real ones.
 
 ## Running and testing in QEMU
 
@@ -68,14 +65,18 @@ development and testing needs no hardware.
 
 ## Running on a Pi Zero
 
-Copy to a FAT32 SD card: the firmware (`bootcode.bin`, `start.elf`,
-`fixup.dat`; run `make` in `circle/boot` to download them), a `config.txt`
-(see `circle/boot/config32.txt`), and `kernel.img`. Logs go to the serial
-port (GPIO 14/15, 115200 baud). Add `logdev=tty1` to `cmdline.txt` to send
-them to the screen instead.
+`tools/build.sh pi` builds the kernel. Copy to a FAT32 SD card: the firmware
+(`bootcode.bin`, `start.elf`, `fixup.dat`; run `make` in `circle/boot` to
+download them), a `config.txt` with `arm_64bit=0`, and `kernel.img`. Logs go
+to the serial port (GPIO 14/15, 921600 baud).
 
-Keyboard and mouse connect through the Zero's USB OTG port, via an OTG
-adapter and a hub.
+Keyboard and mouse connect to the Zero's "USB" port (not "PWR"), through an
+OTG adapter, or a hub for both.
+
+For development, a second Raspberry Pi can drive the Zero: reset it, send it
+kernels over serial, act as its keyboard and mouse, and take screenshots.
+The QEMU scenarios then run unchanged on real hardware; see
+[docs/RIG.md](docs/RIG.md).
 
 **Using it:** Tab and Shift+Tab move between widgets, Enter or Space
 activates, and the Windows (Super) key always returns to the launcher.
@@ -87,9 +88,8 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Step 3: native SHA-256 and a health-checked hardware RNG, with test vectors (`zg:crypto`)
 - [x] Step 4: dice39 logic extracted verbatim (`tools/extract_dice39.py`) and checked: BIP-39 and BIP-93 test vectors, under Node and on the target
 - [x] Step 5: dice39 user interface: dice-code entry, results with verbatim proof, mistake detectors, SeedQR / Compact SeedQR / words QR, codex32 shares
-- [ ] Step 6: hardening (remove unused drivers), reproducible builds, real-hardware tests
-
-So far everything has run under QEMU only, not on a real Pi Zero.
+- [x] Real hardware: every scenario passes on a Pi Zero (v1.3, 512 MB) through the rig ([docs/RIG.md](docs/RIG.md))
+- [ ] Step 6: hardening (remove unused drivers, USB enumeration timeouts), reproducible builds
 
 ## Layout
 
@@ -98,7 +98,7 @@ So far everything has run under QEMU only, not on a real Pi Zero.
 | `apps/` | Bundled apps: `launcher`, `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test). |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `zg_lv_conf.h`) and QuickJS (with compat headers). |
-| `circle/`, `third_party/quickjs/` | Pinned submodules, unmodified. |
+| `circle/`, `third_party/quickjs/` | Pinned submodules. Circle gets the fixes in `patches/circle/`. |
 | `tests/` | QEMU scenarios and test-only apps. |
-| `tools/` | App bundler, QEMU harness, test runner. |
+| `tools/` | Build script, app bundler, QEMU harness, test runner; `tools/rig/` drives real hardware. |
 | `docs/` | Guides and reference. |

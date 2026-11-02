@@ -373,7 +373,7 @@ throws a `ReferenceError`. Used by the launcher.
 
 | Name | Description |
 | --- | --- |
-| `list()` | Array of `{ id, name, version, description, icon, permissions }` for every app not marked `hidden`, sorted by id. |
+| `list()` | Array of `{ id, name, version, description, icon, permissions }` for every app not marked `hidden`, in bundle order (sorted by id; test builds list their test-only apps last). |
 | `launch(id)` | Stop the current app and start `id` (after the current handler returns). Throws if there is no such app. |
 
 ---

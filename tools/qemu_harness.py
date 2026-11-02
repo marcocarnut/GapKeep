@@ -15,7 +15,9 @@ Scenario file: one command per line, '#' starts a comment.
     type <text>                 type text (rest of line, verbatim)
     key <qemu-key> [...]        press keys, e.g. "key tab", "key ret", "key ctrl-a"
     mouse <dx> <dy>             relative mouse move, split into small steps
-    moveto <x> <y>              move to the top-left corner, then by (x, y)
+    moveto <x> <y>              move to the top-left corner, then by (x, y);
+                                "50%" is half the screen width (or height),
+                                so scenarios work at any resolution
     click [left|right]          press and release a mouse button
     shot <name>                 save a screenshot as <outdir>/<name>.png
     serialshot <name>           same, but fetched over the serial line from a
@@ -247,6 +249,17 @@ class Machine:
             self.proc.kill()
 
 
+def screen_coord(m, value, axis):
+    """'123' is pixels, '50%' a fraction of the screen size, which the
+    kernel logs at boot ("Screen 640x480")."""
+    if not value.endswith('%'):
+        return int(value)
+    found = re.search(r'Screen (\d+)x(\d+)', m.serial())
+    if not found:
+        raise SystemExit('moveto %s: screen size not logged yet' % value)
+    return int(int(found.group(axis + 1)) * float(value[:-1]) / 100)
+
+
 def run_scenario(m, path, outdir):
     failures = 0
     with open(path) as f:
@@ -267,7 +280,7 @@ def run_scenario(m, path, outdir):
                 dx, dy = (int(v) for v in rest.split())
                 m.mouse(dx, dy)
             elif cmd == 'moveto':
-                x, y = (int(v) for v in rest.split())
+                x, y = (screen_coord(m, v, axis) for axis, v in enumerate(rest.split()))
                 m.moveto(x, y)
             elif cmd == 'click':
                 m.click(rest.strip() or 'left')

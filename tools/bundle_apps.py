@@ -134,13 +134,15 @@ def main():
         sys.exit(__doc__)
     out = sys.argv[1]
     found = {}
+    # apps sorted by id within each directory, directories in the order
+    # given: test builds list their test-only apps after the real ones
     for appsdir in sys.argv[2:]:
-        for d in os.listdir(appsdir):
+        for d in sorted(os.listdir(appsdir)):
             if os.path.isfile(os.path.join(appsdir, d, 'manifest.json')):
                 if d in found:
                     fail('app %r exists in both %s and %s' % (d, found[d], appsdir))
                 found[d] = appsdir
-    ids = sorted(found)
+    ids = list(found)
     apps = [load_app(os.path.join(found[i], i), i) for i in ids]
     if 'launcher' not in ids:
         fail('the "launcher" app is required')
