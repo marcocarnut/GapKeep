@@ -65,10 +65,11 @@ development and testing needs no hardware.
 
 ## Running on a Pi Zero
 
-`tools/build.sh pi` builds the kernel. Copy to a FAT32 SD card: the firmware
-(`bootcode.bin`, `start.elf`, `fixup.dat`; run `make` in `circle/boot` to
-download them), a `config.txt` with `arm_64bit=0`, and `kernel.img`. Logs go
-to the serial port (GPIO 14/15, 921600 baud).
+`tools/make_sdcard.sh --standalone` builds zerogap for the Pi Zero and puts
+everything the card needs in `sdcard-standalone/`: the Pi firmware,
+`config.txt` and `kernel.img`. Copy those files to the root of a FAT32 card.
+Logs go to the serial port (GPIO 14/15, 921600 baud); production builds never
+read from it.
 
 Keyboard and mouse connect to the Zero's "USB" port (not "PWR"), through an
 OTG adapter, or a hub for both.

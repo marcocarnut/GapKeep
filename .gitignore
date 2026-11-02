@@ -14,3 +14,4 @@ sdcard/
 src/.buildmode
 src/kernel.hex
 .buildtarget
+sdcard-standalone/
