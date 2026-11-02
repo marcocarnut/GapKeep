@@ -1,0 +1,11 @@
+# build outputs
+*.o
+*.d
+*.a
+*.elf
+*.lst
+*.map
+*.img
+src/generated/
+# local
+__pycache__/

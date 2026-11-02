@@ -1,0 +1,28 @@
+# Step 1: keyboard and mouse reach LVGL widgets.
+expect zerogap step 1 60
+expect Keyboard attached 30
+wait 2
+shot 01-boot
+type abandon
+expect text="abandon"
+key backspace backspace
+expect text="aband"$
+key ret
+expect enter text="aband"
+key tab
+expect focus=button
+key ret
+expect click=button n=1
+shot 02-keyboard
+# mouse: click the button (centre ~ 320,178)
+moveto 320 178
+click
+expect click=button n=2
+# click into the text field, type more
+moveto 400 122
+click
+expect focus=word
+key end
+type on
+expect text="abandon"$
+shot 03-mouse
