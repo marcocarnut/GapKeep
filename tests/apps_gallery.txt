@@ -1,5 +1,6 @@
 # Launch the gallery from the launcher, run its self-test, use some widgets,
 # then return with the Home (Windows) key.
+expect Keyboard attached 60
 expect launcher ready 60
 wait 1
 shot 01-launcher

@@ -25,6 +25,8 @@
 //
 #include "apphost.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
+#include <lvgl/lvgl/src/libs/qrcode/qrcodegen.h>
+#include <lvgl/lvgl/src/misc/cache/instance/lv_image_cache.h>
 #include <circle/logger.h>
 #include <circle/util.h>
 #include <circle/string.h>
@@ -100,6 +102,18 @@ struct TZgNode
 	JSValue DeferredRef;		// keeps the wrapper alive while queued
 	TZgNode *pNextDeferred;
 	char *pAccepted;		// TextArea accepted chars (LVGL keeps the pointer)
+	struct TZgQR *pQR;		// QRCode settings
+};
+
+struct TZgQR
+{
+	u8 *pData;			// content (copy)
+	size_t nLength;
+	boolean bBinary;		// bytes (Uint8Array) rather than text
+	int nECC;			// qrcodegen_Ecc
+	int32_t nSize;			// px
+	lv_color_t Dark, Light;
+	int nModules;			// side length of the current symbol, 0: none
 };
 
 struct TZgAlert;
@@ -184,6 +198,16 @@ static JSValue Wrap (JSContext *ctx, lv_obj_t *pObj, TWidgetType Type, JSValueCo
 		pNode->Handlers[i] = JS_UNDEFINED;
 	}
 
+	if (Type == WQRCode)
+	{
+		pNode->pQR = new TZgQR;
+		memset (pNode->pQR, 0, sizeof *pNode->pQR);
+		pNode->pQR->nECC = qrcodegen_Ecc_MEDIUM;
+		pNode->pQR->nSize = 160;
+		pNode->pQR->Dark = lv_color_black ();
+		pNode->pQR->Light = lv_color_white ();
+	}
+
 	JS_SetOpaque (Obj, pNode);
 	lv_obj_set_user_data (pObj, pNode);
 	lv_obj_add_event_cb (pObj, NodeDeleteCallback, LV_EVENT_DELETE, pNode);
@@ -242,6 +266,11 @@ static void WidgetFinalizer (JSRuntime *rt, JSValue Val)
 	// only reachable once the LVGL object is gone (it holds a reference)
 	assert (pNode->pObj == 0);
 	delete [] pNode->pAccepted;
+	if (pNode->pQR != 0)
+	{
+		delete [] pNode->pQR->pData;
+		delete pNode->pQR;
+	}
 	delete pNode;
 }
 
@@ -995,22 +1024,222 @@ SETTER (SetData)
 }
 
 // QRCode
-SETTER (SetQRData)
+//
+// Encoded here rather than by lv_qrcode_update(), so apps control the error
+// correction level and can encode raw bytes: text is encoded in the most
+// compact single mode (numeric, alphanumeric or byte), bytes in byte mode,
+// with no automatic ECC boost - what SeedQR and codex32 QR codes expect.
+// Drawn into lv_qrcode's 1-bit canvas with a 4-module quiet zone.
+
+static int QRRender (JSContext *ctx, TZgNode *pNode)
 {
-	const char *s = ToString (ctx, v, pProp);
-	if (s == 0) return -1;
-	lv_result_t Res = lv_qrcode_update (OBJ, s, strlen (s));
-	JS_FreeCString (ctx, s);
-	if (Res != LV_RESULT_OK)
+	TZgQR *pQR = pNode->pQR;
+	lv_obj_t *pObj = pNode->pObj;
+
+	lv_draw_buf_t *pBuf = lv_canvas_get_draw_buf (pObj);
+	if (pBuf == 0)
 	{
-		JS_ThrowRangeError (ctx, "%s: too much data for a QR code", pProp);
+		JS_ThrowInternalError (ctx, "QRCode: no canvas buffer");
 		return -1;
 	}
+
+	lv_draw_buf_clear (pBuf, 0);
+	lv_canvas_set_palette (pObj, 0, lv_color_to_32 (pQR->Light, LV_OPA_COVER));
+	lv_canvas_set_palette (pObj, 1, lv_color_to_32 (pQR->Dark, LV_OPA_COVER));
+	lv_image_cache_drop (pBuf);
+	lv_obj_invalidate (pObj);
+	pQR->nModules = 0;
+
+	if (pQR->pData == 0)
+	{
+		return 0;
+	}
+
+	u8 *pCode = new u8[qrcodegen_BUFFER_LEN_MAX];
+	u8 *pTemp = new u8[qrcodegen_BUFFER_LEN_MAX];
+	bool bOK;
+	if (pQR->bBinary)
+	{
+		if (pQR->nLength > qrcodegen_BUFFER_LEN_MAX)
+		{
+			bOK = false;
+		}
+		else
+		{
+			memcpy (pTemp, pQR->pData, pQR->nLength);
+			bOK = qrcodegen_encodeBinary (pTemp, pQR->nLength, pCode, (qrcodegen_Ecc) pQR->nECC,
+						      qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+						      qrcodegen_Mask_AUTO, false);
+		}
+	}
+	else
+	{
+		bOK = qrcodegen_encodeText ((const char *) pQR->pData, pTemp, pCode, (qrcodegen_Ecc) pQR->nECC,
+					    qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+					    qrcodegen_Mask_AUTO, false);
+	}
+	delete [] pTemp;
+
+	if (!bOK)
+	{
+		delete [] pCode;
+		JS_ThrowRangeError (ctx, "QRCode: too much data for a QR code");
+		return -1;
+	}
+
+	int n = qrcodegen_getSize (pCode);
+	int32_t w = pBuf->header.w;
+	int32_t nScale = w / (n + 8);
+	if (nScale < 1)
+	{
+		delete [] pCode;
+		JS_ThrowRangeError (ctx, "QRCode: size %d px is too small for %d modules", (int) w, n);
+		return -1;
+	}
+	int32_t nMargin = (w - nScale * n) / 2;
+
+	// I1 format: 8-byte palette, then rows of 1 bit per pixel, MSB first
+	u8 *pPixels = pBuf->data + 8;
+	u32 nStride = pBuf->header.stride;
+	for (int my = 0; my < n; my++)
+	{
+		for (int mx = 0; mx < n; mx++)
+		{
+			if (!qrcodegen_getModule (pCode, mx, my))
+			{
+				continue;
+			}
+			for (int32_t dy = 0; dy < nScale; dy++)
+			{
+				u8 *pRow = pPixels + nStride * (nMargin + my * nScale + dy);
+				for (int32_t dx = 0; dx < nScale; dx++)
+				{
+					int32_t x = nMargin + mx * nScale + dx;
+					pRow[x >> 3] |= 0x80 >> (x & 7);
+				}
+			}
+		}
+	}
+	delete [] pCode;
+
+	pQR->nModules = n;
+	lv_image_cache_drop (pBuf);
+	lv_obj_invalidate (pObj);
+
 	return 0;
 }
-SETTER (SetQRSize) { int32_t n; if (ToInt (ctx, v, pProp, &n)) return -1; lv_qrcode_set_size (OBJ, n); return 0; }
-SETTER (SetQRDark)  { lv_color_t c; if (ToColor (ctx, v, pProp, &c)) return -1; lv_qrcode_set_dark_color (OBJ, c); return 0; }
-SETTER (SetQRLight) { lv_color_t c; if (ToColor (ctx, v, pProp, &c)) return -1; lv_qrcode_set_light_color (OBJ, c); return 0; }
+
+SETTER (SetQRData)
+{
+	TZgQR *pQR = pNode->pQR;
+	u8 *pCopy;
+	size_t nLength;
+	boolean bBinary = FALSE;
+
+	JSValue Hold = JS_UNDEFINED;
+	size_t nOffset, nElement;
+	JSValue Buffer = JS_IsObject (v) ? JS_GetTypedArrayBuffer (ctx, v, &nOffset, &nLength, &nElement)
+					 : JS_EXCEPTION;
+	if (JS_IsObject (v) && !JS_IsException (Buffer))
+	{
+		size_t nSize;
+		u8 *p = JS_GetArrayBuffer (ctx, &nSize, Buffer);
+		if (p == 0)
+		{
+			JS_FreeValue (ctx, Buffer);
+			return -1;
+		}
+		pCopy = new u8[nLength + 1];
+		memcpy (pCopy, p + nOffset, nLength);
+		pCopy[nLength] = 0;
+		bBinary = TRUE;
+		Hold = Buffer;
+	}
+	else
+	{
+		if (JS_IsObject (v))
+		{
+			JS_FreeValue (ctx, JS_GetException (ctx));
+		}
+		const char *s = ToString (ctx, v, pProp);
+		if (s == 0) return -1;
+		nLength = strlen (s);
+		pCopy = new u8[nLength + 1];
+		memcpy (pCopy, s, nLength + 1);
+		JS_FreeCString (ctx, s);
+	}
+	JS_FreeValue (ctx, Hold);
+
+	// commit only if it encodes: a rejected value leaves the widget as it was
+	TZgQR Old = *pQR;
+	pQR->pData = pCopy;
+	pQR->nLength = nLength;
+	pQR->bBinary = bBinary;
+	if (QRRender (ctx, pNode))
+	{
+		delete [] pCopy;
+		*pQR = Old;
+		JSValue Err = JS_GetException (ctx);
+		QRRender (ctx, pNode);
+		JS_Throw (ctx, Err);
+		return -1;
+	}
+	delete [] Old.pData;
+
+	return 0;
+}
+
+// Applies a change to the QR settings; reverts it if the result does not encode.
+static int QRChange (JSContext *ctx, TZgNode *pNode, const TZgQR &rOld)
+{
+	if (QRRender (ctx, pNode) == 0)
+	{
+		return 0;
+	}
+
+	JSValue Err = JS_GetException (ctx);
+	boolean bResize = pNode->pQR->nSize != rOld.nSize;
+	*pNode->pQR = rOld;
+	if (bResize)
+	{
+		lv_qrcode_set_size (pNode->pObj, rOld.nSize);
+	}
+	QRRender (ctx, pNode);
+	JS_Throw (ctx, Err);
+
+	return -1;
+}
+
+SETTER (SetQRSize)
+{
+	int32_t n;
+	if (ToInt (ctx, v, pProp, &n)) return -1;
+	if (n < 21 || n > 1024)
+	{
+		JS_ThrowRangeError (ctx, "%s: 21 to 1024 px expected", pProp);
+		return -1;
+	}
+	TZgQR Old = *pNode->pQR;
+	pNode->pQR->nSize = n;
+	lv_qrcode_set_size (OBJ, n);
+	return QRChange (ctx, pNode, Old);
+}
+
+SETTER (SetQRDark)  { lv_color_t c; if (ToColor (ctx, v, pProp, &c)) return -1; pNode->pQR->Dark = c; return QRRender (ctx, pNode); }
+SETTER (SetQRLight) { lv_color_t c; if (ToColor (ctx, v, pProp, &c)) return -1; pNode->pQR->Light = c; return QRRender (ctx, pNode); }
+
+SETTER (SetQRECC)
+{
+	static const char *const Names[] = {"L", "M", "Q", "H"};
+	static const int Values[] = {qrcodegen_Ecc_LOW, qrcodegen_Ecc_MEDIUM, qrcodegen_Ecc_QUARTILE, qrcodegen_Ecc_HIGH};
+	int n;
+	if (ToEnum (ctx, v, pProp, Names, Values, 4, &n)) return -1;
+	TZgQR Old = *pNode->pQR;
+	pNode->pQR->nECC = n;
+	return QRChange (ctx, pNode, Old);
+}
+
+GETTER (GetQRModules) { return JS_NewInt32 (ctx, pNode->pQR->nModules); }
 
 struct TProp
 {
@@ -1076,6 +1305,8 @@ static const TProp Props[] =
 	{"size",        T (WQRCode), SetQRSize, 0},
 	{"dark",        T (WQRCode), SetQRDark, 0},
 	{"light",       T (WQRCode), SetQRLight, 0},
+	{"ecc",         T (WQRCode), SetQRECC, 0},
+	{"modules",     T (WQRCode), 0, GetQRModules},
 };
 static const unsigned PropCount = sizeof Props / sizeof Props[0];
 
@@ -1524,12 +1755,7 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent)
 	case WTable:	p = lv_table_create (pParent);			break;
 	case WQRCode:
 		p = lv_qrcode_create (pParent);
-		lv_qrcode_set_size (p, 160);
-		lv_qrcode_set_dark_color (p, lv_color_black ());
-		lv_qrcode_set_light_color (p, lv_color_white ());
-		// quiet zone, as scanners expect
-		lv_obj_set_style_border_color (p, lv_color_white (), 0);
-		lv_obj_set_style_border_width (p, 8, 0);
+		lv_qrcode_set_size (p, 160);	// see QRRender: we draw ourselves
 		break;
 	case WTabView:	p = lv_tabview_create (pParent);		break;
 	default:	assert (0);

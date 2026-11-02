@@ -1,4 +1,5 @@
 # Needs a test build (make TEST=1). The system must survive misbehaving apps.
+expect Keyboard attached 60
 expect launcher ready 60
 # tiles are sorted by id: crashtest, gallery, hello
 key ret

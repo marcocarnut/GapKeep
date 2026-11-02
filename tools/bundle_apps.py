@@ -101,7 +101,7 @@ def load_app(appdir, app_id):
     for root, dirs, names in os.walk(appdir):
         dirs.sort()
         for n in sorted(names):
-            if n.endswith(FILE_EXTENSIONS):
+            if n.endswith(FILE_EXTENSIONS) and n != 'package.json':
                 full = os.path.join(root, n)
                 rel = os.path.relpath(full, appdir).replace(os.sep, '/')
                 with open(full, 'rb') as f:

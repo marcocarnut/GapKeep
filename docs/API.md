@@ -231,9 +231,15 @@ displays a value.
 
 | Property | Value | Notes |
 | --- | --- | --- |
-| `data` | string | Encoded content. Throws `RangeError` if too long for a QR code. |
-| `size` | number | Side length in px (default 160). An 8 px white quiet zone is added around it. |
+| `data` | string or `Uint8Array` | Encoded content. Text uses the most compact single mode (numeric for digits only, alphanumeric for `0-9 A-Z $%*+-./:` and space, otherwise byte mode with UTF-8); a `Uint8Array` is encoded as raw bytes. Throws `RangeError` if it doesn't fit. |
+| `ecc` | `"L"`, `"M"`, `"Q"`, `"H"` | Error correction level (default `"M"`). Never raised automatically, so the symbol is exactly what was asked for. |
+| `size` | number | Side length in px (default 160), including a 4-module quiet zone. Modules are drawn at an integer scale. |
 | `dark`, `light` | color | Module colors (default black on white). |
+| `modules` | number | *Read-only*. Modules per side of the current symbol (21 for version 1, +4 per version), 0 when empty. |
+
+A rejected value (data too long, size too small) throws and leaves the code
+unchanged. For example, a 24-word SeedQR (96 digits at `ecc: "L"`) is 29×29,
+a Compact SeedQR (32 bytes at `"L"`) is 25×25.
 
 #### TabView
 

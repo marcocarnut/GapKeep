@@ -158,9 +158,23 @@ export async function runSelfTest(parent) {
   });
 
   await test("qrcode", () => {
-    const q = new ui.QRCode(box, { size: 100, data: "hello" });
-    q.data = "abandon ".repeat(24);
+    const step = (name, f) => { try { f(); } catch (e) { throw new Error(name + ": " + e.message); } };
+    let q;
+    step("create", () => (q = new ui.QRCode(box, { size: 200, data: "hello" })));
+    step("words", () => (q.data = "abandon ".repeat(24)));
     throws(() => (q.data = "x".repeat(5000)), RangeError, "too long");
+    eq(q.modules, 57, "rejected data leaves the code unchanged");
+    // SeedQR: 96 digits, numeric mode, ECC L -> version 3 (29 modules)
+    step("digits", () => q.set({ ecc: "L", data: "0".repeat(96) }));
+    eq(q.modules, 29, "SeedQR 24 words");
+    // Compact SeedQR: 32 bytes, byte mode, ECC L -> version 2 (25 modules)
+    step("bytes", () => (q.data = new Uint8Array(32).fill(0xa5)));
+    eq(q.modules, 25, "Compact SeedQR");
+    // codex32 share, uppercase -> alphanumeric, ECC M -> 33 modules (dice39 README)
+    step("codex32", () => q.set({ ecc: "M", data: "MS12NAMEA320ZYXWVUTSRQPNMLKJHGFEDCAXRPP870HKKQRMXXXXXXXXXXXXXXXXXXXXXXXXXX" }));
+    eq(q.modules, 33, "codex32 share");
+    throws(() => q.set({ size: 40 }), RangeError, "too small");
+    eq(q.modules, 33, "rejected size leaves the code unchanged");
   });
 
   await test("tabview", () => {

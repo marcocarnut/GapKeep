@@ -1,0 +1,1 @@
+{ "type": "module", "private": true, "description": "lets Node load these files as ES modules for tests/dice39" }
