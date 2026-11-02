@@ -1,0 +1,4 @@
+# Boots to the launcher.
+expect launcher ready 60
+wait 2
+shot launcher

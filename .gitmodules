@@ -1,3 +1,6 @@
 [submodule "circle"]
 	path = circle
 	url = https://github.com/rsta2/circle.git
+[submodule "third_party/quickjs"]
+	path = third_party/quickjs
+	url = https://github.com/bellard/quickjs.git

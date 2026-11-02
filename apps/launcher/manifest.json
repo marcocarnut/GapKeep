@@ -1,0 +1,9 @@
+{
+  "id": "launcher",
+  "name": "Launcher",
+  "version": "0.1.0",
+  "description": "Starts apps.",
+  "icon": "home",
+  "permissions": ["apps"],
+  "hidden": true
+}

@@ -1,0 +1,40 @@
+# Alerts and QR codes in the gallery, then the hello app.
+expect launcher ready 60
+key ret
+expect selftest: \d+ passed, 0 failed 30
+# Alerts tab (4th of 5 tabs, 128 px each)
+moveto 448 32
+click
+wait 1
+# its button is the first focusable widget on that page
+moveto 90 120
+click
+wait 1
+shot 01-alert
+# alert buttons: "No" "Yes"; Tab moves to "Yes"
+key tab
+key ret
+expect alert answer: 1
+wait 1
+shot 02-alert-answered
+# QR tab
+moveto 320 32
+click
+wait 1
+shot 03-qr
+key meta_l
+expect launcher ready
+# second tile: hello
+key right
+key ret
+expect Starting hello
+wait 1
+type Satoshi
+key ret
+expect greeted Satoshi
+shot 04-hello
+key tab
+key ret
+key ret
+wait 1
+shot 05-hello-clicks

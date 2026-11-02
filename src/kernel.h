@@ -19,6 +19,7 @@
 #include <lvgl/lvgl.h>
 #include <circle/types.h>
 #include "kbdindev.h"
+#include "runtime/apphost.h"
 
 enum TShutdownMode
 {
@@ -52,6 +53,7 @@ private:
 
 	CLVGL			m_GUI;
 	CKeyboardIndev		m_Keyboard;
+	CAppHost		m_AppHost;
 };
 
 #endif

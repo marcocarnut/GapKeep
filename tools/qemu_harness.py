@@ -98,9 +98,9 @@ class Machine:
         except socket.timeout:
             pass
 
-    def monitor(self, line):
+    def monitor(self, line, delay=0.02):
         self.mon.sendall((line + '\n').encode())
-        time.sleep(0.05)
+        time.sleep(delay)
 
     def serial(self):
         try:
@@ -139,16 +139,17 @@ class Machine:
         return [sign * 10] * (px // 18) + [sign] * (px % 18)
 
     def moveto(self, x, y):
-        # coarse pin, then single units: a 1-unit step is 1 px and only the
-        # step that would cross the edge is dropped, so we land exactly on 0
-        self.mouse(-3000, -3000)
-        for _ in range(30):
-            self.monitor('mouse_move -1 -1')
+        # Pin to the top-left corner: big steps first (180 px each), then
+        # smaller ones (18 px), then single pixels. Circle drops a move that
+        # would cross the edge, so the last stage lands exactly on (0, 0).
+        for step, count in ((100, 12), (10, 12), (1, 20)):
+            for _ in range(count):
+                self.monitor('mouse_move %d %d' % (-step, -step))
         xs, ys = self._axis_steps(x), self._axis_steps(y)
         for i in range(max(len(xs), len(ys))):
             self.monitor('mouse_move %d %d' % (xs[i] if i < len(xs) else 0,
                                                ys[i] if i < len(ys) else 0))
-            time.sleep(0.02)
+        time.sleep(0.1)
 
     def click(self, button='left'):
         mask = {'left': 1, 'right': 2, 'middle': 4}[button]

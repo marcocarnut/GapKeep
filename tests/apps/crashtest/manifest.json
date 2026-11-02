@@ -1,0 +1,7 @@
+{
+  "id": "crashtest",
+  "name": "Crash Test",
+  "version": "0.1.0",
+  "description": "Test builds only: misbehaving code the system must survive.",
+  "icon": "warning"
+}

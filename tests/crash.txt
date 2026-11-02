@@ -1,0 +1,38 @@
+# Needs a test build (make TEST=1). The system must survive misbehaving apps.
+expect launcher ready 60
+# tiles are sorted by id: crashtest, gallery, hello
+key ret
+expect crashtest ready
+key ret
+expect uncaught exception \(callback\): TypeError
+wait 1
+shot 01-exception
+key tab
+key ret
+expect uncaught exception \(unhandled promise rejection\): Error: nobody catches this
+key tab
+key ret
+expect crashtest: looping
+expect script ran for more than 10 s, interrupted 20
+wait 1
+shot 02-watchdog
+# the app still works after being interrupted
+key tab
+key tab
+key ret
+expect crashtest: allocated|out of memory 60
+wait 1
+shot 03-memory
+key meta_l
+expect launcher ready
+# again, and this time leak everything and exit
+key ret
+expect crashtest ready
+key tab
+key tab
+key tab
+key ret
+expect Stopping crashtest
+expect launcher ready
+wait 1
+shot 04-back

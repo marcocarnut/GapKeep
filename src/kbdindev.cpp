@@ -8,6 +8,7 @@
 #include <circle/logger.h>
 #include <circle/util.h>
 #include <circle/synchronize.h>
+#include <circle/usb/usbhid.h>
 #include <assert.h>
 
 static const char FromKbd[] = "kbd";
@@ -17,10 +18,15 @@ CKeyboardIndev *CKeyboardIndev::s_pThis = 0;
 CKeyboardIndev::CKeyboardIndev (void)
 :	m_pKeyboard (0),
 	m_pIndev (0),
-	m_pGroup (0),
+	m_nRawModifiers (0),
+	m_bGUIDown (FALSE),
 	m_nHead (0),
 	m_nTail (0),
-	m_nPressedKey (0)
+	m_nPressedKey (0),
+	m_pKeyHook (0),
+	m_pKeyHookParam (0),
+	m_pHomeHandler (0),
+	m_pHomeParam (0)
 {
 	assert (s_pThis == 0);
 	s_pThis = this;
@@ -28,13 +34,38 @@ CKeyboardIndev::CKeyboardIndev (void)
 
 void CKeyboardIndev::Initialize (void)
 {
-	m_pGroup = lv_group_create ();
-	lv_group_set_default (m_pGroup);
-
 	m_pIndev = lv_indev_create ();
 	lv_indev_set_type (m_pIndev, LV_INDEV_TYPE_KEYPAD);
 	lv_indev_set_read_cb (m_pIndev, ReadCallback);
-	lv_indev_set_group (m_pIndev, m_pGroup);
+}
+
+void CKeyboardIndev::SetGroup (lv_group_t *pGroup)
+{
+	assert (m_pIndev != 0);
+	lv_indev_set_group (m_pIndev, pGroup);
+}
+
+lv_group_t *CKeyboardIndev::GetGroup (void) const
+{
+	assert (m_pIndev != 0);
+	return lv_indev_get_group (m_pIndev);
+}
+
+void CKeyboardIndev::SetKeyHook (TKeyHook *pHook, void *pParam)
+{
+	m_pKeyHook = pHook;
+	m_pKeyHookParam = pParam;
+}
+
+void CKeyboardIndev::SetHomeHandler (THomeHandler *pHandler, void *pParam)
+{
+	m_pHomeHandler = pHandler;
+	m_pHomeParam = pParam;
+}
+
+void CKeyboardIndev::Flush (void)
+{
+	m_nTail = m_nHead;
 }
 
 void CKeyboardIndev::Update (boolean bPlugAndPlayUpdated)
@@ -47,6 +78,7 @@ void CKeyboardIndev::Update (boolean bPlugAndPlayUpdated)
 		{
 			m_pKeyboard->RegisterRemovedHandler (KeyboardRemovedHandler);
 			m_pKeyboard->RegisterKeyPressedHandler (KeyPressedHandler);
+			m_pKeyboard->RegisterKeyStatusHandlerRaw (KeyStatusHandlerRaw, TRUE);	// mixed mode
 
 			CLogger::Get ()->Write (FromKbd, LogNotice, "Keyboard attached");
 		}
@@ -59,14 +91,29 @@ void CKeyboardIndev::Update (boolean bPlugAndPlayUpdated)
 	}
 }
 
+void CKeyboardIndev::KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6])
+{
+	assert (s_pThis != 0);
+	CKeyboardIndev *pThis = s_pThis;
+
+	pThis->m_nRawModifiers = ucModifiers;
+
+	boolean bGUI = (ucModifiers & (LWIN | RWIN)) != 0;
+	if (bGUI && !pThis->m_bGUIDown && pThis->m_pHomeHandler != 0)
+	{
+		(*pThis->m_pHomeHandler) (pThis->m_pHomeParam);
+	}
+	pThis->m_bGUIDown = bGUI;
+}
+
 void CKeyboardIndev::KeyPressedHandler (const char *pString)
 {
 	assert (s_pThis != 0);
 
-	u32 nKey = Translate (pString);
-	if (nKey != 0)
+	TZgKey Key;
+	if (s_pThis->Translate (pString, &Key))
 	{
-		s_pThis->Enqueue (nKey);
+		s_pThis->Enqueue (Key);
 	}
 }
 
@@ -78,7 +125,7 @@ void CKeyboardIndev::KeyboardRemovedHandler (CDevice *pDevice, void *pContext)
 	CLogger::Get ()->Write (FromKbd, LogNotice, "Keyboard removed");
 }
 
-void CKeyboardIndev::Enqueue (u32 nKey)
+void CKeyboardIndev::Enqueue (const TZgKey &rKey)
 {
 	unsigned nNext = (m_nHead + 1) & (QueueSize-1);
 	if (nNext == m_nTail)
@@ -86,14 +133,15 @@ void CKeyboardIndev::Enqueue (u32 nKey)
 		return;		// full: drop the key rather than block in IRQ context
 	}
 
-	m_Queue[m_nHead] = nKey;
+	m_Queue[m_nHead] = rKey;
 	DataMemBarrier ();
 	m_nHead = nNext;
 }
 
-// Each queued key becomes one PRESSED report followed by one RELEASED report.
-// Circle already generates auto-repeat, so LVGL's own long-press repeat is
-// not needed.
+// Each queued key is first offered to the key hook (main-loop context, so it
+// may call into JavaScript). If not consumed and it has an LVGL code, it
+// becomes one PRESSED report followed by one RELEASED report. Circle already
+// generates auto-repeat, so LVGL's own long-press repeat is not needed.
 void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 {
 	assert (s_pThis != 0);
@@ -104,83 +152,136 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 		pData->key = pThis->m_nPressedKey;
 		pData->state = LV_INDEV_STATE_RELEASED;
 		pThis->m_nPressedKey = 0;
-
-		// more keys waiting? have LVGL call us again right away
 		pData->continue_reading = pThis->m_nTail != pThis->m_nHead;
 
 		return;
 	}
 
-	if (pThis->m_nTail == pThis->m_nHead)
+	while (pThis->m_nTail != pThis->m_nHead)
 	{
-		pData->state = LV_INDEV_STATE_RELEASED;
+		DataMemBarrier ();
+		TZgKey Key = pThis->m_Queue[pThis->m_nTail];
+		pThis->m_nTail = (pThis->m_nTail + 1) & (QueueSize-1);
+
+		if (   pThis->m_pKeyHook != 0
+		    && (*pThis->m_pKeyHook) (Key, pThis->m_pKeyHookParam))
+		{
+			continue;
+		}
+
+		if (Key.nLVKey == 0)
+		{
+			continue;
+		}
+
+		// Space activates buttons, checkboxes, switches... like Enter, as
+		// people expect; only text areas get it as a character.
+		if (Key.nLVKey == ' ')
+		{
+			lv_group_t *pGroup = lv_indev_get_group (pIndev);
+			lv_obj_t *pFocused = pGroup ? lv_group_get_focused (pGroup) : 0;
+			if (pFocused != 0 && !lv_obj_check_type (pFocused, &lv_textarea_class))
+			{
+				Key.nLVKey = LV_KEY_ENTER;
+			}
+		}
+
+		pThis->m_nPressedKey = Key.nLVKey;
+		pData->key = Key.nLVKey;
+		pData->state = LV_INDEV_STATE_PRESSED;
+		pData->continue_reading = true;
+
 		return;
 	}
 
-	DataMemBarrier ();
-	u32 nKey = pThis->m_Queue[pThis->m_nTail];
-	pThis->m_nTail = (pThis->m_nTail + 1) & (QueueSize-1);
-
-	pThis->m_nPressedKey = nKey;
-	pData->key = nKey;
-	pData->state = LV_INDEV_STATE_PRESSED;
-	pData->continue_reading = true;
+	pData->state = LV_INDEV_STATE_RELEASED;
 }
 
-u32 CKeyboardIndev::Translate (const char *pString)
+boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey) const
 {
 	assert (pString != 0);
+	assert (pKey != 0);
+
+	u8 nRaw = m_nRawModifiers;
+	pKey->nMods =   ((nRaw & (LSHIFT | RSHIFT)) ? ZG_MOD_SHIFT : 0)
+		      | ((nRaw & (LCTRL | RCTRL)) ? ZG_MOD_CTRL : 0)
+		      | ((nRaw & ALT) ? ZG_MOD_ALT : 0);	// not AltGr: it types characters on many layouts
+	pKey->nLVKey = 0;
+	pKey->Name[0] = '\0';
 
 	if (pString[0] == '\0')
 	{
-		return 0;
+		return FALSE;
 	}
 
 	if (pString[1] == '\0')
 	{
-		switch (pString[0])
+		u8 c = (u8) pString[0];
+		switch (c)
 		{
-		case '\x1b':	return LV_KEY_ESC;
-		case '\x7f':	return LV_KEY_BACKSPACE;
-		case '\t':	return LV_KEY_NEXT;
-		case '\n':	return LV_KEY_ENTER;
-		default:	break;
+		case '\x1b':	pKey->nLVKey = LV_KEY_ESC;	 strcpy (pKey->Name, "Escape");    return TRUE;
+		case '\x7f':	pKey->nLVKey = LV_KEY_BACKSPACE; strcpy (pKey->Name, "Backspace"); return TRUE;
+		case '\n':	pKey->nLVKey = LV_KEY_ENTER;	 strcpy (pKey->Name, "Enter");     return TRUE;
+		case '\t':
+			pKey->nLVKey = (pKey->nMods & ZG_MOD_SHIFT) ? LV_KEY_PREV : LV_KEY_NEXT;
+			strcpy (pKey->Name, "Tab");
+			return TRUE;
+		default:
+			break;
 		}
 
-		u8 c = (u8) pString[0];
+		if (c >= 1 && c <= 26)		// Ctrl+letter: for apps only
+		{
+			pKey->Name[0] = 'a' + c - 1;
+			pKey->Name[1] = '\0';
+			pKey->nMods |= ZG_MOD_CTRL;
+			return TRUE;
+		}
+
 		if (c >= ' ' && c < 0x7f)
 		{
-			return c;
+			pKey->Name[0] = c;
+			pKey->Name[1] = '\0';
+			// Alt+key: for apps only, don't type it
+			pKey->nLVKey = (pKey->nMods & ZG_MOD_ALT) ? 0 : c;
+			return TRUE;
 		}
 
-		return 0;	// other control characters (Ctrl+letter) unused for now
+		return FALSE;
 	}
 
 	static const struct
 	{
 		const char *pSeq;
-		u32 nKey;
+		u32 nLVKey;
+		const char *pName;
 	}
 	Map[] =
 	{
-		{"\x1b[A",  LV_KEY_UP},
-		{"\x1b[B",  LV_KEY_DOWN},
-		{"\x1b[C",  LV_KEY_RIGHT},
-		{"\x1b[D",  LV_KEY_LEFT},
-		{"\x1b[1~", LV_KEY_HOME},
-		{"\x1b[4~", LV_KEY_END},
-		{"\x1b[3~", LV_KEY_DEL},
-		{"\x1b[5~", LV_KEY_PREV},	// PageUp: previous widget (no Shift+Tab in cooked mode)
-		{"\x1b[6~", LV_KEY_NEXT},	// PageDown: next widget
+		{"\x1b[A",  LV_KEY_UP,    "ArrowUp"},
+		{"\x1b[B",  LV_KEY_DOWN,  "ArrowDown"},
+		{"\x1b[C",  LV_KEY_RIGHT, "ArrowRight"},
+		{"\x1b[D",  LV_KEY_LEFT,  "ArrowLeft"},
+		{"\x1b[1~", LV_KEY_HOME,  "Home"},
+		{"\x1b[4~", LV_KEY_END,   "End"},
+		{"\x1b[3~", LV_KEY_DEL,   "Delete"},
+		{"\x1b[2~", 0,            "Insert"},
+		{"\x1b[5~", 0,            "PageUp"},
+		{"\x1b[6~", 0,            "PageDown"},
+		{"\x1b[[A", 0, "F1"}, {"\x1b[[B", 0, "F2"}, {"\x1b[[C", 0, "F3"},
+		{"\x1b[[D", 0, "F4"}, {"\x1b[[E", 0, "F5"}, {"\x1b[17~", 0, "F6"},
+		{"\x1b[18~", 0, "F7"}, {"\x1b[19~", 0, "F8"}, {"\x1b[20~", 0, "F9"},
 	};
 
 	for (unsigned i = 0; i < sizeof Map / sizeof Map[0]; i++)
 	{
 		if (strcmp (pString, Map[i].pSeq) == 0)
 		{
-			return Map[i].nKey;
+			pKey->nLVKey = Map[i].nLVKey;
+			strcpy (pKey->Name, Map[i].pName);
+			return TRUE;
 		}
 	}
 
-	return 0;
+	return FALSE;
 }

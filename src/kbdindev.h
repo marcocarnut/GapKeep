@@ -1,12 +1,18 @@
 //
 // kbdindev.h
 //
-// Feeds Circle's USB keyboard (cooked mode) into LVGL as a keypad input device.
+// Feeds Circle's USB keyboard into LVGL as a keypad input device.
 //
-// Circle delivers each key press (including auto-repeat) as a string: a
-// printable character, or a VT100-style escape sequence for special keys.
-// We translate those into LVGL key codes, queue them, and hand them to LVGL
-// one press/release pair at a time.
+// The keyboard runs in Circle's "mixed" mode: the cooked handler delivers
+// characters and VT100-style escape sequences (with auto-repeat and the
+// keymap applied), the raw handler gives us modifier state (Shift, Ctrl,
+// Alt, GUI). Each key press becomes a TZgKey, which is queued, offered to an
+// optional key hook (the running app's ui.onKey handler) and then, if not
+// consumed, delivered to LVGL as one press/release pair.
+//
+// The GUI ("Windows"/Super) key is the Home key: it asks the system to return
+// to the launcher. That request is raised from interrupt context, so it must
+// only set flags (see SetHomeHandler).
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -17,41 +23,70 @@
 #include <circle/types.h>
 #include <lvgl/lvgl.h>
 
+#define ZG_MOD_SHIFT	(1 << 0)
+#define ZG_MOD_CTRL	(1 << 1)
+#define ZG_MOD_ALT	(1 << 2)
+
+struct TZgKey
+{
+	u32 nLVKey;		// LVGL key code (LV_KEY_* or character), 0: not for LVGL
+	char Name[12];		// "a", "A", "Enter", "ArrowUp", "F5", ...
+	u8 nMods;		// ZG_MOD_*
+};
+
 class CKeyboardIndev
 {
 public:
+	typedef boolean TKeyHook (const TZgKey &rKey, void *pParam);	// TRUE: consumed
+	typedef void THomeHandler (void *pParam);			// IRQ context!
+
+public:
 	CKeyboardIndev (void);
 
-	// Creates the LVGL keypad device and a default focus group.
-	// Call after CLVGL::Initialize().
+	// Creates the LVGL keypad device. Call after CLVGL::Initialize().
 	void Initialize (void);
 
 	// Call from the main loop after USB plug-and-play updates.
 	void Update (boolean bPlugAndPlayUpdated);
 
-	lv_group_t *GetGroup (void) const	{ return m_pGroup; }
+	// Keys are delivered to widgets in this group.
+	void SetGroup (lv_group_t *pGroup);
+	lv_group_t *GetGroup (void) const;
+
+	void SetKeyHook (TKeyHook *pHook, void *pParam);
+	void SetHomeHandler (THomeHandler *pHandler, void *pParam);
+
+	// Drop queued keys (e.g. when switching apps).
+	void Flush (void);
 
 private:
 	static void KeyPressedHandler (const char *pString);
+	static void KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6]);
 	static void KeyboardRemovedHandler (CDevice *pDevice, void *pContext);
 	static void ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData);
 
-	void Enqueue (u32 nKey);
-	static u32 Translate (const char *pString);
+	void Enqueue (const TZgKey &rKey);
+	boolean Translate (const char *pString, TZgKey *pKey) const;
 
 private:
 	CUSBKeyboardDevice *m_pKeyboard;
 	lv_indev_t *m_pIndev;
-	lv_group_t *m_pGroup;
 
-	// Single producer (USB interrupt context) / single consumer (LVGL in the
-	// main loop) ring buffer.
+	volatile u8 m_nRawModifiers;	// last USB HID modifier byte
+	boolean m_bGUIDown;
+
+	// Single producer (USB interrupt context) / single consumer (main loop).
 	static const unsigned QueueSize = 64;	// power of two
-	volatile u32 m_Queue[QueueSize];
-	volatile unsigned m_nHead;		// written by producer
-	volatile unsigned m_nTail;		// written by consumer
+	TZgKey m_Queue[QueueSize];
+	volatile unsigned m_nHead;
+	volatile unsigned m_nTail;
 
-	u32 m_nPressedKey;			// key currently reported as pressed, 0 if none
+	u32 m_nPressedKey;		// key currently reported as pressed, 0 if none
+
+	TKeyHook *m_pKeyHook;
+	void *m_pKeyHookParam;
+	THomeHandler *m_pHomeHandler;
+	void *m_pHomeParam;
 
 	static CKeyboardIndev *s_pThis;
 };

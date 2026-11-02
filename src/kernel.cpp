@@ -1,12 +1,13 @@
 //
 // kernel.cpp
 //
-// Step 1 test kernel: LVGL on the HDMI framebuffer, USB mouse and keyboard.
+// zerogap kernel: brings up the hardware (HDMI framebuffer, USB keyboard and
+// mouse), LVGL, and the app host, then runs the main loop.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "kernel.h"
-#include "ui_test.h"
+#include "runtime/version.h"
 
 static const char FromKernel[] = "kernel";
 
@@ -15,7 +16,8 @@ CKernel::CKernel (void)
 	m_Timer (&m_Interrupt),
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
 	m_USBHCI (&m_Interrupt, &m_Timer, TRUE),	// TRUE: plug-and-play
-	m_GUI (&m_Screen)
+	m_GUI (&m_Screen),
+	m_AppHost (&m_Keyboard)
 {
 	m_ActLED.Blink (5);	// show we are alive
 }
@@ -74,6 +76,10 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		m_Keyboard.Initialize ();
+
+		m_Logger.Write (FromKernel, LogNotice, "zerogap " ZEROGAP_VERSION ", built " __DATE__ " " __TIME__);
+
+		bOK = m_AppHost.Initialize ();
 	}
 
 	return bOK;
@@ -81,16 +87,13 @@ boolean CKernel::Initialize (void)
 
 TShutdownMode CKernel::Run (void)
 {
-	m_Logger.Write (FromKernel, LogNotice, "zerogap step 1, built " __DATE__ " " __TIME__);
-
-	UITestCreate (m_Keyboard.GetGroup ());
-
 	while (1)
 	{
 		boolean bUpdated = m_USBHCI.UpdatePlugAndPlay ();
 
 		m_Keyboard.Update (bUpdated);
-		m_GUI.Update (bUpdated);
+		m_GUI.Update (bUpdated);		// runs LVGL: input, timers, drawing
+		m_AppHost.Update ();			// JS jobs, deferred work, app switches
 	}
 
 	return ShutdownHalt;
