@@ -22,6 +22,15 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o \
 	  generated/apps_bundle.o
 
+# "make TEST=1": test-only apps and kernel features (serial screenshots)
+ifeq ($(strip $(TEST)),1)
+OBJS	+= testshot.o
+DEFINE	+= -DZG_TEST
+BUILDMODE = test
+else
+BUILDMODE = production
+endif
+
 LIBS	= ../lib/lvgl/liblvgl.a \
 	  ../lib/quickjs/libquickjs.a \
 	  $(CIRCLEHOME)/lib/usb/libusb.a \
@@ -45,6 +54,11 @@ endif
 	@python3 ../tools/bundle_apps.py $@ $(APPSDIRS)
 
 FORCE:
+
+# Recompile what depends on ZG_TEST when switching between the two builds.
+.buildmode: FORCE
+	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
+kernel.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d
 

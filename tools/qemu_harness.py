@@ -18,6 +18,8 @@ Scenario file: one command per line, '#' starts a comment.
     moveto <x> <y>              move to the top-left corner, then by (x, y)
     click [left|right]          press and release a mouse button
     shot <name>                 save a screenshot as <outdir>/<name>.png
+    serialshot <name>           same, but fetched over the serial line from a
+                                test build (as on real hardware)
 
 Usage:
     qemu_harness.py [--kernel K] [--out DIR] [--keep] scenario.txt
@@ -69,7 +71,9 @@ class Machine:
         cmd = [
             'qemu-system-arm', '-M', 'raspi0', '-bios', os.path.abspath(kernel),
             '-display', 'none',
-            '-serial', 'file:' + self.serial_path,
+            # serial on a socket (for "serialshot"), everything also logged
+            '-chardev', 'socket,id=ser0,path=serial.sock,server=on,wait=off,logfile=serial.log',
+            '-serial', 'chardev:ser0',
             '-device', 'usb-kbd', '-device', 'usb-mouse',
             # relative socket path: AF_UNIX paths are limited to ~108 bytes
             '-monitor', 'unix:monitor.sock,server,nowait',
@@ -90,6 +94,51 @@ class Machine:
             os.chdir(cwd)
         self.mon.settimeout(2)
         self._drain()
+
+        # keep the serial socket drained, or the guest would block on output
+        import threading
+        self.rx = bytearray()
+        self.rx_lock = threading.Lock()
+        self.ser = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        for _ in range(100):
+            try:
+                cwd = os.getcwd()
+                os.chdir(workdir)
+                try:
+                    self.ser.connect('serial.sock')
+                finally:
+                    os.chdir(cwd)
+                break
+            except OSError:
+                time.sleep(0.05)
+        threading.Thread(target=self._serial_reader, daemon=True).start()
+
+    def _serial_reader(self):
+        while True:
+            try:
+                data = self.ser.recv(65536)
+            except OSError:
+                return
+            if not data:
+                return
+            with self.rx_lock:
+                self.rx += data
+
+    def serialshot(self, png_path):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import serialshot
+        with self.rx_lock:
+            pos = len(self.rx)
+
+        def read():
+            nonlocal pos
+            with self.rx_lock:
+                data = bytes(self.rx[pos:])
+                pos = len(self.rx)
+            return data
+        image = serialshot.capture(read, self.ser.sendall, timeout=60)
+        image.save(png_path)
+        return png_path
 
     def _drain(self):
         try:
@@ -222,6 +271,9 @@ def run_scenario(m, path, outdir):
                 m.moveto(x, y)
             elif cmd == 'click':
                 m.click(rest.strip() or 'left')
+            elif cmd == 'serialshot':
+                p = m.serialshot(os.path.join(outdir, rest.strip() + '.png'))
+                print('[%s] serial screenshot %s' % (where, p))
             elif cmd == 'shot':
                 p = m.shot(os.path.join(outdir, rest.strip() + '.png'))
                 print('[%s] screenshot %s' % (where, p))

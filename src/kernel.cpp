@@ -7,7 +7,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "kernel.h"
+#include <circle/machineinfo.h>
 #include "runtime/version.h"
+
+// same rate as the serial bootloader (FLASHBAUD), so one terminal setting
+// covers both
+#ifndef ZG_SERIAL_BAUD
+#define ZG_SERIAL_BAUD	921600
+#endif
 
 static const char FromKernel[] = "kernel";
 
@@ -18,6 +25,9 @@ CKernel::CKernel (void)
 	m_USBHCI (&m_Interrupt, &m_Timer, TRUE),	// TRUE: plug-and-play
 	m_GUI (&m_Screen),
 	m_AppHost (&m_Keyboard)
+#ifdef ZG_TEST
+	, m_TestShot (&m_Screen, &m_Serial)
+#endif
 {
 	m_ActLED.Blink (5);	// show we are alive
 }
@@ -37,7 +47,14 @@ boolean CKernel::Initialize (void)
 
 	if (bOK)
 	{
-		bOK = m_Serial.Initialize (115200);
+		// ZG_SERIAL_BAUD needs a fast enough UART clock (the Pi firmware
+		// gives 48 MHz, see init_uart_clock in config.txt); QEMU's is slower
+		unsigned nBaud = ZG_SERIAL_BAUD;
+		if (CMachineInfo::Get ()->GetClockRate (CLOCK_ID_UART) / (16 * nBaud) < 1)
+		{
+			nBaud = 115200;
+		}
+		bOK = m_Serial.Initialize (nBaud);
 	}
 
 	if (bOK)
@@ -101,6 +118,9 @@ TShutdownMode CKernel::Run (void)
 		m_Keyboard.Update (bUpdated);
 		m_GUI.Update (bUpdated);		// runs LVGL: input, timers, drawing
 		m_AppHost.Update ();			// JS jobs, deferred work, app switches
+#ifdef ZG_TEST
+		m_TestShot.Update ();			// serial screenshots
+#endif
 	}
 
 	return ShutdownHalt;

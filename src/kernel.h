@@ -21,6 +21,9 @@
 #include "kbdindev.h"
 #include "runtime/apphost.h"
 #include "crypto/hwrng.h"
+#ifdef ZG_TEST
+#include "testshot.h"
+#endif
 
 enum TShutdownMode
 {
@@ -56,6 +59,9 @@ private:
 	CLVGL			m_GUI;
 	CKeyboardIndev		m_Keyboard;
 	CAppHost		m_AppHost;
+#ifdef ZG_TEST
+	CTestShot		m_TestShot;
+#endif
 };
 
 #endif

@@ -1,0 +1,7 @@
+# Needs a test build (make TEST=1): screenshots over the serial line, as used
+# on real hardware, must match QEMU's own screendump.
+expect Keyboard attached 60
+expect launcher ready 60
+wait 1
+shot qemu
+serialshot serial
