@@ -14,6 +14,9 @@ shot 02-gallery
 # focus is on the letters-only text area: digits must be rejected
 type abc123def
 expect text: abcdef$
+# held keys auto-repeat while typing (Enter and Space on buttons do not)
+key a@1500
+expect text: abcdefaaa+$
 key tab
 key spc
 expect checkbox: true
@@ -21,6 +24,16 @@ key tab
 key spc
 expect switch: true
 shot 03-inputs
+# the pointer area under the slider: a click, then a drag
+moveto 100 290
+click
+expect pointer: press \d+,\d+
+expect pointer: release after 0 drag
+mousedown
+mouse 60 0
+mouse 0 20
+mouseup
+expect pointer: release after [1-9]\d* drag
 # self-test tab: click its header (5th tab of 5)
 moveto 90% 20
 click

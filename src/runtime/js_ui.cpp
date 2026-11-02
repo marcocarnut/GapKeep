@@ -30,6 +30,7 @@
 #include <circle/logger.h>
 #include <circle/util.h>
 #include <circle/string.h>
+#include <circle/timer.h>
 #include <assert.h>
 
 // --- types ------------------------------------------------------------------
@@ -70,6 +71,9 @@ enum TEventSlot
 	EvBlur,
 	EvLongPress,
 	EvKey,
+	EvPress,
+	EvDrag,
+	EvRelease,
 	EvCount
 };
 
@@ -88,6 +92,9 @@ Events[EvCount] =
 	{"blur",      "onBlur",      LV_EVENT_DEFOCUSED},
 	{"longpress", "onLongPress", LV_EVENT_LONG_PRESSED},
 	{"key",       "onKey",       LV_EVENT_KEY},
+	{"press",     "onPress",     LV_EVENT_PRESSED},
+	{"drag",      "onDrag",      LV_EVENT_PRESSING},
+	{"release",   "onRelease",   LV_EVENT_RELEASED},
 };
 
 struct TZgNode
@@ -103,6 +110,7 @@ struct TZgNode
 	TZgNode *pNextDeferred;
 	char *pAccepted;		// TextArea accepted chars (LVGL keeps the pointer)
 	struct TZgQR *pQR;		// QRCode settings
+	lv_point_t LastDrag;		// pointer position of the last "drag" event
 };
 
 struct TZgQR
@@ -336,6 +344,28 @@ static void NodeEventCallback (lv_event_t *e)
 		return;
 	}
 
+	// LVGL repeats PRESSING as long as the button is held. A "drag" is a
+	// press that moved: only pointer positions that changed get through.
+	if (Code == LV_EVENT_PRESSED || Code == LV_EVENT_PRESSING)
+	{
+		lv_indev_t *pIndev = lv_indev_active ();
+		boolean bPointer = pIndev != 0 && lv_indev_get_type (pIndev) == LV_INDEV_TYPE_POINTER;
+		lv_point_t Point = {0, 0};
+		if (bPointer)
+		{
+			lv_indev_get_point (pIndev, &Point);
+		}
+		if (Code == LV_EVENT_PRESSING)
+		{
+			if (   !bPointer
+			    || (Point.x == pNode->LastDrag.x && Point.y == pNode->LastDrag.y))
+			{
+				return;
+			}
+		}
+		pNode->LastDrag = Point;
+	}
+
 	for (unsigned i = 0; i < EvCount; i++)
 	{
 		if (Events[i].Code != Code || JS_IsUndefined (pNode->Handlers[i]))
@@ -353,6 +383,27 @@ static void NodeEventCallback (lv_event_t *e)
 		{
 			char Buf[2];
 			JS_SetPropertyStr (ctx, Ev, "key", JS_NewString (ctx, KeyName (lv_event_get_key (e), Buf)));
+		}
+		else if (   Code == LV_EVENT_PRESSED || Code == LV_EVENT_PRESSING
+			 || Code == LV_EVENT_RELEASED)
+		{
+			// press/drag/release: from the mouse, or from Enter/Space on the
+			// focused widget (no position then)
+			lv_indev_t *pIndev = lv_indev_active ();
+			boolean bPointer = pIndev != 0 && lv_indev_get_type (pIndev) == LV_INDEV_TYPE_POINTER;
+			unsigned nSec, nUsec;
+			CTimer::Get ()->GetUptime (&nSec, &nUsec);
+			JS_SetPropertyStr (ctx, Ev, "pointer", JS_NewBool (ctx, bPointer));
+			JS_SetPropertyStr (ctx, Ev, "time", JS_NewFloat64 (ctx, nSec * 1000.0 + nUsec / 1000.0));
+			if (bPointer)
+			{
+				lv_point_t Point;
+				lv_indev_get_point (pIndev, &Point);
+				lv_area_t Coords;
+				lv_obj_get_coords (pNode->pObj, &Coords);
+				JS_SetPropertyStr (ctx, Ev, "x", JS_NewInt32 (ctx, Point.x - Coords.x1));
+				JS_SetPropertyStr (ctx, Ev, "y", JS_NewInt32 (ctx, Point.y - Coords.y1));
+			}
 		}
 		JSValue Value = GetValueProp (ctx, pNode);
 		if (!JS_IsUndefined (Value))
@@ -385,6 +436,12 @@ static int SetHandler (JSContext *ctx, TZgNode *pNode, unsigned nSlot, JSValueCo
 	{
 		lv_obj_add_event_cb (pNode->pObj, NodeEventCallback, Events[nSlot].Code, pNode);
 		pNode->nRegistered |= 1u << nSlot;
+	}
+
+	if (nSlot == EvDrag && JS_IsFunction (ctx, Func))
+	{
+		// dragging on this widget must not scroll its parents instead
+		lv_obj_remove_flag (pNode->pObj, LV_OBJ_FLAG_SCROLL_CHAIN);
 	}
 
 	return 0;
@@ -777,6 +834,30 @@ SETTER (SetHidden)     { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_HIDDE
 SETTER (SetScrollable) { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_SCROLLABLE, FALSE); }
 SETTER (SetClickable)  { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_CLICKABLE, FALSE); }
 GETTER (GetHidden)     { return JS_NewBool (ctx, lv_obj_has_flag (OBJ, LV_OBJ_FLAG_HIDDEN)); }
+
+static lv_style_t s_FocusStyle;		// the focus ring (see ApplyTheme)
+
+// Buttons, text areas and the like are focusable from birth; this makes any
+// widget a stop in the Tab order (or takes one out of it).
+SETTER (SetFocusable)
+{
+	boolean b;
+	if (ToBool (ctx, v, pProp, &b)) return -1;
+	lv_group_t *pGroup = (lv_group_t *) lv_obj_get_group (OBJ);
+	if (b && pGroup == 0)
+	{
+		lv_group_add_obj (pNode->pApp->pGroup, OBJ);
+		lv_obj_add_flag (OBJ, LV_OBJ_FLAG_SCROLL_ON_FOCUS);	// as buttons do
+		// plain Containers have no theme styles, so no focus ring either
+		lv_obj_add_style (OBJ, &s_FocusStyle, LV_STATE_FOCUS_KEY);
+	}
+	else if (!b && pGroup != 0)
+	{
+		lv_group_remove_obj (OBJ);
+	}
+	return 0;
+}
+GETTER (GetFocusable) { return JS_NewBool (ctx, lv_obj_get_group (OBJ) != 0); }
 
 SETTER (SetDisabled)
 {
@@ -1284,6 +1365,7 @@ static const TProp Props[] =
 	{"disabled",    ALL, SetDisabled, GetDisabled},
 	{"scrollable",  ALL, SetScrollable, 0},
 	{"clickable",   ALL, SetClickable, 0},
+	{"focusable",   ALL, SetFocusable, GetFocusable},
 	// widget specific
 	{"text",        TEXTUAL, SetText, GetText},
 	{"overflow",    T (WLabel), SetOverflow, 0},
@@ -2005,7 +2087,6 @@ static JSValue js_ui_on_key (JSContext *ctx, JSValueConst this_val, int argc, JS
 // zerogap's theme = LVGL's default theme plus a clearly visible focus ring
 // in the secondary color, applied on top as a child theme.
 static lv_theme_t s_FocusTheme;
-static lv_style_t s_FocusStyle;
 
 static void FocusThemeApply (lv_theme_t *pTheme, lv_obj_t *pObj)
 {
@@ -2265,6 +2346,7 @@ boolean ZgUIDispatchKey (TZgApp *pApp, const TZgKey &rKey)
 	JS_SetPropertyStr (ctx, Ev, "shift", JS_NewBool (ctx, rKey.nMods & ZG_MOD_SHIFT));
 	JS_SetPropertyStr (ctx, Ev, "ctrl", JS_NewBool (ctx, rKey.nMods & ZG_MOD_CTRL));
 	JS_SetPropertyStr (ctx, Ev, "alt", JS_NewBool (ctx, rKey.nMods & ZG_MOD_ALT));
+	JS_SetPropertyStr (ctx, Ev, "repeat", JS_NewBool (ctx, rKey.bRepeat));
 
 	JSValue Result = CAppHost::Get ()->Call (pApp->KeyHandler, JS_UNDEFINED, 1, &Ev);
 	boolean bConsumed = !JS_IsException (Result) && JS_ToBool (ctx, Result) > 0;

@@ -16,6 +16,7 @@ import {
   seedQrDigits, samplesToBytes,
 } from "./vendor/dice.js";
 import { runDice39SelfTest } from "./lib/selftest.js";
+import { entropyBitsTarget, newPad, addPadSample } from "./lib/entropypad.js";
 import { S } from "./lib/strings.js";
 
 const GREEN = "#66bb6a", AMBER = "#ffb300", RED = "#ef5350", MUTED = "#8a9199";
@@ -25,6 +26,7 @@ const state = {
   total: 24,          // phrase length
   fields: [],         // word entry boxes
   samples: [],        // key timings, mixed into the device entropy
+  pad: null,          // entropy pad: { samples, bits, last, lastTime }
   result: null,       // buildMnemonic output + extras
   selftest: null,     // { passed, failed }
 };
@@ -43,6 +45,39 @@ ui.onKey((ev) => {
   }
   return false;  // never consume: this only listens
 });
+
+// --- the entropy pad (accounting in lib/entropypad.js) ----------------------
+
+// The pad, its progress bar and label. onUpdate runs after every accepted sample.
+function entropyPad(parent, target, onUpdate) {
+  new ui.Label(parent, { text: S.step2Heading, font: 18 });
+  paragraph(parent, S.step2Body, { color: MUTED });
+  // the bar goes above the pad (dice39 has it below): scrolled to the
+  // focused pad on a small screen, it stays in view
+  const row = new ui.Container(parent, { layout: "row", alignItems: "center", gap: 12, width: "100%" });
+  const bar = new ui.Bar(row, { min: 0, max: target, value: 0, grow: 1 });
+  const label = new ui.Label(row, { font: 14, color: MUTED });
+  const pad = new ui.Container(parent, {
+    width: "100%", height: 140, radius: 10, borderWidth: 2, borderColor: "#3a4152", bg: "#14171f",
+    layout: "column", justify: "center", alignItems: "center", scrollable: false, focusable: true,
+  });
+  new ui.Label(pad, { text: S.padText, color: MUTED, clickable: false });
+
+  const update = () => {
+    const bits = Math.min(state.pad.bits, target);
+    bar.value = bits;
+    label.text = `${S.bitsLabel(bits, target)}   ${Math.round(bits / target * 100)}%`;
+    if (bits >= target && !state.pad.announced) {
+      state.pad.announced = true;   // counts only: never log what was sampled
+      console.log(`dice39: entropy pad full: ${state.pad.samples.length} samples, ${state.pad.bits} bits`);
+    }
+    onUpdate();
+  };
+  pad.onPress = (ev) => { if (addPadSample(state.pad, ev, "tap")) update(); };
+  pad.onDrag = (ev) => { if (addPadSample(state.pad, ev, "drag")) update(); };
+  update();
+  return pad;
+}
 
 // --- helpers --------------------------------------------------------------
 
@@ -137,6 +172,11 @@ function showEntry() {
   for (let i = 0; i < spec.maxUser; i++) state.fields.push(makeField(grid, i, cellWidth));
 
   const status = new ui.Label({ width: "100%", font: 14 });
+  const target = entropyBitsTarget(spec);
+  state.refresh = null;   // the previous page's, if any: its widgets are gone
+  state.pad = newPad();
+  const pad = entropyPad(ui.screen, target, () => state.refresh && state.refresh());
+  state.padWidget = pad;
   const buttons = buttonRow(ui.screen);
   const generate = new ui.Button(buttons, {
     text: ui.symbols.ok + "  Generate",
@@ -155,14 +195,16 @@ function showEntry() {
     const n = countWords();
     return n >= spec.minUser && n <= spec.maxUser;
   };
+  state.padFull = () => state.pad.bits >= target;
   state.refresh = () => {
     const n = countWords();
     const ready = state.ready();
-    generate.disabled = !ready;
+    generate.disabled = !(ready && state.padFull());
     const typed = state.fields.filter((f) => normalize(f.ta.text)).length;
     let text = `${n} word${n === 1 ? "" : "s"} entered (${spec.minUser} to ${spec.maxUser}).`;
     if (ready) text += ` Words ${n + 1} to ${state.total} will come from this device.`;
     else text += ` Enter at least ${spec.minUser - n} more.`;
+    if (ready && !state.padFull()) text += " Fill the entropy bar below to enable Generate.";
     if (typed > n) text += " Words after the first empty or unfinished box are not used.";
     status.set({ text, color: ready ? GREEN : MUTED });
   };
@@ -190,15 +232,20 @@ function makeField(parent, i, width) {
   const f = { i, ta, note, word: null, dice: null };
   ta.onChange = () => updateField(f);
   ta.onSubmit = () => {
-    // Enter on an empty box once there are enough words: go to Generate
-    if (!normalize(ta.text) && state.ready && state.ready()) return state.generateButton.focus();
+    // Enter on an empty box once there are enough words: go on to the
+    // entropy pad, or to Generate once the pad is full
+    if (!normalize(ta.text) && state.ready && state.ready()) return nextAfterWords().focus();
     complete(f);
     const next = state.fields[i + 1];
     if (next) next.ta.focus();
-    else if (state.generateButton) state.generateButton.focus();
+    else if (state.generateButton) nextAfterWords().focus();
   };
   ta.onBlur = () => complete(f);
   return f;
+}
+
+function nextAfterWords() {
+  return state.padFull() ? state.generateButton : state.padWidget;
 }
 
 function setNote(f, text, color) {
@@ -300,7 +347,10 @@ async function onGenerate() {
   const userWords = state.fields.slice(0, n).map((f) => f.word);
   try {
     const baseline = zgcrypto.randomBytes(32);
-    const seed = await sha256(concatBytes(baseline, samplesToBytes(state.samples)));
+    // dice39 hashes the CSPRNG baseline with the pad samples; zerogap adds
+    // the key timings after them
+    const seed = await sha256(concatBytes(baseline, samplesToBytes(state.pad.samples),
+      samplesToBytes(state.samples)));
     const r = await buildMnemonic(BIP39_WORDS, userWords, seed, state.total);
     r.typed = userWords;
     r.sorted = r.patternSuspected === "identical" ? null : sortedPairsSuspected(userWords);
@@ -389,6 +439,8 @@ function wipe() {
   if (state.result && state.result.entropyBytes) state.result.entropyBytes.fill(0);
   state.result = null;
   state.fields = [];
+  state.pad = null;
+  state.samples = [];
   sys.gc();
 }
 
@@ -503,8 +555,8 @@ function showAbout() {
     "checked against the published page.", { color: MUTED });
   paragraph(ui.screen,
     "Different from the web page: there is no printing (print the dice tables from the web page on any " +
-    "computer), no clipboard, and no network check, because this device has no network. Device entropy " +
-    "comes from the hardware random generator and your key timing instead of a touch pad.", { color: MUTED });
+    "computer), no clipboard, and no network check, because this device has no network. The entropy pad " +
+    "also takes Space presses, for use without a mouse, and your key timing is mixed in too.", { color: MUTED });
   paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. zerogap ${sys.version.zerogap}, ` +
     `QuickJS ${sys.version.quickjs}, LVGL ${sys.version.lvgl}.`, { color: MUTED, font: 12 });
   new ui.Button({ text: "Back", onClick: showStart }).focus();

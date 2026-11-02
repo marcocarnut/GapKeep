@@ -19,6 +19,7 @@ CKeyboardIndev::CKeyboardIndev (void)
 :	m_pKeyboard (0),
 	m_pIndev (0),
 	m_nRawModifiers (0),
+	m_bNewPress (FALSE),
 	m_bGUIDown (FALSE),
 	m_nHead (0),
 	m_nTail (0),
@@ -32,6 +33,7 @@ CKeyboardIndev::CKeyboardIndev (void)
 {
 	assert (s_pThis == 0);
 	s_pThis = this;
+	memset (m_RawKeys, 0, sizeof m_RawKeys);
 }
 
 void CKeyboardIndev::Initialize (void)
@@ -100,6 +102,32 @@ void CKeyboardIndev::KeyStatusHandlerRaw (unsigned char ucModifiers, const unsig
 
 	pThis->m_nRawModifiers = ucModifiers;
 
+	// Circle calls this before it turns the same report into characters;
+	// auto-repeat characters come from a timer, with no report. So a
+	// character is a real key press only if some key went down since the
+	// previous one. (Comparing key sets, not counting reports: keyboards
+	// may resend unchanged reports.)
+	for (unsigned i = 0; i < 6; i++)
+	{
+		if (RawKeys[i] == 0)
+		{
+			continue;
+		}
+		boolean bWasDown = FALSE;
+		for (unsigned j = 0; j < 6; j++)
+		{
+			if (pThis->m_RawKeys[j] == RawKeys[i])
+			{
+				bWasDown = TRUE;
+			}
+		}
+		if (!bWasDown)
+		{
+			pThis->m_bNewPress = TRUE;
+		}
+	}
+	memcpy (pThis->m_RawKeys, RawKeys, sizeof pThis->m_RawKeys);
+
 	boolean bGUI = (ucModifiers & (LWIN | RWIN)) != 0;
 	if (bGUI && !pThis->m_bGUIDown && pThis->m_pHomeHandler != 0)
 	{
@@ -113,6 +141,8 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 	assert (s_pThis != 0);
 
 	TZgKey Key;
+	Key.bRepeat = !s_pThis->m_bNewPress;
+	s_pThis->m_bNewPress = FALSE;
 	if (s_pThis->Translate (pString, &Key))
 	{
 		s_pThis->Enqueue (Key);
@@ -142,8 +172,9 @@ void CKeyboardIndev::Enqueue (const TZgKey &rKey)
 
 // Each queued key is first offered to the key hook (main-loop context, so it
 // may call into JavaScript). If not consumed and it has an LVGL code, it
-// becomes one PRESSED report followed by one RELEASED report. Circle already
-// generates auto-repeat, so LVGL's own long-press repeat is not needed.
+// becomes one PRESSED report followed by one RELEASED report. Circle
+// generates auto-repeat (enabled by patches/circle/0002), so LVGL's own
+// long-press repeat is not needed.
 void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 {
 	assert (s_pThis != 0);
@@ -196,6 +227,13 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 			{
 				Key.nLVKey = LV_KEY_ENTER;
 			}
+		}
+
+		// Holding Enter (or Space on a button) must not click again and
+		// again: auto-repeat is for moving and typing, not for actions.
+		if (Key.bRepeat && Key.nLVKey == LV_KEY_ENTER)
+		{
+			continue;
 		}
 
 		pThis->m_nPressedKey = Key.nLVKey;

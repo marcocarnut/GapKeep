@@ -42,8 +42,20 @@ type sausage
 key ret
 wait 1
 shot 03-entry-done
-# focus is on word 13 (empty): Enter goes to Generate, Enter again generates
+# focus is on word 13 (empty): Enter goes on to the entropy pad, as the
+# pad is not full yet and Generate is disabled
 key ret
+# Space on the pad: 3 bits per press, 128 needed. Held down, it must
+# count once (auto-repeat is not a press): 1 held + 42 = 43 presses.
+key spc@1500
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+expect dice39: entropy pad full: 43 samples, 129 bits
+wait 1
+shot 03b-pad-full
+# Tab to Generate, Enter generates
+key tab
 key ret
 expect dice39: generated a 24-word phrase, 132 bits from dice, 124 from the device 30
 expect dice39: verbatim check ok

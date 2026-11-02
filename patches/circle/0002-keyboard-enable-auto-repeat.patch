@@ -1,0 +1,20 @@
+From: zerogap
+Subject: keyboard: enable auto-repeat
+
+Holding Backspace or an arrow key repeats it, as people expect. zerogap
+tells repeats from real presses (src/kbdindev.cpp) and never lets a
+repeat click a button.
+
+diff --git a/lib/input/keyboardbehaviour.cpp b/lib/input/keyboardbehaviour.cpp
+index d529c98..971323d 100644
+--- a/lib/input/keyboardbehaviour.cpp
++++ b/lib/input/keyboardbehaviour.cpp
+@@ -20,7 +20,7 @@
+ #include <circle/input/keyboardbehaviour.h>
+ #include <assert.h>
+ 
+-//#define REPEAT_ENABLE
++#define REPEAT_ENABLE
+ 
+ #define REPEAT_DELAY		MSEC2HZ (400)
+ #define REPEAT_RATE		MSEC2HZ (80)

@@ -124,6 +124,7 @@ class RigMachine:
         self.lock = threading.Lock()
         self.kbd = open('/dev/hidg0', 'wb', buffering=0)
         self.mouse_dev = open('/dev/hidg1', 'wb', buffering=0)
+        self.buttons = 0
         threading.Thread(target=self._reader, daemon=True).start()
 
     def _reader(self):
@@ -166,8 +167,8 @@ class RigMachine:
         for c in text:
             self.key(qemu_harness.char_to_key(c))
 
-    def _move(self, dx, dy, buttons=0):
-        self.mouse_dev.write(bytes([buttons, dx & 0xff, dy & 0xff]))
+    def _move(self, dx, dy):
+        self.mouse_dev.write(bytes([self.buttons, dx & 0xff, dy & 0xff]))
         time.sleep(0.012)
 
     def mouse(self, dx, dy):
@@ -189,10 +190,17 @@ class RigMachine:
         time.sleep(0.1)
 
     def click(self, button='left'):
-        mask = {'left': 1, 'right': 2, 'middle': 4}[button]
-        self._move(0, 0, mask)
+        self.mousedown(button)
+        self.mouseup()
+
+    def mousedown(self, button='left'):
+        self.buttons = {'left': 1, 'right': 2, 'middle': 4}[button]
+        self._move(0, 0)
         time.sleep(0.15)
-        self._move(0, 0, 0)
+
+    def mouseup(self):
+        self.buttons = 0
+        self._move(0, 0)
         time.sleep(0.15)
 
     def serialshot(self, png_path):

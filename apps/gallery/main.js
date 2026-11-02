@@ -42,6 +42,20 @@ new ui.Slider(inputs, {
   },
 });
 
+// press / drag / release: any widget can follow the pointer
+let drags = 0;
+const area = new ui.Container(inputs, {
+  width: 300, height: 120, radius: 8, borderWidth: 2, borderColor: "#3a4152",
+  layout: "column", justify: "center", alignItems: "center",
+  onPress: (ev) => {
+    drags = 0;
+    console.log(`pointer: press ${ev.pointer ? ev.x + "," + ev.y : "(key)"}`);
+  },
+  onDrag: () => { drags++; },
+  onRelease: (ev) => console.log(`pointer: release after ${drags} drag event(s)`),
+});
+new ui.Label(area, { text: "Press and drag here", color: "#8a9199", clickable: false });
+
 // --- Table --------------------------------------------------------------
 const tablePage = tabs.addTab("Table");
 const table = new ui.Table(tablePage, {

@@ -192,4 +192,37 @@ function samplesToBytes(samples) {
   return new Uint8Array(arr.buffer);
 }
 
-export { TABLE_CELLS, TABLE_WORDS, REROLL_CELLS, GRID_COLS, rerollPositions, buildTableCells, diceTable, sortedPairsSuspected, stripDiceSeparators, parseDiceCode, isPartialDiceCode, diceWordFor, SEEDQR_ECC, seedQrDigits, compactSeedQrPayload, samplesToBytes };
+/* Entropy accounting.
+   The progress bar used to count raw pointer samples, which meant a mouse
+   drifting across the pad — or resting on it while the OS emitted move
+   events — filled it without contributing anything unpredictable. We now
+   only accept input that a human actually caused, and score it in
+   deliberately pessimistic bits:
+
+     - a drag point is credited with the low-order jitter of where the
+       finger/cursor landed, and nothing for timing: during a drag, sample
+       arrival is paced by the pointer hardware (~8ms here), so the clock
+       reading is close to predictable from the previous one;
+     - a tap/press is human-initiated, so the wall-clock millisecond it
+       lands on is genuinely the user's to choose — worth ~3 bits on its
+       own (a millisecond digit is 10 bits if uniform; we claim well under
+       that because presses cluster and users have rhythm).
+
+   None of this gates the real security of the seed: crypto.getRandomValues
+   supplies a full 32-byte CSPRNG baseline that this material is hashed
+   together with. The bar exists so the user contributes *something*
+   physical, and so the number it shows isn't a lie. */
+const BITS_PER_DRAG_POINT = 1;
+
+const BITS_PER_TAP = 4;
+
+// Far enough apart that a point isn't largely predictable from the previous
+// one — a smooth drag sampled every few pixels is mostly its own direction
+// repeated, which is what would make the 1-bit credit above a lie.
+const MIN_DRAG_DISTANCE_PX = 12;
+
+const MIN_SAMPLE_INTERVAL_MS = 8;
+
+const SAMPLE_CAP = 1200;
+
+export { TABLE_CELLS, TABLE_WORDS, REROLL_CELLS, GRID_COLS, rerollPositions, buildTableCells, diceTable, sortedPairsSuspected, stripDiceSeparators, parseDiceCode, isPartialDiceCode, diceWordFor, SEEDQR_ECC, seedQrDigits, compactSeedQrPayload, samplesToBytes, BITS_PER_DRAG_POINT, BITS_PER_TAP, MIN_DRAG_DISTANCE_PX, MIN_SAMPLE_INTERVAL_MS, SAMPLE_CAP };

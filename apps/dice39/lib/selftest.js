@@ -11,6 +11,7 @@ import {
   diceTable, parseDiceCode, diceWordFor, isPartialDiceCode, sortedPairsSuspected,
   seedQrDigits, TABLE_WORDS, REROLL_CELLS,
 } from "../vendor/dice.js";
+import { entropyBitsTarget, newPad, addPadSample } from "./entropypad.js";
 
 const hexToBytes = (h) => new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
 const bytesToHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -185,6 +186,23 @@ export async function runDice39SelfTest() {
       const r = CODEX32.cxRecover(shares.slice(n - k));
       eq(bytesToHex(r.seed), bytesToHex(seed), k + "-of-" + n);
     }
+  });
+
+  await test("entropy pad accounting", () => {
+    eq(entropyBitsTarget(PHRASE_SIZES[24]), 128, "target at 24 words");
+    eq(entropyBitsTarget(PHRASE_SIZES[12]), 64, "target at 12 words");
+    const pad = newPad();
+    const at = (x, y, time) => ({ pointer: true, x, y, time });
+    eq(addPadSample(pad, at(100, 100, 1000), "tap"), true, "mouse press");
+    eq(pad.bits, 4, "a mouse press scores 4");
+    eq(addPadSample(pad, at(150, 100, 1003), "drag"), false, "drag 3 ms after the last point");
+    eq(addPadSample(pad, at(105, 105, 1100), "drag"), false, "drag of 7 px");
+    eq(addPadSample(pad, at(120, 100, 1200), "drag"), true, "drag of 20 px");
+    eq(pad.bits, 5, "a drag point scores 1");
+    eq(addPadSample(pad, { pointer: false, time: 1300 }, "tap"), true, "Space on the pad");
+    eq(pad.bits, 8, "a key press scores 3");
+    eq(pad.samples.length, 3, "accepted samples");
+    eq(pad.samples[2].x, -1, "key press has no position");
   });
 
   return { passed, failed };

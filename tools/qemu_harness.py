@@ -13,12 +13,15 @@ Scenario file: one command per line, '#' starts a comment.
     wait <seconds>              sleep
     expect <regex> [timeout]    wait until the serial log matches (default 30 s)
     type <text>                 type text (rest of line, verbatim)
-    key <qemu-key> [...]        press keys, e.g. "key tab", "key ret", "key ctrl-a"
+    key <qemu-key> [...]        press keys, e.g. "key tab", "key ret", "key ctrl-a";
+                                "key spc@1500" holds the key 1.5 s (auto-repeat)
     mouse <dx> <dy>             relative mouse move, split into small steps
     moveto <x> <y>              move to the top-left corner, then by (x, y);
                                 "50%" is half the screen width (or height),
                                 so scenarios work at any resolution
     click [left|right]          press and release a mouse button
+    mousedown [left|right]      press a mouse button (moves then drag)
+    mouseup                     release the mouse buttons
     shot <name>                 save a screenshot as <outdir>/<name>.png
     serialshot <name>           same, but fetched over the serial line from a
                                 test build (as on real hardware)
@@ -203,9 +206,14 @@ class Machine:
         time.sleep(0.1)
 
     def click(self, button='left'):
-        mask = {'left': 1, 'right': 2, 'middle': 4}[button]
-        self.monitor('mouse_button %d' % mask)
+        self.mousedown(button)
+        self.mouseup()
+
+    def mousedown(self, button='left'):
+        self.monitor('mouse_button %d' % {'left': 1, 'right': 2, 'middle': 4}[button])
         time.sleep(0.15)
+
+    def mouseup(self):
         self.monitor('mouse_button 0')
         time.sleep(0.15)
 
@@ -275,7 +283,11 @@ def run_scenario(m, path, outdir):
                 m.type(line.strip()[len('type '):])
             elif cmd == 'key':
                 for k in rest.split():
-                    m.key(k)
+                    name, _, hold = k.partition('@')
+                    if hold:
+                        m.key(name, int(hold))
+                    else:
+                        m.key(name)
             elif cmd == 'mouse':
                 dx, dy = (int(v) for v in rest.split())
                 m.mouse(dx, dy)
@@ -284,6 +296,10 @@ def run_scenario(m, path, outdir):
                 m.moveto(x, y)
             elif cmd == 'click':
                 m.click(rest.strip() or 'left')
+            elif cmd == 'mousedown':
+                m.mousedown(rest.strip() or 'left')
+            elif cmd == 'mouseup':
+                m.mouseup()
             elif cmd == 'serialshot':
                 p = m.serialshot(os.path.join(outdir, rest.strip() + '.png'))
                 print('[%s] serial screenshot %s' % (where, p))

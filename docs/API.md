@@ -126,6 +126,7 @@ A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.
 | `disabled` | boolean | *Readable*. Grayed out, ignores input. |
 | `scrollable` | boolean | Whether content overflowing the widget can be scrolled. |
 | `clickable` | boolean | Whether the widget receives clicks. |
+| `focusable` | boolean | *Readable*. Whether Tab stops at the widget. Buttons, text areas and other input widgets are focusable already; set it on a Container to make it a keyboard target (it gets the focus ring and is scrolled into view when focused). |
 
 ### Events
 
@@ -138,6 +139,9 @@ A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.
 | `"blur"` | `onBlur` | Lost keyboard focus. |
 | `"longpress"` | `onLongPress` | Pressed and held. |
 | `"key"` | `onKey` | A key reached the focused widget (after `ui.onKey`). |
+| `"press"` | `onPress` | The mouse button went down on the widget, or Enter/Space while it is focused. |
+| `"drag"` | `onDrag` | The mouse moved while pressed on the widget (only when it actually moved). |
+| `"release"` | `onRelease` | The press ended. |
 
 Handlers receive one event object and are called with `this` set to the
 widget:
@@ -148,6 +152,14 @@ widget:
 | `target` | The widget. |
 | `value` | For value-carrying widgets: TextArea text, Checkbox/Switch `checked`, Slider/Bar `value`, Dropdown `selected`, TabView `active`. |
 | `key` | `"key"` events only: key name (see [key names](#key-names)). |
+| `pointer` | `"press"`, `"drag"`, `"release"`: `true` if from the mouse, `false` if from the keyboard. |
+| `x`, `y` | Same events, mouse only: position relative to the widget's top-left corner, px. |
+| `time` | Same events: uptime in milliseconds, microsecond resolution (as `sys.uptime()`). |
+
+A widget with a `"drag"` handler does not scroll its parents when dragged
+on, so drawing or entropy-collecting areas work inside scrollable pages.
+Holding Enter or Space does not repeat `"click"` or `"press"`: auto-repeat
+moves and types, but never activates.
 
 ### Widgets
 
@@ -272,6 +284,7 @@ Called for every key press before it reaches the focused widget. Return
 | --- | --- |
 | `key` | Key name (see below). |
 | `shift`, `ctrl`, `alt` | Modifier state (booleans). |
+| `repeat` | `true` if the key is being held down and this press is an auto-repeat (after 400 ms, every 80 ms). |
 
 With Ctrl or Alt held, keys are delivered to the handler only, not typed.
 

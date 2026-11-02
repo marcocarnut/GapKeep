@@ -13,7 +13,7 @@ export const S = {
     "anything brute-forceable. Switching length clears the boxes: the same words mean a different wallet at each length.",
   entryHelp: "Type each word, or its dice code instead: a3526 or b3526 (table, then the four dice). " +
     "Just 3526 offers both tables' words to pick from. Enter moves to the next box; Enter on an empty box " +
-    "goes to Generate.",
+    "goes on to the entropy pad below.",
   reroll: "REROLL: throw the four dice again on this same table, and do not re-flip the coin.",
 
   coinSkip: (n, t, odds, actual, ideal) => [
@@ -47,5 +47,15 @@ export const S = {
     "BIP-93 tool gives back the entropy, and handing that to a wallet as a raw seed opens a different, empty wallet, " +
     "silently. Recover with dice39's codex32_recover page, which turns the entropy back into your words.",
   deviceEntropy: "The device words come from zerogap's hardware random generator (health-checked, SHA-256 " +
-    "conditioned) mixed with the timing of every key you pressed, hashed together with SHA-256.",
+    "conditioned) mixed with what you did on the entropy pad and the timing of every key you pressed, hashed " +
+    "together with SHA-256.",
+
+  // the entropy pad: dice39's own wording, plus the keyboard way in
+  step2Heading: "Add device entropy",
+  step2Body: "Press and drag inside the box below, or tap it repeatedly, until the bar fills. Only real drags and " +
+    "taps count: moving the pointer across it without pressing does nothing, and neither does jiggling in " +
+    "place. This mixes with this device's own random generator to source words beyond what you typed. " +
+    "Without a mouse: Tab to the box and press Space, again and again (holding it down counts once).",
+  padText: "press and drag here, or tap repeatedly",
+  bitsLabel: (bits, target) => `collected: ${bits} of ${target} bits`,
 };
