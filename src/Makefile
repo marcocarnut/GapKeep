@@ -19,7 +19,7 @@ endif
 OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/apphost.o runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha256.o crypto/hwrng.o \
-	  runtime/zg_bridge.o runtime/libc_shim.o \
+	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o \
 	  generated/apps_bundle.o
 
 LIBS	= ../lib/lvgl/liblvgl.a \

@@ -139,6 +139,13 @@ protection between apps), so this guards against mistakes and keeps app
 code honest, not against native-code exploits. All native code is part of
 the image and auditable.
 
+**Secrets in memory:** both heaps that hold app data zero every block when
+it is freed: the JS heap (`apphost.cpp`, which also makes `realloc` move so
+the old block can be zeroed) and LVGL's heap (`lv_mem_wipe.c`; labels and
+text areas keep copies of what they show). When an app exits, all its
+memory is freed, so seed words do not linger after the app is closed. Data
+still in use is of course in RAM; a Pi Zero has no memory encryption.
+
 **Trusted code** is the image: Circle, LVGL, QuickJS, `src/` and `apps/`.
 Builds should be reproducible (pinned submodules and toolchain) so a
 published image hash can be checked; see the README.

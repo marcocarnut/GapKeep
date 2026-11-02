@@ -24,6 +24,17 @@ CAppHost *CAppHost::s_pThis = 0;
 //
 // Circle's allocator cannot report block sizes, which QuickJS needs to
 // enforce the memory limit. So each block carries its size in a header.
+// Freed blocks are zeroed (and realloc always moves, so the old block can
+// be zeroed too): whatever an app held - seed words, keys - does not linger
+// in freed memory after it is released or the app exits.
+
+static void Wipe (volatile u8 *p, size_t n)
+{
+	while (n--)
+	{
+		*p++ = 0;		// volatile: not optimized away
+	}
+}
 
 static const size_t HeaderSize = 8;	// keeps 8-byte alignment
 
@@ -59,8 +70,10 @@ static void ZgFree (JSMallocState *s, void *ptr)
 		return;
 	}
 
+	size_t size = ZgUsableSize (ptr);
 	s->malloc_count--;
-	s->malloc_size -= ZgUsableSize (ptr) + HeaderSize;
+	s->malloc_size -= size + HeaderSize;
+	Wipe ((u8 *) ptr - HeaderSize, size + HeaderSize);
 	free ((u8 *) ptr - HeaderSize);
 }
 
@@ -83,16 +96,16 @@ static void *ZgRealloc (JSMallocState *s, void *ptr, size_t size)
 		return 0;
 	}
 
-	u8 *p = (u8 *) realloc ((u8 *) ptr - HeaderSize, size + HeaderSize);
+	void *p = ZgMalloc (s, size);	// checks the limit with both blocks counted
 	if (p == 0)
 	{
 		return 0;
 	}
 
-	*(size_t *) p = size;
-	s->malloc_size += size - old;
+	memcpy (p, ptr, old < size ? old : size);
+	ZgFree (s, ptr);
 
-	return p + HeaderSize;
+	return p;
 }
 
 static const JSMallocFunctions MallocFunctions =

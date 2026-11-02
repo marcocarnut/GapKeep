@@ -1,6 +1,7 @@
 /**
  * zerogap LVGL configuration, derived from circle/addon/lvgl/lv_conf.h.
- * Changes: QR codes on, Montserrat 28/32/40 on, widgets demo off, dark theme.
+ * Changes: QR codes on, Montserrat 28/32/40 on, widgets demo off, dark theme,
+ * custom allocator that wipes freed memory (src/runtime/lv_mem_wipe.c).
  *
  * @file lv_conf.h
  * Configuration file for v9.4.0
@@ -56,7 +57,7 @@
  * - LV_STDLIB_RTTHREAD:    RT-Thread implementation
  * - LV_STDLIB_CUSTOM:      Implement the functions externally
  */
-#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CLIB
+#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CUSTOM	/* src/runtime/lv_mem_wipe.c: zeroes freed blocks */
 
 /** Possible values
  * - LV_STDLIB_BUILTIN:     LVGL's built in implementation
