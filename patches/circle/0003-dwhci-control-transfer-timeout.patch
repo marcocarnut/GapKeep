@@ -1,0 +1,161 @@
+diff --git a/include/circle/usb/dwhcidevice.h b/include/circle/usb/dwhcidevice.h
+index 33b15c7..3a37afe 100644
+--- a/include/circle/usb/dwhcidevice.h
++++ b/include/circle/usb/dwhcidevice.h
+@@ -39,6 +39,10 @@
+ 
+ #define DWHCI_WAIT_BLOCKS	DWHCI_MAX_CHANNELS
+ 
++// zerogap: how long a blocking control transfer may take (USB 2.0 allows a
++// device 5 s for a request with no data stage, 500 ms per data packet)
++#define USB_CONTROL_TIMEOUT_MS	3000
++
+ class CDWHCIDevice : public CUSBHostController
+ {
+ public:
+@@ -66,6 +70,7 @@ private:
+ 
+ 	void BeginRecoveryBackoff (void);
+ 	void AbortActiveChannels (void);
++	boolean AbortRequest (CUSBRequest *pURB);	// zerogap: control transfer timeout
+ 
+ 	void ResetRecoveryState (void)			// called on genuine unplug
+ 	{
+diff --git a/include/circle/usb/dwhcixferstagedata.h b/include/circle/usb/dwhcixferstagedata.h
+index b15200b..2f3cd4d 100644
+--- a/include/circle/usb/dwhcixferstagedata.h
++++ b/include/circle/usb/dwhcixferstagedata.h
+@@ -82,6 +82,11 @@ public:
+ 	boolean IsTimeout (void) const;
+ 	boolean IsRetryOK (void) const;
+ 
++	// zerogap: a blocking control transfer that took too long; the channel
++	// interrupt handler completes it with USBErrorTimeout
++	void SetAborted (void)			{ m_bAborted = TRUE; }
++	boolean IsAborted (void) const		{ return m_bAborted; }
++
+ 	CUSBRequest *GetURB (void) const;
+ 	CUSBDevice *GetDevice (void) const;
+ 	CDWHCIFrameScheduler *GetFrameScheduler (void) const;
+@@ -92,6 +97,7 @@ private:
+ 	boolean		 m_bIn;
+ 	boolean		 m_bStatusStage;
+ 	unsigned	 m_nTimeoutHZ;
++	volatile boolean m_bAborted;
+ 
+ 	boolean		 m_bSplitTransaction;
+ 	boolean		 m_bSplitComplete;
+diff --git a/lib/usb/dwhcidevice.cpp b/lib/usb/dwhcidevice.cpp
+index 66033b4..c3a231a 100644
+--- a/lib/usb/dwhcidevice.cpp
++++ b/lib/usb/dwhcidevice.cpp
+@@ -392,6 +392,49 @@ void CDWHCIDevice::CancelDeviceTransactions (CUSBDevice *pUSBDevice)
+ 	AbortActiveChannels ();
+ }
+ 
++boolean CDWHCIDevice::AbortRequest (CUSBRequest *pURB)
++{
++	// Mark the request's stage as aborted and disable its channel. The
++	// resulting HALTED interrupt completes it with USBErrorTimeout (see the
++	// top of ChannelInterruptHandler()). FALSE: the request is not on a
++	// channel at the moment.
++	boolean bResult = FALSE;
++
++	EnterCritical (IRQ_LEVEL);
++
++	for (unsigned nChannel = 0; nChannel < m_nChannels; nChannel++)
++	{
++		CDWHCITransferStageData *pStageData = m_pStageData[nChannel];
++		if (   pStageData == 0
++		    || pStageData->GetURB () != pURB)
++		{
++			continue;
++		}
++
++		pStageData->SetAborted ();
++
++		CDWHCIRegister Character (DWHCI_HOST_CHAN_CHARACTER (nChannel));
++		Character.Read ();
++		if (Character.IsSet (DWHCI_HOST_CHAN_CHARACTER_ENABLE))
++		{
++			Character.And (~DWHCI_HOST_CHAN_CHARACTER_ENABLE);
++			Character.Or (DWHCI_HOST_CHAN_CHARACTER_DISABLE);
++			Character.Write ();
++		}
++
++		CDWHCIRegister ChanInterruptMask (DWHCI_HOST_CHAN_INT_MASK (nChannel));
++		ChanInterruptMask.Set (DWHCI_HOST_CHAN_INT_HALTED);
++		ChanInterruptMask.Write ();
++
++		bResult = TRUE;
++		break;
++	}
++
++	LeaveCritical ();
++
++	return bResult;
++}
++
+ void CDWHCIDevice::AbortActiveChannels (void)
+ {
+ 	// Force-disable any channel which is still actively transferring for a
+@@ -826,11 +869,31 @@ boolean CDWHCIDevice::TransferStage (CUSBRequest *pURB, boolean bIn, boolean bSt
+ 		return FALSE;
+ 	}
+ 
++	// zerogap: control transfers had no timeout, so a device that never
++	// completes one (it NAKs forever) hung enumeration, and with it the
++	// whole system. Give up after USB_CONTROL_TIMEOUT_MS, like Linux does.
++	boolean bControl = pURB->GetEndpoint ()->GetType () == EndpointTypeControl;
++	unsigned nStartTicks = CTimer::Get ()->GetClockTicks ();
++	boolean bAborted = FALSE;
++
+ 	while (m_bWaiting[nWaitBlock])
+ 	{
+ #ifdef NO_BUSY_WAIT
+ 		CScheduler::Get ()->Yield ();
+ #endif
++		if (   bControl
++		    && !bAborted
++		    && CTimer::Get ()->GetClockTicks () - nStartTicks
++		       >= USB_CONTROL_TIMEOUT_MS * (CLOCKHZ / 1000))
++		{
++			// not on a channel yet (queued for the next frame): try again
++			bAborted = AbortRequest (pURB);
++		}
++	}
++
++	if (bAborted)
++	{
++		LOGWARN ("Control transfer timed out");
+ 	}
+ 
+ 	FreeWaitBlock (nWaitBlock);
+@@ -1143,12 +1206,13 @@ void CDWHCIDevice::ChannelInterruptHandler (unsigned nChannel)
+ 	CUSBRequest *pURB = pStageData->GetURB ();
+ 	assert (pURB != 0);
+ 
+-	if (!m_bRootPortEnabled)
++	if (   !m_bRootPortEnabled
++	    || pStageData->IsAborted ())		// zerogap: see AbortRequest()
+ 	{
+ 		DisableChannelInterrupt (nChannel);
+ 
+ 		pURB->SetStatus (0);
+-		pURB->SetUSBError (USBErrorAborted);
++		pURB->SetUSBError (m_bRootPortEnabled ? USBErrorTimeout : USBErrorAborted);
+ 
+ 		delete pStageData;
+ 		m_pStageData[nChannel] = 0;
+diff --git a/lib/usb/dwhcixferstagedata.cpp b/lib/usb/dwhcixferstagedata.cpp
+index d5d2544..9141f30 100644
+--- a/lib/usb/dwhcixferstagedata.cpp
++++ b/lib/usb/dwhcixferstagedata.cpp
+@@ -43,6 +43,7 @@ CDWHCITransferStageData::CDWHCITransferStageData (unsigned	 nChannel,
+ 	m_bIn (bIn),
+ 	m_bStatusStage (bStatusStage),
+ 	m_nTimeoutHZ (USB_TIMEOUT_NONE),
++	m_bAborted (FALSE),
+ 	m_bSplitComplete (FALSE),
+ 	m_nTotalBytesTransfered (0),
+ 	m_nIsoPackets (0),

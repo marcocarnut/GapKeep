@@ -117,18 +117,27 @@ class RigMachine:
     """The Pi Zero, driven like qemu_harness.Machine: same methods, so
     qemu_harness.run_scenario() plays scenarios on real hardware."""
 
-    def __init__(self, port):
+    def __init__(self, port, hexfile):
         import threading
         self.port = port
+        self.hexfile = hexfile
         self.rx = bytearray()
         self.lock = threading.Lock()
         self.kbd = open('/dev/hidg0', 'wb', buffering=0)
         self.mouse_dev = open('/dev/hidg1', 'wb', buffering=0)
         self.buttons = 0
+        self.mark = 0			# expect() looks at the log from here on
+        self.pause = threading.Event()	# set: the reader leaves the port alone
+        self.paused = threading.Event()
         threading.Thread(target=self._reader, daemon=True).start()
 
     def _reader(self):
         while True:
+            if self.pause.is_set():
+                self.paused.set()
+                time.sleep(0.01)
+                continue
+            self.paused.clear()
             data = self.port.read(65536)
             if data:
                 with self.lock:
@@ -144,10 +153,24 @@ class RigMachine:
         rx = re.compile(pattern, re.M)
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if rx.search(self.serial()):
+            if rx.search(self.serial()[self.mark:]):
                 return True
             time.sleep(0.1)
         return False
+
+    def send(self, line):
+        self.port.write((line + '\n').encode())
+
+    def reset(self):
+        """Reset the Zero and upload the kernel again (the bootloader on its
+        card waits for one)."""
+        self.mark = len(self.serial())
+        self.pause.set()
+        self.paused.wait(5)
+        try:
+            flash(self.port, self.hexfile)
+        finally:
+            self.pause.clear()
 
     def key(self, name, hold_ms=60):
         mods, code = 0, 0
@@ -258,7 +281,7 @@ def main():
         elif args.cmd == 'run':
             os.makedirs(args.out, exist_ok=True)
             flash(port, args.hexfile)
-            m = RigMachine(port)
+            m = RigMachine(port, args.hexfile)
             failures = qemu_harness.run_scenario(m, args.scenario, args.out)
             log = m.serial()
             open(os.path.join(args.out, 'serial.log'), 'w').write(log)

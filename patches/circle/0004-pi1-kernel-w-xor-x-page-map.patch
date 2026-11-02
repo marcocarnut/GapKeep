@@ -1,0 +1,134 @@
+diff --git a/circle.ld b/circle.ld
+index 717486c..f5cc3bb 100644
+--- a/circle.ld
++++ b/circle.ld
+@@ -16,6 +16,12 @@ SECTIONS
+ 		_etext = .;
+ 	}
+ 
++	/* zerogap: page-aligned, so the MMU can map code read-only and
++	   executable, constants read-only and not executable, and data
++	   writable and not executable (lib/pagetable.cpp) */
++	. = ALIGN(4096);
++	__rodata_start = .;
++
+ 	.rodata : {
+ 		*(.rodata*)
+ 	}
+@@ -52,6 +58,9 @@ SECTIONS
+ 		__eh_frame_end = .;
+ 	}
+ 
++	. = ALIGN(4096);
++	__data_start = .;
++
+ 	.data : {
+ 		*(.data*)
+ 	}
+diff --git a/include/circle/pagetable.h b/include/circle/pagetable.h
+index c9cbd2d..4031632 100644
+--- a/include/circle/pagetable.h
++++ b/include/circle/pagetable.h
+@@ -31,6 +31,12 @@ public:
+ 	~CPageTable (void);
+ 
+ 	u32 GetBaseAddress (void) const;	// with mode bits to be loaded into TTBRn
++
++#if RASPPI == 1
++	// zerogap: makes the exception vector page (0x0-0xFFF) read-only, once
++	// the vectors are set up (CExceptionHandler, CInterruptSystem)
++	static void ProtectVectorPage (void);
++#endif
+ 	
+ private:
+ 	u32 *m_pTable;
+diff --git a/lib/pagetable.cpp b/lib/pagetable.cpp
+index 3e49bc2..6630907 100644
+--- a/lib/pagetable.cpp
++++ b/lib/pagetable.cpp
+@@ -46,6 +46,61 @@
+ #define MEM_TOTAL_END	ARM_GIC_END
+ #endif
+ 
++#if RASPPI == 1
++
++// zerogap: the kernel's memory, from 0 to the end of the kernel stack, is
++// mapped with 4 KB pages instead of 1 MB sections, so each part gets the
++// access it needs (W^X):
++//
++//	0x0000 - 0x0FFF		exception vectors: RW, X; RO after ProtectVectorPage()
++//	0x1000 - 0x7FFF		firmware data (ATAGs): RW
++//	0x8000 - __rodata_start	code: RO, X
++//	__rodata_start - __data_start	constants: RO
++//	__data_start - _end	data, bss: RW
++//	_end - MEM_KERNEL_END	unused: no access, so a kernel stack overflow
++//				faults instead of running into the data below
++//	MEM_KERNEL_END - ...	kernel stack: RW
++//
++// Everything is normal memory, outer and inner write back, no write
++// allocate (as ARMV6MMUL1SECTION_NORMAL); "RW"/"RO" are for privileged code
++// (all of Circle), and nothing but code is executable.
++
++#define SMALL_NORMAL		0x01E		// XN=0, B, C, AP=01
++#define SMALL_RW		(SMALL_NORMAL | 0x001)		// + XN
++#define SMALL_RO		(SMALL_NORMAL | 0x200 | 0x001)	// + APX, XN
++#define SMALL_RO_X		(SMALL_NORMAL | 0x200)		// + APX
++#define SMALL_RW_X		SMALL_NORMAL
++
++#define KERNEL_SECTIONS		((MEM_KERNEL_STACK + MEGABYTE - 1) / MEGABYTE)
++
++static u32 s_CoarseTables[KERNEL_SECTIONS][256] __attribute__ ((aligned (1024)));
++
++static u32 KernelPageAttributes (u32 nAddress)
++{
++	extern u8 __rodata_start, __data_start, _end;
++
++	if (nAddress < SMALL_PAGE_SIZE)			return SMALL_RW_X;
++	if (nAddress < MEM_KERNEL_START)		return SMALL_RW;
++	if (nAddress < (u32) &__rodata_start)		return SMALL_RO_X;
++	if (nAddress < (u32) &__data_start)		return SMALL_RO;
++	if (nAddress < (u32) &_end)			return SMALL_RW;
++	if (nAddress < MEM_KERNEL_END)			return ARMV6MMU_FAULT;	// guard
++	return SMALL_RW;
++}
++
++void CPageTable::ProtectVectorPage (void)
++{
++	s_CoarseTables[0][0] = 0 | SMALL_RO_X;
++
++	CleanDataCache ();
++	DataSyncBarrier ();
++	asm volatile ("mcr p15, 0, %0, c8, c7,  0" : : "r" (0));	// invalidate unified TLB
++	DataSyncBarrier ();
++	FlushPrefetchBuffer ();
++}
++
++#endif
++
+ #if RASPPI <= 3
+ 
+ CPageTable::CPageTable (u32 nMemSize)
+@@ -60,6 +115,23 @@ CPageTable::CPageTable (u32 nMemSize)
+ 		u32 nAttributes = ARMV6MMU_FAULT;
+ 
+ 		extern u8 _etext;
++#if RASPPI == 1
++		if (nEntry < KERNEL_SECTIONS)
++		{
++			for (unsigned nPage = 0; nPage < 256; nPage++)
++			{
++				u32 nAddress = nBaseAddress + nPage * SMALL_PAGE_SIZE;
++				u32 nPageAttributes = KernelPageAttributes (nAddress);
++				s_CoarseTables[nEntry][nPage] =
++					nPageAttributes == ARMV6MMU_FAULT ? 0 : nAddress | nPageAttributes;
++			}
++
++			m_pTable[nEntry] = (u32) s_CoarseTables[nEntry] | 1;	// coarse table, domain 0
++
++			continue;
++		}
++		else
++#endif
+ 		if (nBaseAddress < (u32) &_etext)
+ 		{
+ 			nAttributes = ARMV6MMUL1SECTION_NORMAL;

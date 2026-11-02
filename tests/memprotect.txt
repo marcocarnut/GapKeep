@@ -1,0 +1,34 @@
+# Needs a test build (make TEST=1). Memory protection: each "#crash" breaks
+# one rule on purpose (src/testcrash.cpp), and the system must stop with an
+# exception, not carry on. Then the machine is reset for the next one.
+expect launcher ready 60
+send #crash write-code
+expect except: Data abort
+reset
+expect launcher ready 60
+send #crash write-rodata
+expect except: Data abort
+reset
+expect launcher ready 60
+send #crash write-vectors
+expect except: Data abort
+reset
+expect launcher ready 60
+send #crash exec-data
+expect except: Prefetch abort
+reset
+expect launcher ready 60
+send #crash exec-heap
+expect except: Prefetch abort
+reset
+expect launcher ready 60
+send #crash exec-stack
+expect except: Prefetch abort
+reset
+expect launcher ready 60
+send #crash stack-overflow
+expect except: Data abort
+reset
+expect launcher ready 60
+send #crash smash
+expect stackguard: Stack smashing detected

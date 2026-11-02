@@ -7,6 +7,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "appstore.h"
+#include "../crypto/sha256.h"
+#include <circle/memorymap.h>
 #include "version.h"
 #include <circle/version.h>
 #include <circle/logger.h>
@@ -281,6 +284,44 @@ static JSValue js_sys_gc (JSContext *ctx, JSValueConst this_val, int argc, JSVal
 	return JS_UNDEFINED;
 }
 
+// The SHA-256 of the running kernel's code and constants: the memory from
+// MEM_KERNEL_START (0x8000, where the firmware puts kernel.img) up to
+// __data_start, which the MMU maps read-only. It equals the SHA-256 of the
+// first (__data_start - 0x8000) bytes of kernel.img. Computed once.
+static JSValue KernelInfo (JSContext *ctx)
+{
+	static char s_Hash[2 * ZG_SHA256_DIGEST_SIZE + 1];
+	extern u8 __data_start;
+	const u8 *pStart = (const u8 *) MEM_KERNEL_START;
+	unsigned nSize = &__data_start - pStart;
+
+	if (s_Hash[0] == '\0')
+	{
+		u8 Digest[ZG_SHA256_DIGEST_SIZE];
+		zg_sha256 (pStart, nSize, Digest);
+		for (unsigned i = 0; i < ZG_SHA256_DIGEST_SIZE; i++)
+		{
+			static const char Digits[] = "0123456789abcdef";
+			s_Hash[2 * i] = Digits[Digest[i] >> 4];
+			s_Hash[2 * i + 1] = Digits[Digest[i] & 15];
+		}
+	}
+
+	JSValue Obj = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, s_Hash));
+	JS_SetPropertyStr (ctx, Obj, "hashedBytes", JS_NewUint32 (ctx, nSize));
+#ifdef ZG_TEST
+	const char *pBuild = "test";
+#elif defined (ZG_SEALED)
+	const char *pBuild = "sealed";
+#else
+	const char *pBuild = "production";
+#endif
+	JS_SetPropertyStr (ctx, Obj, "build", JS_NewString (ctx, pBuild));
+
+	return Obj;
+}
+
 static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 {
 	JSValue Obj = JS_NewObject (ctx);
@@ -289,6 +330,9 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 	JS_SetPropertyStr (ctx, Obj, "version", JS_NewString (ctx, pApp->version));
 	JS_SetPropertyStr (ctx, Obj, "description", JS_NewString (ctx, pApp->description));
 	JS_SetPropertyStr (ctx, Obj, "icon", JS_NewString (ctx, pApp->icon));
+	JS_SetPropertyStr (ctx, Obj, "source",
+			   JS_NewString (ctx, pApp->source == ZG_APP_SDCARD ? "sdcard" : "builtin"));
+	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, pApp->hash));
 
 	JSValue Perms = JS_NewArray (ctx);
 	if (pApp->permissions & ZG_PERM_APPS)
@@ -314,6 +358,7 @@ static int SysModuleInit (JSContext *ctx, JSModuleDef *m)
 
 	JS_SetModuleExport (ctx, m, "version", Version);
 	JS_SetModuleExport (ctx, m, "app", AppInfo (ctx, pApp->pBundle));
+	JS_SetModuleExport (ctx, m, "kernel", KernelInfo (ctx));
 	JS_SetModuleExport (ctx, m, "log", JS_NewCFunctionMagic (ctx, js_console_log, "log", 1, JS_CFUNC_generic_magic, LogNotice));
 	JS_SetModuleExport (ctx, m, "uptime", JS_NewCFunction (ctx, js_sys_uptime, "uptime", 0));
 	JS_SetModuleExport (ctx, m, "memory", JS_NewCFunction (ctx, js_sys_memory, "memory", 0));
@@ -331,7 +376,7 @@ JSModuleDef *ZgInitSysModule (JSContext *ctx, const char *pName)
 		return 0;
 	}
 
-	static const char *Exports[] = {"version", "app", "log", "uptime", "memory", "gc", "exit"};
+	static const char *Exports[] = {"version", "app", "kernel", "log", "uptime", "memory", "gc", "exit"};
 	for (unsigned i = 0; i < sizeof Exports / sizeof Exports[0]; i++)
 	{
 		JS_AddModuleExport (ctx, m, Exports[i]);
@@ -346,15 +391,34 @@ static JSValue js_apps_list (JSContext *ctx, JSValueConst this_val, int argc, JS
 {
 	JSValue Array = JS_NewArray (ctx);
 	unsigned n = 0;
-	for (unsigned i = 0; i < zg_app_count; i++)
+	for (unsigned i = 0; i < CAppStore::GetCount (); i++)
 	{
-		if (!zg_apps[i].hidden)
+		const zg_app_t *pApp = CAppStore::Get (i);
+		if (!pApp->hidden)
 		{
-			JS_SetPropertyUint32 (ctx, Array, n++, AppInfo (ctx, &zg_apps[i]));
+			JS_SetPropertyUint32 (ctx, Array, n++, AppInfo (ctx, pApp));
 		}
 	}
 
 	return Array;
+}
+
+static JSValue js_apps_card (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	JSValue Obj = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Obj, "status", JS_NewString (ctx, CAppStore::GetCardStatusName ()));
+
+	JSValue Problems = JS_NewArray (ctx);
+	for (unsigned i = 0; i < CAppStore::GetProblemCount (); i++)
+	{
+		JSValue Problem = JS_NewObject (ctx);
+		JS_SetPropertyStr (ctx, Problem, "folder", JS_NewString (ctx, CAppStore::GetProblemFolder (i)));
+		JS_SetPropertyStr (ctx, Problem, "error", JS_NewString (ctx, CAppStore::GetProblemText (i)));
+		JS_SetPropertyUint32 (ctx, Problems, i, Problem);
+	}
+	JS_SetPropertyStr (ctx, Obj, "problems", Problems);
+
+	return Obj;
 }
 
 static JSValue js_apps_launch (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -382,6 +446,7 @@ static int AppsModuleInit (JSContext *ctx, JSModuleDef *m)
 {
 	JS_SetModuleExport (ctx, m, "list", JS_NewCFunction (ctx, js_apps_list, "list", 0));
 	JS_SetModuleExport (ctx, m, "launch", JS_NewCFunction (ctx, js_apps_launch, "launch", 1));
+	JS_SetModuleExport (ctx, m, "card", JS_NewCFunction (ctx, js_apps_card, "card", 0));
 
 	return 0;
 }
@@ -396,6 +461,7 @@ JSModuleDef *ZgInitAppsModule (JSContext *ctx, const char *pName)
 
 	JS_AddModuleExport (ctx, m, "list");
 	JS_AddModuleExport (ctx, m, "launch");
+	JS_AddModuleExport (ctx, m, "card");
 
 	return m;
 }

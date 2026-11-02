@@ -25,9 +25,14 @@ Scenario file: one command per line, '#' starts a comment.
     shot <name>                 save a screenshot as <outdir>/<name>.png
     serialshot <name>           same, but fetched over the serial line from a
                                 test build (as on real hardware)
+    send <text>                 send a line on the serial port (test builds
+                                take commands: #shot, #crash <kind>)
+    reset                       reset the machine (on the rig: and upload
+                                the kernel again); "expect" only looks at
+                                what was logged after the reset
 
 Usage:
-    qemu_harness.py [--kernel K] [--out DIR] [--keep] scenario.txt
+    qemu_harness.py [--kernel K] [--sd IMG] [--out DIR] [--keep] scenario.txt
     qemu_harness.py --kernel K --interactive     # just boot, print serial, Ctrl-C to stop
 """
 
@@ -73,17 +78,29 @@ class Machine:
         workdir = os.path.abspath(workdir)
         self.serial_path = os.path.join(workdir, 'serial.log')
         self.mon_path = os.path.join(workdir, 'monitor.sock')
-        cmd = [
+        self.cmd = [
             'qemu-system-arm', '-M', 'raspi0', '-bios', os.path.abspath(kernel),
             '-display', 'none',
             # serial on a socket (for "serialshot"), everything also logged
-            '-chardev', 'socket,id=ser0,path=serial.sock,server=on,wait=off,logfile=serial.log',
+            # (appended: "reset" restarts QEMU)
+            '-chardev', 'socket,id=ser0,path=serial.sock,server=on,wait=off,'
+                        'logfile=serial.log,logappend=on',
             '-serial', 'chardev:ser0',
             '-device', 'usb-kbd', '-device', 'usb-mouse',
             # relative socket path: AF_UNIX paths are limited to ~108 bytes
             '-monitor', 'unix:monitor.sock,server,nowait',
             *extra_args,
         ]
+        if os.path.exists(self.serial_path):
+            os.remove(self.serial_path)
+        self._start()
+
+    def _start(self):
+        workdir = os.path.abspath(self.workdir)
+        cmd = self.cmd
+        for sock in ('monitor.sock', 'serial.sock'):
+            if os.path.exists(os.path.join(workdir, sock)):
+                os.remove(os.path.join(workdir, sock))
         self.proc = subprocess.Popen(cmd, cwd=workdir, stdout=subprocess.DEVNULL,
                                      stderr=open(os.path.join(workdir, 'qemu.stderr'), 'w'))
         for _ in range(100):
@@ -235,16 +252,27 @@ class Machine:
             png_path = ppm
         return png_path
 
+    mark = 0	# expect() looks at the log from here on
+
     def expect(self, pattern, timeout=30.0):
         rx = re.compile(pattern, re.M)
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if rx.search(self.serial()):
+            if rx.search(self.serial()[self.mark:]):
                 return True
             if self.proc.poll() is not None:
                 return False
             time.sleep(0.1)
         return False
+
+    def send(self, line):
+        self.ser.sendall((line + '\n').encode())
+
+    def reset(self):
+        # QEMU's system_reset does not reboot the raspi machine: restart QEMU
+        self.mark = len(self.serial())
+        self.stop()
+        self._start()
 
     def stop(self):
         try:
@@ -306,6 +334,10 @@ def run_scenario(m, path, outdir):
             elif cmd == 'shot':
                 p = m.shot(os.path.join(outdir, rest.strip() + '.png'))
                 print('[%s] screenshot %s' % (where, p))
+            elif cmd == 'send':
+                m.send(rest)
+            elif cmd == 'reset':
+                m.reset()
             elif cmd == 'expect':
                 parts = rest.rsplit(' ', 1)
                 timeout = 30.0
@@ -332,11 +364,18 @@ def main():
     ap.add_argument('--out', default=None, help='directory for screenshots and logs')
     ap.add_argument('--interactive', action='store_true')
     ap.add_argument('--keep', action='store_true', help='leave QEMU running at the end')
+    ap.add_argument('--sd', help='SD card image (tools/make_sd_image.sh); default: no card')
     args = ap.parse_args()
 
     outdir = args.out or tempfile.mkdtemp(prefix='zerogap-qemu-')
     os.makedirs(outdir, exist_ok=True)
-    m = Machine(args.kernel, outdir)
+    extra = []
+    if args.sd:
+        # a private copy: QEMU may write to it, and runs can go in parallel
+        img = os.path.join(outdir, 'sd.img')
+        shutil.copyfile(args.sd, img)
+        extra = ['-drive', 'file=%s,if=sd,format=raw' % os.path.abspath(img)]
+    m = Machine(args.kernel, outdir, extra)
     failures = 0
     try:
         if args.interactive or not args.scenario:

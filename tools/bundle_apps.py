@@ -3,11 +3,17 @@
 Bundle zerogap apps into the kernel image.
 
 Reads every apps/<id>/manifest.json, validates it, and writes a C file
-holding each app's metadata and the contents of its files (.js, .json, .txt).
-The output is deterministic: same inputs, same bytes.
+holding each app's metadata, hash and the contents of its files (.js, .json,
+.txt). The output is deterministic: same inputs, same bytes.
 
-Usage: bundle_apps.py <output.c> <apps-dir> [<apps-dir> ...]
+The checks are the same as for apps loaded from the SD card at boot
+(src/runtime/appstore.cpp); keep the two in step.
+
+Usage: bundle_apps.py <output.c> [--only id,...] <apps-dir> [<apps-dir> ...]
+       bundle_apps.py --hash <app-dir> [<app-dir> ...]
+           prints each app's hash, as the launcher shows it
 """
+import hashlib
 import json
 import os
 import re
@@ -16,6 +22,11 @@ import sys
 PERMISSIONS = {'apps': 'ZG_PERM_APPS'}
 FILE_EXTENSIONS = ('.js', '.json', '.txt')
 ID_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,31}$')
+NAME_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')     # loaded files and folders
+MAX_FILES = 256
+MAX_FILE_SIZE = 4 << 20
+MAX_APP_SIZE = 16 << 20
+MAX_DEPTH = 8
 
 # Keep in sync with the symbol table in src/runtime/js_ui.cpp (ui.symbols).
 SYMBOLS = {
@@ -71,6 +82,57 @@ def symbol_utf8(name, where):
     return chr(int(SYMBOLS[name], 16)).encode('utf-8')
 
 
+def is_app_file(name):
+    return name.endswith(FILE_EXTENSIONS) and name != 'package.json'
+
+
+def app_hash(files):
+    """SHA-256 over the app's files sorted by path: for each, the path, NUL,
+    the size in decimal, NUL, the contents (docs/APPS.md, "App hashes")."""
+    h = hashlib.sha256()
+    for path, data in sorted(files, key=lambda f: f[0].encode()):
+        h.update(path.encode() + b'\0' + str(len(data)).encode() + b'\0' + data)
+    return h.hexdigest()
+
+
+def read_files(appdir):
+    files = []
+    total = 0
+    for root, dirs, names in os.walk(appdir):
+        rel_root = os.path.relpath(root, appdir)
+        depth = 1 if rel_root == '.' else rel_root.count(os.sep) + 2
+        dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
+        for d in dirs:
+            if not NAME_RE.match(d):
+                fail('%s: folder name may only contain A-Z a-z 0-9 . _ -' % os.path.join(root, d))
+            if depth >= MAX_DEPTH:
+                fail('%s: folders nested too deeply' % os.path.join(root, d))
+        for n in sorted(names):
+            if n.startswith('.') or not is_app_file(n):
+                continue
+            full = os.path.join(root, n)
+            if not NAME_RE.match(n):
+                fail('%s: name may only contain A-Z a-z 0-9 . _ -' % full)
+            rel = os.path.relpath(full, appdir).replace(os.sep, '/')
+            with open(full, 'rb') as f:
+                data = f.read()
+            if b'\0' in data:
+                fail('%s: contains NUL bytes' % full)
+            try:
+                data.decode('utf-8')
+            except UnicodeDecodeError:
+                fail('%s: not valid UTF-8' % full)
+            if len(data) > MAX_FILE_SIZE:
+                fail('%s: larger than %d MB' % (full, MAX_FILE_SIZE >> 20))
+            total += len(data)
+            files.append((rel, data))
+    if len(files) > MAX_FILES:
+        fail('%s: more than %d files' % (appdir, MAX_FILES))
+    if total > MAX_APP_SIZE:
+        fail('%s: larger than %d MB' % (appdir, MAX_APP_SIZE >> 20))
+    return sorted(files, key=lambda f: f[0].encode())
+
+
 def load_app(appdir, app_id):
     where = os.path.join(appdir, 'manifest.json')
     try:
@@ -85,34 +147,25 @@ def load_app(appdir, app_id):
     for k in m:
         if k not in known:
             fail('%s: unknown key %r' % (where, k))
-    for k in ('id', 'name', 'version'):
-        if not isinstance(m.get(k), str) or not m[k]:
-            fail('%s: %r is required and must be a non-empty string' % (where, k))
+    limits = {'id': 32, 'name': 64, 'version': 32, 'description': 256, 'icon': 32, 'entry': 255}
+    for k, limit in limits.items():
+        if k not in m and k not in ('id', 'name', 'version'):
+            continue
+        v = m.get(k)
+        if not isinstance(v, str) or not v or len(v.encode()) > limit or '\0' in v:
+            fail('%s: %r must be a non-empty string of at most %d bytes' % (where, k, limit))
+    if 'hidden' in m and not isinstance(m['hidden'], bool):
+        fail('%s: "hidden" must be true or false' % where)
     if m['id'] != app_id:
         fail('%s: id %r must match the directory name %r' % (where, m['id'], app_id))
     if not ID_RE.match(app_id):
         fail('%s: id must match %s' % (where, ID_RE.pattern))
     perms = m.get('permissions', [])
-    if not isinstance(perms, list) or any(p not in PERMISSIONS for p in perms):
+    if not isinstance(perms, list) or any(not isinstance(p, str) or p not in PERMISSIONS for p in perms):
         fail('%s: permissions must be a list drawn from %s' % (where, sorted(PERMISSIONS)))
     entry = m.get('entry', 'main.js')
 
-    files = []
-    for root, dirs, names in os.walk(appdir):
-        dirs.sort()
-        for n in sorted(names):
-            if n.endswith(FILE_EXTENSIONS) and n not in ('package.json',):
-                full = os.path.join(root, n)
-                rel = os.path.relpath(full, appdir).replace(os.sep, '/')
-                with open(full, 'rb') as f:
-                    data = f.read()
-                if b'\0' in data:
-                    fail('%s: contains NUL bytes' % full)
-                try:
-                    data.decode('utf-8')
-                except UnicodeDecodeError:
-                    fail('%s: not valid UTF-8' % full)
-                files.append((rel, data))
+    files = read_files(appdir)
     if entry not in [p for p, _ in files]:
         fail('%s: entry module %r not found' % (where, entry))
 
@@ -126,18 +179,32 @@ def load_app(appdir, app_id):
         'permissions': ' | '.join(PERMISSIONS[p] for p in perms) or '0',
         'hidden': 1 if m.get('hidden') else 0,
         'files': files,
+        'hash': app_hash(files),
     }
 
 
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == '--hash':
+        for appdir in sys.argv[2:]:
+            appdir = appdir.rstrip('/')
+            a = load_app(appdir, os.path.basename(appdir))
+            print('%s  %s %s' % (a['hash'], a['id'], a['version']))
+        return
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     out = sys.argv[1]
+    args = sys.argv[2:]
+    only = None
+    if args[0] == '--only':
+        only = set(args[1].split(','))
+        args = args[2:]
     found = {}
     # apps sorted by id within each directory, directories in the order
     # given: test builds list their test-only apps after the real ones
-    for appsdir in sys.argv[2:]:
+    for appsdir in args:
         for d in sorted(os.listdir(appsdir)):
+            if only is not None and d not in only:
+                continue
             if os.path.isfile(os.path.join(appsdir, d, 'manifest.json')):
                 if d in found:
                     fail('app %r exists in both %s and %s' % (d, found[d], appsdir))
@@ -157,15 +224,15 @@ def main():
             lines.append('\t{ %s, app%d_file%d, %d },' % (c_string(path.encode()), n, k, len(data)))
         lines.append('};')
         lines.append('')
-    lines.append('const zg_app_t zg_apps[] = {')
+    lines.append('const zg_app_t zg_builtin_apps[] = {')
     for n, a in enumerate(apps):
-        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, app%d_files, %d },' % (
+        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, app%d_files, %d,\n\t  "%s", ZG_APP_BUILTIN },' % (
             c_string(a['id'].encode()), c_string(a['name'].encode()),
             c_string(a['version'].encode()), c_string(a['description'].encode()),
             c_string(a['icon']), c_string(a['entry'].encode()),
-            a['permissions'], a['hidden'], n, len(a['files'])))
+            a['permissions'], a['hidden'], n, len(a['files']), a['hash']))
     lines.append('};')
-    lines.append('const unsigned zg_app_count = %d;' % len(apps))
+    lines.append('const unsigned zg_builtin_app_count = %d;' % len(apps))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     data = '\n'.join(lines) + '\n'
     try:

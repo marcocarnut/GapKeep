@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "testshot.h"
+#include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
 #include <circle/string.h>
@@ -31,6 +32,10 @@ void CTestShot::Update (void)
 				if (strcmp (m_Line, "#shot") == 0)
 				{
 					Send ();
+				}
+				else if (strncmp (m_Line, "#crash ", 7) == 0)
+				{
+					ZgTestCrash (m_Line + 7);
 				}
 				m_nLine = 0;
 			}

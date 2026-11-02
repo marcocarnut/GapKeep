@@ -1,9 +1,9 @@
 //
 // apphost.h
 //
-// The app host runs zerogap apps: JavaScript programs bundled into the
-// kernel image (see bundle.h), each with its own QuickJS runtime, its own
-// LVGL screen and its own keyboard focus group.
+// The app host runs zerogap apps: JavaScript programs built into the kernel
+// image or loaded from the SD card (see appstore.h), each with its own
+// QuickJS runtime, its own LVGL screen and its own keyboard focus group.
 //
 // Isolation: every app gets a fresh JSRuntime. When an app exits (or the
 // user presses Home), its screen is deleted, its timers cancelled and its
@@ -86,7 +86,8 @@ public:
 
 	CKeyboardIndev *GetKeyboard (void) const	{ return m_pKeyboard; }
 
-	static const zg_app_t *FindApp (const char *pID);
+	// A JS runtime with the zeroing allocator, no memory limit
+	static JSRuntime *NewRuntime (void);
 
 private:
 	boolean StartApp (const zg_app_t *pApp);
@@ -141,6 +142,9 @@ boolean ZgUIDispatchKey (TZgApp *pApp, const TZgKey &rKey);
 // Focus callback for every focus group: shows the focus ring however focus
 // moved (keyboard, mouse or code). zerogap is keyboard-first.
 void ZgGroupFocusCallback (lv_group_t *pGroup);
+
+// The UTF-8 symbol for an icon name in ui.symbols ("home", ...), or 0.
+const char *ZgSymbolByName (const char *pName);
 
 // Applies the system theme (dark, teal/amber).
 void ZgUIApplyDefaultTheme (void);

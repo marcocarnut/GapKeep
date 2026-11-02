@@ -333,7 +333,8 @@ import * as sys from "zg:sys";
 
 | Name | Description |
 | --- | --- |
-| `app` | This app's manifest data: `{ id, name, version, description, icon, permissions }`. |
+| `kernel` | The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"`. |
+| `app` | This app's manifest data and origin: `{ id, name, version, description, icon, permissions, source, hash }`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)). |
 | `version` | `{ zerogap, quickjs, lvgl, circle }` version strings. |
 | `log(...args)` | Same as `console.log`. |
 | `uptime()` | Milliseconds since boot, as a float with microsecond resolution. |
@@ -386,8 +387,9 @@ throws a `ReferenceError`. Used by the launcher.
 
 | Name | Description |
 | --- | --- |
-| `list()` | Array of `{ id, name, version, description, icon, permissions }` for every app not marked `hidden`, in bundle order (sorted by id; test builds list their test-only apps last). |
+| `list()` | Array of `{ id, name, version, description, icon, permissions, source, hash }` (as `sys.app`) for every app not marked `hidden`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). |
 | `launch(id)` | Stop the current app and start `id` (after the current handler returns). Throws if there is no such app. |
+| `card()` | The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16. |
 
 ---
 

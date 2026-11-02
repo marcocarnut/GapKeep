@@ -8,7 +8,10 @@
 //
 #include "kernel.h"
 #include <circle/machineinfo.h>
+#include <circle/gpiopin.h>
+#include <circle/pagetable.h>
 #include "runtime/version.h"
+#include "runtime/appstore.h"
 
 // same rate as the serial bootloader (FLASHBAUD), so one terminal setting
 // covers both
@@ -23,6 +26,9 @@ CKernel::CKernel (void)
 	m_Timer (&m_Interrupt),
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
 	m_USBHCI (&m_Interrupt, &m_Timer, TRUE),	// TRUE: plug-and-play
+#ifndef ZG_SEALED
+	m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
+#endif
 	m_GUI (&m_Screen),
 	m_AppHost (&m_Keyboard)
 #ifdef ZG_TEST
@@ -45,6 +51,7 @@ boolean CKernel::Initialize (void)
 		bOK = m_Screen.Initialize ();
 	}
 
+#ifdef ZG_SERIAL_LOG
 	if (bOK)
 	{
 		// ZG_SERIAL_BAUD needs a fast enough UART clock (the Pi firmware
@@ -59,8 +66,8 @@ boolean CKernel::Initialize (void)
 
 	if (bOK)
 	{
-		// Log to the serial port: the screen belongs to LVGL.
-		// "logdev=tty1" in cmdline.txt sends logs to the screen instead.
+		// Log to the serial port (the screen belongs to LVGL), or to
+		// another device named with "logdev=" in cmdline.txt.
 		CDevice *pTarget = m_DeviceNameService.GetDevice (m_Options.GetLogDevice (), FALSE);
 		if (pTarget == 0 || pTarget == &m_Screen)
 		{
@@ -69,10 +76,29 @@ boolean CKernel::Initialize (void)
 
 		bOK = m_Logger.Initialize (pTarget);
 	}
+#else
+	if (bOK)
+	{
+		// No serial port at all: the UART is never set up, and its pins
+		// (GPIO 14 TXD, 15 RXD), which the firmware leaves on the UART,
+		// become inputs. The log is discarded.
+		CGPIOPin TxD (14, GPIOModeInputPullDown);
+		CGPIOPin RxD (15, GPIOModeInputPullDown);
+
+		bOK = m_Logger.Initialize (&m_NullLog);
+	}
+#endif
 
 	if (bOK)
 	{
 		bOK = m_Interrupt.Initialize ();
+	}
+
+	if (bOK)
+	{
+		// the exception and interrupt vectors are in place: no more writes
+		// to the vector page (circle/lib/pagetable.cpp, zerogap's W^X map)
+		CPageTable::ProtectVectorPage ();
 	}
 
 	if (bOK)
@@ -90,6 +116,16 @@ boolean CKernel::Initialize (void)
 		// a failing RNG is reported and disables zg:crypto's random
 		// functions, but does not stop the system
 		m_Random.Initialize ();
+	}
+
+	if (bOK)
+	{
+		// apps: built in, then from the SD card (no card: built-in only)
+#ifndef ZG_SEALED
+		CAppStore::Initialize (m_EMMC.Initialize ());
+#else
+		CAppStore::Initialize (FALSE);
+#endif
 	}
 
 	if (bOK)

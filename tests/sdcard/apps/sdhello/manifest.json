@@ -1,0 +1,7 @@
+{
+  "id": "sdhello",
+  "name": "SD Hello",
+  "version": "1.0.0",
+  "description": "Loaded from the SD card.",
+  "icon": "sd-card"
+}

@@ -20,7 +20,9 @@ TYPED = ['alpha', 'already', 'abandon', 'zoo', 'eyebrow', 'neutral',
 def decode(png, binary=False):
     cmd = ['zbarimg', '--quiet', '--raw'] + (['-Sbinary'] if binary else []) + [png]
     out = subprocess.run(cmd, capture_output=True, check=True).stdout
-    return out[:-1] if out.endswith(b'\n') else out
+    # zbarimg ends text with a newline, but not binary data (whose last
+    # byte may well be 0x0a)
+    return out if binary else out[:-1] if out.endswith(b'\n') else out
 
 
 def main():

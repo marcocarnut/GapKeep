@@ -9,6 +9,10 @@
 # Usage: tools/rig/run_hw_tests.sh [-o output-dir] [scenario.txt ...]
 #        (default: every scenario; rig from $ZG_RIG, default mac@five.local)
 #
+# Scenarios that need the test SD card (tests/sdcard: "Needs ... the test SD
+# card") are skipped unless ZG_RIG_SDAPPS=1 says the rig's card has its
+# apps/ folder (tools/make_sdcard.sh puts it on the development card).
+#
 set -e
 cd "$(dirname "$0")/../.."
 RIG=${ZG_RIG:-mac@five.local}
@@ -28,6 +32,10 @@ scp -q $SCENARIOS "$RIG:zerogap-rig/tests/"
 FAILED=0
 for t in $SCENARIOS; do
 	name=$(basename "$t" .txt)
+	if head -2 "$t" | grep -q "the test SD card" && [ "$ZG_RIG_SDAPPS" != 1 ]; then
+		echo "SKIP  hw:$name   (set ZG_RIG_SDAPPS=1 once the rig's card has tests/sdcard/apps)"
+		continue
+	fi
 	if ssh "$RIG" "cd zerogap-rig && rm -rf out/$name && python3 -u zgrig.py run kernel.hex tests/$name.txt --out out/$name" \
 		> "$OUT/$name.log" 2>&1; then
 		echo "PASS  hw:$name"

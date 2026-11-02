@@ -1,6 +1,7 @@
 # Writing zerogap apps
 
-A zerogap app is a small JavaScript program with a manifest. It is compiled
+A zerogap app is a small JavaScript program with a manifest, in a folder of
+its own. It is either copied to the `apps` folder of the SD card or built
 into the system image, shows up in the launcher, and talks to the system only
 through a few documented modules (`zg:ui`, `zg:sys`, ...). This guide walks
 through writing one; [API.md](API.md) is the full reference.
@@ -14,7 +15,8 @@ through writing one; [API.md](API.md) is the full reference.
 - **A keyboard and a mouse.** Every widget can be reached with Tab and
   activated with Enter or Space.
 - **No network, no files, no clock you can trust**, and no way to reach
-  other apps. That is the point: an app sees only what the person types.
+  other apps. (Apps are read from the card at boot, but an app itself cannot
+  read or write files.) That is the point: an app sees only what the person types.
 
 ## Your first app
 
@@ -56,12 +58,17 @@ new ui.Button({
 });
 ```
 
-Build and run it in the emulator:
+Run it in the emulator, with your app on an SD card image:
 
 ```sh
-make -C src
-python3 tools/qemu_harness.py --interactive
+tools/build.sh qemu                                  # the system (launcher only)
+mkdir -p /tmp/card/apps && cp -r apps/counter /tmp/card/apps/
+tools/make_sd_image.sh /tmp/card.img /tmp/card
+python3 tools/qemu_harness.py --sd /tmp/card.img --interactive
 ```
+
+On a real Pi Zero, copy the `counter` folder into the `apps` folder of the
+card (see [Installing apps](#installing-apps)).
 
 That's it: no `main()` or event loop to write. The module's top level runs
 once when the app starts, and everything after that happens in event
@@ -80,9 +87,62 @@ handlers and timers.
 | `permissions` | no | Extra system modules the app may import, e.g. `["apps"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 
-The build checks every manifest (`tools/bundle_apps.py`) and fails with a
-clear message on unknown keys, bad ids, unknown icons or permissions, or a
-missing entry module. Only `.js`, `.json` and `.txt` files are bundled.
+zerogap checks every manifest, and refuses an app with unknown keys, a bad
+id, an unknown icon or permission, or a missing entry module. The build does
+it for built-in apps (`tools/bundle_apps.py`); for apps on the SD card the
+system does it at boot, and the launcher lists each refused app with the
+reason.
+
+Only `.js`, `.json` and `.txt` files are part of an app; the rest (a README,
+images) is ignored. Names of those files, and of folders, may use
+`A-Z a-z 0-9 . _ -`; names starting with `.` are skipped. Text must be UTF-8.
+Limits: 256 files, 4 MB per file, 16 MB per app, folders 8 levels deep.
+
+## Installing apps
+
+The card holds the apps in a folder called `apps`, one folder per app, named
+after its id, laid out exactly like the repository's `apps/`:
+
+```
+(card)
+  kernel.img, config.txt, ...
+  apps/
+    dice39/
+      manifest.json
+      main.js
+      lib/...
+    counter/
+      ...
+```
+
+`tools/make_sdcard.sh --standalone` makes such a card, with every app in
+`apps/`. zerogap reads the apps once, at boot, into memory, and never writes
+to the card (its FAT driver is compiled read-only). To install or remove an
+app, change the card and restart.
+
+The launcher lists the built-in apps first, then those from the card, each
+sorted by id. An app on the card cannot replace a built-in one: if its id is
+taken (the launcher's, for instance), it is refused.
+
+A **sealed** system (`tools/make_sdcard.sh --sealed`) has every app built
+into `kernel.img` and no SD card code at all: for a machine that should only
+ever run one set of apps.
+
+## App hashes
+
+Whoever can change the card can change the apps on it, so the launcher shows
+the SHA-256 of the focused app below the tiles (as `sys.app.hash` and in
+`apps.list()`). Compare it with the hash published for the app before you
+open it. It covers exactly what zerogap loads, so it is the same on any card
+and for the built-in copy:
+
+```sh
+python3 tools/bundle_apps.py --hash apps/dice39
+```
+
+It is the SHA-256 of the app's files sorted by path (byte order), each
+contributing its path relative to the app folder (with `/`), a NUL byte, its
+size in decimal, a NUL byte, and its contents.
 
 ## Laying out a screen
 
@@ -175,7 +235,8 @@ log, prefixed with `app:<id>`. Objects are printed as JSON.
 
 `tools/qemu_harness.py` boots the image in QEMU and plays a scenario: type,
 press keys, click, take screenshots, and wait for log lines. Put scenarios in
-`tests/*.txt` and run them all with `tools/run_tests.sh`. See
+`tests/*.txt` and run them all with `tools/run_tests.sh`, which puts the apps
+in `apps/` on the emulated SD card. See
 `tests/apps_widgets.txt` for an example, and the comment at the top of
 `tools/qemu_harness.py` for the commands.
 

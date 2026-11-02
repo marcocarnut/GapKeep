@@ -1,8 +1,10 @@
 #!/bin/sh
 #
 # Runs every QEMU scenario in tests/, plus the native and Node tests.
-# Normal scenarios run against the production app set; those marked
-# "Needs a test build" against the test-only apps too (make TEST=1).
+# Normal scenarios run against a production kernel (only the launcher built
+# in) with apps/ on its SD card, as tools/make_sdcard.sh --standalone makes
+# it; those marked "Needs a test build" against a test build (every app
+# built in, test-only apps too) with the test SD card (tests/sdcard).
 # Leaves a production kernel.img behind.
 #
 # Usage: tools/run_tests.sh [output-dir]
@@ -13,9 +15,9 @@ OUT=${1:-$(mktemp -d -t zerogap-tests-XXXXXX)}
 mkdir -p "$OUT"
 FAILED=0
 
-run() {
+run() {	# scenario, SD card image
 	name=$(basename "$1" .txt)
-	if python3 tools/qemu_harness.py --out "$OUT/$name" "$1" > "$OUT/$name.log" 2>&1; then
+	if python3 tools/qemu_harness.py --sd "$2" --out "$OUT/$name" "$1" > "$OUT/$name.log" 2>&1; then
 		echo "PASS  $name"
 	else
 		echo "FAIL  $name   (see $OUT/$name.log)"
@@ -33,10 +35,23 @@ check() {	# name, command...
 check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/crypto/sha256.c -o "$0/sha256test" && "$0/sha256test"' "$OUT"
 check dice39_node node tests/dice39/run_node.mjs
 
+# the two SD cards
+mkdir -p "$OUT/card-apps/apps"
+for a in apps/*/; do
+	[ "$(basename "$a")" = launcher ] || cp -r "$a" "$OUT/card-apps/apps/"
+done
+tools/make_sd_image.sh "$OUT/sd-apps.img" "$OUT/card-apps"
+tools/make_sd_image.sh "$OUT/sd-test.img" tests/sdcard
+
 tools/build.sh qemu >/dev/null
 for t in tests/*.txt; do
-	needs_test_build "$t" || run "$t"
+	needs_test_build "$t" || run "$t" "$OUT/sd-apps.img"
 done
+
+# the kernel hash the launcher shows must be that of kernel.img
+if [ -f "$OUT/boot_launcher/serial.log" ]; then
+	check kernel_hash tests/check_kernel_hash.sh "$OUT/boot_launcher/serial.log" src/kernel.img
+fi
 
 # dice39's three QR exports, decoded from the screenshots, must agree
 if [ -f "$OUT/dice39/07-words.png" ]; then
@@ -45,7 +60,7 @@ fi
 
 tools/build.sh qemu TEST=1 >/dev/null
 for t in tests/*.txt; do
-	! needs_test_build "$t" || run "$t"
+	! needs_test_build "$t" || run "$t" "$OUT/sd-test.img"
 done
 
 tools/build.sh qemu >/dev/null	# back to the production app set

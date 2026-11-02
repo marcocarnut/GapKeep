@@ -5,33 +5,59 @@
 #   ../circle            Circle libraries (./makeall)
 #   ../lib/lvgl          LVGL with zerogap's configuration
 #   ../lib/quickjs       QuickJS engine
+#   ../lib/fatfs         FatFs, read-only (not for SEALED=1)
+#   ../circle/addon/SDCard  SD card driver (not for SEALED=1)
+#
+# Which apps are built into the image:
+#   make            the launcher only; the other apps come from the SD
+#                   card's /apps folder (tools/make_sdcard.sh --standalone)
+#   make SEALED=1   every app in ../apps, and no SD card code at all
+#   make TEST=1     every app in ../apps and ../tests/apps, plus test
+#                   features (serial screenshots); /apps is read too
+#
+# The serial port (GPIO 14/15): test builds log to it (and answer serial
+# screenshot requests). Other builds don't touch it, and keep no log
+# anywhere, unless made with LOG=serial (tools/build.sh does that for QEMU,
+# where the tests read the log). No build but TEST=1 ever reads from it.
 #
 
 CIRCLEHOME = ../circle
 QJSDIR     = ../third_party/quickjs
-APPSDIRS   = ../apps
-
-# "make TEST=1" also bundles the test-only apps in ../tests/apps
-ifeq ($(strip $(TEST)),1)
-APPSDIRS  += ../tests/apps
-endif
 
 OBJS	= main.o kernel.o kbdindev.o \
-	  runtime/apphost.o runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
+	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o \
+	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha256.o crypto/hwrng.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o \
 	  generated/apps_bundle.o
 
-# "make TEST=1": test-only apps and kernel features (serial screenshots)
 ifeq ($(strip $(TEST)),1)
-OBJS	+= testshot.o
+BUNDLE	= ../apps ../tests/apps
+OBJS	+= testshot.o testcrash.o
 DEFINE	+= -DZG_TEST
 BUILDMODE = test
+else ifeq ($(strip $(SEALED)),1)
+BUNDLE	= ../apps
+DEFINE	+= -DZG_SEALED
+BUILDMODE = sealed
 else
+BUNDLE	= --only launcher ../apps
 BUILDMODE = production
 endif
 
-LIBS	= ../lib/lvgl/liblvgl.a \
+ifeq ($(strip $(TEST)),1)
+DEFINE	+= -DZG_SERIAL_LOG
+else ifeq ($(strip $(LOG)),serial)
+DEFINE	+= -DZG_SERIAL_LOG
+BUILDMODE := $(BUILDMODE)-log
+endif
+
+ifneq ($(strip $(SEALED)),1)
+LIBS	+= ../lib/fatfs/libfatfs.a \
+	   $(CIRCLEHOME)/addon/SDCard/libsdcard.a
+endif
+
+LIBS	+= ../lib/lvgl/liblvgl.a \
 	  ../lib/quickjs/libquickjs.a \
 	  $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/input/libinput.a \
@@ -41,7 +67,7 @@ LIBS	= ../lib/lvgl/liblvgl.a \
 # every file including LVGL headers must see the same configuration
 DEFINE += -DLV_CONF_PATH="<zg_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
-EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR)
+EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src
 
 include $(CIRCLEHOME)/Rules.mk
 
@@ -51,14 +77,14 @@ generated/apps_bundle.c: FORCE
 ifeq ($(strip $(TEST)),1)
 	@python3 ../tools/make_qjstests.py $(QJSDIR) ../tests/apps/qjstests/suites.js
 endif
-	@python3 ../tools/bundle_apps.py $@ $(APPSDIRS)
+	@python3 ../tools/bundle_apps.py $@ $(BUNDLE)
 
 FORCE:
 
-# Recompile what depends on ZG_TEST when switching between the two builds.
+# Recompile what depends on ZG_TEST / ZG_SEALED when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-kernel.o: .buildmode
+main.o kernel.o runtime/appstore.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d
 

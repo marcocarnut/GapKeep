@@ -18,10 +18,15 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "kernel.h"
+#include "runtime/stackguard.h"
 #include <circle/startup.h>
 
+// zerogap: no stack canary in main(), which sets it (runtime/stackguard.cpp)
+__attribute__ ((no_stack_protector))
 int main (void)
 {
+	ZgInitStackGuard ();
+
 	// cannot return here because some destructors used in CKernel are not implemented
 
 	CKernel Kernel;

@@ -2195,6 +2195,19 @@ static const struct { const char *pName; const char *pSymbol; } Symbols[] =
 	{"new-line", LV_SYMBOL_NEW_LINE},
 };
 
+const char *ZgSymbolByName (const char *pName)
+{
+	for (unsigned i = 0; i < sizeof Symbols / sizeof Symbols[0]; i++)
+	{
+		if (strcmp (Symbols[i].pName, pName) == 0)
+		{
+			return Symbols[i].pSymbol;
+		}
+	}
+
+	return 0;
+}
+
 static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",

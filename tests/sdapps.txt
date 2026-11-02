@@ -1,0 +1,28 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# Apps load from the card's /apps folder; broken ones are refused, each with
+# its reason, and the rest of the system carries on.
+expect Keyboard attached 60
+expect apps/BadName not loaded: the folder name must be an app id
+expect apps/badjson not loaded: manifest.json: SyntaxError
+expect apps/badutf8 not loaded: main.js: not valid UTF-8 text
+expect apps/hello not loaded: an app with this id is built in
+expect apps/noentry not loaded: entry module "main.js" not found
+# the same hash as "tools/bundle_apps.py --hash tests/sdcard/apps/sdhello"
+expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 19bf01dfcf5f3d0a2bc3ddfebe9b8ddc754761e4a766e7b09013797b0763a40d
+expect apps/unknownkey not loaded: manifest.json: unknown key "network"
+expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
+expect 1 app\(s\) from the SD card, 7 not loaded
+expect launcher ready: dice39, gallery, hello, crashtest, qjstests, sdhello 60
+expect sd card: ok 7 problem\(s\)
+# tiles: dice39, gallery, hello, crashtest, qjstests, then sdhello
+key right
+key right
+key right
+key right
+key right
+wait 1
+shot 01-launcher
+key ret
+expect sdhello ready: Hello from the SD card sdcard 19bf01dfcf5f3d0a2bc3ddfebe9b8ddc754761e4a766e7b09013797b0763a40d
+wait 1
+shot 02-sdhello

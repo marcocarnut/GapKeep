@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "appstore.h"
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
@@ -146,17 +147,9 @@ TZgApp *CAppHost::GetApp (JSContext *pContext)
 	return (TZgApp *) JS_GetContextOpaque (pContext);
 }
 
-const zg_app_t *CAppHost::FindApp (const char *pID)
+JSRuntime *CAppHost::NewRuntime (void)
 {
-	for (unsigned i = 0; i < zg_app_count; i++)
-	{
-		if (strcmp (zg_apps[i].id, pID) == 0)
-		{
-			return &zg_apps[i];
-		}
-	}
-
-	return 0;
+	return JS_NewRuntime2 (&MallocFunctions, 0);
 }
 
 boolean CAppHost::Initialize (void)
@@ -168,9 +161,7 @@ boolean CAppHost::Initialize (void)
 	m_pKeyboard->SetKeyHook (KeyHook, this);
 	m_pKeyboard->SetHomeHandler (HomeHandler, this);
 
-	CLogger::Get ()->Write (FromHost, LogNotice, "%u app(s) bundled", zg_app_count);
-
-	const zg_app_t *pLauncher = FindApp ("launcher");
+	const zg_app_t *pLauncher = CAppStore::Find ("launcher");
 	if (pLauncher == 0)
 	{
 		CLogger::Get ()->Write (FromHost, LogError, "No launcher app");
@@ -182,7 +173,7 @@ boolean CAppHost::Initialize (void)
 
 boolean CAppHost::RequestLaunch (const char *pID)
 {
-	const zg_app_t *pApp = FindApp (pID != 0 ? pID : "launcher");
+	const zg_app_t *pApp = CAppStore::Find (pID != 0 ? pID : "launcher");
 	if (pApp == 0)
 	{
 		return FALSE;
@@ -255,7 +246,7 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 	m_App.KeyHandler = JS_UNDEFINED;
 	m_App.nNextTimerID = 1;
 
-	m_App.pRuntime = JS_NewRuntime2 (&MallocFunctions, 0);
+	m_App.pRuntime = NewRuntime ();
 	if (m_App.pRuntime == 0)
 	{
 		CLogger::Get ()->Write (FromHost, LogError, "Cannot create JS runtime");
@@ -293,7 +284,7 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 			pEntry = &pApp->files[i];
 		}
 	}
-	assert (pEntry != 0);		// checked by bundle_apps.py
+	assert (pEntry != 0);		// checked by bundle_apps.py and CAppStore
 
 	m_App.nCallDepth = 1;
 	m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
@@ -327,6 +318,12 @@ void CAppHost::StopApp (void)
 	m_pKeyboard->SetGroup (0);
 	lv_group_set_default (0);
 	lv_screen_load (m_pIdleScreen);
+
+	// Paint the (empty) idle screen over everything now, so nothing the app
+	// showed (seed words, keys) stays in the framebuffer while the next app
+	// starts.
+	lv_obj_invalidate (m_pIdleScreen);
+	lv_refr_now (0);
 
 	ZgUIAppStopping (&m_App);
 	ZgTimersFree (&m_App);

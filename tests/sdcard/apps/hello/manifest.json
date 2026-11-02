@@ -1,0 +1,7 @@
+{
+  "id": "hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "description": "The smallest useful app. Start here.",
+  "icon": "edit"
+}

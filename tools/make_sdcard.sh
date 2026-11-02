@@ -6,26 +6,56 @@
 #   tools/make_sdcard.sh               -> sdcard/: development card for the rig
 #                                         (docs/RIG.md): Circle's serial
 #                                         bootloader at FLASHBAUD; kernels
-#                                         arrive over the serial line
+#                                         arrive over the serial line. Its
+#                                         apps/ holds the test card's apps
+#                                         (tests/sdcard, tests/sdapps.txt).
 #   tools/make_sdcard.sh --standalone  -> sdcard-standalone/: zerogap itself
-#                                         (production build), boots on its own
+#                                         (production build), boots on its
+#                                         own; the apps are in apps/ on the
+#                                         card, one folder each, as in the
+#                                         repository's apps/
+#   tools/make_sdcard.sh --sealed      -> sdcard-sealed/: every app built
+#                                         into kernel.img, which then has no
+#                                         SD card code at all
+#
+# The Pi firmware (closed, Broadcom's) comes from the raspberrypi/firmware
+# commit that Circle pins (circle/boot/Makefile); tools/firmware.sha256 pins
+# the bytes too (checked against that commit's git blob ids when written).
 #
 set -e
 cd "$(dirname "$0")/.."
 make -C circle/boot all >/dev/null
+( cd circle/boot && sha256sum -c --quiet ../../tools/firmware.sha256 ) || {
+	echo "make_sdcard: the firmware files differ from tools/firmware.sha256" >&2; exit 1; }
 
-if [ "$1" = "--standalone" ]; then
-	OUT=sdcard-standalone
-	tools/build.sh pi
+if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
+	if [ "$1" = "--sealed" ]; then
+		OUT=sdcard-sealed
+		tools/build.sh pi SEALED=1
+	else
+		OUT=sdcard-standalone
+		tools/build.sh pi
+	fi
 	rm -rf $OUT && mkdir $OUT
 	for f in bootcode.bin start.elf fixup.dat LICENCE.broadcom; do
 		cp "circle/boot/$f" $OUT/
 	done
 	cp src/kernel.img $OUT/
+	if [ $OUT = sdcard-standalone ]; then
+		mkdir $OUT/apps
+		for a in apps/*/; do
+			[ "$(basename "$a")" = launcher ] || cp -r "$a" $OUT/apps/
+		done
+	fi
 	cat > $OUT/config.txt <<'CFG'
 # zerogap standalone card (Raspberry Pi Zero)
 arm_64bit=0
 initial_turbo=0
+# zerogap never uses the serial port: the firmware leaves it off too
+enable_uart=0
+# HDMI is output only: ignore CEC, so the TV can't send anything back
+hdmi_ignore_cec=1
+hdmi_ignore_cec_init=1
 # use the whole screen: without this the firmware leaves a black border
 # (overscan) on many monitors
 disable_overscan=1
@@ -43,9 +73,12 @@ arm_64bit=0
 initial_turbo=0
 # fixed UART clock, so 921600 baud is exact enough on GPIO 14/15
 init_uart_clock=48000000
+hdmi_ignore_cec=1
+hdmi_ignore_cec_init=1
 CFG
+	cp -r tests/sdcard/apps $OUT/
 fi
 
-( cd $OUT && sha256sum * > SHA256SUMS )
+( cd $OUT && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS )
 echo "$OUT/ ready:"
 cat $OUT/SHA256SUMS

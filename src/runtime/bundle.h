@@ -1,10 +1,10 @@
 /*
- * bundle.h - apps compiled into the kernel image.
+ * bundle.h - the description of an app, and the apps built into the kernel.
  *
- * zerogap has no writable storage for code: every app is bundled into the
- * kernel image at build time by tools/bundle_apps.py, which also validates
- * each app's manifest.json. The generated table lives in
- * src/generated/apps_bundle.c.
+ * Apps come from two places: built into the kernel image at build time by
+ * tools/bundle_apps.py (src/generated/apps_bundle.c), or loaded from the SD
+ * card's /apps folder at boot (appstore.cpp). Both check manifest.json the
+ * same way and describe the app with a zg_app_t; CAppStore lists them all.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -36,13 +36,18 @@ typedef struct
 	const char *entry;		/* path of the entry module */
 	unsigned permissions;		/* ZG_PERM_* */
 	int hidden;			/* not listed in the launcher */
-	const zg_file_t *files;
+	const zg_file_t *files;		/* sorted by path */
 	unsigned file_count;
+	const char *hash;		/* SHA-256 of the files, 64 hex digits (docs/APPS.md) */
+	int source;			/* ZG_APP_BUILTIN or ZG_APP_SDCARD */
 }
 zg_app_t;
 
-extern const zg_app_t zg_apps[];
-extern const unsigned zg_app_count;
+#define ZG_APP_BUILTIN	0
+#define ZG_APP_SDCARD	1
+
+extern const zg_app_t zg_builtin_apps[];
+extern const unsigned zg_builtin_app_count;
 
 #ifdef __cplusplus
 }

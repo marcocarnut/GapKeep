@@ -1,8 +1,10 @@
 //
 // testshot.h
 //
-// Test builds only (make TEST=1): screenshots over the serial line, for
-// testing on real hardware without an HDMI capture device.
+// Test builds only (make TEST=1): commands on the serial line.
+//
+// "#shot": a screenshot, for testing on real hardware without an HDMI
+// capture device.
 //
 // The host sends "#shot\n". The kernel answers with
 //
@@ -13,6 +15,9 @@
 // where the payload is the framebuffer, run-length encoded as pairs of
 // (count: u16 LE, pixel: bits-per-pixel/8 bytes LE). tools/serialshot.py
 // decodes it.
+//
+// "#crash <kind>": breaks one of the memory protection rules on purpose,
+// so tests/memprotect.txt can check that the system stops (testcrash.cpp).
 //
 // Production builds never read from the serial port.
 //
@@ -38,7 +43,7 @@ private:
 private:
 	CScreenDevice *m_pScreen;
 	CSerialDevice *m_pSerial;
-	char m_Line[16];
+	char m_Line[32];
 	unsigned m_nLine;
 };
 

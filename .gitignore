@@ -10,8 +10,11 @@ src/generated/
 # local
 __pycache__/
 tests/apps/qjstests/suites.js
-sdcard/
+/sdcard/
 src/.buildmode
 src/kernel.hex
 .buildtarget
-sdcard-standalone/
+/sdcard-standalone/
+/sdcard-sealed/
+lib/fatfs/src/
+/toolchain/
