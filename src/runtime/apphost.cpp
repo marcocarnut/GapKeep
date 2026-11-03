@@ -230,6 +230,17 @@ static void PromiseRejectionTracker (JSContext *pContext, JSValueConst Promise,
 		return;
 	}
 
+	// the same reason again: already reported
+	TZgApp *pApp = CAppHost::GetApp (pContext);
+	if (   JS_IsObject (Reason)
+	    && JS_IsObject (pApp->LastRejection)
+	    && JS_VALUE_GET_PTR (Reason) == JS_VALUE_GET_PTR (pApp->LastRejection))
+	{
+		return;
+	}
+	JS_FreeValue (pContext, pApp->LastRejection);
+	pApp->LastRejection = JS_DupValue (pContext, Reason);
+
 	JS_Throw (pContext, JS_DupValue (pContext, Reason));
 	((CAppHost *) pParam)->ReportException (pContext, "unhandled promise rejection");
 }
@@ -261,6 +272,7 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 	memset (&m_App, 0, sizeof m_App);
 	m_App.pBundle = pApp;
 	m_App.KeyHandler = JS_UNDEFINED;
+	m_App.LastRejection = JS_UNDEFINED;
 	m_App.nNextTimerID = 1;
 
 	m_App.pRuntime = NewRuntime ();
@@ -363,6 +375,9 @@ void CAppHost::StopApp (void)
 
 	lv_group_delete (m_App.pGroup);
 	m_App.pGroup = 0;
+
+	JS_FreeValue (m_App.pContext, m_App.LastRejection);
+	m_App.LastRejection = JS_UNDEFINED;
 
 	JS_FreeContext (m_App.pContext);
 	JS_FreeRuntime (m_App.pRuntime);	// asserts that nothing leaked

@@ -216,6 +216,8 @@ def gen_ts(spec):
     I = '  '
     for t in ui['types']:
         out += doc(t['md'], I) + [I + 'export type %s = %s;' % (t['name'], t['ts'])]
+    out.append(I + 'export type SymbolName = %s;' % ' | '.join('"%s"' % x for x in ui['symbols']))
+    out.append(I + 'export type SymbolTable = { readonly [name in SymbolName]: string };')
     out.append(I + 'export type EventName = %s;' % ' | '.join('"%s"' % e['name'] for e in ui['events']))
     out += doc('The event object handlers receive (`this` is the widget).', I)
     out.append(I + 'export interface WidgetEvent {')

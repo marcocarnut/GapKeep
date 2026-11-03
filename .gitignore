@@ -18,3 +18,5 @@ src/kernel.hex
 /sdcard-sealed/
 lib/fatfs/src/
 /toolchain/
+/sim/build/
+/sim/web/vendor/

@@ -45,6 +45,7 @@ export class Zerogap {
   // The SD card's contents: { "apps/<id>/<path>": string or Uint8Array }.
   // Call before boot().
   writeCard (files) {
+    this.m.FS.mkdirTree ("/card/apps");     // an empty card has the folder too
     for (const [path, data] of Object.entries (files)) {
       const full = "/card/" + path.replace (/^\/+/, "");
       this.m.FS.mkdirTree (full.slice (0, full.lastIndexOf ("/")));

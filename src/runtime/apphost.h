@@ -57,6 +57,11 @@ struct TZgApp
 	// iterations), whatever the machine. Logged when the app starts and
 	// stops; the simulator turns it into an estimate of Pi Zero time.
 	unsigned long long nWork;
+
+	// The reason of the last unhandled promise rejection reported: QuickJS
+	// reports a failing module twice (its promise and its evaluation's),
+	// with the same reason. Held, so its identity stays unique.
+	JSValue LastRejection;
 };
 
 class CAppHost

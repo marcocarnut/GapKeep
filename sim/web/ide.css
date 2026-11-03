@@ -1,0 +1,125 @@
+/* The zerogap IDE: a dark theme in zerogap's colors (the screen's
+   background, teal primary, amber focus ring).
+   SPDX-License-Identifier: GPL-3.0-or-later */
+
+:root {
+  --bg: #1d1c23;          /* page */
+  --pane: #292831;        /* zerogap's screen background */
+  --head: #24232b;
+  --line: #3a3944;
+  --text: #e6e4ec;
+  --dim: #8d8b96;
+  --primary: #00968c;     /* zerogap's primary */
+  --focus: #ffc300;       /* zerogap's focus ring */
+  --error: #ff6b6b;
+  --select: #34404a;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column;
+  background: var(--bg); color: var(--text);
+  font: 13px/1.4 system-ui, sans-serif;
+  overflow: hidden;
+}
+
+button, select {
+  font: inherit; color: var(--text);
+  background: #33323d; border: 1px solid var(--line); border-radius: 4px;
+  padding: 2px 8px; cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--dim); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; }
+kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); border-radius: 3px; }
+
+#top {
+  display: flex; align-items: center; gap: 16px;
+  padding: 4px 12px; background: var(--head); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 300; letter-spacing: .5px; }
+.brand b { color: var(--primary); }
+#status { color: var(--dim); }
+#status.running { color: var(--primary); }
+#status.error { color: var(--error); }
+.spacer { flex: 1; }
+.hint, .dim { color: var(--dim); }
+
+/* Files | editor | screen above, the console under the editor and screen. */
+#layout {
+  flex: 1; min-height: 0;
+  display: grid; gap: 1px; background: var(--line);
+  grid-template-columns: minmax(200px, 250px) minmax(300px, 1fr) minmax(340px, 44%);
+  grid-template-rows: minmax(0, 1fr) minmax(110px, 27%);
+  grid-template-areas: "files editor screen" "files console console";
+}
+.pane { background: var(--pane); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#files-pane { grid-area: files; }
+#editor-pane { grid-area: editor; }
+#screen-pane { grid-area: screen; }
+#console-pane { grid-area: console; }
+.pane-head {
+  display: flex; align-items: center; gap: 6px; flex: none;
+  padding: 4px 8px; background: var(--head); border-bottom: 1px solid var(--line);
+  min-height: 30px;
+}
+.pane-head .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px 0; }
+.toolbar button { font-size: 12px; padding: 1px 6px; }
+
+/* File tree */
+#tree { list-style: none; margin: 6px 0; padding: 0; overflow: auto; flex: 1; font-size: 13px; }
+#tree ul { list-style: none; margin: 0; padding: 0; }
+#tree .row {
+  display: flex; gap: 4px; align-items: baseline;
+  padding: 1px 8px; cursor: pointer; white-space: nowrap; user-select: none;
+}
+#tree .row:hover { background: #303039; }
+#tree .row.selected { background: var(--select); }
+#tree .row.open .name { color: var(--focus); }
+#tree .twisty { width: 10px; color: var(--dim); flex: none; font-size: 10px; }
+#tree .app > .name { font-weight: 600; }
+#tree .meta { color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+#tree .dirty::after { content: " \25CF"; color: var(--focus); }
+#tree .running::before { content: "\25B6 "; color: var(--primary); font-size: 10px; }
+
+/* Editor */
+#editor { flex: 1; min-height: 0; }
+#editor .message { padding: 24px; color: var(--dim); }
+#editor .message.error { color: var(--error); }
+#file-title.dirty::after { content: " \25CF"; color: var(--focus); }
+
+/* Screen: the canvas is the true size; CSS scales it (integer steps when
+   it fits) and keeps the pixels sharp. zerogap draws its own cursor. */
+#screen-box {
+  flex: 1; min-height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: #111015;
+}
+#screen {
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  cursor: none; outline: none; background: #000;
+  outline: 2px solid transparent;
+}
+#screen:focus { outline-color: var(--focus); }
+#screen-foot {
+  display: flex; justify-content: space-between; gap: 8px; flex: none;
+  padding: 2px 8px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line);
+}
+#screen-hint.focused { color: var(--focus); }
+
+/* Console */
+#console {
+  flex: 1; overflow: auto; padding: 4px 8px;
+  font: 12px/1.45 var(--mono); white-space: pre-wrap; word-break: break-all;
+  background: #1f1e26;
+}
+#console .error { color: var(--error); }
+#console .ide { color: #7fb8d8; }
+#console .app { color: #c9e7c2; }
+#console a { color: inherit; text-decoration: underline; text-decoration-color: var(--dim); cursor: pointer; }
+#console a:hover { color: var(--focus); }

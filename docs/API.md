@@ -184,12 +184,16 @@ padding, scrollbars when content overflows.
 
 #### Label
 
+Text: one line or wrapped.
+
 | Property | Value | Notes |
 | --- | --- | --- |
 | `text` | string | *Readable*. May contain `\n` and `ui.symbols`. |
 | `overflow` | `"wrap"`, `"clip"`, `"dots"`, `"scroll"`, `"scroll-circular"` | What happens when text is wider than the label (set a `width` for this to matter). |
 
 #### Button
+
+A button: clicked with the mouse, or Enter or Space while focused.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -198,6 +202,8 @@ padding, scrollbars when content overflows.
 Buttons can also contain arbitrary children (give them a `layout`).
 
 #### TextArea
+
+A text field, one line or several.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -210,6 +216,8 @@ Buttons can also contain arbitrary children (give them a `layout`).
 
 #### Checkbox
 
+A box to tick, with a label.
+
 | Property | Value | Notes |
 | --- | --- | --- |
 | `text` | string | *Readable*. Label next to the box. |
@@ -217,11 +225,15 @@ Buttons can also contain arbitrary children (give them a `layout`).
 
 #### Switch
 
+An on/off switch.
+
 | Property | Value | Notes |
 | --- | --- | --- |
 | `checked` | boolean | *Readable*. |
 
 #### Dropdown
+
+Picks one of several options from a list that opens.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -229,6 +241,8 @@ Buttons can also contain arbitrary children (give them a `layout`).
 | `selected` | number | *Readable*. Index of the selected option. |
 
 #### Slider, Bar
+
+A Slider sets a number in a range; a Bar shows one.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -240,6 +254,8 @@ displays a value.
 
 #### Table
 
+Rows and columns of text.
+
 | Property / method | Value | Notes |
 | --- | --- | --- |
 | `data` | string[][] | Replaces all cells; rows may have different lengths. |
@@ -249,6 +265,8 @@ displays a value.
 | `setColumnWidth(col, px)` |  |  |
 
 #### QRCode
+
+A QR code, drawn from text or bytes.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -278,6 +296,8 @@ new ui.Image({ src: sys.app.image, radius: 12 });
 ```
 
 #### TabView
+
+Tabs along the top, each with its own page.
 
 | Property / method | Value | Notes |
 | --- | --- | --- |

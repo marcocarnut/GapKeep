@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!-- The zerogap IDE: static files, no server code. Start it with
+     tools/zgide.sh; see docs/IDE.md. SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zerogap IDE</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="ide.css">
+<link rel="stylesheet" href="vendor/monaco/vs/editor/editor.main.css">
+<script type="module" src="ide.js"></script>
+</head>
+<body>
+<header id="top">
+  <span class="brand">zerogap <b>IDE</b></span>
+  <span id="status">loading...</span>
+  <span class="spacer"></span>
+  <span class="hint"><kbd>Ctrl</kbd>+<kbd>S</kbd> save &middot; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> run</span>
+</header>
+
+<main id="layout">
+  <section id="files-pane" class="pane">
+    <div class="pane-head"><span class="title">SD card</span><span class="dim">apps/</span></div>
+    <div class="toolbar">
+      <button id="new-app" title="New app from a template">New app</button>
+      <button id="new-file" title="New file in the selected app or folder">New file</button>
+      <button id="import" title="Import an app folder (or a folder of apps) from your computer">Import</button>
+    </div>
+    <div class="toolbar">
+      <button id="rename" title="Rename the selected app, folder or file">Rename</button>
+      <button id="delete" title="Delete the selected app, folder or file">Delete</button>
+    </div>
+    <div class="toolbar">
+      <button id="export" title="Download the selected app as a .zip, to unzip into a card's apps/ folder">Export .zip</button>
+      <button id="examples" title="Add back the example apps that are missing">Examples</button>
+    </div>
+    <ul id="tree" role="tree"></ul>
+    <input type="file" id="import-input" webkitdirectory multiple hidden>
+  </section>
+
+  <section id="editor-pane" class="pane">
+    <div class="pane-head"><span id="file-title" class="title">No file open</span></div>
+    <div id="editor"></div>
+  </section>
+
+  <section id="screen-pane" class="pane">
+    <div class="pane-head">
+      <button id="run" class="primary" title="Save all, boot, and start the app whose file is open (Ctrl+Enter)">&#9654; Run</button>
+      <button id="stop" title="Stop the machine">Stop</button>
+      <button id="home" title="The Windows key: back to the launcher">Home</button>
+      <button id="restart" title="Boot again, into the launcher">Restart</button>
+      <span class="spacer"></span>
+      <select id="size" title="Screen size (reboots)"></select>
+    </div>
+    <div id="screen-box"><canvas id="screen" tabindex="0" width="640" height="480"></canvas></div>
+    <div id="screen-foot"><span id="screen-info"></span><span id="screen-hint"></span></div>
+  </section>
+
+  <section id="console-pane" class="pane">
+    <div class="pane-head"><span class="title">Console</span><span class="spacer"></span><button id="clear">Clear</button></div>
+    <div id="console" role="log"></div>
+  </section>
+</main>
+</body>
+</html>

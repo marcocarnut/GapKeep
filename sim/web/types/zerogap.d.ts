@@ -30,6 +30,8 @@ declare module "zg:ui" {
    * as canvas `ImageData`.
    */
   export type ImageSource = { width: number; height: number; data: Uint8Array | ArrayBuffer };
+  export type SymbolName = "audio" | "video" | "list" | "ok" | "close" | "power" | "settings" | "home" | "download" | "drive" | "refresh" | "mute" | "volume-mid" | "volume-max" | "image" | "tint" | "prev" | "play" | "pause" | "stop" | "next" | "eject" | "left" | "right" | "plus" | "minus" | "eye-open" | "eye-close" | "warning" | "shuffle" | "up" | "down" | "loop" | "directory" | "upload" | "call" | "cut" | "copy" | "save" | "bars" | "envelope" | "charge" | "paste" | "bell" | "keyboard" | "gps" | "file" | "wifi" | "battery-full" | "battery-3" | "battery-2" | "battery-1" | "battery-empty" | "usb" | "bluetooth" | "trash" | "edit" | "backspace" | "sd-card" | "new-line";
+  export type SymbolTable = { readonly [name in SymbolName]: string };
   export type EventName = "click" | "change" | "submit" | "focus" | "blur" | "longpress" | "key" | "press" | "drag" | "release";
   /** The event object handlers receive (`this` is the widget). */
   export interface WidgetEvent {
@@ -322,6 +324,7 @@ declare module "zg:ui" {
     constructor(parent: Widget, props?: PanelProps);
     set(props: PanelProps): this;
   }
+  /** Text: one line or wrapped. */
   export class Label extends Widget {
     constructor(props?: LabelProps);
     constructor(parent: Widget, props?: LabelProps);
@@ -331,6 +334,7 @@ declare module "zg:ui" {
     /** What happens when text is wider than the label (set a `width` for this to matter). */
     overflow: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
   }
+  /** A button: clicked with the mouse, or Enter or Space while focused. */
   export class Button extends Widget {
     constructor(props?: ButtonProps);
     constructor(parent: Widget, props?: ButtonProps);
@@ -338,6 +342,7 @@ declare module "zg:ui" {
     /** *Readable*. Creates a centered label inside the button. */
     text: string;
   }
+  /** A text field, one line or several. */
   export class TextArea extends Widget {
     constructor(props?: TextAreaProps);
     constructor(parent: Widget, props?: TextAreaProps);
@@ -355,6 +360,7 @@ declare module "zg:ui" {
     /** Only these characters can be typed. */
     accept: string | null;
   }
+  /** A box to tick, with a label. */
   export class Checkbox extends Widget {
     constructor(props?: CheckboxProps);
     constructor(parent: Widget, props?: CheckboxProps);
@@ -364,6 +370,7 @@ declare module "zg:ui" {
     /** *Readable*. */
     checked: boolean;
   }
+  /** An on/off switch. */
   export class Switch extends Widget {
     constructor(props?: SwitchProps);
     constructor(parent: Widget, props?: SwitchProps);
@@ -371,6 +378,7 @@ declare module "zg:ui" {
     /** *Readable*. */
     checked: boolean;
   }
+  /** Picks one of several options from a list that opens. */
   export class Dropdown extends Widget {
     constructor(props?: DropdownProps);
     constructor(parent: Widget, props?: DropdownProps);
@@ -379,6 +387,7 @@ declare module "zg:ui" {
     /** *Readable*. Index of the selected option. */
     selected: number;
   }
+  /** A Slider sets a number in a range; a Bar shows one. */
   export class Slider extends Widget {
     constructor(props?: SliderProps);
     constructor(parent: Widget, props?: SliderProps);
@@ -390,6 +399,7 @@ declare module "zg:ui" {
     /** *Readable*. Clamped to the range. */
     value: number;
   }
+  /** A Slider sets a number in a range; a Bar shows one. */
   export class Bar extends Widget {
     constructor(props?: BarProps);
     constructor(parent: Widget, props?: BarProps);
@@ -401,6 +411,7 @@ declare module "zg:ui" {
     /** *Readable*. Clamped to the range. */
     value: number;
   }
+  /** Rows and columns of text. */
   export class Table extends Widget {
     constructor(props?: TableProps);
     constructor(parent: Widget, props?: TableProps);
@@ -417,6 +428,7 @@ declare module "zg:ui" {
     getCell(row: number, col: number): string | undefined;
     setColumnWidth(col: number, px: number): void;
   }
+  /** A QR code, drawn from text or bytes. */
   export class QRCode extends Widget {
     constructor(props?: QRCodeProps);
     constructor(parent: Widget, props?: QRCodeProps);
@@ -442,6 +454,7 @@ declare module "zg:ui" {
     /** `data`: a `Uint8Array` or `ArrayBuffer` of `width * height * 4` bytes, RGBA with straight alpha, rows top to bottom (as canvas `ImageData`). Up to 1024 px a side. Copied: the app may reuse its buffer. `sys.app.image` and the `image` of `apps.list()` entries are in this form. */
     src: ImageSource;
   }
+  /** Tabs along the top, each with its own page. */
   export class TabView extends Widget {
     constructor(props?: TabViewProps);
     constructor(parent: Widget, props?: TabViewProps);
@@ -460,7 +473,7 @@ declare module "zg:ui" {
   /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. */
   export const fonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
-  export const symbols: Record<string, string>;
+  export const symbols: SymbolTable;
   /** Modal message. [Details]. */
   export function alert(message: string, options?: { title?: string; buttons?: string[] }): Promise<number>;
   /** App-wide key handler. [Details]. */
