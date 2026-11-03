@@ -51,6 +51,12 @@ struct TZgApp
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;
+
+	// Work done by the app's JavaScript: QuickJS calls the interrupt
+	// handler after a fixed amount of execution (calls and loop
+	// iterations), whatever the machine. Logged when the app starts and
+	// stops; the simulator turns it into an estimate of Pi Zero time.
+	unsigned long long nWork;
 };
 
 class CAppHost

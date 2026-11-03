@@ -27,6 +27,8 @@ Scenario file: one command per line, '#' starts a comment.
                                 test build (as on real hardware)
     send <text>                 send a line on the serial port (test builds
                                 take commands: #shot, #crash <kind>)
+    launch <id>                 simulator only: start that app, as the
+                                launcher would
     reset                       reset the machine (on the rig: and upload
                                 the kernel again); "expect" only looks at
                                 what was logged after the reset
@@ -430,6 +432,10 @@ class SimMachine:
     def send(self, line):
         raise SystemExit('send: the simulator has no serial port')
 
+    def launch(self, app_id):
+        self._cmd('launch %s' % app_id)
+        time.sleep(0.1)
+
     def reset(self):
         self.mark = len(self.serial())
         self.stop()
@@ -482,6 +488,10 @@ def run_scenario(m, path, outdir):
             elif cmd == 'moveto':
                 x, y = (screen_coord(m, v, axis) for axis, v in enumerate(rest.split()))
                 m.moveto(x, y)
+            elif cmd == 'launch':
+                if not hasattr(m, 'launch'):
+                    raise SystemExit('%s: launch works on the simulator only' % where)
+                m.launch(rest.strip())
             elif cmd == 'click':
                 m.click(rest.strip() or 'left')
             elif cmd == 'mousedown':

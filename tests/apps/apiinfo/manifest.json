@@ -1,0 +1,8 @@
+{
+  "id": "apiinfo",
+  "name": "API info",
+  "version": "1.0.0",
+  "description": "Test builds only: dumps the JavaScript API for tools/check_api.py.",
+  "hidden": true,
+  "permissions": ["apps"]
+}

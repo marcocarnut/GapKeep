@@ -1,0 +1,541 @@
+# zerogap's JavaScript API: the single description of it.
+#
+# tools/gen_api.py generates from this file:
+#   docs/API.md                    the reference (humans and agents)
+#   sim/web/types/zerogap.d.ts     TypeScript declarations (editor completions)
+# tools/check_api.py compares it with the API the runtime really has (an
+# introspection app run on the simulator), so the two cannot drift apart.
+#
+# Edit this file, then run: python3 tools/gen_api.py
+#
+# Conventions: `md` fields are Markdown. `ts` fields are TypeScript types
+# or signatures, as they go into zerogap.d.ts. A property is `readable` if
+# reading it returns its current value; others are write-only (they can only
+# be set), except `readonly` ones, which can only be read.
+
+title: zerogap JavaScript API reference
+
+intro: |
+  Apps are ES modules running on QuickJS. They reach the system through the
+  modules below, imported by name:
+
+  | Module | Available to | Purpose |
+  | --- | --- | --- |
+  | [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
+  | [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
+  | [`zg:crypto`](#zgcrypto) | every app | SHA-256, hardware random bytes |
+  | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
+
+  Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
+  `clearTimeout` and `clearInterval`, and the standard JavaScript library
+  (ES2023).
+
+  An app's own modules are imported with relative paths (`"./lib/x.js"`).
+  Paths are resolved inside the app's directory; `..` cannot leave it.
+
+# --- zg:ui ----------------------------------------------------------------------
+
+ui:
+  import: 'import * as ui from "zg:ui";'
+
+  types:
+    - name: Size
+      ts: number | string
+      md: |
+        A **size** is a number of pixels, a percentage of the parent as a string
+        (`"50%"`), or `"content"` (fit the children).
+    - name: Color
+      ts: number | string
+      md: 'A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.'
+    - name: ImageSource
+      ts: '{ width: number; height: number; data: Uint8Array | ArrayBuffer }'
+      md: |
+        An **image source** is `{ width, height, data }`: `data` holds
+        `width * height * 4` bytes of RGBA (straight alpha, rows top to bottom),
+        as canvas `ImageData`.
+
+  exports:
+    - name: Widget
+      kind: class
+      md: Base class of all widgets. Not constructible; use for `instanceof`.
+    - name: widgets
+      kind: classes
+      md: '[Widgets](#widgets)'
+    - name: screen
+      ts: Container
+      md: The app's root widget. A column with 16 px padding and 12 px gap.
+    - name: width
+      ts: number
+      md: Display size in pixels.
+      also: height
+    - name: height
+      ts: number
+      hidden_in_table: true
+    - name: fonts
+      ts: number[]
+      md: 'Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40.'
+    - name: symbols
+      kind: object
+      ts: Record<string, string>
+      md: 'Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List](#symbols).'
+    - name: alert
+      ts: '(message: string, options?: { title?: string; buttons?: string[] }) => Promise<number>'
+      signature: alert(message, options?)
+      md: Modal message. [Details](#uialert).
+    - name: onKey
+      ts: '(handler: ((ev: KeyEvent) => boolean | void) | null) => void'
+      signature: onKey(handler)
+      md: App-wide key handler. [Details](#uionkey).
+    - name: theme
+      ts: '(options: { dark?: boolean; primary?: Color; secondary?: Color }) => void'
+      signature: theme(options)
+      md: Change colors. [Details](#uitheme).
+
+  creating: |
+    ```js
+    new ui.Label(props?)            // child of ui.screen
+    new ui.Label(parent, props?)    // child of another widget
+    ```
+
+    `props` is an object of [properties](#common-properties) and
+    [event handlers](#events). Unknown property names and invalid values throw a
+    `TypeError` naming the problem, both here and in `set()`, so typos don't
+    fail silently.
+
+    Widgets can be subclassed:
+
+    ```js
+    class Title extends ui.Label {
+      constructor(parent, text) {
+        super(parent, { text, font: 28 });
+      }
+    }
+    ```
+
+  base_members:
+    - name: set
+      signature: set(props)
+      ts: '(props: P) => this'
+      md: Apply several properties. Returns the widget (chainable).
+    - name: 'on'
+      signature: on(event, fn)
+      ts: '(event: EventName, handler: (this: this, ev: WidgetEvent) => void) => this'
+      md: Set the handler for an event (replaces any previous one). Chainable.
+    - name: 'off'
+      signature: off(event)
+      ts: '(event: EventName) => this'
+      md: Remove the handler. Chainable.
+    - name: focus
+      signature: focus()
+      ts: '() => void'
+      md: Give keyboard focus to the widget (if it is focusable).
+    - name: delete
+      signature: delete()
+      ts: '() => void'
+      md: Remove the widget and its children. Safe inside the widget's own handlers. Calling it twice is harmless.
+    - name: clear
+      signature: clear()
+      ts: '() => this'
+      md: Delete all children. Chainable.
+    - name: scrollIntoView
+      signature: scrollIntoView()
+      ts: '() => void'
+      md: Scroll the parents so the widget is visible.
+    - name: parent
+      ts: Widget | null
+      readonly: true
+      md: Parent widget (read-only), `null` for the screen.
+    - name: children
+      ts: Widget[]
+      readonly: true
+      md: Array of child widgets (read-only, a new array each time).
+    - name: alive
+      ts: boolean
+      readonly: true
+      md: '`false` once deleted (read-only). Any other use of a deleted widget throws.'
+    - name: type
+      ts: string
+      readonly: true
+      md: '`"Label"`, `"Button"`, ... (read-only).'
+
+  base_members_after: |
+    Every property in the tables below is also a JavaScript property:
+    `label.text = "hi"` is the same as `label.set({ text: "hi" })`. Properties
+    marked *readable* return their current value; the others are write-only.
+
+  common_props:
+    - group: Geometry and layout
+      props:
+        - {name: x, also: y, ts: Size, value: size, md: Position. Relative to the `align` point if set.}
+        - {name: 'y', ts: Size, hidden_in_table: true}
+        - {name: width, also: height, ts: Size, value: size, readable: true, md: '*Readable* (returns pixels).'}
+        - {name: height, ts: Size, readable: true, hidden_in_table: true}
+        - {name: minWidth, also: [maxWidth, minHeight, maxHeight], ts: Size, value: size, md: ''}
+        - {name: maxWidth, ts: Size, hidden_in_table: true}
+        - {name: minHeight, ts: Size, hidden_in_table: true}
+        - {name: maxHeight, ts: Size, hidden_in_table: true}
+        - {name: grow, ts: number, value: number, md: Flex grow factor inside a row/column parent.}
+        - name: align
+          ts: '"default" | "center" | "top-left" | "top-mid" | "top-right" | "bottom-left" | "bottom-mid" | "bottom-right" | "left-mid" | "right-mid"'
+          md: Position within the parent. Ignored when the parent has a layout.
+        - name: layout
+          ts: '"none" | "row" | "column" | "row-wrap" | "column-wrap"'
+          md: How children are arranged.
+        - name: justify
+          ts: '"start" | "center" | "end" | "space-between" | "space-around" | "space-evenly"'
+          md: Main-axis placement of children.
+        - name: alignItems
+          ts: '"start" | "center" | "end"'
+          md: Cross-axis placement of children.
+        - {name: gap, ts: number, value: number, md: 'Space between children, px.'}
+        - name: padding
+          ts: number | [number, number] | [number, number, number, number]
+          value: number, `[v, h]` or `[top, right, bottom, left]`
+          md: Inner spacing, px.
+      after_md: |
+        A **size** is a number of pixels, a percentage of the parent as a string
+        (`"50%"`), or `"content"` (fit the children).
+    - group: Appearance
+      props:
+        - {name: bg, ts: Color, value: color, md: Background color (makes the background opaque).}
+        - {name: color, ts: Color, value: color, md: Text color.}
+        - {name: font, ts: number, value: number, md: 'Font size, one of `ui.fonts`.'}
+        - {name: textAlign, ts: '"left" | "center" | "right"', md: ''}
+        - {name: radius, ts: number, value: number, md: 'Corner radius, px.'}
+        - {name: borderWidth, ts: number, value: number, md: px.}
+        - {name: borderColor, ts: Color, value: color, md: ''}
+        - {name: opacity, ts: number, value: number 0..1, md: 'Whole widget, including children.'}
+      after_md: 'A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.'
+    - group: State
+      props:
+        - {name: hidden, ts: boolean, readable: true, md: '*Readable*. Hidden widgets take no space in layouts.'}
+        - {name: disabled, ts: boolean, readable: true, md: '*Readable*. Grayed out, ignores input.'}
+        - name: scrollable
+          ts: boolean
+          md: 'Whether content overflowing the widget can be scrolled. Panels and the screen scroll by default, Containers only when set ([Container](#container)).'
+        - {name: clickable, ts: boolean, md: Whether the widget receives clicks.}
+        - name: focusable
+          ts: boolean
+          readable: true
+          md: '*Readable*. Whether Tab stops at the widget. Buttons, text areas and other input widgets are focusable already; set it on a Container to make it a keyboard target (it gets the focus ring and is scrolled into view when focused).'
+
+  events:
+    - {name: click, prop: onClick, md: 'Clicked, or Enter/Space while focused.'}
+    - {name: change, prop: onChange, md: The value changed (by the person or by code).}
+    - {name: submit, prop: onSubmit, md: Enter in a one-line TextArea.}
+    - {name: focus, prop: onFocus, md: Received keyboard focus.}
+    - {name: blur, prop: onBlur, md: Lost keyboard focus.}
+    - {name: longpress, prop: onLongPress, md: Pressed and held.}
+    - {name: key, prop: onKey, md: 'A key reached the focused widget (after `ui.onKey`).'}
+    - {name: press, prop: onPress, md: 'The mouse button went down on the widget, or Enter/Space while it is focused.'}
+    - {name: drag, prop: onDrag, md: The mouse moved while pressed on the widget (only when it actually moved).}
+    - {name: release, prop: onRelease, md: The press ended.}
+
+  event_intro: |
+    Handlers receive one event object and are called with `this` set to the
+    widget:
+
+  event_fields:
+    - {name: type, ts: EventName, md: Event name.}
+    - {name: target, ts: Widget, md: The widget.}
+    - {name: value, ts: any, md: 'For value-carrying widgets: TextArea text, Checkbox/Switch `checked`, Slider/Bar `value`, Dropdown `selected`, TabView `active`.'}
+    - {name: key, ts: string, optional: true, md: '`"key"` events only: key name (see [key names](#key-names)).'}
+    - {name: pointer, ts: boolean, optional: true, md: '`"press"`, `"drag"`, `"release"`: `true` if from the mouse, `false` if from the keyboard.'}
+    - {name: x, also: 'y', ts: number, optional: true, md: "Same events, mouse only: position relative to the widget's top-left corner, px."}
+    - {name: 'y', ts: number, optional: true, hidden_in_table: true}
+    - {name: time, ts: number, optional: true, md: 'Same events: uptime in milliseconds, microsecond resolution (as `sys.uptime()`).'}
+
+  events_after: |
+    A widget with a `"drag"` handler does not scroll its parents when dragged
+    on, so drawing or entropy-collecting areas work inside scrollable pages.
+    Holding Enter or Space does not repeat `"click"` or `"press"`: auto-repeat
+    moves and types, but never activates.
+
+  widgets:
+    - name: Container
+      md: |
+        An invisible box for layout: no background, border or padding, sized to its
+        content by default. Children's focus rings may draw outside it.
+
+        A Container doesn't scroll unless you set `scrollable: true`. A scrollable
+        Container clips its content (rows scrolled out of view must not draw over
+        the rest of the screen) and, unless you set `padding`, gets 5 px of padding
+        so the focus rings of the widgets at its edges stay whole. If you set your own
+        padding on a scrollable Container, leave at least 5 px for the ring: it is
+        3 px wide, 2 px away from the widget.
+
+    - name: Panel
+      md: |
+        A box with the theme's "card" look: background, border, rounded corners,
+        padding, scrollbars when content overflows.
+
+    - name: Label
+      props:
+        - {name: text, ts: string, readable: true, md: '*Readable*. May contain `\n` and `ui.symbols`.'}
+        - name: overflow
+          ts: '"wrap" | "clip" | "dots" | "scroll" | "scroll-circular"'
+          md: What happens when text is wider than the label (set a `width` for this to matter).
+
+    - name: Button
+      props:
+        - {name: text, ts: string, readable: true, md: '*Readable*. Creates a centered label inside the button.'}
+      after_md: Buttons can also contain arbitrary children (give them a `layout`).
+
+    - name: TextArea
+      props:
+        - {name: text, ts: string, readable: true, md: '*Readable*.'}
+        - {name: placeholder, ts: string, md: Shown while empty.}
+        - {name: oneLine, ts: boolean, md: 'Single line; Enter fires `submit`.'}
+        - {name: password, ts: boolean, md: Show bullets instead of characters.}
+        - {name: maxLength, ts: number, md: 0 = unlimited.}
+        - {name: accept, ts: string | null, value: string or `null`, md: Only these characters can be typed.}
+
+    - name: Checkbox
+      props:
+        - {name: text, ts: string, readable: true, md: '*Readable*. Label next to the box.'}
+        - {name: checked, ts: boolean, readable: true, md: '*Readable*.'}
+
+    - name: Switch
+      props:
+        - {name: checked, ts: boolean, readable: true, md: '*Readable*.'}
+
+    - name: Dropdown
+      props:
+        - {name: options, ts: 'string[]', md: ''}
+        - {name: selected, ts: number, readable: true, md: '*Readable*. Index of the selected option.'}
+
+    - name: Slider
+      title: Slider, Bar
+      props:
+        - {name: min, also: max, ts: number, readable: true, md: '*Readable*. Integer range (default 0..100).'}
+        - {name: max, ts: number, readable: true, hidden_in_table: true}
+        - {name: value, ts: number, readable: true, md: '*Readable*. Clamped to the range.'}
+      after_md: |
+        A Slider can be changed by the person (arrow keys when focused); a Bar only
+        displays a value.
+    - name: Bar
+      same_as: Slider
+
+    - name: Table
+      props:
+        - {name: data, ts: 'string[][]', md: Replaces all cells; rows may have different lengths.}
+        - {name: rows, also: cols, ts: number, readable: true, md: '*Readable*.'}
+        - {name: cols, ts: number, readable: true, hidden_in_table: true}
+      methods:
+        - {name: setCell, signature: 'setCell(row, col, text)', ts: '(row: number, col: number, text: string) => void', md: Grows the table if needed.}
+        - {name: getCell, signature: 'getCell(row, col)', returns: string, ts: '(row: number, col: number) => string | undefined', md: '`undefined` outside the table.'}
+        - {name: setColumnWidth, signature: 'setColumnWidth(col, px)', ts: '(col: number, px: number) => void', md: ''}
+
+    - name: QRCode
+      props:
+        - name: data
+          ts: string | Uint8Array
+          value: string or `Uint8Array`
+          md: "Encoded content. Text uses the most compact single mode (numeric for digits only, alphanumeric for `0-9 A-Z $%*+-./:` and space, otherwise byte mode with UTF-8); a `Uint8Array` is encoded as raw bytes. Throws `RangeError` if it doesn't fit."
+        - {name: ecc, ts: '"L" | "M" | "Q" | "H"', md: 'Error correction level (default `"M"`). Never raised automatically, so the symbol is exactly what was asked for.'}
+        - {name: size, ts: number, md: 'Side length in px (default 160), including a 4-module quiet zone. Modules are drawn at an integer scale.'}
+        - {name: dark, also: light, ts: Color, value: color, md: Module colors (default black on white).}
+        - {name: light, ts: Color, hidden_in_table: true}
+        - {name: modules, ts: number, readonly: true, md: '*Read-only*. Modules per side of the current symbol (21 for version 1, +4 per version), 0 when empty.'}
+      after_md: |
+        A rejected value (data too long, size too small) throws and leaves the code
+        unchanged. For example, a 24-word SeedQR (96 digits at `ecc: "L"`) is 29×29,
+        a Compact SeedQR (32 bytes at `"L"`) is 25×25.
+
+    - name: Image
+      md: A picture from pixels the app supplies (zerogap decodes no image formats).
+      props:
+        - name: src
+          ts: ImageSource
+          value: '`{ width, height, data }`'
+          md: '`data`: a `Uint8Array` or `ArrayBuffer` of `width * height * 4` bytes, RGBA with straight alpha, rows top to bottom (as canvas `ImageData`). Up to 1024 px a side. Copied: the app may reuse its buffer. `sys.app.image` and the `image` of `apps.list()` entries are in this form.'
+      after_md: |
+        The image shows at its own size. Give the widget a `width` and `height` to
+        scale it to fit (keeping its aspect ratio); `radius` rounds its corners.
+
+        ```js
+        new ui.Image({ src: sys.app.image, radius: 12 });
+        ```
+
+    - name: TabView
+      props:
+        - {name: active, ts: number, readable: true, md: '*Readable*. Index of the shown tab.'}
+      methods:
+        - {name: addTab, signature: addTab(title), returns: Container, ts: '(title: string) => Container', md: "Adds a tab and returns its page. Put the tab's widgets in the page."}
+      methods_first: true
+
+  sections:
+    - title: ui.alert
+      md: |
+        ```js
+        const index = await ui.alert(message, { title, buttons });
+        ```
+
+        Shows a modal dialog over the app. `buttons` is an array of labels (default
+        `["OK"]`). Resolves with the index of the button pressed, or -1 if the
+        person pressed Escape. While an alert is open, Tab moves only between its
+        buttons and `ui.onKey` handlers are not called. Alerts can be nested.
+    - title: ui.onKey
+      md: |
+        ```js
+        ui.onKey((ev) => { ... return true; });   // or ui.onKey(null) to remove
+        ```
+
+        Called for every key press before it reaches the focused widget. Return
+        `true` to consume the key. The event has:
+
+        | Field | Description |
+        | --- | --- |
+        | `key` | Key name (see below). |
+        | `shift`, `ctrl`, `alt` | Modifier state (booleans). |
+        | `repeat` | `true` if the key is being held down and this press is an auto-repeat (after 400 ms, every 80 ms). |
+
+        With Ctrl or Alt held, keys are delivered to the handler only, not typed.
+
+        #### Key names
+
+        Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`). Others:
+        `"Enter"`, `"Escape"`, `"Backspace"`, `"Delete"`, `"Tab"` (check `shift`
+        for Shift+Tab), `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`,
+        `"Home"`, `"End"`, `"PageUp"`, `"PageDown"`, `"Insert"`, `"F1"`...`"F9"`.
+
+        The Windows/Super key is reserved: it always returns to the launcher.
+    - title: ui.theme
+      md: |
+        ```js
+        ui.theme({ dark: true, primary: "#009688", secondary: "#ffc107" });
+        ```
+
+        Changes the theme for widgets created afterwards; call it before building
+        the screen. The secondary color is also the focus ring. The system theme is
+        restored when the app exits.
+    - title: Symbols
+      symbols: true
+      md: |
+        Icon glyphs from the built-in font, usable inside any text:
+        {symbols}.
+
+        Names with dashes need bracket syntax: `ui.symbols["eye-open"]`. The same
+        names are valid for `icon` in `manifest.json`.
+
+  symbols: [audio, video, list, ok, close, power, settings, home, download, drive, refresh,
+            mute, volume-mid, volume-max, image, tint, prev, play, pause, stop, next, eject,
+            left, right, plus, minus, eye-open, eye-close, warning, shuffle, up, down, loop,
+            directory, upload, call, cut, copy, save, bars, envelope, charge, paste, bell,
+            keyboard, gps, file, wifi, battery-full, battery-3, battery-2, battery-1,
+            battery-empty, usb, bluetooth, trash, edit, backspace, sd-card, new-line]
+
+  key_event_ts: '{ key: string; shift: boolean; ctrl: boolean; alt: boolean; repeat: boolean }'
+
+# --- other modules --------------------------------------------------------------
+
+modules:
+  - name: zg:sys
+    var: sys
+    exports:
+      - name: kernel
+        ts: '{ readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" }'
+        md: 'The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel''s code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros).'
+      - name: app
+        ts: AppInfo
+        md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash }`. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)).'
+      - name: version
+        ts: '{ readonly zerogap: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
+        md: '`{ zerogap, quickjs, lvgl, circle }` version strings.'
+      - {name: log, signature: log(...args), ts: '(...args: any[]) => void', md: Same as `console.log`.}
+      - {name: uptime, signature: uptime(), ts: '() => number', md: 'Milliseconds since boot, as a float with microsecond resolution.'}
+      - {name: memory, signature: memory(), ts: '() => { used: number; limit: number; objects: number }', md: "`{ used, limit, objects }`: this app's JS heap in bytes and its object count."}
+      - {name: gc, signature: gc(), ts: '() => void', md: Run the garbage collector now.}
+      - {name: exit, signature: exit(), ts: '() => void', md: Leave the app and return to the launcher (after the current handler returns).}
+
+  - name: zg:crypto
+    var: crypto
+    exports:
+      - {name: sha256, signature: sha256(data), ts: '(data: ArrayBufferView | ArrayBuffer | string) => Uint8Array', md: 'SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous.'}
+      - {name: randomBytes, signature: randomBytes(n), ts: '(n: number) => Uint8Array', md: '`Uint8Array(n)` of random bytes, `n` ≤ 65536.'}
+      - {name: getRandomValues, signature: getRandomValues(array), ts: '<T extends ArrayBufferView>(array: T) => T', md: "Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes."}
+      - {name: rngStatus, signature: rngStatus(), ts: '() => { healthy: boolean; failure: string | null; rawBytes: number }', md: '`{ healthy, failure, rawBytes }`.'}
+    after_md: |
+      **Where the randomness comes from.** The BCM2835's hardware random number
+      generator, treated as a noise source of unknown quality. Every raw byte
+      passes NIST SP 800-90B's continuous health tests (Repetition Count and
+      Adaptive Proportion, tuned for an assumed 1 bit of entropy per byte), 4096
+      bytes are tested at boot, and each 32 output bytes are SHA-256 of 256 raw
+      bytes. If a test ever fails, the generator shuts off until reboot:
+      `randomBytes` and `getRandomValues` then throw an `InternalError`, and never
+      return weak bytes.
+
+      The hardware RNG is undocumented. Apps handling secrets should treat it as a
+      supplement to entropy the person provides (dice, coins), not a replacement.
+      (In the [simulator](IDE.md), the bytes come from the host's random source.)
+
+      To run code written for WebCrypto unchanged, give it a small adapter:
+
+      ```js
+      globalThis.crypto = {
+        getRandomValues: zgcrypto.getRandomValues,
+        subtle: { digest: async (alg, data) => zgcrypto.sha256(data).buffer },
+      };
+      ```
+
+  - name: zg:apps
+    var: apps
+    intro_md: |
+      Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
+      throws a `ReferenceError`. Used by the launcher.
+    exports:
+      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash }` (as `sys.app`) for every app not marked `hidden`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
+      - {name: launch, signature: launch(id), ts: '(id: string) => void', md: 'Stop the current app and start `id` (after the current handler returns). Throws if there is no such app.'}
+      - name: card
+        signature: card()
+        ts: '() => { status: "ok" | "none" | "unreadable" | "no-apps" | "disabled"; problems: { folder: string; error: string }[] }'
+        md: 'The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16.'
+
+# shared types for zerogap.d.ts
+shared_ts:
+  AppInfo: |
+    {
+      readonly id: string;
+      readonly name: string;
+      readonly version: string;
+      readonly description: string;
+      /** a ui.symbols glyph */
+      readonly icon: string;
+      /** the manifest's picture icon, for ui.Image's src, or null */
+      readonly image: { width: number; height: number; data: Uint8Array } | null;
+      readonly permissions: string[];
+      readonly source: "builtin" | "sdcard";
+      /** SHA-256 of the app's files (docs/APPS.md, "App hashes") */
+      readonly hash: string;
+    }
+
+globals:
+  - {names: 'console.log`, `info`, `warn`, `error`, `debug', md: 'Write to the serial log as `app:<id>`. Strings are printed as-is, errors with their stack, other objects as JSON.'}
+  - {names: 'setTimeout(fn, ms)`, `setInterval(fn, ms)', md: 'Return a numeric id. Extra arguments are not passed on; use a closure. Interval minimum 1 ms.'}
+  - {names: 'clearTimeout(id)`, `clearInterval(id)', md: Unknown ids are ignored.}
+
+globals_after: |
+  Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage`,
+  `require`, `process`, the DOM, and the global `crypto` object (use
+  [`zg:crypto`](#zgcrypto)).
+
+globals_ts: |
+  declare var console: {
+    log(...args: any[]): void;
+    info(...args: any[]): void;
+    warn(...args: any[]): void;
+    error(...args: any[]): void;
+    debug(...args: any[]): void;
+  };
+  /** Returns a numeric id. Extra arguments are not passed on: use a closure. */
+  declare function setTimeout(fn: () => void, ms?: number): number;
+  /** Returns a numeric id. Minimum interval 1 ms. */
+  declare function setInterval(fn: () => void, ms?: number): number;
+  declare function clearTimeout(id: number): void;
+  declare function clearInterval(id: number): void;
+
+limits:
+  - [JS heap per app, 96 MB]
+  - [JS stack, 512 KB]
+  - ['One handler, timer or job', '10 s, then interrupted (the app keeps running)']
+  - [Display, 'Whatever the HDMI output negotiates (640×480 in QEMU and, by default, the simulator)']

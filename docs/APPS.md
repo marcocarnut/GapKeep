@@ -255,6 +255,21 @@ up to 96 MB of memory.
 `console.log` (and `info`, `warn`, `error`, `debug`) write to the serial
 log, prefixed with `app:<id>`. Objects are printed as JSON.
 
+## Trying it out
+
+The quickest way: the simulator runs your app on your machine, the same
+runtime as on the Pi ([SIMULATOR.md](SIMULATOR.md)):
+
+```sh
+tools/zgsim apps/counter                                 # the log on stdout
+tools/zgsim --for 2 --shot /tmp/counter.png apps/counter # a screenshot
+```
+
+Or in the browser, with an editor that knows the API: [IDE.md](IDE.md).
+
+It runs much faster than a Pi Zero: watch the "about N ms of JavaScript on
+a Pi Zero" it logs when your app starts and stops.
+
 ## Testing in the emulator
 
 `tools/qemu_harness.py` boots the image in QEMU and plays a scenario: type,
@@ -262,7 +277,8 @@ press keys, click, take screenshots, and wait for log lines. Put scenarios in
 `tests/*.txt` and run them all with `tools/run_tests.sh`, which puts the apps
 in `apps/` on the emulated SD card. See
 `tests/apps_widgets.txt` for an example, and the comment at the top of
-`tools/qemu_harness.py` for the commands.
+`tools/qemu_harness.py` for the commands. The same scenarios run on the
+simulator in seconds (`--sim`, and `tools/run_sim_tests.sh`).
 
 Logging what your app does (`console.log("submitted", value)`) is what lets a
 scenario check it.

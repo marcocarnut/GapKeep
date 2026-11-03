@@ -202,7 +202,8 @@ build.
 | `lib/lvgl/` | Builds LVGL with `zg_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
-| `src/` | Kernel and runtime. `src/generated/` is build output. |
+| `src/` | Kernel and runtime. `src/generated/` is build output. `src/runtime/` is also compiled into the simulator. |
+| `sim/` | The simulator ([SIMULATOR.md](SIMULATOR.md)): stand-ins for the Circle headers the runtime uses, its main loop, and the browser IDE (`sim/web/`). |
 | `tests/` | QEMU scenarios; `tests/apps/` holds test-only apps (`make TEST=1`); `tests/sdcard/` the test SD card; `tests/native`, `tests/dice39` host tests. |
 | `tools/` | App bundler, QEMU harness, test runner. |
-| `docs/` | This file, the API reference and the app guide. |
+| `docs/` | This file, the guides, and the API reference generated from `docs/api/zerogap-api.yaml`. |

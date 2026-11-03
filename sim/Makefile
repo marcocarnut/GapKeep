@@ -43,7 +43,12 @@ endif
 
 OBJDIR   := build/$(TARGET)-$(MODE)
 
-DEFS     := -DZG_SIM $(MODEDEF) -DLV_CONF_PATH="<zg_lv_conf.h>" \
+# JavaScript work per second on a Pi Zero (see ZeroEstimate in
+# src/runtime/apphost.cpp), measured on the hardware: dice39's self-test
+# did 67 units in 2.0 s, QuickJS's test suite 155 in 3.9 s.
+ZERO_WORK_PER_SECOND := 36
+
+DEFS     := -DZG_SIM $(MODEDEF) -DZG_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<zg_lv_conf.h>" \
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
 INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -idirafter $(ROOT)/circle/addon

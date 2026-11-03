@@ -23,7 +23,12 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 ## Documentation
 
 - [Writing apps](docs/APPS.md): start here.
-- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:apps`, globals.
+- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:crypto`, `zg:apps`, globals.
+  Generated from [docs/api/zerogap-api.yaml](docs/api/zerogap-api.yaml), which a
+  test checks against the runtime.
+- [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
+- [Browser IDE](docs/IDE.md): edit and run apps in the browser.
+- [Guide for coding agents](docs/AGENTS.md): writing apps with an AI agent.
 - [Architecture and security model](docs/ARCHITECTURE.md)
 - [Hardware test rig](docs/RIG.md)
 
@@ -60,6 +65,16 @@ the SD card's `apps` folder at boot ([docs/APPS.md](docs/APPS.md#installing-apps
 Sealed builds have every app in `apps/` built in. Test builds have those plus
 the test-only apps in `tests/apps/`, listed after the real ones, and read
 the card too.
+
+## Running in the simulator
+
+```sh
+tools/zgsim apps/dice39                     # an app on your machine (sim/, gcc)
+tools/run_sim_tests.sh                      # the scenarios on the simulator, plus the API check
+```
+
+The simulator is zerogap's runtime compiled for the host, natively or as
+WebAssembly for the browser IDE: see [docs/SIMULATOR.md](docs/SIMULATOR.md).
 
 ## Running and testing in QEMU
 
@@ -104,6 +119,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Step 5: dice39 user interface: dice-code entry, results with verbatim proof, mistake detectors, SeedQR / Compact SeedQR / words QR, codex32 shares
 - [x] Real hardware: every scenario passes on a Pi Zero (v1.3, 512 MB) through the rig ([docs/RIG.md](docs/RIG.md))
 - [x] Apps from the SD card's `apps` folder, checked and hashed at boot; sealed builds with every app built in
+- [x] Simulator (native and WebAssembly) running the same runtime, a browser IDE, an API description checked against the runtime, and a guide for coding agents
 - [x] Step 6: hardening: USB drivers cut to hub, keyboard and mouse, with control-transfer timeouts; no serial port in production; W^X memory protection, stack canaries and a stack guard; reproducible builds with a pinned compiler and firmware; the kernel's hash on screen ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model))
 
 ## Layout
@@ -114,6 +130,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers) and read-only FatFs. |
 | `circle/`, `third_party/quickjs/` | Pinned submodules. Circle gets the fixes in `patches/circle/`. |
-| `tests/` | QEMU scenarios, test-only apps and the test SD card. |
+| `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
+| `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |
 | `tools/` | Build script, app bundler, QEMU harness, test runner; `tools/rig/` drives real hardware. |
-| `docs/` | Guides and reference. |
+| `docs/` | Guides and reference; `docs/api/` holds the API description. |

@@ -234,6 +234,23 @@ static void PromiseRejectionTracker (JSContext *pContext, JSValueConst Promise,
 	((CAppHost *) pParam)->ReportException (pContext, "unhandled promise rejection");
 }
 
+// In the simulator, which runs much faster than a Pi Zero: roughly how long
+// an amount of JavaScript work would take on the Zero (calibrated with
+// QuickJS's test suite, tests/apps/qjstests, on the hardware). Execution
+// only: compiling modules and drawing are not counted.
+static CString ZeroEstimate (unsigned long long nWork)
+{
+	CString Text;
+#ifdef ZG_SIM
+	static const unsigned WorkPerSecondOnZero = ZG_ZERO_WORK_PER_SECOND;
+	Text.Format (", about %u ms of JavaScript on a Pi Zero",
+		     (unsigned) (nWork * 1000 / WorkPerSecondOnZero));
+#else
+	(void) nWork;
+#endif
+	return Text;
+}
+
 boolean CAppHost::StartApp (const zg_app_t *pApp)
 {
 	assert (pApp != 0);
@@ -304,9 +321,10 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 	RunJobs ();
 
 	unsigned nEndTicks = CTimer::Get ()->GetClockTicks ();
-	CLogger::Get ()->Write (FromHost, LogNotice, "Started %s: modules %u ms, promise jobs %u ms",
+	CLogger::Get ()->Write (FromHost, LogNotice, "Started %s: modules %u ms, promise jobs %u ms, work %llu%s",
 				pApp->id, (nEvalTicks - nStartTicks) / 1000,
-				(nEndTicks - nEvalTicks) / 1000);
+				(nEndTicks - nEvalTicks) / 1000, m_App.nWork,
+				(const char *) ZeroEstimate (m_App.nWork));
 
 	return TRUE;
 }
@@ -318,7 +336,8 @@ void CAppHost::StopApp (void)
 		return;
 	}
 
-	CLogger::Get ()->Write (FromHost, LogNotice, "Stopping %s", m_App.pBundle->id);
+	CLogger::Get ()->Write (FromHost, LogNotice, "Stopping %s (work %llu%s)", m_App.pBundle->id,
+				m_App.nWork, (const char *) ZeroEstimate (m_App.nWork));
 
 	ClearError ();
 	m_pKeyboard->Flush ();
@@ -521,6 +540,7 @@ void CAppHost::HomeHandler (void *pParam)		// IRQ context
 int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)
 {
 	CAppHost *pThis = (CAppHost *) pParam;
+	pThis->m_App.nWork++;
 
 	if (   pThis->m_bHomeRequested
 	    && pThis->m_App.pBundle != 0
