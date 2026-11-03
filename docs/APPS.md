@@ -82,16 +82,40 @@ handlers and timers.
 | `name` | yes | Shown in the launcher. |
 | `version` | yes | Free-form string, shown in logs. |
 | `description` | no | One line for the launcher tile. |
-| `icon` | no | One of the names in `ui.symbols` (default `"file"`). |
+| `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
 | `permissions` | no | Extra system modules the app may import, e.g. `["apps"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 
 zerogap checks every manifest, and refuses an app with unknown keys, a bad
-id, an unknown icon or permission, or a missing entry module. The build does
+id, an unknown or malformed icon, an unknown permission, or a missing entry
+module. The build does
 it for built-in apps (`tools/bundle_apps.py`); for apps on the SD card the
 system does it at boot, and the launcher lists each refused app with the
 reason.
+
+### Picture icons
+
+Instead of a symbol name, `icon` can be a picture, which the launcher shows
+on the app's tile:
+
+```json
+"icon": { "width": 64, "height": 64, "rgba": "Dxos/w8aLP8RHS//..." }
+```
+
+`rgba` is base64 (standard alphabet, with padding) of `width * height * 4`
+bytes: red, green, blue and alpha per pixel, rows top to bottom. 64×64 suits
+the launcher (it scales larger pictures down to that); sides may be 1 to 128
+px. `tools/make_icon.py` turns a PNG or any other image into this:
+
+```
+python3 tools/make_icon.py logo.png --manifest apps/myapp/manifest.json
+```
+
+Why not a PNG? zerogap would need a PNG decoder (zlib and all) to read it,
+on data that comes from the SD card. Plain pixels only need decoding from
+base64 and checking for length, which is easy to get right. The icon is part
+of manifest.json, so the app's hash covers it.
 
 Only `.js`, `.json` and `.txt` files are part of an app; the rest (a README,
 images) is ignored. Names of those files, and of folders, may use

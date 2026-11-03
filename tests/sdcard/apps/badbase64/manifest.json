@@ -1,0 +1,10 @@
+{
+  "id": "badbase64",
+  "name": "Bad base64",
+  "version": "1.0.0",
+  "icon": {
+    "width": 1,
+    "height": 1,
+    "rgba": "AAAAAB=="
+  }
+}

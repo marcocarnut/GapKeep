@@ -13,6 +13,8 @@ Usage: bundle_apps.py <output.c> [--only id,...] <apps-dir> [<apps-dir> ...]
        bundle_apps.py --hash <app-dir> [<app-dir> ...]
            prints each app's hash, as the launcher shows it
 """
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -27,6 +29,7 @@ MAX_FILES = 256
 MAX_FILE_SIZE = 4 << 20
 MAX_APP_SIZE = 16 << 20
 MAX_DEPTH = 8
+ICON_MAX_SIDE = 128     # ZG_ICON_MAX_SIDE in src/runtime/bundle.h
 
 # Keep in sync with the symbol table in src/runtime/js_ui.cpp (ui.symbols).
 SYMBOLS = {
@@ -80,6 +83,32 @@ def symbol_utf8(name, where):
     if name not in SYMBOLS:
         fail('%s: unknown icon %r (one of: %s)' % (where, name, ', '.join(sorted(SYMBOLS))))
     return chr(int(SYMBOLS[name], 16)).encode('utf-8')
+
+
+def icon_picture(icon, where):
+    """A picture icon, {"width", "height", "rgba"}: (width, height, pixels)."""
+    if set(icon) != {'width', 'height', 'rgba'}:
+        fail('%s: a picture "icon" has exactly the keys "width", "height" and "rgba"' % where)
+    w, h, b64 = icon['width'], icon['height'], icon['rgba']
+    for k, v in (('width', w), ('height', h)):
+        # JSON has just numbers: 64 and 64.0 are the same (as for the loader)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v != int(v) \
+                or not 1 <= v <= ICON_MAX_SIDE:
+            fail('%s: icon %s must be a whole number from 1 to %d' % (where, k, ICON_MAX_SIDE))
+    w, h = int(w), int(h)
+    if not isinstance(b64, str):
+        fail('%s: icon "rgba" must be a base64 string' % where)
+    try:
+        pixels = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError):
+        pixels = None
+    # canonical base64 only (as the SD card loader checks it)
+    if pixels is None or base64.b64encode(pixels).decode() != b64:
+        fail('%s: icon "rgba" is not valid base64' % where)
+    if len(pixels) != w * h * 4:
+        fail('%s: icon "rgba" must hold width * height * 4 = %d bytes, not %d'
+             % (where, w * h * 4, len(pixels)))
+    return w, h, pixels
 
 
 def is_app_file(name):
@@ -148,6 +177,10 @@ def load_app(appdir, app_id):
         if k not in known:
             fail('%s: unknown key %r' % (where, k))
     limits = {'id': 32, 'name': 64, 'version': 32, 'description': 256, 'icon': 32, 'entry': 255}
+    picture = None
+    if isinstance(m.get('icon'), dict):
+        picture = icon_picture(m['icon'], where)
+        limits.pop('icon')
     for k, limit in limits.items():
         if k not in m and k not in ('id', 'name', 'version'):
             continue
@@ -174,7 +207,8 @@ def load_app(appdir, app_id):
         'name': m['name'],
         'version': m['version'],
         'description': m.get('description', ''),
-        'icon': symbol_utf8(m.get('icon', 'file'), where),
+        'icon': symbol_utf8('file' if picture else m.get('icon', 'file'), where),
+        'picture': picture,
         'entry': entry,
         'permissions': ' | '.join(PERMISSIONS[p] for p in perms) or '0',
         'hidden': 1 if m.get('hidden') else 0,
@@ -223,14 +257,22 @@ def main():
         for k, (path, data) in enumerate(a['files']):
             lines.append('\t{ %s, app%d_file%d, %d },' % (c_string(path.encode()), n, k, len(data)))
         lines.append('};')
+        if a['picture']:
+            w, h, pixels = a['picture']
+            lines.append('static const unsigned char app%d_icon[] = {' % n)
+            for i in range(0, len(pixels), 16):
+                lines.append('\t' + ','.join(str(b) for b in pixels[i:i + 16]) + ',')
+            lines.append('};')
         lines.append('')
     lines.append('const zg_app_t zg_builtin_apps[] = {')
     for n, a in enumerate(apps):
-        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, app%d_files, %d,\n\t  "%s", ZG_APP_BUILTIN },' % (
+        w, h, _ = a['picture'] or (0, 0, None)
+        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, app%d_files, %d,\n\t  "%s", ZG_APP_BUILTIN, %s, %d, %d },' % (
             c_string(a['id'].encode()), c_string(a['name'].encode()),
             c_string(a['version'].encode()), c_string(a['description'].encode()),
             c_string(a['icon']), c_string(a['entry'].encode()),
-            a['permissions'], a['hidden'], n, len(a['files']), a['hash']))
+            a['permissions'], a['hidden'], n, len(a['files']), a['hash'],
+            'app%d_icon' % n if a['picture'] else '0', w, h))
     lines.append('};')
     lines.append('const unsigned zg_builtin_app_count = %d;' % len(apps))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)

@@ -288,6 +288,7 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 
 	m_App.nCallDepth = 1;
 	m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
+	unsigned nStartTicks = m_App.nCallStartTicks;
 	JSValue Result = JS_Eval (m_App.pContext, pEntry->data, pEntry->size, pEntry->path,
 				  JS_EVAL_TYPE_MODULE);
 	m_App.nCallDepth = 0;
@@ -298,8 +299,14 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 		return FALSE;
 	}
 	JS_FreeValue (m_App.pContext, Result);
+	unsigned nEvalTicks = CTimer::Get ()->GetClockTicks ();
 
 	RunJobs ();
+
+	unsigned nEndTicks = CTimer::Get ()->GetClockTicks ();
+	CLogger::Get ()->Write (FromHost, LogNotice, "Started %s: modules %u ms, promise jobs %u ms",
+				pApp->id, (nEvalTicks - nStartTicks) / 1000,
+				(nEndTicks - nEvalTicks) / 1000);
 
 	return TRUE;
 }

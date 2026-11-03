@@ -1,0 +1,10 @@
+{
+  "id": "badicon",
+  "name": "Bad icon",
+  "version": "1.0.0",
+  "icon": {
+    "width": 2,
+    "height": 2,
+    "rgba": "AAAAAAAAAAAAAAAA"
+  }
+}

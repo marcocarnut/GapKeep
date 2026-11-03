@@ -69,7 +69,7 @@ list.forEach((app, i) => {
     layout: "column",
     justify: "center",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     padding: 10,
     onClick: () => apps.launch(app.id),
     onFocus: () => {
@@ -78,7 +78,15 @@ list.forEach((app, i) => {
       showDetails(app);
     },
   });
-  new ui.Label(tile, { text: app.icon, font: 40 });
+  if (app.image) {
+    // 64 x 64 (a smaller picture shows as it is, a larger one is scaled down)
+    const big = app.image.width > 64 || app.image.height > 64;
+    // rounded corners: opaque square art (a favicon) sits better on the tile
+    new ui.Image(tile, big ? { src: app.image, width: 64, height: 64, radius: 12 }
+                           : { src: app.image, radius: 12 });
+  } else {
+    new ui.Label(tile, { text: app.icon, font: 40 });
+  }
   new ui.Label(tile, { text: app.name, font: 18 });
   new ui.Label(tile, {
     text: app.description,

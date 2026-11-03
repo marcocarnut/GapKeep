@@ -3,17 +3,19 @@
 # its reason, and the rest of the system carries on.
 expect Keyboard attached 60
 expect apps/BadName not loaded: the folder name must be an app id
+expect apps/badbase64 not loaded: manifest.json: icon "rgba" is not valid base64
+expect apps/badicon not loaded: manifest.json: icon "rgba" must hold width \* height \* 4 = 16 bytes
 expect apps/badjson not loaded: manifest.json: SyntaxError
 expect apps/badutf8 not loaded: main.js: not valid UTF-8 text
 expect apps/hello not loaded: an app with this id is built in
 expect apps/noentry not loaded: entry module "main.js" not found
 # the same hash as "tools/bundle_apps.py --hash tests/sdcard/apps/sdhello"
-expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 19bf01dfcf5f3d0a2bc3ddfebe9b8ddc754761e4a766e7b09013797b0763a40d
+expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 0627776fc0fd5752ffed7704f323d11392d79e9d476394ebfdf62ed4b109d1fc
 expect apps/unknownkey not loaded: manifest.json: unknown key "network"
 expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
-expect 1 app\(s\) from the SD card, 7 not loaded
+expect 1 app\(s\) from the SD card, 9 not loaded
 expect launcher ready: dice39, gallery, hello, crashtest, qjstests, sdhello 60
-expect sd card: ok 7 problem\(s\)
+expect sd card: ok 9 problem\(s\)
 # tiles: dice39, gallery, hello, crashtest, qjstests, then sdhello
 key right
 key right
@@ -23,6 +25,6 @@ key right
 wait 1
 shot 01-launcher
 key ret
-expect sdhello ready: Hello from the SD card sdcard 19bf01dfcf5f3d0a2bc3ddfebe9b8ddc754761e4a766e7b09013797b0763a40d
+expect sdhello ready: Hello from the SD card sdcard 0627776fc0fd5752ffed7704f323d11392d79e9d476394ebfdf62ed4b109d1fc icon 32x32
 wait 1
 shot 02-sdhello

@@ -30,7 +30,7 @@ import * as ui from "zg:ui";
 | Name | Type | Description |
 | --- | --- | --- |
 | `Widget` | class | Base class of all widgets. Not constructible; use for `instanceof`. |
-| `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `TabView` | classes | [Widgets](#widgets) |
+| `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `TabView`, `Image` | classes | [Widgets](#widgets) |
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
 | `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. |
@@ -124,7 +124,7 @@ A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.
 | --- | --- | --- |
 | `hidden` | boolean | *Readable*. Hidden widgets take no space in layouts. |
 | `disabled` | boolean | *Readable*. Grayed out, ignores input. |
-| `scrollable` | boolean | Whether content overflowing the widget can be scrolled. |
+| `scrollable` | boolean | Whether content overflowing the widget can be scrolled. Panels and the screen scroll by default, Containers only when set ([Container](#container)). |
 | `clickable` | boolean | Whether the widget receives clicks. |
 | `focusable` | boolean | *Readable*. Whether Tab stops at the widget. Buttons, text areas and other input widgets are focusable already; set it on a Container to make it a keyboard target (it gets the focus ring and is scrolled into view when focused). |
 
@@ -167,6 +167,13 @@ moves and types, but never activates.
 
 An invisible box for layout: no background, border or padding, sized to its
 content by default. Children's focus rings may draw outside it.
+
+A Container doesn't scroll unless you set `scrollable: true`. A scrollable
+Container clips its content (rows scrolled out of view must not draw over
+the rest of the screen) and, unless you set `padding`, gets 5 px of padding
+so the focus rings of the widgets at its edges stay whole. If you set your own
+padding on a scrollable Container, leave at least 5 px for the ring: it is
+3 px wide, 2 px away from the widget.
 
 #### Panel
 
@@ -253,6 +260,21 @@ A rejected value (data too long, size too small) throws and leaves the code
 unchanged. For example, a 24-word SeedQR (96 digits at `ecc: "L"`) is 29×29,
 a Compact SeedQR (32 bytes at `"L"`) is 25×25.
 
+#### Image
+
+A picture from pixels the app supplies (zerogap decodes no image formats).
+
+| Property | Value | Notes |
+| --- | --- | --- |
+| `src` | `{ width, height, data }` | `data`: a `Uint8Array` or `ArrayBuffer` of `width * height * 4` bytes, RGBA with straight alpha, rows top to bottom (as canvas `ImageData`). Up to 1024 px a side. Copied: the app may reuse its buffer. `sys.app.image` and the `image` of `apps.list()` entries are in this form. |
+
+The image shows at its own size. Give the widget a `width` and `height` to
+scale it to fit (keeping its aspect ratio); `radius` rounds its corners.
+
+```js
+new ui.Image({ src: sys.app.image, radius: 12 });
+```
+
 #### TabView
 
 | Property / method | Value | Notes |
@@ -334,7 +356,7 @@ import * as sys from "zg:sys";
 | Name | Description |
 | --- | --- |
 | `kernel` | The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"`. |
-| `app` | This app's manifest data and origin: `{ id, name, version, description, icon, permissions, source, hash }`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)). |
+| `app` | This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash }`. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)). |
 | `version` | `{ zerogap, quickjs, lvgl, circle }` version strings. |
 | `log(...args)` | Same as `console.log`. |
 | `uptime()` | Milliseconds since boot, as a float with microsecond resolution. |
@@ -387,7 +409,7 @@ throws a `ReferenceError`. Used by the launcher.
 
 | Name | Description |
 | --- | --- |
-| `list()` | Array of `{ id, name, version, description, icon, permissions, source, hash }` (as `sys.app`) for every app not marked `hidden`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). |
+| `list()` | Array of `{ id, name, version, description, icon, image, permissions, source, hash }` (as `sys.app`) for every app not marked `hidden`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). |
 | `launch(id)` | Stop the current app and start `id` (after the current handler returns). Throws if there is no such app. |
 | `card()` | The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16. |
 

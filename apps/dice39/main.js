@@ -145,18 +145,20 @@ function showStart() {
   });
   new ui.Button(buttons, { text: "About", onClick: showAbout });
 
+  // No phrase is made before the self-test has passed: Enter stays disabled
+  // until it has, and the page is redrawn when it finishes.
   const st = state.selftest;
+  start.disabled = !st || st.failed.length > 0;
   if (!st) {
     paragraph(ui.screen, "Self-test running...", { color: MUTED, font: 12 });
   } else if (st.failed.length === 0) {
     paragraph(ui.screen, `${ui.symbols.ok} Self-test passed (${st.passed} checks: BIP-39 and codex32 test vectors, ` +
       "dice tables, round trips).", { color: GREEN, font: 12 });
   } else {
-    start.disabled = true;
     paragraph(ui.screen, `${ui.symbols.close} Self-test FAILED. Do not use this device to make a seed.\n` +
       st.failed.join("\n"), { color: RED });
   }
-  (st && st.failed.length ? len : start).focus();
+  (st && st.failed.length === 0 ? start : len).focus();
 }
 
 // --- word entry -----------------------------------------------------------

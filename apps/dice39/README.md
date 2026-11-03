@@ -13,7 +13,13 @@ source and its SHA-256. To update, run:
     git diff apps/dice39/vendor
 
 `lib/selftest.js` checks it against the BIP-39 and BIP-93 test vectors at
-every start, and under Node (`node tests/dice39/run_node.mjs`).
+every start, and under Node (`node tests/dice39/run_node.mjs`). On the Pi
+Zero it takes about two seconds, so it runs after the start page is up,
+in steps that leave the screen responsive; Enter my dice words stays
+disabled until it has passed.
+
+The launcher icon is the favicon of `bip39_generator.html`, converted with
+`python3 tools/make_icon.py favicon.png --manifest apps/dice39/manifest.json`.
 `lib/cryptoshim.js` gives the browser code the two WebCrypto calls it uses,
 backed by `zg:crypto`. `main.js` is the LVGL interface.
 

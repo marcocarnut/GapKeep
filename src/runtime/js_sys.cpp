@@ -334,6 +334,23 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 			   JS_NewString (ctx, pApp->source == ZG_APP_SDCARD ? "sdcard" : "builtin"));
 	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, pApp->hash));
 
+	// the picture icon, ready for ui.Image's src (RGBA, like canvas ImageData)
+	JSValue Image = JS_NULL;
+	if (pApp->icon_rgba != 0)
+	{
+		Image = JS_NewObject (ctx);
+		JS_SetPropertyStr (ctx, Image, "width", JS_NewUint32 (ctx, pApp->icon_width));
+		JS_SetPropertyStr (ctx, Image, "height", JS_NewUint32 (ctx, pApp->icon_height));
+		JSValue Buffer = JS_NewArrayBufferCopy (ctx, pApp->icon_rgba,
+							pApp->icon_width * pApp->icon_height * 4);
+		// JS_NewTypedArray reads argv[0..2] regardless of argc: pass all three
+		JSValueConst Args[3] = {Buffer, JS_NewInt32 (ctx, 0), JS_UNDEFINED};
+		JSValue Data = JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8);
+		JS_FreeValue (ctx, Buffer);
+		JS_SetPropertyStr (ctx, Image, "data", Data);
+	}
+	JS_SetPropertyStr (ctx, Obj, "image", Image);
+
 	JSValue Perms = JS_NewArray (ctx);
 	if (pApp->permissions & ZG_PERM_APPS)
 	{

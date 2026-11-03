@@ -32,7 +32,8 @@ typedef struct
 	const char *name;		/* shown in the launcher */
 	const char *version;
 	const char *description;
-	const char *icon;		/* UTF-8 symbol (resolved from the manifest) */
+	const char *icon;		/* UTF-8 symbol (resolved from the manifest; "file" if
+					   the manifest gives a picture) */
 	const char *entry;		/* path of the entry module */
 	unsigned permissions;		/* ZG_PERM_* */
 	int hidden;			/* not listed in the launcher */
@@ -40,11 +41,17 @@ typedef struct
 	unsigned file_count;
 	const char *hash;		/* SHA-256 of the files, 64 hex digits (docs/APPS.md) */
 	int source;			/* ZG_APP_BUILTIN or ZG_APP_SDCARD */
+	const unsigned char *icon_rgba;	/* picture icon (manifest "icon": { width, height,
+					   rgba }): width * height * 4 bytes, or 0 */
+	unsigned icon_width, icon_height;
 }
 zg_app_t;
 
 #define ZG_APP_BUILTIN	0
 #define ZG_APP_SDCARD	1
+
+/* picture icons: 1 to ZG_ICON_MAX_SIDE px wide and high */
+#define ZG_ICON_MAX_SIDE	128
 
 extern const zg_app_t zg_builtin_apps[];
 extern const unsigned zg_builtin_app_count;

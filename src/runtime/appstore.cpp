@@ -446,6 +446,157 @@ static boolean GetString (JSContext *ctx, JSValueConst Obj, const char *pKey, un
 	return bOK;
 }
 
+// Strict base64 (RFC 4648, with padding, canonical: unused bits zero), as
+// Python's b64decode(validate=True) plus re-encoding checks it in
+// tools/bundle_apps.py. Returns the number of bytes, or -1.
+static int DecodeBase64 (const char *pIn, size_t nInLength, u8 *pOut, size_t nOutSize)
+{
+	if (nInLength % 4 != 0)
+	{
+		return -1;
+	}
+
+	size_t nOut = 0;
+	for (size_t i = 0; i < nInLength; i += 4)
+	{
+		boolean bLast = i + 4 == nInLength;
+		u32 nBits = 0;
+		unsigned nPad = 0;
+		for (unsigned k = 0; k < 4; k++)
+		{
+			char c = pIn[i + k];
+			int v;
+			if (c >= 'A' && c <= 'Z')	v = c - 'A';
+			else if (c >= 'a' && c <= 'z')	v = c - 'a' + 26;
+			else if (c >= '0' && c <= '9')	v = c - '0' + 52;
+			else if (c == '+')		v = 62;
+			else if (c == '/')		v = 63;
+			else if (c == '=' && bLast && k >= 2)
+			{
+				v = 0;
+				nPad++;
+			}
+			else
+			{
+				return -1;
+			}
+			if (nPad > 0 && c != '=')	// "=" only at the very end
+			{
+				return -1;
+			}
+			nBits = nBits << 6 | v;
+		}
+		if (   (nPad == 1 && (nBits & 0xFF) != 0)		// canonical: unused bits 0
+		    || (nPad == 2 && (nBits & 0xFFFF) != 0))
+		{
+			return -1;
+		}
+
+		unsigned nBytes = 3 - nPad;
+		if (nOut + nBytes > nOutSize)
+		{
+			return -1;
+		}
+		for (unsigned k = 0; k < nBytes; k++)
+		{
+			pOut[nOut++] = (u8) (nBits >> (16 - 8 * k));
+		}
+	}
+
+	return (int) nOut;
+}
+
+static boolean GetIconSide (JSContext *ctx, JSValueConst Icon, const char *pKey, unsigned *pSide)
+{
+	JSValue Value = JS_GetPropertyStr (ctx, Icon, pKey);
+	double f;
+	boolean bOK =    JS_IsNumber (Value) && JS_ToFloat64 (ctx, &f, Value) == 0
+		      && f >= 1 && f <= ZG_ICON_MAX_SIDE && f == (double) (unsigned) f;
+	JS_FreeValue (ctx, Value);
+	*pSide = bOK ? (unsigned) f : 0;
+	return bOK;
+}
+
+// A picture icon: { "width", "height", "rgba" } (docs/APPS.md)
+static boolean ParseIconPicture (JSContext *ctx, JSValueConst Icon, zg_app_t *pApp, CString *pError)
+{
+	JSPropertyEnum *pProps;
+	uint32_t nProps;
+	if (JS_GetOwnPropertyNames (ctx, &pProps, &nProps, Icon, JS_GPN_STRING_MASK) < 0)
+	{
+		*pError = "manifest.json: cannot read \"icon\"";
+		return FALSE;
+	}
+	boolean bKeysOK = nProps == 3;
+	for (uint32_t i = 0; i < nProps && bKeysOK; i++)
+	{
+		const char *pKey = JS_AtomToCString (ctx, pProps[i].atom);
+		bKeysOK =    pKey != 0
+			  && (   strcmp (pKey, "width") == 0 || strcmp (pKey, "height") == 0
+			      || strcmp (pKey, "rgba") == 0);
+		JS_FreeCString (ctx, pKey);
+	}
+	JS_FreePropertyEnum (ctx, pProps, nProps);
+	if (!bKeysOK)
+	{
+		*pError = "manifest.json: a picture \"icon\" has exactly the keys \"width\", \"height\" and \"rgba\"";
+		return FALSE;
+	}
+
+	unsigned nWidth, nHeight;
+	if (   !GetIconSide (ctx, Icon, "width", &nWidth)
+	    || !GetIconSide (ctx, Icon, "height", &nHeight))
+	{
+		pError->Format ("manifest.json: icon width and height must be whole numbers from 1 to %u",
+				ZG_ICON_MAX_SIDE);
+		return FALSE;
+	}
+	size_t nPixelBytes = nWidth * nHeight * 4;
+
+	JSValue RGBA = JS_GetPropertyStr (ctx, Icon, "rgba");
+	size_t nLength = 0;
+	const char *p = JS_IsString (RGBA) ? JS_ToCStringLen (ctx, &nLength, RGBA) : 0;
+	JS_FreeValue (ctx, RGBA);
+	if (p == 0)
+	{
+		*pError = "manifest.json: icon \"rgba\" must be a base64 string";
+		return FALSE;
+	}
+
+	// base64 of n bytes is 4 * ceil(n / 3) characters: refuse a length that
+	// cannot be right before decoding anything
+	size_t nMaxBytes = nLength / 4 * 3;
+	if (nMaxBytes > nPixelBytes + 2)
+	{
+		JS_FreeCString (ctx, p);
+		pError->Format ("manifest.json: icon \"rgba\" must hold width * height * 4 = %u bytes",
+				(unsigned) nPixelBytes);
+		return FALSE;
+	}
+	u8 *pPixels = new u8[nMaxBytes + 1];
+	int nDecoded = DecodeBase64 (p, nLength, pPixels, nMaxBytes);
+	JS_FreeCString (ctx, p);
+	if (nDecoded < 0)
+	{
+		*pError = "manifest.json: icon \"rgba\" is not valid base64";
+		delete [] pPixels;
+		return FALSE;
+	}
+	if ((size_t) nDecoded != nPixelBytes)
+	{
+		pError->Format ("manifest.json: icon \"rgba\" must hold width * height * 4 = %u bytes",
+				(unsigned) nPixelBytes);
+		delete [] pPixels;
+		return FALSE;
+	}
+
+	pApp->icon_rgba = pPixels;
+	pApp->icon_width = nWidth;
+	pApp->icon_height = nHeight;
+
+	return TRUE;
+}
+
 // Fills pApp's metadata from manifest.json, with the checks of
 // tools/bundle_apps.py.
 static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
@@ -506,12 +657,17 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 			break;
 		}
 
+		// "icon" is a symbol name or a picture
+		JSValue Icon = JS_GetPropertyStr (ctx, Obj, "icon");
+		boolean bPicture = JS_IsObject (Icon) && !JS_IsArray (ctx, Icon) && !JS_IsFunction (ctx, Icon);
+		JS_FreeValue (ctx, Icon);
+
 		char *pName = 0, *pVersion = 0;
 		if (   !GetString (ctx, Obj, "id", 32, TRUE, &pID, pError)
 		    || !GetString (ctx, Obj, "name", 64, TRUE, &pName, pError)
 		    || !GetString (ctx, Obj, "version", 32, TRUE, &pVersion, pError)
 		    || !GetString (ctx, Obj, "description", 256, FALSE, &pDescription, pError)
-		    || !GetString (ctx, Obj, "icon", 32, FALSE, &pIcon, pError)
+		    || (!bPicture && !GetString (ctx, Obj, "icon", 32, FALSE, &pIcon, pError))
 		    || !GetString (ctx, Obj, "entry", 255, FALSE, &pEntry, pError))
 		{
 			delete [] pName;
@@ -534,6 +690,14 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 			break;
 		}
 		pApp->icon = pSymbol;
+
+		Icon = JS_GetPropertyStr (ctx, Obj, "icon");
+		boolean bIconOK = !bPicture || ParseIconPicture (ctx, Icon, pApp, pError);
+		JS_FreeValue (ctx, Icon);
+		if (!bIconOK)
+		{
+			break;
+		}
 
 		pApp->permissions = 0;
 		JSValue Perms = JS_GetPropertyStr (ctx, Obj, "permissions");
@@ -603,7 +767,9 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 		delete [] pDescription;
 		delete [] (char *) pApp->name;
 		delete [] (char *) pApp->version;
+		delete [] pApp->icon_rgba;
 		pApp->name = pApp->version = 0;
+		pApp->icon_rgba = 0;
 	}
 
 	return bOK;
@@ -695,6 +861,7 @@ static void LoadApp (const char *pFolder)
 		delete [] (char *) pApp->version;
 		delete [] (char *) pApp->description;
 		delete [] (char *) pApp->entry;
+		delete [] pApp->icon_rgba;
 		delete pApp;
 		FreeFiles (&List);
 		return;

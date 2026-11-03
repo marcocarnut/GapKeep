@@ -13,6 +13,11 @@ import {
 } from "../vendor/dice.js";
 import { entropyBitsTarget, newPad, addPadSample } from "./entropypad.js";
 
+// Hand the CPU back to the UI between steps. On the Pi Zero the whole test
+// takes about two seconds of QuickJS; run in one go it would hold the app's
+// first screen back (and freeze input) for all of that.
+const yieldToUI = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const hexToBytes = (h) => new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
 const bytesToHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
@@ -57,6 +62,7 @@ export async function runDice39SelfTest() {
   let passed = 0;
   const failed = [];
   async function test(name, fn) {
+    await yieldToUI();
     try {
       await fn();
       passed++;
@@ -77,6 +83,7 @@ export async function runDice39SelfTest() {
 
   await test("BIP-39 vectors", async () => {
     for (const [hex, phrase] of BIP39_VECTORS) {
+      await yieldToUI();
       const r = await importMnemonic(BIP39_WORDS, phrase.split(" "));
       eq(bytesToHex(r.entropyBytes), hex, phrase.split(" ")[0] + "...");
     }
@@ -98,6 +105,7 @@ export async function runDice39SelfTest() {
     for (const total of [12, 24]) {
       const spec = PHRASE_SIZES[total];
       for (let n = spec.minUser; n <= spec.maxUser; n++) {
+        await yieldToUI();
         const user = [];
         for (let i = 0; i < n; i++) user.push(BIP39_WORDS[(i * 389 + n * 7 + total) % 2048]);
         const seed = new Uint8Array(32);
@@ -124,6 +132,7 @@ export async function runDice39SelfTest() {
   });
 
   await test("dice tables", () => {
+    const index = new Map(BIP39_WORDS.map((w, i) => [w, i]));
     const seen = new Set();
     for (const parity of [0, 1]) {
       const cells = diceTable(parity);
@@ -132,7 +141,7 @@ export async function runDice39SelfTest() {
       const words = cells.filter((c) => c !== null);
       eq(words.length, TABLE_WORDS, "words");
       for (const w of words) {
-        eq(BIP39_WORDS.indexOf(w) & 1, parity, "parity of " + w);
+        eq(index.get(w) & 1, parity, "parity of " + w);
         seen.add(w);
       }
     }
@@ -177,10 +186,11 @@ export async function runDice39SelfTest() {
     eq(bytesToHex(CODEX32.cxRecover(v2.shares.map((s) => s.toLowerCase())).seed), v2.secret, "vector 2");
   });
 
-  await test("codex32 split and recover", () => {
+  await test("codex32 split and recover", async () => {
     const seed = new Uint8Array(32);
     crypto.getRandomValues(seed);
     for (const [k, n] of [[2, 3], [2, 4], [3, 5]]) {
+      await yieldToUI();
       const { shares } = CODEX32.cxSplit(seed, k, n, "zgap");
       eq(shares.length, n, "share count");
       const r = CODEX32.cxRecover(shares.slice(n - k));

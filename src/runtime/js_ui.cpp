@@ -50,13 +50,14 @@ enum TWidgetType
 	WTable,
 	WQRCode,
 	WTabView,
+	WImage,
 	WTypeCount
 };
 
 static const char *TypeNames[WTypeCount] =
 {
 	"Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
-	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView"
+	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image"
 };
 
 #define T(t)		(1u << (t))
@@ -110,6 +111,7 @@ struct TZgNode
 	TZgNode *pNextDeferred;
 	char *pAccepted;		// TextArea accepted chars (LVGL keeps the pointer)
 	struct TZgQR *pQR;		// QRCode settings
+	lv_image_dsc_t *pImage;		// Image: the picture (pixels follow the descriptor)
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
 };
 
@@ -232,7 +234,7 @@ static TWidgetType GuessType (lv_obj_t *pObj)
 		{&lv_switch_class, WSwitch}, {&lv_dropdown_class, WDropdown},
 		{&lv_slider_class, WSlider}, {&lv_bar_class, WBar},
 		{&lv_table_class, WTable}, {&lv_qrcode_class, WQRCode},
-		{&lv_tabview_class, WTabView},
+		{&lv_tabview_class, WTabView}, {&lv_image_class, WImage},
 	};
 	for (unsigned i = 0; i < sizeof Map / sizeof Map[0]; i++)
 	{
@@ -278,6 +280,11 @@ static void WidgetFinalizer (JSRuntime *rt, JSValue Val)
 	{
 		delete [] pNode->pQR->pData;
 		delete pNode->pQR;
+	}
+	if (pNode->pImage != 0)
+	{
+		lv_image_cache_drop (pNode->pImage);
+		delete [] (u8 *) pNode->pImage;
 	}
 	delete pNode;
 }
@@ -831,11 +838,65 @@ static int SetFlag (JSContext *ctx, TZgNode *pNode, JSValueConst v, const char *
 }
 
 SETTER (SetHidden)     { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_HIDDEN, FALSE); }
-SETTER (SetScrollable) { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_SCROLLABLE, FALSE); }
 SETTER (SetClickable)  { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_CLICKABLE, FALSE); }
 GETTER (GetHidden)     { return JS_NewBool (ctx, lv_obj_has_flag (OBJ, LV_OBJ_FLAG_HIDDEN)); }
 
 static lv_style_t s_FocusStyle;		// the focus ring (see ApplyTheme)
+
+// The focus ring is drawn outside the widget: RingWidth px wide, RingGap px
+// away from it. Layouts must leave RingReach px around anything focusable.
+static const int32_t RingWidth = 3;
+static const int32_t RingGap = 2;
+static const int32_t RingReach = RingWidth + RingGap;
+
+static void RingRoomCallback (lv_event_t *e)
+{
+	lv_event_set_ext_draw_size (e, RingReach);
+}
+
+// For boxes that let their children draw outside them (plain Containers).
+// LVGL repaints a child only within its parents' area plus each parent's
+// "extra draw size", which is 0 for a box without styles: the part of a
+// child's focus ring outside a tight box would never be repainted (rings
+// that look like brackets). Reserve the ring's reach as extra draw size.
+static void AllowRingOverflow (lv_obj_t *pObj)
+{
+	lv_obj_add_flag (pObj, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+	lv_obj_add_event_cb (pObj, RingRoomCallback, LV_EVENT_REFR_EXT_DRAW_SIZE, 0);
+	lv_obj_refresh_ext_draw_size (pObj);
+}
+
+// A Container draws its children's focus rings outside its box, which is
+// fine while it holds still. One that scrolls must clip its content (or
+// rows scrolled out of view would draw over the rest of the screen), so it
+// keeps room for the rings inside: RingReach of padding unless the app set
+// its own.
+SETTER (SetScrollable)
+{
+	if (SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_SCROLLABLE, FALSE))
+	{
+		return -1;
+	}
+	if (pNode->Type != WContainer || lv_obj_get_parent (OBJ) == 0)	// not the screen
+	{
+		return 0;
+	}
+
+	if (lv_obj_has_flag (OBJ, LV_OBJ_FLAG_SCROLLABLE))
+	{
+		lv_obj_remove_flag (OBJ, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+		lv_style_value_t Value;
+		if (lv_obj_get_local_style_prop (OBJ, LV_STYLE_PAD_TOP, &Value, 0) != LV_STYLE_RES_FOUND)
+		{
+			lv_obj_set_style_pad_all (OBJ, RingReach, 0);
+		}
+	}
+	else
+	{
+		lv_obj_add_flag (OBJ, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+	}
+	return 0;
+}
 
 // Buttons, text areas and the like are focusable from birth; this makes any
 // widget a stop in the Tab order (or takes one out of it).
@@ -1210,6 +1271,106 @@ static int QRRender (JSContext *ctx, TZgNode *pNode)
 	return 0;
 }
 
+// Image src: { width, height, data } with data width * height * 4 bytes of
+// RGBA (straight alpha, rows top to bottom) in a Uint8Array or ArrayBuffer,
+// like canvas ImageData. Copied: the app may reuse its buffer.
+static const int32_t ImageMaxSide = 1024;
+
+static int GetImageSide (JSContext *ctx, JSValueConst v, const char *pKey, int32_t *pOut)
+{
+	JSValue Side = JS_GetPropertyStr (ctx, v, pKey);
+	int nResult = JS_ToInt32 (ctx, pOut, Side);
+	JS_FreeValue (ctx, Side);
+	if (nResult == 0 && (*pOut < 1 || *pOut > ImageMaxSide))
+	{
+		JS_ThrowRangeError (ctx, "Image src: %s must be 1 to %d", pKey, (int) ImageMaxSide);
+		return -1;
+	}
+	return nResult;
+}
+
+SETTER (SetImageSrc)
+{
+	if (!JS_IsObject (v))
+	{
+		JS_ThrowTypeError (ctx, "Image src must be { width, height, data }");
+		return -1;
+	}
+
+	int32_t nWidth, nHeight;
+	if (   GetImageSide (ctx, v, "width", &nWidth)
+	    || GetImageSide (ctx, v, "height", &nHeight))
+	{
+		return -1;
+	}
+	size_t nPixelBytes = (size_t) nWidth * nHeight * 4;
+
+	JSValue Data = JS_GetPropertyStr (ctx, v, "data");
+	size_t nOffset = 0, nLength = 0, nElement;
+	JSValue Buffer = JS_GetTypedArrayBuffer (ctx, Data, &nOffset, &nLength, &nElement);
+	if (JS_IsException (Buffer))
+	{
+		JS_FreeValue (ctx, JS_GetException (ctx));
+		Buffer = JS_DupValue (ctx, Data);		// maybe a plain ArrayBuffer
+		nLength = (size_t) -1;
+	}
+	JS_FreeValue (ctx, Data);
+
+	size_t nSize;
+	const u8 *pData = JS_GetArrayBuffer (ctx, &nSize, Buffer);
+	if (pData == 0)
+	{
+		JS_FreeValue (ctx, Buffer);
+		JS_FreeValue (ctx, JS_GetException (ctx));
+		JS_ThrowTypeError (ctx, "Image src: data must be a Uint8Array or an ArrayBuffer");
+		return -1;
+	}
+	if (nLength == (size_t) -1)
+	{
+		nLength = nSize;
+	}
+	if (nLength != nPixelBytes)
+	{
+		JS_FreeValue (ctx, Buffer);
+		JS_ThrowRangeError (ctx, "Image src: data must be width * height * 4 = %u bytes (RGBA), not %u",
+				    (unsigned) nPixelBytes, (unsigned) nLength);
+		return -1;
+	}
+
+	// descriptor and pixels in one block; LVGL's ARGB8888 is B, G, R, A in memory
+	u8 *pBlock = new u8[sizeof (lv_image_dsc_t) + nPixelBytes];
+	lv_image_dsc_t *pDesc = (lv_image_dsc_t *) pBlock;
+	memset (pDesc, 0, sizeof *pDesc);
+	u8 *pPixels = pBlock + sizeof (lv_image_dsc_t);
+	const u8 *pIn = pData + nOffset;
+	for (size_t i = 0; i < nPixelBytes; i += 4)
+	{
+		pPixels[i + 0] = pIn[i + 2];
+		pPixels[i + 1] = pIn[i + 1];
+		pPixels[i + 2] = pIn[i + 0];
+		pPixels[i + 3] = pIn[i + 3];
+	}
+	JS_FreeValue (ctx, Buffer);
+
+	pDesc->header.magic = LV_IMAGE_HEADER_MAGIC;
+	pDesc->header.cf = LV_COLOR_FORMAT_ARGB8888;
+	pDesc->header.w = nWidth;
+	pDesc->header.h = nHeight;
+	pDesc->header.stride = nWidth * 4;
+	pDesc->data_size = nPixelBytes;
+	pDesc->data = pPixels;
+
+	lv_image_set_src (OBJ, pDesc);
+	if (pNode->pImage != 0)
+	{
+		lv_image_cache_drop (pNode->pImage);
+		delete [] (u8 *) pNode->pImage;
+	}
+	pNode->pImage = pDesc;
+
+	return 0;
+}
+
 SETTER (SetQRData)
 {
 	TZgQR *pQR = pNode->pQR;
@@ -1389,6 +1550,7 @@ static const TProp Props[] =
 	{"light",       T (WQRCode), SetQRLight, 0},
 	{"ecc",         T (WQRCode), SetQRECC, 0},
 	{"modules",     T (WQRCode), 0, GetQRModules},
+	{"src",         T (WImage), SetImageSrc, 0},
 };
 static const unsigned PropCount = sizeof Props / sizeof Props[0];
 
@@ -1822,7 +1984,8 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent)
 		p = lv_obj_create (pParent);
 		lv_obj_remove_style_all (p);		// plain: no background, border or padding
 		lv_obj_set_size (p, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-		lv_obj_add_flag (p, LV_OBJ_FLAG_OVERFLOW_VISIBLE);	// don't clip focus rings
+		lv_obj_remove_flag (p, LV_OBJ_FLAG_SCROLLABLE);	// unless asked (SetScrollable)
+		AllowRingOverflow (p);				// don't clip focus rings
 		break;
 	case WPanel:	p = lv_obj_create (pParent);
 			lv_obj_set_size (p, LV_SIZE_CONTENT, LV_SIZE_CONTENT);	break;
@@ -1840,6 +2003,11 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent)
 		lv_qrcode_set_size (p, 160);	// see QRRender: we draw ourselves
 		break;
 	case WTabView:	p = lv_tabview_create (pParent);		break;
+	case WImage:
+		p = lv_image_create (pParent);
+		// natural size, or scaled down/up to fit a width and height set by the app
+		lv_image_set_inner_align (p, LV_IMAGE_ALIGN_CONTAIN);
+		break;
 	default:	assert (0);
 	}
 
@@ -1999,7 +2167,7 @@ static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSV
 	lv_obj_set_flex_flow (pRow, LV_FLEX_FLOW_ROW);
 	lv_obj_set_flex_align (pRow, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 	lv_obj_set_style_pad_column (pRow, 8, 0);
-	lv_obj_add_flag (pRow, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+	AllowRingOverflow (pRow);
 
 	// own focus group, so Tab stays inside the alert
 	pAlert->pGroup = lv_group_create ();
@@ -2105,8 +2273,8 @@ static void ApplyTheme (boolean bDark, lv_color_t Primary, lv_color_t Secondary)
 		bStyleInit = TRUE;
 	}
 	lv_style_set_outline_color (&s_FocusStyle, Secondary);
-	lv_style_set_outline_width (&s_FocusStyle, 3);
-	lv_style_set_outline_pad (&s_FocusStyle, 2);
+	lv_style_set_outline_width (&s_FocusStyle, RingWidth);
+	lv_style_set_outline_pad (&s_FocusStyle, RingGap);
 	lv_style_set_outline_opa (&s_FocusStyle, LV_OPA_COVER);
 
 	s_FocusTheme = *pBase;
@@ -2211,7 +2379,7 @@ const char *ZgSymbolByName (const char *pName)
 static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
-	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView",
+	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image",
 	"screen", "width", "height", "fonts", "symbols", "alert", "onKey", "theme"
 };
 
