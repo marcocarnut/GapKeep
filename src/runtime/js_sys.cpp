@@ -291,6 +291,12 @@ static JSValue js_sys_gc (JSContext *ctx, JSValueConst this_val, int argc, JSVal
 static JSValue KernelInfo (JSContext *ctx)
 {
 	static char s_Hash[2 * ZG_SHA256_DIGEST_SIZE + 1];
+#ifdef ZG_SIM
+	// the simulator (sim/) has no kernel image: no hash to show
+	const char *pBuild = "simulator";
+	strcpy (s_Hash, "0000000000000000000000000000000000000000000000000000000000000000");
+	unsigned nSize = 0;
+#else
 	extern u8 __data_start;
 	const u8 *pStart = (const u8 *) MEM_KERNEL_START;
 	unsigned nSize = &__data_start - pStart;
@@ -306,11 +312,13 @@ static JSValue KernelInfo (JSContext *ctx)
 			s_Hash[2 * i + 1] = Digits[Digest[i] & 15];
 		}
 	}
+#endif
 
 	JSValue Obj = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, s_Hash));
 	JS_SetPropertyStr (ctx, Obj, "hashedBytes", JS_NewUint32 (ctx, nSize));
-#ifdef ZG_TEST
+#ifdef ZG_SIM
+#elif defined (ZG_TEST)
 	const char *pBuild = "test";
 #elif defined (ZG_SEALED)
 	const char *pBuild = "sealed";

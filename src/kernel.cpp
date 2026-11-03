@@ -43,24 +43,6 @@ CKernel::~CKernel (void)
 {
 }
 
-// Circle's LVGL addon gives a mouse its pointer image when the mouse turns
-// up (at boot or plugged in later); draw zerogap's instead.
-static void InstallCursor (void)
-{
-	for (lv_indev_t *pIndev = lv_indev_get_next (0); pIndev != 0; pIndev = lv_indev_get_next (pIndev))
-	{
-		lv_obj_t *pCursor = lv_indev_get_cursor (pIndev);
-		if (   pCursor != 0
-		    && lv_image_get_src (pCursor) != &zg_cursor_image)
-		{
-			lv_image_set_src (pCursor, &zg_cursor_image);
-			// LVGL puts the image's top left corner at the pointer
-			lv_obj_set_style_translate_x (pCursor, -zg_cursor_hot_x, 0);
-			lv_obj_set_style_translate_y (pCursor, -zg_cursor_hot_y, 0);
-		}
-	}
-}
-
 boolean CKernel::Initialize (void)
 {
 	boolean bOK = TRUE;
@@ -150,7 +132,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		bOK = m_GUI.Initialize ();
-		InstallCursor ();
+		ZgInstallCursor ();
 	}
 
 	if (bOK)
@@ -176,7 +158,7 @@ TShutdownMode CKernel::Run (void)
 		m_GUI.Update (bUpdated);		// runs LVGL: input, timers, drawing
 		if (bUpdated)
 		{
-			InstallCursor ();		// a mouse may have turned up
+			ZgInstallCursor ();		// a mouse may have turned up
 		}
 		m_AppHost.Update ();			// JS jobs, deferred work, app switches
 #ifdef ZG_TEST

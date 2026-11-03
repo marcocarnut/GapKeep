@@ -34,6 +34,12 @@ Scenario file: one command per line, '#' starts a comment.
 Usage:
     qemu_harness.py [--kernel K] [--sd IMG] [--out DIR] [--keep] scenario.txt
     qemu_harness.py --kernel K --interactive     # just boot, print serial, Ctrl-C to stop
+    qemu_harness.py --sim sim/build/zgsim [--card DIR] [--size WxH] scenario.txt
+        plays the scenario on the simulator (sim/) instead of QEMU: the same
+        runtime, natively, in a fraction of the time; DIR plays the SD card
+        (apps in DIR/apps). "send" and "serialshot" need a serial port, which
+        the simulator doesn't have: "serialshot" takes a normal screenshot,
+        "send" fails.
 """
 
 import argparse
@@ -285,6 +291,160 @@ class Machine:
             self.proc.kill()
 
 
+class SimMachine:
+    """The simulator (sim/build/zgsim): log on stdout, commands on stdin."""
+
+    def __init__(self, binary, workdir, card=None, size=None):
+        self.binary = os.path.abspath(binary)
+        self.workdir = workdir
+        self.card = os.path.abspath(card) if card else None
+        self.size = size
+        self.serial_path = os.path.join(workdir, 'serial.log')
+        if os.path.exists(self.serial_path):
+            os.remove(self.serial_path)
+        self.x = self.y = None          # pointer, once the screen size is known
+        self.buttons = 0
+        self._start()
+
+    def _start(self):
+        import threading
+        args = [self.binary]
+        if self.card:
+            args += ['--card', self.card]
+        if self.size:
+            args += ['--size', self.size]
+        self.log = open(self.serial_path, 'a')
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, cwd=self.workdir)
+        self.answers = []
+        threading.Thread(target=self._reader, args=(self.proc, self.log), daemon=True).start()
+        self.x = self.y = None
+        self.buttons = 0
+
+    def _reader(self, proc, log):
+        for raw in proc.stdout:
+            line = raw.decode('utf-8', 'replace')
+            if line.startswith('#'):
+                self.answers.append(line.strip())
+            log.write(line)
+            log.flush()
+
+    def _cmd(self, line):
+        self.proc.stdin.write((line + '\n').encode())
+        self.proc.stdin.flush()
+
+    def serial(self):
+        try:
+            with open(self.serial_path, 'r', errors='replace') as f:
+                return f.read()
+        except OSError:
+            return ''
+
+    def key(self, name, hold_ms=60):
+        if hold_ms == 60:
+            self._cmd('key %s' % name)
+        else:
+            self._cmd('keydown %s' % name)
+            time.sleep(hold_ms / 1000)
+            self._cmd('keyup')
+        time.sleep(0.12)
+
+    def type(self, text):
+        for c in text:
+            self.key(char_to_key(c))
+
+    def _screen(self):
+        found = re.search(r'Screen (\d+)x(\d+)', self.serial())
+        return (int(found.group(1)), int(found.group(2))) if found else (640, 480)
+
+    def _pointer(self):
+        if self.x is None:
+            w, h = self._screen()
+            self.x, self.y = (w + 1) // 2, (h + 1) // 2      # as at boot
+        self._cmd('pointer %d %d %d' % (self.x, self.y, 1 if self.buttons else 0))
+
+    def _move(self, dx, dy):
+        # as Circle turns QEMU's relative mouse reports into pixels:
+        # times 18/10 in integer math, a move off the screen is dropped
+        w, h = self._screen()
+        if self.x is None:
+            self.x, self.y = (w + 1) // 2, (h + 1) // 2
+        px = int(dx * 18 / 10)
+        py = int(dy * 18 / 10)
+        if 0 <= self.x + px < w:
+            self.x += px
+        if 0 <= self.y + py < h:
+            self.y += py
+
+    def mouse(self, dx, dy):
+        steps = max(1, int(max(abs(dx), abs(dy)) / 10))
+        for i in range(steps):
+            sx = dx * (i + 1) // steps - dx * i // steps
+            sy = dy * (i + 1) // steps - dy * i // steps
+            self._move(sx, sy)
+            self._pointer()
+            time.sleep(0.03)
+
+    def moveto(self, x, y):
+        self.x, self.y = x, y
+        self._pointer()
+        time.sleep(0.1)
+
+    def click(self, button='left'):
+        self.mousedown(button)
+        self.mouseup()
+
+    def mousedown(self, button='left'):
+        self.buttons = 1 if button == 'left' else 0
+        self._pointer()
+        time.sleep(0.15)
+
+    def mouseup(self):
+        self.buttons = 0
+        self._pointer()
+        time.sleep(0.15)
+
+    def shot(self, png_path):
+        png_path = os.path.abspath(png_path)
+        want = '#shot %s' % png_path
+        self._cmd('shot %s' % png_path)
+        deadline = time.time() + 10
+        while time.time() < deadline and want not in self.answers:
+            time.sleep(0.02)
+        return png_path
+
+    serialshot = shot
+    mark = 0
+
+    def expect(self, pattern, timeout=30.0):
+        rx = re.compile(pattern, re.M)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if rx.search(self.serial()[self.mark:]):
+                return True
+            if self.proc.poll() is not None:
+                return bool(rx.search(self.serial()[self.mark:]))
+            time.sleep(0.05)
+        return False
+
+    def send(self, line):
+        raise SystemExit('send: the simulator has no serial port')
+
+    def reset(self):
+        self.mark = len(self.serial())
+        self.stop()
+        self._start()
+
+    def stop(self):
+        if self.proc.poll() is None:
+            try:
+                self._cmd('quit')
+                self.proc.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                self.proc.kill()
+        self.log.close()
+
+
 def screen_coord(m, value, axis):
     """'123' is pixels, '50%' a fraction of the screen size, which the
     kernel logs at boot ("Screen 640x480")."""
@@ -365,6 +525,9 @@ def main():
     ap.add_argument('--interactive', action='store_true')
     ap.add_argument('--keep', action='store_true', help='leave QEMU running at the end')
     ap.add_argument('--sd', help='SD card image (tools/make_sd_image.sh); default: no card')
+    ap.add_argument('--sim', help='run on the simulator binary (sim/build/zgsim) instead of QEMU')
+    ap.add_argument('--card', help='with --sim: folder that plays the SD card (apps in DIR/apps)')
+    ap.add_argument('--size', help='with --sim: screen size, e.g. 1824x984 (default 640x480)')
     args = ap.parse_args()
 
     outdir = args.out or tempfile.mkdtemp(prefix='zerogap-qemu-')
@@ -375,7 +538,10 @@ def main():
         img = os.path.join(outdir, 'sd.img')
         shutil.copyfile(args.sd, img)
         extra = ['-drive', 'file=%s,if=sd,format=raw' % os.path.abspath(img)]
-    m = Machine(args.kernel, outdir, extra)
+    if args.sim:
+        m = SimMachine(args.sim, outdir, args.card, args.size)
+    else:
+        m = Machine(args.kernel, outdir, extra)
     failures = 0
     try:
         if args.interactive or not args.scenario:
@@ -389,7 +555,7 @@ def main():
                 time.sleep(0.2)
         else:
             failures = run_scenario(m, args.scenario, outdir)
-            if args.keep:
+            if args.keep and not args.sim:
                 print('QEMU still running; monitor socket %s' % m.mon_path)
                 return 0
     except KeyboardInterrupt:

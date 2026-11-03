@@ -28,7 +28,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha256.o crypto/hwrng.o \
-	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o \
+	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  generated/apps_bundle.o
 
 ifeq ($(strip $(TEST)),1)

@@ -1,0 +1,61 @@
+#!/bin/sh
+#
+# Plays the test scenarios (tests/*.txt) on the simulator (sim/): the same
+# runtime as on the Pi, natively, with a folder for the SD card. As
+# tools/run_tests.sh does on QEMU: normal scenarios against the production
+# app set (the launcher built in, apps/ on the card), those marked "Needs a
+# test build" against the test set with tests/sdcard. Scenarios that talk to
+# the serial port ("send": crash tests, memory protection) need real
+# hardware or QEMU and are skipped.
+#
+# Usage: tools/run_sim_tests.sh [-o output-dir] [scenario.txt ...]
+#
+set -e
+cd "$(dirname "$0")/.."
+OUT=
+if [ "$1" = "-o" ]; then OUT=$2; shift 2; fi
+OUT=${OUT:-$(mktemp -d -t zerogap-sim-XXXXXX)}
+mkdir -p "$OUT"
+SCENARIOS=${*:-$(ls tests/*.txt)}
+FAILED=0
+
+make -C sim -s -j"$(nproc)" >/dev/null
+make -C sim -s -j"$(nproc)" TEST=1 >/dev/null
+
+# the production card: apps/ without the launcher (built in)
+rm -rf "$OUT/card-apps"
+mkdir -p "$OUT/card-apps/apps"
+for a in apps/*/; do
+	[ "$(basename "$a")" = launcher ] || cp -r "$a" "$OUT/card-apps/apps/"
+done
+
+for t in $SCENARIOS; do
+	name=$(basename "$t" .txt)
+	if grep -q "^send " "$t"; then
+		echo "SKIP  sim:$name   (needs the serial port)"
+		continue
+	fi
+	if head -1 "$t" | grep -q "Needs a test build"; then
+		sim=sim/build/zgsim-test; card=tests/sdcard
+	else
+		sim=sim/build/zgsim; card=$OUT/card-apps
+	fi
+	if python3 tools/qemu_harness.py --sim "$sim" --card "$card" --out "$OUT/$name" "$t" \
+		> "$OUT/$name.log" 2>&1; then
+		echo "PASS  sim:$name"
+	else
+		echo "FAIL  sim:$name   (see $OUT/$name.log)"
+		FAILED=1
+	fi
+done
+
+if [ -f "$OUT/dice39/07-words.png" ]; then
+	if python3 tests/dice39/check_qr.py "$OUT/dice39" apps/dice39/vendor/wordlist.js > "$OUT/dice39_qr.log" 2>&1; then
+		echo "PASS  sim:dice39_qr"
+	else
+		echo "FAIL  sim:dice39_qr   (see $OUT/dice39_qr.log)"; FAILED=1
+	fi
+fi
+
+echo "screenshots and logs: $OUT"
+exit $FAILED
