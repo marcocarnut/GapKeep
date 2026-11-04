@@ -1,0 +1,8 @@
+{
+  "id": "qrscan",
+  "name": "QR Scanner",
+  "version": "0.1.0",
+  "description": "Reads QR codes with the camera and shows what they hold.",
+  "icon": "image",
+  "permissions": ["camera"]
+}

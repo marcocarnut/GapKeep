@@ -14,9 +14,10 @@ expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 0627776fc0fd5752f
 expect apps/unknownkey not loaded: manifest.json: unknown key "network"
 expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
 expect 1 app\(s\) from the SD card, 9 not loaded
-expect launcher ready: dice39, gallery, hello, crashtest, qjstests, sdhello 60
+expect launcher ready: dice39, gallery, hello, qrscan, crashtest, qjstests, sdhello 60
 expect sd card: ok 9 problem\(s\)
-# tiles: dice39, gallery, hello, crashtest, qjstests, then sdhello
+# tiles: dice39, gallery, hello, qrscan, crashtest, qjstests, then sdhello
+key right
 key right
 key right
 key right

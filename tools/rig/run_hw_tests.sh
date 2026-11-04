@@ -36,6 +36,10 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (set ZG_RIG_SDAPPS=1 once the rig's card has tests/sdcard/apps)"
 		continue
 	fi
+	if grep -q "^camera " "$t" && [ ! -f third_party/quirc/lib/quirc.c ]; then
+		echo "SKIP  hw:$name   (needs the QR decoder, third_party/quirc)"
+		continue
+	fi
 	if ssh "$RIG" "cd zerogap-rig && rm -rf out/$name && python3 -u zgrig.py run kernel.hex tests/$name.txt --out out/$name" \
 		> "$OUT/$name.log" 2>&1; then
 		echo "PASS  hw:$name"

@@ -360,9 +360,14 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 	JS_SetPropertyStr (ctx, Obj, "image", Image);
 
 	JSValue Perms = JS_NewArray (ctx);
+	unsigned nPerms = 0;
 	if (pApp->permissions & ZG_PERM_APPS)
 	{
-		JS_SetPropertyUint32 (ctx, Perms, 0, JS_NewString (ctx, "apps"));
+		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "apps"));
+	}
+	if (pApp->permissions & ZG_PERM_CAMERA)
+	{
+		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "camera"));
 	}
 	JS_SetPropertyStr (ctx, Obj, "permissions", Perms);
 

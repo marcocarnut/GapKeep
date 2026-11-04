@@ -111,6 +111,21 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
   padding: 2px 8px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line);
 }
 #screen-hint.focused { color: var(--focus); }
+#camera-bar {
+  display: flex; align-items: flex-start; gap: 8px; flex: none; flex-wrap: wrap;
+  padding: 4px 8px; font-size: 12px; border-top: 1px solid var(--line);
+}
+#camera-bar .label { font-weight: 600; padding-top: 3px; }
+#camera-bar select { font-size: 12px; }
+#camera-qr { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 180px; }
+#camera-qr[hidden] { display: none; }
+#camera-text {
+  flex: 1; min-height: 22px; max-height: 120px; resize: vertical;
+  font: 12px var(--mono); color: var(--text); background: #1f1e26;
+  border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px;
+}
+#camera-bar label { white-space: nowrap; padding-top: 3px; }
+#camera-info { padding-top: 3px; }
 
 /* Console */
 #console {

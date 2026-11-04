@@ -15,6 +15,7 @@ CTestShot::CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial)
 	m_pSerial (pSerial),
 	m_nLine (0)
 {
+	CZgCamera::Set (&m_Camera);
 }
 
 void CTestShot::Update (void)
@@ -36,6 +37,10 @@ void CTestShot::Update (void)
 				else if (strncmp (m_Line, "#crash ", 7) == 0)
 				{
 					ZgTestCrash (m_Line + 7);
+				}
+				else if (strncmp (m_Line, "#camera ", 8) == 0)
+				{
+					Camera (m_Line + 8);
 				}
 				m_nLine = 0;
 			}
@@ -120,4 +125,36 @@ void CTestShot::Send (void)
 	m_pSerial->SetOptions (nOptions);
 
 	delete [] pOut;
+}
+
+// (Logs what the camera shows, never the text: tests may use secrets.)
+void CTestShot::Camera (const char *pArgs)
+{
+	CLogger *pLogger = CLogger::Get ();
+	if (strncmp (pArgs, "qr ", 3) == 0)
+	{
+		unsigned nLength = strlen (pArgs + 3);
+		if (m_Camera.SetQR ((const u8 *) pArgs + 3, nLength))
+		{
+			pLogger->Write ("camera", LogNotice, "a QR code of %u bytes", nLength);
+		}
+		else
+		{
+			pLogger->Write ("camera", LogWarning, "too long for a QR code");
+		}
+	}
+	else if (strcmp (pArgs, "scene") == 0)
+	{
+		m_Camera.SetScene ();
+		pLogger->Write ("camera", LogNotice, "scene");
+	}
+	else if (strcmp (pArgs, "none") == 0)
+	{
+		m_Camera.SetNone ();
+		pLogger->Write ("camera", LogNotice, "none");
+	}
+	else
+	{
+		pLogger->Write ("camera", LogWarning, "#camera qr <text> | scene | none");
+	}
 }

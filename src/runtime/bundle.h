@@ -17,6 +17,7 @@ extern "C" {
 
 /* permission bits, granted by "permissions" in manifest.json */
 #define ZG_PERM_APPS	(1u << 0)	/* zg:apps - list and launch other apps */
+#define ZG_PERM_CAMERA	(1u << 1)	/* ui.QRScanner - the camera, for QR codes */
 
 typedef struct
 {

@@ -97,6 +97,11 @@ handler" safe.
 All properties are described by one table; constructors, `set()` and the
 per-type property accessors all go through it, with strict validation.
 
+`ui.QRScanner` is driven by `qrscan.cpp` (camera frames, decoding with
+`qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
+interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for
+the simulator and test builds. See [CAMERA.md](CAMERA.md).
+
 ### Cryptography (`src/crypto/`)
 
 SHA-256 written from FIPS 180-4, self-tested at boot and testable on the
@@ -137,6 +142,7 @@ for them to leave, other than what a person reads off the screen.
 | Surface | Notes |
 | --- | --- |
 | USB host controller + HID parsing (Circle) | The only input from outside. Only the hub, keyboard and mouse (boot protocol) drivers are in the image; every other class driver is left out at build time (`EXCLUDE_USB_*` in `tools/build.sh`), including the generic-HID path and its report descriptor parser. Control transfers time out after 3 s (`patches/circle/0003`), so a device that never answers cannot hang the system. |
+| Camera (planned; [CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes. Decoded in the kernel by quirc, fuzzed under AddressSanitizer; apps get the decoded bytes, never pixels, and only with the `"camera"` permission. No driver for the Pi Camera yet: today only test builds and the simulator have a (synthetic) camera. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
 | SD card | Read by the firmware at boot, then by zerogap, once, for `/apps` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |

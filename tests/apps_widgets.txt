@@ -1,7 +1,7 @@
 # Alerts and QR codes in the gallery, then the hello app.
 expect Keyboard attached 60
 expect launcher ready 60
-# tiles: dice39, gallery, hello (test builds: then crashtest, qjstests)
+# tiles: dice39, gallery, hello (test builds: then qrscan, crashtest, qjstests)
 key right
 key ret
 expect selftest: \d+ passed, 0 failed 30

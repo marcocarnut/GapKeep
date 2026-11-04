@@ -13,6 +13,11 @@
 //   shot <file.png>         screenshot; answers "#shot <file.png>"
 //   launch [<id>]           start that app (or the launcher), as the
 //                           launcher would
+//   camera qr <text>        the camera films a QR code of <text> (UTF-8)
+//   camera qrhex <hex>      ... of these bytes
+//   camera picture <file>   ... a picture: binary PGM (P5) or PPM (P6)
+//   camera scene            ... nothing in particular (the default)
+//   camera none             there is no camera
 //   quit                    exit
 //
 // Usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--for SECONDS] [--shot FILE.png]
@@ -51,6 +56,95 @@ static const unsigned KeyHoldTicks = 60000;	// "key": 60 ms, as the harness hold
 
 static unsigned s_nReleaseAt;
 static int s_bReleasePending;
+
+// A binary PGM (P5) or PPM (P6) file, 8 bits, as grey. 0 if it isn't one.
+static uint8_t *ReadPicture (const char *pPath, unsigned *pWidth, unsigned *pHeight)
+{
+	FILE *f = fopen (pPath, "rb");
+	if (f == 0)
+	{
+		return 0;
+	}
+	char Magic[3] = {0};
+	unsigned w = 0, h = 0, nMax = 0;
+	uint8_t *pGrey = 0;
+	if (   fscanf (f, "%2s %u %u %u", Magic, &w, &h, &nMax) == 4 && nMax == 255
+	    && (strcmp (Magic, "P5") == 0 || strcmp (Magic, "P6") == 0)
+	    && w > 0 && h > 0 && w <= 8192 && h <= 8192 && fgetc (f) != EOF)
+	{
+		unsigned nChannels = Magic[1] == '6' ? 3 : 1;
+		uint8_t *pRaw = (uint8_t *) malloc ((size_t) w * h * nChannels);
+		if (fread (pRaw, nChannels, (size_t) w * h, f) == (size_t) w * h)
+		{
+			pGrey = (uint8_t *) malloc ((size_t) w * h);
+			for (size_t i = 0; i < (size_t) w * h; i++)
+			{
+				const uint8_t *p = pRaw + i * nChannels;
+				pGrey[i] = nChannels == 1 ? p[0] : (uint8_t) ((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8);
+			}
+		}
+		free (pRaw);
+	}
+	fclose (f);
+	*pWidth = w;
+	*pHeight = h;
+	return pGrey;
+}
+
+static void CameraCommand (char *pArgs)
+{
+	char *pRest = strchr (pArgs, ' ');
+	if (pRest != 0)
+	{
+		*pRest++ = '\0';
+	}
+	else
+	{
+		pRest = pArgs + strlen (pArgs);
+	}
+
+	if (strcmp (pArgs, "qr") == 0)
+	{
+		if (zg_sim_camera_qr ((const uint8_t *) pRest, strlen (pRest), 0) != 0)
+		{
+			printf ("#error camera qr: too long\n");
+		}
+	}
+	else if (strcmp (pArgs, "qrhex") == 0)
+	{
+		size_t n = strlen (pRest) / 2;
+		uint8_t *pData = (uint8_t *) malloc (n + 1);
+		size_t i = 0;
+		for (; i < n; i++)
+		{
+			unsigned b;
+			if (sscanf (pRest + 2 * i, "%2x", &b) != 1)
+			{
+				break;
+			}
+			pData[i] = (uint8_t) b;
+		}
+		if (i != n || strlen (pRest) % 2 != 0 || zg_sim_camera_qr (pData, n, 0) != 0)
+		{
+			printf ("#error camera qrhex <hex>: bad hex or too long\n");
+		}
+		free (pData);
+	}
+	else if (strcmp (pArgs, "picture") == 0)
+	{
+		unsigned w, h;
+		uint8_t *pGrey = ReadPicture (pRest, &w, &h);
+		if (pGrey == 0 || zg_sim_camera_picture (pGrey, w, h) != 0)
+		{
+			printf ("#error camera picture %s: not a binary PGM or PPM file (8 bits)\n", pRest);
+		}
+		free (pGrey);
+	}
+	else if (zg_sim_camera (pArgs) != 0)
+	{
+		printf ("#error camera qr <text> | qrhex <hex> | picture <file> | scene | none\n");
+	}
+}
 
 static int Command (char *pLine)
 {
@@ -107,6 +201,10 @@ static int Command (char *pLine)
 		{
 			printf ("#error no app %s\n", pArgs);
 		}
+	}
+	else if (strcmp (pLine, "camera") == 0)
+	{
+		CameraCommand (pArgs);
 	}
 	else if (strcmp (pLine, "quit") == 0)
 	{

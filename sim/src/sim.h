@@ -48,6 +48,17 @@ void zg_sim_key_up (void);
  * (id 0). Returns 0 if there is such an app. */
 int zg_sim_launch (const char *id);
 
+/* The camera (src/runtime/synthcam.h), after boot. What it films:
+ * zg_sim_camera ("none") no camera, ("scene") nothing in particular (the
+ * default); a QR code of these bytes; a picture (8-bit grey, scaled to
+ * fit); or frames as they come (the browser's webcam). Changes are logged
+ * (never what a code holds), except quiet ones (animated codes). Return 0 on success,
+ * -1 if refused (too long, too large, unknown mode). */
+int zg_sim_camera (const char *mode);
+int zg_sim_camera_qr (const uint8_t *data, unsigned length, int quiet);	/* quiet: not logged */
+int zg_sim_camera_picture (const uint8_t *grey, unsigned width, unsigned height);
+int zg_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height);
+
 /* The mouse: absolute position in screen pixels, left button state. */
 void zg_sim_pointer (int x, int y, int pressed);
 

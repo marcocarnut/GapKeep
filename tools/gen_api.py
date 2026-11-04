@@ -107,6 +107,10 @@ def gen_md(spec):
             mrows = ['| `%s` | %s | %s |' % (m['signature'], '→ ' + m['returns'] if m.get('returns') else '',
                                               m.get('md', '')) for m in w['methods']]
             rows = rows[:2] + (mrows + rows[2:] if w.get('methods_first') else rows[2:] + mrows)
+        if w.get('events'):
+            if not rows:
+                rows = ['| Property / method | Value | Notes |', '| --- | --- | --- |']
+            rows += ['| `%s` | handler | Event `"%s"`. %s |' % (e['prop'], e['name'], e['md']) for e in w['events']]
         if rows:
             out += rows + ['']
         if w.get('after_md'):
@@ -218,7 +222,8 @@ def gen_ts(spec):
         out += doc(t['md'], I) + [I + 'export type %s = %s;' % (t['name'], t['ts'])]
     out.append(I + 'export type SymbolName = %s;' % ' | '.join('"%s"' % x for x in ui['symbols']))
     out.append(I + 'export type SymbolTable = { readonly [name in SymbolName]: string };')
-    out.append(I + 'export type EventName = %s;' % ' | '.join('"%s"' % e['name'] for e in ui['events']))
+    all_events = ui['events'] + [e for w in ui['widgets'] for e in w.get('events', [])]
+    out.append(I + 'export type EventName = %s;' % ' | '.join('"%s"' % e['name'] for e in all_events))
     out += doc('The event object handlers receive (`this` is the widget).', I)
     out.append(I + 'export interface WidgetEvent {')
     for f in ui['event_fields']:
@@ -246,6 +251,9 @@ def gen_ts(spec):
         for p in props:
             out += doc(p.get('md') or row_md(p, props), I * 2)
             out.append(I * 2 + '%s?: %s;' % (p['name'], p['ts']))
+        for e in src.get('events', []):
+            out += doc('Handler for `"%s"`: %s' % (e['name'], e['md']), I * 2)
+            out.append(I * 2 + '%s?: (this: %s, ev: %s) => void;' % (e['prop'], w['name'], e['ev_ts']))
         out.append(I + '}')
 
     # Widget base class
@@ -281,6 +289,9 @@ def gen_ts(spec):
             out += doc(m.get('md', ''), I * 2)
             g, params, ret = split_fn(m['ts'])
             out.append(I * 2 + '%s%s%s: %s;' % (m['name'], g, params, ret))
+        for e in src.get('events', []):
+            out += doc('Handler for `"%s"`: %s' % (e['name'], e['md']), I * 2)
+            out.append(I * 2 + '%s: ((this: %s, ev: %s) => void) | null;' % (e['prop'], w['name'], e['ev_ts']))
         out.append(I + '}')
 
     for e in ui['exports']:

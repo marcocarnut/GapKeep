@@ -8,6 +8,7 @@
 import { Zerogap, MOD_SHIFT, MOD_CTRL, MOD_ALT } from "./zerogap.js";
 import { Store } from "./store.js";
 import { makeZip } from "./zip.js";
+import { CameraBar } from "./camera.js";
 
 const $ = (id) => document.getElementById (id);
 const here = (rel) => new URL (rel, import.meta.url).href;
@@ -40,6 +41,7 @@ const expanded = new Set (JSON.parse (localStorage.getItem ("zgide.expanded") ||
 let binaryModel = null;     // read-only stand-in shown for binary files
 
 let machine = null;         // the running Zerogap instance
+let camera = null;          // CameraBar: what the camera films
 let runToken = 0;           // the latest run() wins when several overlap
 let runningApp = null;      // the app zerogap says it started (from the log)
 let lastApp = null;         // what Run launched last (for screen size changes)
@@ -459,7 +461,7 @@ const MANIFEST_SCHEMA = {
       ],
     },
     entry: { type: "string", description: "Entry module (default main.js)." },
-    permissions: { type: "array", items: { enum: ["apps"] }, description: "Extra system modules." },
+    permissions: { type: "array", items: { enum: ["apps", "camera"] }, description: "Extra rights: \"apps\" (zg:apps), \"camera\" (ui.QRScanner)." },
     hidden: { type: "boolean", description: "true: not listed in the launcher." },
   },
 };
@@ -533,6 +535,7 @@ function stopMachine () {
   if (machine) machine.stop ();
   machine = null;
   runningApp = null;
+  camera?.apply ();    // stops feeding it
 }
 
 // Boots a fresh machine with the card as saved, then starts appId (or
@@ -584,6 +587,7 @@ async function run (appId, { focus = true } = {}) {
     return;
   }
   zg.start ();
+  camera.apply ();
   lastApp = appId;
   if (appId && !zg.launch (appId)) {
     ideLog (`${appId} did not start (see "not loaded" above); staying on the launcher`, true);
@@ -900,6 +904,7 @@ async function restoreExamples () {
 // Start
 
 function setupUi () {
+  camera = new CameraBar (() => machine, ideLog);
   $("new-app").onclick = newApp;
   $("new-file").onclick = newFile;
   $("rename").onclick = renameSelected;
@@ -973,6 +978,7 @@ async function main () {
 // For scripts and tests: window.zgide.run("hello"), .open("apps/x/main.js", 3)...
 window.zgide = {
   run, home, openFile, files, stop: () => $("stop").click (),
+  get camera () { return camera; },
   get machine () { return machine; },
   get editor () { return editor; },
   get monaco () { return monaco; },

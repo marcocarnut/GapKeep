@@ -9,6 +9,7 @@
 #include "../../src/runtime/apphost.h"
 #include "../../src/runtime/appstore.h"
 #include "../../src/runtime/cursor.h"
+#include "../../src/runtime/synthcam.h"
 #include "../../src/runtime/version.h"
 #include "../../src/crypto/hwrng.h"
 #include "../../src/kbdindev.h"
@@ -29,6 +30,7 @@ static const char From[] = "kernel";
 static CZgRandom *s_pRandom;
 static CKeyboardIndev *s_pKeyboard;
 static CAppHost *s_pAppHost;
+static CZgSynthCamera *s_pCamera;
 static boolean s_bAttached;
 
 static int s_nWidth, s_nHeight;
@@ -138,6 +140,9 @@ int zg_sim_boot (int width, int height, const char *card)
 
 	CLogger::Get ()->Write (From, LogNotice, "zerogap " ZEROGAP_VERSION " (simulator), built " __DATE__ " " __TIME__);
 	CLogger::Get ()->Write (From, LogNotice, "Screen %ux%u", (unsigned) width, (unsigned) height);
+
+	s_pCamera = new CZgSynthCamera;
+	CZgCamera::Set (s_pCamera);
 
 	s_pAppHost = new CAppHost (s_pKeyboard);
 	return s_pAppHost->Initialize () ? 0 : -1;
@@ -398,4 +403,57 @@ const uint16_t *zg_sim_frame (int *width, int *height)
 unsigned zg_sim_frame_serial (void)
 {
 	return s_nFrameSerial;
+}
+
+// --- camera -------------------------------------------------------------------
+// (Never logs what the camera shows: a QR code may hold a secret.)
+
+int zg_sim_camera (const char *mode)
+{
+	if (s_pCamera == 0)
+	{
+		return -1;
+	}
+	if (strcmp (mode, "none") == 0)
+	{
+		s_pCamera->SetNone ();
+	}
+	else if (strcmp (mode, "scene") == 0)
+	{
+		s_pCamera->SetScene ();
+	}
+	else
+	{
+		return -1;
+	}
+	CLogger::Get ()->Write ("camera", LogNotice, "%s", mode);
+	return 0;
+}
+
+int zg_sim_camera_qr (const uint8_t *data, unsigned length, int quiet)
+{
+	if (s_pCamera == 0 || !s_pCamera->SetQR (data, length))
+	{
+		return -1;
+	}
+	if (!quiet)
+	{
+		CLogger::Get ()->Write ("camera", LogNotice, "a QR code of %u bytes", length);
+	}
+	return 0;
+}
+
+int zg_sim_camera_picture (const uint8_t *grey, unsigned width, unsigned height)
+{
+	if (s_pCamera == 0 || !s_pCamera->SetPicture (grey, width, height))
+	{
+		return -1;
+	}
+	CLogger::Get ()->Write ("camera", LogNotice, "a picture, %ux%u", width, height);
+	return 0;
+}
+
+int zg_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height)
+{
+	return s_pCamera != 0 && s_pCamera->PushFrame (grey, width, height) ? 0 : -1;
 }

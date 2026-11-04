@@ -35,6 +35,7 @@ on stdin, one per line:
 | `pointer <x> <y> <0\|1>` | The mouse at (x, y), left button up or down. |
 | `shot <file.png>` | Screenshot; answers `#shot <file.png>`. |
 | `launch [<id>]` | Start that app, or the launcher. |
+| `camera <what>` | What the camera films: see [The camera](#the-camera). |
 | `quit` | Exit. |
 
 Answers to commands start with `#`; everything else on stdout is the log,
@@ -43,6 +44,23 @@ formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 `sim/build/zgsim` itself takes `--card DIR` (DIR plays the SD card: apps in
 `DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`,
 `--for SECONDS` and `--shot FILE`.
+
+## The camera
+
+The simulator has a camera that films what you tell it, for apps with
+`ui.QRScanner` ([CAMERA.md](CAMERA.md)). The decoder is the real one.
+
+| Command | The camera films |
+| --- | --- |
+| `camera qr <text>` | A QR code of the text (UTF-8), a little turned, with noise. |
+| `camera qrhex <hex>` | A QR code of these bytes. |
+| `camera picture <file>` | A picture: binary PGM (`P5`) or PPM (`P6`), 8 bits. |
+| `camera scene` | Nothing in particular (the default). |
+| `camera none` | There is no camera: scanners report `"no camera"`. |
+
+The log says what changed (`camera: a QR code of 14 bytes`), never what a
+code holds. Scenarios use the same commands; test kernels in QEMU and on the
+rig take them too.
 
 ## Working on the launcher
 
@@ -99,6 +117,8 @@ before the first screen. The device logs the work too, without the estimate.
 - **No serial port**: `send` in scenarios fails; test-build serial commands
   (`#shot`, `#crash`) are unavailable.
 - **No USB events**: the keyboard and mouse are always there.
+- **The camera** is synthetic (above); the Pi's has no driver yet
+  ([CAMERA.md](CAMERA.md#status)).
 - **No kernel image**: `sys.kernel.build` is `"simulator"` and its `hash` is
   all zeros.
 - **Random numbers** come from the host (`getentropy`), through the same

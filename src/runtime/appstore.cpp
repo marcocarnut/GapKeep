@@ -720,6 +720,10 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 				{
 					pApp->permissions |= ZG_PERM_APPS;
 				}
+				else if (p != 0 && strcmp (p, "camera") == 0)
+				{
+					pApp->permissions |= ZG_PERM_CAMERA;
+				}
 				else
 				{
 					bPermsOK = FALSE;
@@ -731,7 +735,7 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 		JS_FreeValue (ctx, Perms);
 		if (!bPermsOK)
 		{
-			*pError = "manifest.json: \"permissions\" must be a list drawn from [\"apps\"]";
+			*pError = "manifest.json: \"permissions\" must be a list drawn from [\"apps\", \"camera\"]";
 			break;
 		}
 

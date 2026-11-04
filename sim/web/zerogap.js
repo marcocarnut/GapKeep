@@ -20,6 +20,17 @@ export const MOD_SHIFT = 1, MOD_CTRL = 2, MOD_ALT = 4;
 
 let factory = null;     // createZerogap, loaded once
 
+// Grey (one byte a pixel) from RGBA, or as is if already grey.
+function toGrey (pixels, width, height) {
+  if (pixels.length === width * height) return pixels;
+  if (pixels.length !== width * height * 4) throw new RangeError ("pixels: width * height grey or RGBA bytes expected");
+  const grey = new Uint8Array (width * height);
+  for (let i = 0, o = 0; o < grey.length; i += 4, o++) {
+    grey[o] = (pixels[i] * 77 + pixels[i + 1] * 150 + pixels[i + 2] * 29) >> 8;
+  }
+  return grey;
+}
+
 export class Zerogap {
   // options: { onLog(line), onHalt(), moduleUrl } - moduleUrl: zgsim.js
   // (default: next to this file, as "make web" puts it in sim/build/web)
@@ -129,6 +140,46 @@ export class Zerogap {
   // Mouse at (x, y) in screen pixels, left button pressed or not.
   pointer (x, y, pressed) {
     this.m._zg_sim_pointer (Math.round (x), Math.round (y), pressed ? 1 : 0);
+  }
+
+  // The camera (after boot). What it films: "none" (no camera) or
+  // "scene" (nothing in particular, the default); a QR code of a string
+  // (UTF-8) or of bytes; a picture or a live frame, as grey (one byte a
+  // pixel) or RGBA (an ImageData's data). A picture stays until changed; a
+  // live frame until the next one (push them at the camera's pace, e.g.
+  // 15 a second, from a webcam). Return false if refused (too long, too
+  // large).
+  camera (mode) {
+    const p = this.m.stringToNewUTF8 (mode);
+    const ok = this.m._zg_sim_camera (p) === 0;
+    this.m._free (p);
+    return ok;
+  }
+
+  // quiet: not logged (for the parts of an animated code)
+  cameraQR (data, quiet = false) {
+    const bytes = typeof data === "string" ? new TextEncoder ().encode (data) : data;
+    return this.withBytes (bytes, (p) => this.m._zg_sim_camera_qr (p, bytes.length, quiet ? 1 : 0) === 0);
+  }
+
+  cameraPicture (pixels, width, height) {
+    const grey = toGrey (pixels, width, height);
+    return this.withBytes (grey, (p) => this.m._zg_sim_camera_picture (p, width, height) === 0);
+  }
+
+  cameraPush (pixels, width, height) {
+    const grey = toGrey (pixels, width, height);
+    return this.withBytes (grey, (p) => this.m._zg_sim_camera_push (p, width, height) === 0);
+  }
+
+  withBytes (bytes, fn) {
+    const p = this.m._malloc (Math.max (1, bytes.length));
+    this.m.HEAPU8.set (bytes, p);
+    try {
+      return fn (p);
+    } finally {
+      this.m._free (p);
+    }
   }
 
   // Bumped whenever the screen changed.

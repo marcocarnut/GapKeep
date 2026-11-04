@@ -68,6 +68,7 @@ if [ "$(cat .buildtarget 2>/dev/null)" != "$TARGET $CONFIG $OPTIMIZE" ]; then
 	make -C lib/lvgl -s clean >/dev/null; rm -rf lib/lvgl/obj
 	make -C lib/quickjs -s clean >/dev/null
 	make -C lib/fatfs -s clean >/dev/null
+	[ ! -f third_party/quirc/lib/quirc.c ] || make -C lib/quirc -s clean >/dev/null
 	make -C circle/addon/SDCard -s clean >/dev/null
 	make -C src -s clean >/dev/null
 	( cd circle && ./makeall --nosample $J >/dev/null )
@@ -77,6 +78,7 @@ fi
 make -C lib/lvgl -s $J >/dev/null
 make -C lib/quickjs -s $J >/dev/null
 make -C lib/fatfs -s $J >/dev/null
+[ ! -f third_party/quirc/lib/quirc.c ] || make -C lib/quirc -s $J >/dev/null
 make -C circle/addon/SDCard -s $J >/dev/null
 # QEMU builds keep the serial log: the tests read it (src/Makefile, LOG)
 LOG=

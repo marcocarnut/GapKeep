@@ -110,7 +110,8 @@ def main():
         w = by_name[name]
         src = by_name[w['same_as']] if w.get('same_as') else w
         props = src.get('props', [])
-        documented = [p['name'] for p in props] + [x['name'] for x in src.get('methods', [])]
+        documented = [p['name'] for p in props] + [x['name'] for x in src.get('methods', [])] + \
+                     [e['prop'] for e in src.get('events', [])]
         actual = real['widgets'].get(name, {})
         compare(name, documented, actual)
         readability(name, props, actual)

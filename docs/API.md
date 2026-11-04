@@ -32,7 +32,7 @@ import * as ui from "zg:ui";
 | Name | Type | Description |
 | --- | --- | --- |
 | `Widget` | class | Base class of all widgets. Not constructible; use for `instanceof`. |
-| `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `TabView` | classes | [Widgets](#widgets) |
+| `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `QRScanner`, `TabView` | classes | [Widgets](#widgets) |
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
 | `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. |
@@ -293,6 +293,32 @@ scale it to fit (keeping its aspect ratio); `radius` rounds its corners.
 
 ```js
 new ui.Image({ src: sys.app.image, radius: 12 });
+```
+
+#### QRScanner
+
+The camera's view, and the QR codes in it. The app gets the decoded
+contents of each code, never the picture: the kernel draws the view and
+reads the codes. Needs `"permissions": ["camera"]` in the manifest
+(otherwise the constructor throws). See [CAMERA.md](CAMERA.md).
+
+| Property / method | Value | Notes |
+| --- | --- | --- |
+| `scanning` | boolean | *Read-only*. Whether the camera is on for this scanner. |
+| `start()` |  | Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created. |
+| `stop()` |  | Turns the camera off. Deleting the widget, or the app ending, does too. |
+| `onCode` | handler | Event `"code"`. A QR code was read: `bytes` (a `Uint8Array`) is its content, `text` the same as a string if it is valid UTF-8, else `null`. Fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. |
+| `onError` | handler | Event `"error"`. The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. |
+
+The view is 320×240 unless you set `width` and `height`; the picture is
+scaled to fit, and a green outline marks the code just read. One scanner
+at a time can have the camera.
+
+```js
+new ui.QRScanner({
+  onCode: ({ bytes, text }) => console.log(`read ${bytes.length} bytes`),
+  onError: ({ reason }) => (status.text = reason),
+});
 ```
 
 #### TabView

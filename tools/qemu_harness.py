@@ -29,6 +29,11 @@ Scenario file: one command per line, '#' starts a comment.
                                 take commands: #shot, #crash <kind>)
     launch <id>                 simulator only: start that app, as the
                                 launcher would
+    camera qr <text>            what the camera films (test builds and the
+    camera scene | none         simulator have a synthetic camera, see
+                                docs/CAMERA.md): a QR code of <text>, nothing,
+                                or no camera at all. The simulator also takes
+                                "camera qrhex <hex>", "camera picture <file>"
     reset                       reset the machine (on the rig: and upload
                                 the kernel again); "expect" only looks at
                                 what was logged after the reset
@@ -432,6 +437,9 @@ class SimMachine:
     def send(self, line):
         raise SystemExit('send: the simulator has no serial port')
 
+    def camera(self, args):
+        self._cmd('camera %s' % args)
+
     def launch(self, app_id):
         self._cmd('launch %s' % app_id)
         time.sleep(0.1)
@@ -506,6 +514,12 @@ def run_scenario(m, path, outdir):
                 print('[%s] screenshot %s' % (where, p))
             elif cmd == 'send':
                 m.send(rest)
+            elif cmd == 'camera':
+                # the simulator takes it on stdin, test builds on the serial line
+                if hasattr(m, 'camera'):
+                    m.camera(rest)
+                else:
+                    m.send('#camera ' + rest)
             elif cmd == 'reset':
                 m.reset()
             elif cmd == 'expect':

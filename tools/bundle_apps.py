@@ -21,7 +21,7 @@ import os
 import re
 import sys
 
-PERMISSIONS = {'apps': 'ZG_PERM_APPS'}
+PERMISSIONS = {'apps': 'ZG_PERM_APPS', 'camera': 'ZG_PERM_CAMERA'}
 FILE_EXTENSIONS = ('.js', '.json', '.txt')
 ID_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,31}$')
 NAME_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')     # loaded files and folders

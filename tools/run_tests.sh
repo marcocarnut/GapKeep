@@ -17,6 +17,10 @@ FAILED=0
 
 run() {	# scenario, SD card image
 	name=$(basename "$1" .txt)
+	if grep -q "^camera " "$1" && [ ! -f third_party/quirc/lib/quirc.c ]; then
+		echo "SKIP  $name   (needs the QR decoder, third_party/quirc)"
+		return
+	fi
 	if python3 tools/qemu_harness.py --sd "$2" --out "$OUT/$name" "$1" > "$OUT/$name.log" 2>&1; then
 		echo "PASS  $name"
 	else

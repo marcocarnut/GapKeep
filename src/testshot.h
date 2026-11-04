@@ -19,6 +19,11 @@
 // "#crash <kind>": breaks one of the memory protection rules on purpose,
 // so tests/memprotect.txt can check that the system stops (testcrash.cpp).
 //
+// "#camera qr <text>", "#camera scene", "#camera none": what the camera
+// films. Test builds have a synthetic camera (src/runtime/synthcam.h), so
+// QR scanning, decoder included, can be tested in QEMU and timed on a Pi
+// without a camera module.
+//
 // Production builds never read from the serial port.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -28,6 +33,7 @@
 
 #include <circle/screen.h>
 #include <circle/serial.h>
+#include "runtime/synthcam.h"
 
 class CTestShot
 {
@@ -39,11 +45,13 @@ public:
 
 private:
 	void Send (void);
+	void Camera (const char *pArgs);
 
 private:
 	CScreenDevice *m_pScreen;
 	CSerialDevice *m_pSerial;
-	char m_Line[32];
+	CZgSynthCamera m_Camera;
+	char m_Line[1024];
 	unsigned m_nLine;
 };
 

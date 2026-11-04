@@ -54,6 +54,22 @@
     </div>
     <div id="screen-box"><canvas id="screen" tabindex="0" width="640" height="480"></canvas></div>
     <div id="screen-foot"><span id="screen-info"></span><span id="screen-hint"></span></div>
+    <div id="camera-bar" title="What zerogap's camera sees (for apps with ui.QRScanner)">
+      <span class="label">Camera</span>
+      <select id="camera-mode">
+        <option value="scene">Empty scene</option>
+        <option value="qr">QR code</option>
+        <option value="webcam">Webcam</option>
+        <option value="picture">Picture...</option>
+        <option value="none">No camera</option>
+      </select>
+      <span id="camera-qr" hidden>
+        <textarea id="camera-text" rows="1" spellcheck="false" placeholder="Text of the QR code"></textarea>
+        <label title="Each line is a code, shown in turn: an animated QR code"><input type="checkbox" id="camera-animate"> one per line</label>
+      </span>
+      <span id="camera-info" class="dim"></span>
+      <input type="file" id="camera-file" accept="image/*" hidden>
+    </div>
   </section>
 
   <section id="console-pane" class="pane">

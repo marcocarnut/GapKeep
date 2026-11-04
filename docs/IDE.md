@@ -28,7 +28,7 @@ current browsers should work.
   renaming an app also changes the `id` in its manifest. **Import** takes a
   folder from your computer: one app's folder, or a folder of apps (a card's
   `apps/`). **Export .zip** downloads the selected app. **Examples** adds back
-  any of `launcher`, `hello`, `gallery` and `dice39` that you deleted. A dot marks
+  any of `launcher`, `hello`, `gallery`, `dice39` and `qrscan` that you deleted. A dot marks
   unsaved files, a triangle the running app.
 - **Editor** (middle): Monaco, as in VS Code. JavaScript is checked as
   zerogap runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
@@ -73,6 +73,24 @@ edits.
 For scripts and agents, the page exposes `window.zgide`: `run(id)`,
 `openFile(path, line)`, `home()`, `files` (path to contents), `machine` (the
 `Zerogap` instance of `sim/web/zerogap.js`), `editor`, `monaco`.
+
+## The camera
+
+Under the screen, **Camera** sets what zerogap's camera films, for apps
+with `ui.QRScanner` ([CAMERA.md](CAMERA.md)):
+
+- **Empty scene**: nothing in particular.
+- **QR code**: a code of the text you type. With **one per line**, each line
+  is a code, shown in turn twice a second: an animated code, for apps that
+  read data in parts.
+- **Webcam**: your computer's camera (the browser asks first), 15 frames a
+  second. Hold a code up to it.
+- **Picture...**: an image file, in any format the browser reads.
+- **No camera**: as a Pi without one.
+
+The setting stays across reboots and reloads (the webcam and the picture
+are asked for again). zerogap decodes the codes itself, with the decoder it
+has on the Pi; the IDE only supplies pictures.
 
 ## Changing the launcher
 
