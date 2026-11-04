@@ -33,15 +33,15 @@ expect totp selftest: \d+ passed, 0 failed 20
 key ret
 camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
 expect totp: added account 1 \(SHA512, 8 digits, 30 s\), 1 in all 20
-expect totp: account 1, step 66666666, code sha256 fc330d33d0c236b0 5
+expect totp: account 1, step 66666666, code tag 68541462523f8061 5
 camera scene
 
 # 3. A Google Authenticator export with two accounts (tests/totp/make_migration.py)
 key ret
 camera qr otpauth-migration://offline?data=CjgKFDEyMzQ1Njc4OTAxMjM0NTY3ODkwEhFhbGljZUBleGFtcGxlLmNvbRoHRXhhbXBsZSABKAIwAgo3CiAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMhILQUNNRSBDbzpib2IaACACKAIwAhABGAEgACi5YA%3D%3D
 expect totp: export part 1 of 1: 2 added, 0 already there, 0 refused 20
-expect totp: account 2, step 66666666, code sha256 309b30280f860aff 5
-expect totp: account 3, step 66666666, code sha256 3c863695e5963342 5
+expect totp: account 2, step 66666666, code tag 03f8ca84c736ba76 5
+expect totp: account 3, step 66666666, code tag bcb2d91df57850d2 5
 camera scene
 
 # 4. Malformed and refused codes: the reason is on screen, nothing is added
@@ -73,7 +73,7 @@ shot 03-type-refused
 type ehpk3pxp
 key ret
 expect totp: added account 4 \(SHA1, 6 digits, 30 s\), 4 in all 5
-expect totp: account 4, step 66666666, code sha256 10ef2c0fb492cdef 5
+expect totp: account 4, step 66666666, code tag 3d10ac4a71bb51a0 5
 wait 0.5
 shot 04-codes
 # Tab past the four buttons (Forget all is enabled now) to the first
@@ -92,8 +92,8 @@ launch totp
 expect totp ready \(clock set\) 10
 key ret
 camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
-expect totp: account 1, step 66666666, code sha256 fc330d33d0c236b0 5
-expect totp: account 1, step 66666667, code sha256 eef8d29faf6c516b 10
+expect totp: account 1, step 66666666, code tag 68541462523f8061 5
+expect totp: account 1, step 66666667, code tag 333950ef241255b9 10
 wait 0.5
 shot 06-next-step
 camera scene

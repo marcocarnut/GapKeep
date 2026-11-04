@@ -74,8 +74,11 @@ the last whole byte are ignored, as other authenticators do.
   bits, shown in the account's details) to recognise the same key scanned
   twice. Forget all and Remove overwrite that state.
 - **The log never holds a key or a code.** It goes to the serial port in
-  test builds. Codes are logged as the first 64 bits of their SHA-256, for
-  the tests; messages about refused codes never quote the key.
+  test builds. For the tests, each code is logged as a tag: the first 64
+  bits of an HMAC of the code under the account's own key, which only
+  someone holding the key can check (a plain hash of a 6-digit code would
+  give the code away: there are only a million to try). Messages about
+  refused codes never quote the key.
 - The camera's picture never reaches the app: it gets the QR code's text
   only ([CAMERA.md](../../docs/CAMERA.md)).
 - Codes are on screen while the app is open: leave it when you are done.

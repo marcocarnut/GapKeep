@@ -100,7 +100,11 @@ function update(ms) {
       a.counter = counter;
       a.code = hotp(a.hmac, counter, a.digits);
       a.ui.code.text = groupCode(a.code);
-      console.log(`totp: account ${a.n}, step ${counter}, code sha256 ${hex(sha256(a.code)).slice(0, 16)}`);
+      // For tests: a tag only the account's key can check. (A plain hash
+      // of a 6-digit code is reversed by trying all million of them.)
+      const tag = a.hmac.mac(Uint8Array.from("zerogap log " + a.code, (c) => c.charCodeAt(0)));
+      console.log(`totp: account ${a.n}, step ${counter}, code tag ${hex(tag).slice(0, 16)}`);
+      tag.fill(0);
     }
     const left = a.period - (seconds % a.period);
     a.ui.bar.value = left;
