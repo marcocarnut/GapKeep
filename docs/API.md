@@ -455,6 +455,33 @@ globalThis.crypto = {
 
 ---
 
+## zg:clock
+
+```js
+import * as clock from "zg:clock";
+```
+
+The wall clock, kept by the system whatever app runs. A Pi Zero has no
+battery-backed clock, so the time is lost at power-off: until the clock
+app sets it, it counts from 1970-01-01 at boot (`status().set` is
+`false`). `Date.now()` and `new Date()` follow this clock, and local
+time (`getHours()`, ...) is UTC plus the clock's fixed offset (no daylight
+saving rules). Every app may read it; setting it needs
+`"permissions": ["rtc"]` (the others throw a `TypeError`). See
+[CLOCK.md](CLOCK.md).
+
+| Name | Description |
+| --- | --- |
+| `now()` | Milliseconds since 1970-01-01 UTC: the same as `Date.now()`. |
+| `status()` | `{ set, time, trimPpm, utcOffset, drift }`: whether the time was set since boot; the time (ms, as `now()`); the trim correcting the crystal, in parts per million (+ runs faster); local time's offset from UTC in minutes (-180 for UTC-03:00); and `drift`, `null` or what the last `set()` measured: `{ correction, over, trimPpm, uncertaintyPpm }`: the clock was `correction` seconds off (+: fast) after `over` seconds, so `trimPpm` would have kept it right, give or take `uncertaintyPpm` (a second's error in each setting). Measured only when the sets are at least 10 minutes apart. |
+| `set(time)` | *Needs "rtc".* Sets the time (ms since 1970, or a `Date`; from 2000 to 2099) and returns `status()`, with the drift measured since the last `set()`. |
+| `setTrim(ppm)` | *Needs "rtc".* The trim, -500 to 500 ppm. Takes effect from now, without changing the time. At boot it comes from `clock_trim_ppm` in the card's `zerogap.txt`. |
+| `setUtcOffset(minutes)` | *Needs "rtc".* Local time's offset, -720 to 840 minutes (UTC-12:00 to UTC+14:00). At boot it comes from `utc_offset` in `zerogap.txt`. |
+| `every(seconds, fn)` | Calls `fn` on the clock's marks: whenever the UTC time is a multiple of `seconds` (whole, 1 to 86400), e.g. at :00 and :30 for 30, and at once (`changed: true`) whenever the clock is set or its trim or offset change. `fn` gets `{ time, changed }`. Returns an id for `cancel`. Ends with the app. |
+| `cancel(id)` | Stops an `every`. |
+
+---
+
 ## zg:apps
 
 Requires `"permissions": ["apps"]` in the manifest; importing it otherwise

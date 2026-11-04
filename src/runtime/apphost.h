@@ -48,6 +48,7 @@ struct TZgApp
 
 	JSValue KeyHandler;		// ui.onKey() handler or JS_UNDEFINED
 	TZgUIState *pUI;		// zg:ui state, 0 until the app imports it
+	struct TZgClockState *pClock;	// zg:clock alarms, 0 until the first every()
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;
@@ -137,6 +138,8 @@ JSModuleDef *ZgInitUIModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitSysModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitAppsModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitCryptoModule (JSContext *pContext, const char *pName);
+JSModuleDef *ZgInitClockModule (JSContext *pContext, const char *pName);
+void ZgClockFree (TZgApp *pApp);		// js_clock.cpp: the app's alarms
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void ZgInitGlobals (JSContext *pContext);

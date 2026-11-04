@@ -125,8 +125,9 @@ size_t malloc_usable_size (void *ptr)
 	return 0;
 }
 
-/* Time. A Pi Zero has no real-time clock and zerogap has no network, so the
- * wall clock starts at the Unix epoch at boot unless something sets it. */
+/* Time: zerogap's clock (clock.cpp). A Pi Zero has no real-time clock and
+ * zerogap has no network, so it counts from the Unix epoch at boot until
+ * the clock app sets it. */
 int gettimeofday (struct timeval *tv, void *tz)
 {
 	(void) tz;
@@ -147,10 +148,12 @@ int clock_gettime (int clock_id, struct timespec *tp)
 	return 0;
 }
 
-/* The system runs on UTC: there is no time zone database. */
+/* Local time: UTC plus the clock's fixed offset (no time zone database, no
+ * daylight saving rules). */
 struct tm *localtime_r (const time_t *t, struct tm *tm)
 {
-	long long secs = *t;
+	long nOffset = (long) zg_utc_offset_minutes () * 60;
+	long long secs = *t + nOffset;
 	long long days = secs / 86400;
 	long rem = (long) (secs % 86400);
 	if (rem < 0)
@@ -182,6 +185,6 @@ struct tm *localtime_r (const time_t *t, struct tm *tm)
 	static const short cum[12] = {0,31,59,90,120,151,181,212,243,273,304,334};
 	tm->tm_yday = cum[m - 1] + (int) d - 1 + (leap && m > 2);
 	tm->tm_isdst = 0;
-	tm->tm_gmtoff = 0;
+	tm->tm_gmtoff = nOffset;
 	return tm;
 }

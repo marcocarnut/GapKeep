@@ -369,6 +369,10 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "camera"));
 	}
+	if (pApp->permissions & ZG_PERM_RTC)
+	{
+		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "rtc"));
+	}
 	JS_SetPropertyStr (ctx, Obj, "permissions", Perms);
 
 	return Obj;

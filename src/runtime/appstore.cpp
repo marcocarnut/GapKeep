@@ -5,6 +5,7 @@
 //
 #include "appstore.h"
 #include "apphost.h"
+#include "clock.h"
 #include "../crypto/sha256.h"
 #include <circle/logger.h>
 #include <circle/util.h>
@@ -724,6 +725,10 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 				{
 					pApp->permissions |= ZG_PERM_CAMERA;
 				}
+				else if (p != 0 && strcmp (p, "rtc") == 0)
+				{
+					pApp->permissions |= ZG_PERM_RTC;
+				}
 				else
 				{
 					bPermsOK = FALSE;
@@ -735,7 +740,7 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 		JS_FreeValue (ctx, Perms);
 		if (!bPermsOK)
 		{
-			*pError = "manifest.json: \"permissions\" must be a list drawn from [\"apps\", \"camera\"]";
+			*pError = "manifest.json: \"permissions\" must be a list drawn from [\"apps\", \"camera\", \"rtc\"]";
 			break;
 		}
 
@@ -905,6 +910,8 @@ static void LoadCard (void)
 		CLogger::Get ()->Write (From, LogWarning, "SD card: no FAT file system");
 		return;
 	}
+
+	CZgClock::LoadConfig ();		// zerogap.txt, while the card is mounted
 
 	DIR Dir;
 	if (f_opendir (&Dir, "SD:/apps") != FR_OK)

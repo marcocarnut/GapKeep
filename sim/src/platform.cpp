@@ -12,6 +12,8 @@
 #include <circle/startup.h>
 #include <circle/usb/usbkeyboard.h>
 #include "sim.h"
+#include "../../src/runtime/clock.h"
+#include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -157,4 +159,25 @@ void halt (void)
 	ZgSimLogLine ("(system halted)");
 	ZgSimHalted ();
 	exit (3);
+}
+
+// QuickJS's time (sim/Makefile renames its calls): zerogap's clock, as on
+// the device, rather than the host's.
+extern "C" int zg_gettimeofday (struct timeval *tv, void *tz)
+{
+	(void) tz;
+	unsigned sec, usec;
+	zg_time_now (&sec, &usec);
+	tv->tv_sec = sec;
+	tv->tv_usec = usec;
+	return 0;
+}
+
+extern "C" struct tm *zg_localtime_r (const time_t *t, struct tm *tm)
+{
+	long nOffset = (long) zg_utc_offset_minutes () * 60;
+	time_t nLocal = *t + nOffset;
+	gmtime_r (&nLocal, tm);
+	tm->tm_gmtoff = nOffset;
+	return tm;
 }

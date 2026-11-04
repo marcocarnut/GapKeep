@@ -11,7 +11,8 @@ extern "C" {
 #endif
 
 void zg_log_line (const char *source, const char *line);
-void zg_time_now (unsigned *sec, unsigned *usec);
+void zg_time_now (unsigned *sec, unsigned *usec);	/* clock.cpp: UTC */
+int zg_utc_offset_minutes (void);			/* clock.cpp: local time's offset */
 void zg_fatal (const char *message) __attribute__ ((noreturn));
 
 #ifdef __cplusplus

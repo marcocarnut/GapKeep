@@ -78,7 +78,8 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \
 	    $(ROOT)/src/runtime/cursor_install.c \
 	    $(ROOT)/src/runtime/scanner.cpp $(ROOT)/src/runtime/qrdecode.cpp \
-	    $(ROOT)/src/runtime/synthcam.cpp \
+	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp \
+	    $(ROOT)/src/runtime/js_clock.cpp \
 	    $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/kbdindev.cpp
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
@@ -124,6 +125,11 @@ $(OBJDIR)/apps_bundle.c: FORCE
 
 $(OBJDIR)/apps_bundle.c.o: $(OBJDIR)/apps_bundle.c
 	@$(CC) $(CFLAGS) -I $(ROOT)/src/generated -c -o $@ $<
+
+# QuickJS asks the C library for the time: in the simulator too, that is
+# zerogap's clock (src/runtime/clock.cpp), not the host's (platform.cpp).
+$(call obj,$(QJS)/quickjs.c): CFLAGS += -Dgettimeofday=zg_gettimeofday -Dlocaltime_r=zg_localtime_r
+$(call obj,$(QJS)/quickjs.c): Makefile		# flags above: rebuild when they change
 
 $(OBJDIR)/up/%.c.o: ../%.c
 	@mkdir -p $(dir $@)

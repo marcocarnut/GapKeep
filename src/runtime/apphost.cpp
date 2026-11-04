@@ -365,6 +365,7 @@ void CAppHost::StopApp (void)
 
 	ZgUIAppStopping (&m_App);
 	ZgTimersFree (&m_App);
+	ZgClockFree (&m_App);
 
 	// Deleting the screen deletes every widget of the app; each widget
 	// releases its JS event handlers as it goes.
@@ -679,6 +680,10 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	if (strcmp (pName, "zg:crypto") == 0)
 	{
 		return ZgInitCryptoModule (pContext, pName);
+	}
+	if (strcmp (pName, "zg:clock") == 0)
+	{
+		return ZgInitClockModule (pContext, pName);
 	}
 	if (strcmp (pName, "zg:apps") == 0)
 	{
