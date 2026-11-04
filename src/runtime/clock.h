@@ -29,7 +29,7 @@ struct TZgDrift
 	double fCorrection;		// seconds the clock was off (+: it was fast)
 	double fOver;			// over this many seconds since the Set() before
 	double fTrim;			// ppm: the trim that would have kept it right
-	double fUncertainty;		// ppm: from a second's error in each Set()
+	double fUncertainty;		// ppm: from half a second's error in each Set()
 };
 
 class CZgClock

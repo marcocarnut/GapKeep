@@ -27,16 +27,21 @@ The system timer runs from the Pi's crystal, which is off by some parts per
 million (ppm): typically tens, so a few seconds a day. The **trim** corrects
 it: a trim of -21.4 ppm slows the clock by 21.4 µs per second.
 
-To measure it, set the clock, and set it again hours (or days) later. The
-second time, the Clock app shows how far off the clock was, and the trim
-that would have kept it right, with its uncertainty: a second's error in
-each setting over 10 hours is ±0.06 ppm. **Apply measured trim** uses it.
-Measurements over less than 10 minutes are not made: they would say more
-about the hand that typed the time than about the crystal.
+To measure it, set the clock, and set it again days later. The second
+time, the Clock app shows how far off the clock was, and the trim that
+would have kept it right, with its uncertainty. Setting the clock by hand
+is right to about half a second, so the measurement is as good as the time
+between the two settings is long:
 
-The crystal's error depends a little on temperature, so a trim measured
-over a day at room temperature is about as good as it gets: within a
-second or two a week.
+| Between settings | Trim measured to |
+| --- | --- |
+| 1 hour (the least it measures) | ±278 ppm: not useful |
+| 1 day | ±12 ppm (about 1 s a day) |
+| 1 week | ±1.7 ppm (about 1 s a week) |
+
+**Apply measured trim** uses it. Measure over a day first, apply it, then
+again over a week. The crystal's error also changes a little with
+temperature, so a few ppm is about as good as it gets.
 
 ## zerogap.txt: keeping the trim and offset
 

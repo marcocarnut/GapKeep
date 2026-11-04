@@ -25,8 +25,11 @@ u64 CZgClock::s_nLastSetTicks = 0;
 TZgDrift CZgClock::s_Drift = {FALSE, 0, 0, 0, 0};
 
 // Below this, a measured drift says more about the hand that set the time
-// than about the crystal (a second off in an hour is 278 ppm).
-static const double MinDriftSeconds = 600;
+// than about the crystal: setting it by hand is right to about half a
+// second, so two settings an hour apart measure the rate to ±278 ppm, a
+// day apart to ±12 ppm, a week apart to ±1.7 ppm.
+static const double MinDriftSeconds = 3600;
+static const double SettingError = 0.5;		// s, each setting
 
 s64 CZgClock::Now (void)
 {
@@ -60,7 +63,7 @@ void CZgClock::Set (s64 nUnixMicros)
 			s_Drift.fCorrection = (double) (nWas - nUnixMicros) * 1e-6;
 			s_Drift.fOver = fTrue;
 			s_Drift.fTrim = (fTrue / fRaw - 1) * 1e6;
-			s_Drift.fUncertainty = 2 / fTrue * 1e6;		// a second each side
+			s_Drift.fUncertainty = 2 * SettingError / fTrue * 1e6;
 		}
 	}
 

@@ -117,10 +117,10 @@ function render() {
       : `${Math.abs(d.correction).toFixed(2)} s ${d.correction > 0 ? "fast" : "slow"}`;
     driftLabel.text = `At the last setting, after ${durationText(d.over)}, the clock was ${how}. ` +
       `The trim that keeps it right: ${ppmText(d.trimPpm)} ppm, ± ${d.uncertaintyPpm.toFixed(1)} ppm ` +
-      "(longer between settings is more precise).";
+      "(a week between settings measures it to about 2 ppm).";
     applyDrift.hidden = false;
   } else {
-    driftLabel.text = "Set the clock again some hours from now to measure its drift.";
+    driftLabel.text = "Set the clock again a day or more from now to measure its drift (at least an hour).";
     applyDrift.hidden = true;
   }
 
