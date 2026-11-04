@@ -10,7 +10,7 @@
 //
 // Detectors, by the name apps use (manifest-free: "detect" in the widget):
 //
-//   "qr"      QR codes, decoded with quirc (qrdecode.h)
+//   "qr"      QR codes, decoded with zxing-cpp (qrdecode.h)
 //
 // To add one (say "aruco", for dice): a ZG_DETECT_* bit and its name in
 // scanner.cpp, a decoder like qrdecode.*, a case in CZgScanner::Poll, and

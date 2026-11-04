@@ -40,8 +40,8 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (simulator only)"
 		continue
 	fi
-	if grep -q "^camera " "$t" && [ ! -f third_party/quirc/lib/quirc.c ]; then
-		echo "SKIP  hw:$name   (needs the QR decoder, third_party/quirc)"
+	if grep -q "^camera " "$t" && [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ]; then
+		echo "SKIP  hw:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
 	fi
 	if ssh "$RIG" "cd zerogap-rig && rm -rf out/$name && python3 -u zgrig.py run kernel.hex tests/$name.txt --out out/$name" \

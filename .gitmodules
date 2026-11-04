@@ -4,6 +4,6 @@
 [submodule "third_party/quickjs"]
 	path = third_party/quickjs
 	url = https://github.com/bellard/quickjs.git
-[submodule "third_party/quirc"]
-	path = third_party/quirc
-	url = https://github.com/dlbeer/quirc
+[submodule "third_party/zxing-cpp"]
+	path = third_party/zxing-cpp
+	url = https://github.com/zxing-cpp/zxing-cpp.git

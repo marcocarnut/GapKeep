@@ -41,8 +41,14 @@ CXX      := g++
 OPT      := -O2 -g
 endif
 
+# The QR decoder: zxing-cpp's QR code reader (third_party/zxing-cpp and
+# ../lib/zxing/zxing.mk). Without it, scanners report "this build has no
+# QR decoder".
+ZXING    := $(ROOT)/third_party/zxing-cpp/core/src
+HAVEZX   := $(wildcard $(ZXING)/ReadBarcode.cpp)
+
 # (with the QR decoder or without: objects apart, so adding it rebuilds)
-OBJDIR   := build/$(TARGET)-$(MODE)$(if $(wildcard $(ROOT)/third_party/quirc/lib/quirc.c),-quirc)
+OBJDIR   := build/$(TARGET)-$(MODE)$(if $(HAVEZX),-zxing)
 
 # JavaScript work per second on a Pi Zero (see ZeroEstimate in
 # src/runtime/apphost.cpp), measured on the hardware: dice39's self-test
@@ -53,18 +59,18 @@ DEFS     := -DZG_SIM $(MODEDEF) -DZG_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
 INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -idirafter $(ROOT)/circle/addon
-# The QR decoder (third_party/quirc). Without it, scanners report "this
-# build has no QR decoder".
-QUIRC    := $(ROOT)/third_party/quirc/lib
-ifneq ($(wildcard $(QUIRC)/quirc.c),)
-$(shell $(ROOT)/tools/apply_patches.sh quirc >&2)
-QUIRCSRC := $(wildcard $(QUIRC)/*.c)
-DEFS     += -DZG_HAVE_QUIRC
-INCS     += -I $(QUIRC)
+ifneq ($(HAVEZX),)
+$(shell $(ROOT)/tools/apply_patches.sh zxing-cpp >&2)
+include $(ROOT)/lib/zxing/zxing.mk
+ZXSRC    := $(addprefix $(ZXING)/,$(ZXING_SOURCES))
+DEFS     += -DZG_HAVE_ZXING
 endif
 CFLAGS   := $(OPT) $(DEFS) $(INCS) -fno-strict-aliasing -Wall -Wno-unused-parameter \
 	    -Wno-sign-compare -Wno-format-truncation -Wno-array-bounds -Wno-unknown-warning-option
 CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-exceptions -fno-rtti
+# zxing-cpp, and qrdecode.cpp that calls it: C++20 (lib/zxing/zxing.mk)
+ZXFLAGS  := $(CFLAGS) -std=c++20 -fno-exceptions -fno-rtti $(ZXING_DEFINES) -I $(ROOT)/lib/zxing -I $(ZXING) \
+	    -Wno-missing-braces -Wno-unused-template
 
 RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/js_ui.cpp $(ROOT)/src/runtime/js_sys.cpp \
@@ -88,7 +94,9 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(QUIRCSRC)) $(OBJDIR)/apps_bundle.c.o
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC)) $(OBJDIR)/apps_bundle.c.o
+ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
+$(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 
 .PHONY: all web clean FORCE
 all: build/zgsim$(if $(filter test,$(MODE)),-test)
