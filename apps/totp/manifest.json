@@ -1,0 +1,8 @@
+{
+  "id": "totp",
+  "name": "Authenticator",
+  "version": "0.1.0",
+  "description": "Time-based one-time codes (TOTP) from QR codes, kept in memory only.",
+  "icon": "refresh",
+  "permissions": ["camera"]
+}
