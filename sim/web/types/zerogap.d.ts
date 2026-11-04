@@ -561,7 +561,7 @@ declare module "zg:crypto" {
 declare module "zg:clock" {
   /** Milliseconds since 1970-01-01 UTC: the same as `Date.now()`. */
   export function now(): number;
-  /** `{ set, time, trimPpm, utcOffset, drift }`: whether the time was set since boot; the time (ms, as `now()`); the trim correcting the crystal, in parts per million (+ runs faster); local time's offset from UTC in minutes (-180 for UTC-03:00); and `drift`, `null` or what the last `set()` measured: `{ correction, over, trimPpm, uncertaintyPpm }`: the clock was `correction` seconds off (+: fast) after `over` seconds, so `trimPpm` would have kept it right, give or take `uncertaintyPpm` (a second's error in each setting). Measured only when the sets are at least 10 minutes apart. */
+  /** `{ set, time, trimPpm, utcOffset, drift }`: whether the time was set since boot; the time (ms, as `now()`); the trim correcting the crystal, in parts per million (+ runs faster); local time's offset from UTC in minutes (-180 for UTC-03:00); and `drift`, `null` or what the last `set()` measured: `{ correction, over, trimPpm, uncertaintyPpm }`: the clock was `correction` seconds off (+: fast) after `over` seconds, so `trimPpm` would have kept it right, give or take `uncertaintyPpm` (half a second's error in each setting). Measured only when the sets are at least an hour apart. */
   export function status(): ClockStatus;
   /** *Needs "rtc".* Sets the time (ms since 1970, or a `Date`; from 2000 to 2099) and returns `status()`, with the drift measured since the last `set()`. */
   export function set(time: number | Date): ClockStatus;
