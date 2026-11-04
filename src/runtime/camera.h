@@ -8,8 +8,8 @@
 //
 // Implementations: CZgSynthCamera (synthcam.h: QR codes drawn from text,
 // pictures and frames pushed by the host; the simulator and test builds)
-// and, later, the Pi Camera. No camera registered: scanners report "no
-// camera".
+// and CZgPiCamera (src/camera/picamera.h: the Pi Camera Module v2.1, kernel
+// only). No camera registered: scanners report "no camera".
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -10,9 +10,10 @@
 #include <circle/string.h>
 #include <circle/util.h>
 
-CTestShot::CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial)
+CTestShot::CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial, CZgPiCamera *pPiCamera)
 :	m_pScreen (pScreen),
 	m_pSerial (pSerial),
+	m_pPiCamera (pPiCamera),
 	m_nLine (0)
 {
 	CZgCamera::Set (&m_Camera);
@@ -131,6 +132,40 @@ void CTestShot::Send (void)
 void CTestShot::Camera (const char *pArgs)
 {
 	CLogger *pLogger = CLogger::Get ();
+	if (strcmp (pArgs, "pi") == 0)
+	{
+		if (m_pPiCamera->Probe ())
+		{
+			CZgCamera::Set (m_pPiCamera);
+			pLogger->Write ("camera", LogNotice, "pi");
+		}
+		else
+		{
+			pLogger->Write ("camera", LogWarning, "no Pi Camera: still the synthetic one");
+		}
+		return;
+	}
+	if (strcmp (pArgs, "mode centre") == 0 || strcmp (pArgs, "mode full") == 0)
+	{
+		boolean bFull = pArgs[5] == 'f';
+		m_pPiCamera->SetMode (bFull ? &CZgIMX219::ModeFull : &CZgIMX219::ModeCentre);
+		pLogger->Write ("camera", LogNotice, "pi mode %s (from the next start)", pArgs + 5);
+		return;
+	}
+	if (strncmp (pArgs, "pattern ", 8) == 0)
+	{
+		char *pEnd;
+		unsigned long nPattern = strtoul (pArgs + 8, &pEnd, 10);
+		if (pEnd == pArgs + 8 || *pEnd != '\0' || nPattern > 9)
+		{
+			pLogger->Write ("camera", LogWarning, "#camera pattern <0..9>");
+			return;
+		}
+		m_pPiCamera->SetTestPattern ((unsigned) nPattern);
+		return;
+	}
+
+	// everything else is the synthetic camera's
 	if (strncmp (pArgs, "qr ", 3) == 0)
 	{
 		unsigned nLength = strlen (pArgs + 3);
@@ -153,8 +188,15 @@ void CTestShot::Camera (const char *pArgs)
 		m_Camera.SetNone ();
 		pLogger->Write ("camera", LogNotice, "none");
 	}
+	else if (strcmp (pArgs, "synth") == 0)
+	{
+		pLogger->Write ("camera", LogNotice, "synthetic (%s)", m_Camera.GetMode ());
+	}
 	else
 	{
-		pLogger->Write ("camera", LogWarning, "#camera qr <text> | scene | none");
+		pLogger->Write ("camera", LogWarning,
+				"#camera qr <text> | scene | none | synth | pi | pattern <n> | mode centre|full");
+		return;
 	}
+	CZgCamera::Set (&m_Camera);
 }

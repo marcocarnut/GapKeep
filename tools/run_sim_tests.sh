@@ -31,6 +31,10 @@ done
 
 for t in $SCENARIOS; do
 	name=$(basename "$t" .txt)
+	if grep -q "^# Rig only" "$t"; then
+		echo "SKIP  sim:$name   (rig only: tools/rig/run_hw_tests.sh)"
+		continue
+	fi
 	if grep -q "^send " "$t"; then
 		echo "SKIP  sim:$name   (needs the serial port)"
 		continue

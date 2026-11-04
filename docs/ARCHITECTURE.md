@@ -100,7 +100,9 @@ per-type property accessors all go through it, with strict validation.
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for
-the simulator and test builds. See [CAMERA.md](CAMERA.md).
+the simulator and test builds, and a driver for the Pi Camera Module v2.1
+(`src/camera/`, kernel only: the sensor over I2C, the CSI-2 receiver, grey
+frames and automatic exposure). See [CAMERA.md](CAMERA.md).
 
 ### Cryptography (`src/crypto/`)
 

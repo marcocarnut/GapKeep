@@ -17,6 +17,11 @@ FAILED=0
 
 run() {	# scenario, SD card image
 	name=$(basename "$1" .txt)
+	# a real camera, sensors, ...: tests/picamera.txt says "# Rig only"
+	if grep -q "^# Rig only" "$1"; then
+		echo "SKIP  $name   (rig only: tools/rig/run_hw_tests.sh)"
+		return
+	fi
 	if grep -q "^launch " "$1"; then
 		echo "SKIP  $name   (simulator only: tools/run_sim_tests.sh)"
 		return

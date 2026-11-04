@@ -1,0 +1,81 @@
+//
+// imx219.h
+//
+// The Sony IMX219 sensor of the Raspberry Pi Camera Module v2.1, over I2C
+// (CCI): identification, the modes zerogap uses (RAW8 on two CSI-2 lanes,
+// 2x2 analogue binning, 30 frame/s: the recommended 640x480 from the
+// centred 1280x960, or 1640x1232 from the whole array), exposure and gain,
+// and the test patterns. Written from docs/camera/SPEC.md (section 4);
+// docs/camera/IMPLEMENTATION.md has the decisions.
+//
+// The sensor has no automatic exposure: CZgPiCamera computes it and calls
+// SetExposure(). Powering the module (GPIO 41) is the caller's job; this
+// class only talks to a powered sensor.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+#ifndef _zg_imx219_h
+#define _zg_imx219_h
+
+#include <circle/i2cmaster.h>
+#include <circle/types.h>
+
+// A readout window, binned 2x2 to nWidth x nHeight
+struct TZgIMX219Mode
+{
+	const char *pName;
+	u16 nXStart, nXEnd, nYStart, nYEnd;	// in the 3280 x 2464 array
+	u16 nWidth, nHeight;			// sent, RAW8
+};
+
+class CZgIMX219
+{
+public:
+	static const TZgIMX219Mode ModeCentre;	// 640x480 (SPEC 1)
+	static const TZgIMX219Mode ModeFull;	// 1640x1232
+
+	static const unsigned FrameLength = 1763;	// FRM_LENGTH_A, in its units
+	static const unsigned MaxExposure = FrameLength - 4;
+	static const unsigned MinExposure = 4;
+	static const unsigned MaxAnalogueCode = 232;	// 10.67x
+	static const unsigned MinDigitalGain = 0x100;	// 4.8 fixed point, 1.0x
+	static const unsigned MaxDigitalGain = 0xFFF;
+
+	CZgIMX219 (CI2CMaster *pI2C);
+
+	// Reads MODEL_ID. TRUE: an IMX219 answered (*pID is what it said
+	// whenever the bus answered at all, else 0).
+	boolean Probe (u16 *pID);
+
+	// Streams once, briefly, then back to standby: the sensor leaves its
+	// lanes in LP-11 only after it has streamed (SPEC 4.2).
+	boolean SettleLanes (void);
+
+	// Writes the whole mode in standby (SPEC 4.3 A-E).
+	boolean Configure (const TZgIMX219Mode &rMode, unsigned nExposure, unsigned nAnalogueCode,
+			   unsigned nDigitalGain, unsigned nTestPattern);
+
+	boolean StartStreaming (void);
+	boolean StopStreaming (void);		// to software standby
+
+	// Exposure (lines of FrameLength), analogue gain code and digital gain
+	// in one I2C transfer, so the sensor latches them at the same V-sync.
+	boolean SetExposure (unsigned nExposure, unsigned nAnalogueCode, unsigned nDigitalGain);
+
+	// 0 off, 1 solid colour, 2 colour bars, ... 9 PN31 (SPEC 4.7)
+	boolean SetTestPattern (unsigned nPattern);
+
+	int GetLastResult (void) const		{ return m_nLastResult; }
+
+private:
+	boolean Write (u16 nRegister, const u8 *pValues, unsigned nCount);
+	boolean Write8 (u16 nRegister, u8 uchValue);
+	boolean Write16 (u16 nRegister, u16 usValue);
+	boolean Read (u16 nRegister, u8 *pValues, unsigned nCount);
+
+private:
+	CI2CMaster *m_pI2C;
+	int m_nLastResult;		// of the last failed transfer (Circle's codes)
+};
+
+#endif

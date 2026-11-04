@@ -83,7 +83,7 @@ camera (camera.h) -> greyscale frames -> CZgScanner (scanner.cpp) -> onDetect({ 
 | `ui.Scanner`, scanning, preview, permission | Done, in the runtime (Pi and simulator). |
 | QR decoder | [quirc](https://github.com/dlbeer/quirc) (ISC licence), `third_party/quirc`, pinned; zerogap's fixes in `patches/quirc/`, both found by the fuzzer: an array index computed before its range check, and integer overflows on degenerate perspectives (huge coordinates). Worth sending upstream. Without the submodule, builds say "this build has no QR decoder". |
 | Simulated camera | Done: the simulator, the IDE (QR codes from text, pictures, the webcam) and test kernels (`#camera` on the serial line). |
-| Pi Camera driver | Not yet. See below. |
+| Pi Camera driver | Camera Module v2.1 (IMX219) on the Zero v1.3: `src/camera/`, kernel only. Frames, colour bars and automatic exposure checked on the rig; reading a real printed code not yet (see below). |
 
 The builds (`sim/Makefile`, `src/Makefile` with `lib/quirc/Makefile`, and
 `tools/fuzz_qr.sh`) apply `patches/quirc/` (`tools/apply_patches.sh`) and use
@@ -91,22 +91,36 @@ the decoder when the submodule is checked out.
 
 ### The Pi Camera
 
-Circle's author maintains [libcamera for Circle](https://github.com/rsta2/libcamera):
-it drives Camera Module 1 (OV5647) and 2 (IMX219) directly, without the
-GPU's camera firmware, on the Zero v1.3 and later (the Zero needs its own,
-narrower cable). It delivers raw 10-bit Bayer frames. For QR codes, the
-average of each 2×2 block is a good grey picture at half the resolution;
-Module 2 has no automatic exposure, so the kernel would adjust exposure and
-gain from the picture's brightness.
+`src/camera/` drives the Raspberry Pi Camera Module v2.1 (Sony IMX219) on
+the Pi Zero v1.3's camera connector (with the Zero's narrower cable),
+without the GPU's camera firmware. It was written clean-room, from the
+specification in [camera/SPEC.md](camera/SPEC.md), not from other drivers'
+code (whose licence, GPL-2.0 only, doesn't combine with zerogap's GPLv3).
+[camera/IMPLEMENTATION.md](camera/IMPLEMENTATION.md) records the decisions
+and the measurements.
 
-Open question: its files say GPL-2.0 only, and zerogap (with Circle) is
-GPLv3, so the two can't be combined in a kernel we distribute. Its author
-can't simply relicense it either: the sensor and Unicam code is ported from
-Linux drivers (`imx219.c`, `bcm2835-unicam.c`, Raspberry Pi Ltd and
-others, GPL-2.0 only), and the sensor's mode tables were recorded from the
-Raspberry Pi firmware's I2C traffic. Camera Modules 3 and the HQ camera aren't supported by it.
+- **The mode:** 640x480 RAW8 on two CSI-2 lanes, the centre 1280x960 of the
+  sensor binned 2x2, 30 frame/s. The average of each 2x2 Bayer tile gives
+  a 320x240 grey frame. It is a modest zoom: a code must be held in front
+  of the lens. (Test builds also offer the full field, 1640x1232, for
+  diagnosis.)
+- **Exposure:** the sensor has no automatic exposure, so the kernel sets
+  exposure time, analogue gain and digital gain from the picture's
+  brightness. Exposure comes first, up to 13 ms against motion blur.
+- **Power:** the module is powered only while a scanner runs. At boot,
+  production builds power it for about 20 ms to read the sensor's chip ID,
+  and register the camera if it is there. Otherwise scanners report
+  "no camera".
+- **Errors:** "no camera", "no frames from the camera" (nothing for 1 s),
+  "the camera does not answer" (I2C), "the camera receiver does not start".
+- **Logs:** the probe (chip ID), the mode, the frame rate measured from the
+  receiver's interrupts, the frame counts at stop, exposure changes (at
+  most every 2 s) and receiver errors. Never image data.
 
-## Testing without a camera
+Camera Modules 1 (OV5647) and 3 (IMX708) and the HQ camera are not
+supported: the probe finds no IMX219 and reports no camera.
+
+## Testing with and without a camera
 
 The **synthetic camera** (`src/runtime/synthcam.cpp`) films an empty scene,
 a QR code made from bytes (slightly turned, blurred at the edges, with
@@ -122,9 +136,24 @@ are the same code as with a real camera.
 - **Test kernels** (`make TEST=1`, QEMU and the rig): the synthetic camera,
   driven by `#camera qr <text>`, `#camera scene` and `#camera none` on the
   serial line. On the rig this times the decoder on a real Zero, without a
-  camera module.
+  camera module. Test kernels on a Zero with a camera module can switch to
+  it:
+
+  | Command | Does |
+  | --- | --- |
+  | `#camera pi` | the Pi Camera, if the probe finds one (logs `picamera: IMX219 found (model 0219)` and `camera: pi`) |
+  | `#camera synth` | back to the synthetic camera (so do `qr`, `scene` and `none`) |
+  | `#camera pattern <n>` | the sensor's test pattern: 0 off, 1 solid colour, 2 colour bars, 7 column counter, ... |
+  | `#camera mode centre` / `full` | the Pi Camera's mode, from the next start: 640x480 (default) or the full field, 1640x1232 |
+
+  A switch applies from the next scanner start: a running scanner keeps the
+  camera it started with. In grey, the colour bars are five bands: white,
+  yellow and cyan, green and magenta, red and blue, black.
 - **Scenarios:** `camera qr <text>` works on all three (`tools/qemu_harness.py`
   sends it the right way). `tests/qrscan.txt` reads codes with `apps/qrscan`.
+  `tests/picamera.txt` runs on the rig only (its `# Rig only` line makes
+  the QEMU and simulator runners skip it): the real camera, colour bars
+  in a serial screenshot, then a printed code in front of the lens.
 - **Fuzzing:** `tools/fuzz_qr.sh [rounds] [seed]` feeds the decoder
   thousands of images under AddressSanitizer and UBSan (with float-to-int
   overflow checks): noise, real codes

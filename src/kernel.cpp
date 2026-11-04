@@ -33,7 +33,7 @@ CKernel::CKernel (void)
 	m_GUI (&m_Screen),
 	m_AppHost (&m_Keyboard)
 #ifdef ZG_TEST
-	, m_TestShot (&m_Screen, &m_Serial)
+	, m_TestShot (&m_Screen, &m_Serial, &m_PiCamera)
 #endif
 {
 	m_ActLED.Blink (5);	// show we are alive
@@ -141,6 +141,16 @@ boolean CKernel::Initialize (void)
 
 		m_Logger.Write (FromKernel, LogNotice, "zerogap " ZEROGAP_VERSION ", built " __DATE__ " " __TIME__);
 		m_Logger.Write (FromKernel, LogNotice, "Screen %ux%u", m_Screen.GetWidth (), m_Screen.GetHeight ());
+
+#ifndef ZG_TEST
+		// A Pi Camera on the connector? The probe powers it for a moment
+		// only. Test builds keep their synthetic camera (the tests depend
+		// on it) and switch with "#camera pi" (testshot.h).
+		if (m_PiCamera.Probe ())
+		{
+			CZgCamera::Set (&m_PiCamera);
+		}
+#endif
 
 		bOK = m_AppHost.Initialize ();
 	}

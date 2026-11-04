@@ -26,6 +26,7 @@
 #include "kbdindev.h"
 #include "runtime/apphost.h"
 #include "crypto/hwrng.h"
+#include "camera/picamera.h"
 #ifdef ZG_TEST
 #include "testshot.h"
 #endif
@@ -80,6 +81,7 @@ private:
 	CLVGL			m_GUI;
 	CKeyboardIndev		m_Keyboard;
 	CAppHost		m_AppHost;
+	CZgPiCamera		m_PiCamera;	// powered only while it streams
 #ifdef ZG_TEST
 	CTestShot		m_TestShot;
 #endif

@@ -32,6 +32,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  crypto/sha256.o crypto/hwrng.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/qrdecode.o \
+	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 
 ifeq ($(strip $(TEST)),1)
@@ -96,6 +97,7 @@ FORCE:
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
 main.o kernel.o runtime/appstore.o runtime/qrdecode.o: .buildmode
 
-EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d
+EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d \
+	      camera/*.o camera/*.d
 
 -include $(DEPS)

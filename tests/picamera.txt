@@ -1,0 +1,35 @@
+# Needs a test build, and the rig with a Pi Camera Module v2.1 looking at a
+# printed QR code (docs/RIG.md): the real camera (src/camera/), not the
+# synthetic one. The code's content is not known here: any code will do.
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line (neither QEMU nor the simulator has a Pi Camera).
+expect Keyboard attached 60
+expect launcher ready 60
+send #camera pi
+expect picamera: IMX219 found \(model 0219\) 10
+expect camera: pi 5
+# colour bars first: the sensor, the link and the grey conversion, seen
+# without depending on the scene (5 bands: white, yellow+cyan, green+magenta,
+# red+blue, black, each pair the same grey)
+send #camera pattern 2
+expect test pattern 2 5
+# tiles: dice39, gallery, hello, qrscan
+key right
+key right
+key right
+key ret
+expect qrscan ready
+expect picamera: streaming 640x480 10
+expect picamera: \d+ frames in \d+ ms: (29|30)\.\d frame/s, 480 lines 15
+wait 1
+serialshot 01-colour-bars
+# the scene: the automatic exposure settles, and the code is read
+send #camera pattern 0
+expect test pattern 0 5
+expect qrscan: code 1, \d+ bytes 30
+serialshot 02-code
+key meta_l
+expect picamera: stopped: \d+ frames started 10
+expect launcher ready
+send #camera synth
+expect camera: synthetic 5

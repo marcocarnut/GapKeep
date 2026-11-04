@@ -59,6 +59,12 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
   wedged although its service says active: `sudo systemctl restart
   zerogap-gadget` (or `sudo tools/rig/gadget.sh up`). Seen once, on
   2026-11-04, after the rig had been up for two days.
+- **Camera:** a Pi Camera Module v2.1 is plugged into the Zero, looking
+  at a printed QR code. `tests/picamera.txt` (rig only) uses it through
+  `#camera pi` (docs/CAMERA.md). Other scenarios keep the synthetic
+  camera, which test kernels start with. In this setup, no QR code was in
+  the camera's view on 2026-11-04: it showed the ceiling
+  (docs/camera/IMPLEMENTATION.md).
 - Test commands on the serial line (`#camera ...`, `#crash ...`) are read
   by polling the UART's 16-byte FIFO from the main loop, so `zgrig.py`
   sends long lines in pieces of 12 bytes, 0.6 s apart.
