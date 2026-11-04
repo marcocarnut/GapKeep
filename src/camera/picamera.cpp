@@ -60,7 +60,9 @@ CZgPiCamera::CZgPiCamera (void)
 	m_bExposureChanged (FALSE),
 	m_nNextErrorLog (0),
 	m_nErrorsSeen (0),
-	m_nFramesShown (0)
+	m_nFramesShown (0),
+	m_nGreyTicks (0),
+	m_nMaxGreyTicks (0)
 {
 	// the pins are only claimed here; PowerUp() drives them
 	m_Power.AssignPin (PowerPin);
@@ -274,12 +276,16 @@ boolean CZgPiCamera::StartStreaming (void)
 	m_nNextErrorLog = 0;
 	m_nErrorsSeen = 0;
 	m_nFramesShown = 0;
+	m_nGreyTicks = 0;
+	m_nMaxGreyTicks = 0;
 	m_nSkip = 2;
 
 	pLogger->Write (FromCamera, LogNotice,
-			"streaming %ux%u RAW8 (%s) on 2 lanes, %u lines per frame, exposure %u lines%s",
+			"streaming %ux%u RAW8 (%s) on 2 lanes, %u lines per frame, exposure %u lines,"
+			" %u buffers of %u KiB, grey %ux%u%s",
 			m_pMode->nWidth, m_pMode->nHeight, m_pMode->pName, CZgIMX219::FrameLength,
-			m_nExposure, m_nTestPattern != 0 ? ", test pattern" : "");
+			m_nExposure, CZgUnicam::Buffers, m_nStride * m_pMode->nHeight / 1024,
+			m_nWidth, m_nHeight, m_nTestPattern != 0 ? ", test pattern" : "");
 	return TRUE;
 }
 
@@ -301,9 +307,12 @@ void CZgPiCamera::Stop (void)
 	m_bStreaming = FALSE;
 
 	CLogger::Get ()->Write (FromCamera, LogNotice,
-		"stopped: %u frames started, %u complete, %u shown, %u replaced unread, %u incomplete",
+		"stopped: %u frames started, %u complete, %u shown, %u replaced unread, %u incomplete;"
+		" grey in %u us each on average, %u us at most",
 		m_Unicam.GetFramesStarted (), m_Unicam.GetFramesCompleted (), m_nFramesShown,
-		m_Unicam.GetFramesNotTaken (), m_Unicam.GetFramesIncomplete ());
+		m_Unicam.GetFramesNotTaken (), m_Unicam.GetFramesIncomplete (),
+		m_nFramesShown > 0 ? (unsigned) (m_nGreyTicks * 1000000 / CLOCKHZ / m_nFramesShown) : 0,
+		(unsigned) (m_nMaxGreyTicks * 1000000ULL / CLOCKHZ));
 }
 
 const char *CZgPiCamera::GetError (void)
@@ -336,7 +345,14 @@ const u8 *CZgPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *
 	const u8 *pRaw = m_Unicam.TakeFrame ();
 	if (pRaw != 0)
 	{
+		unsigned long long nStart = CTimer::GetClockTicks64 ();
 		ToGrey (pRaw);
+		unsigned nTicks = (unsigned) (CTimer::GetClockTicks64 () - nStart);
+		m_nGreyTicks += nTicks;
+		if (nTicks > m_nMaxGreyTicks)
+		{
+			m_nMaxGreyTicks = nTicks;
+		}
 		m_Unicam.ReleaseFrame ();
 		m_nSerial++;
 		m_nFramesShown++;

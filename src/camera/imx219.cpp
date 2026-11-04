@@ -69,26 +69,53 @@ static const TRegWrite Mode[] =
 	{0x0309, 1, {0x08}},		// OPPXCK_DIV: 8 bits per pixel
 	{0x018C, 2, {0x08, 0x08}},	// CSI_DATA_FORMAT_A: RAW8
 
-	// D: the readout window and output size come from the mode
-	// (Configure); both modes bin 2x2 in the analogue domain and are
-	// turned by 180 degrees (the module is mounted upside down)
+	// D: the readout window, output size and binning come from the mode
+	// (Configure); every mode is turned by 180 degrees (the module is
+	// mounted upside down)
 	{0x0162, 2, {0x0D, 0x78}},	// LINE_LENGTH_A 3448
 	{0x0170, 1, {0x01}},		// X_ODD_INC_A
 	{0x0171, 1, {0x01}},		// Y_ODD_INC_A
 	{0x0172, 1, {0x03}},		// IMG_ORIENTATION_A: both flips
-	{0x0174, 1, {0x03}},		// BINNING_MODE_H_A: x2 analogue
-	{0x0175, 1, {0x03}},		// BINNING_MODE_V_A
 
 	// E: frame length (exposure, gains and the test pattern follow, from
 	// the caller's values)
 	{0x0160, 2, {CZgIMX219::FrameLength >> 8, CZgIMX219::FrameLength & 0xFF}},
 };
 
+// Every window is centred on the array's centre (1640, 1232) and starts
+// on an even pixel, so each 2x2 tile is one Bayer quad.
+//
 // The recommended mode: the centre 1280x960, binned (SPEC 1, 4.3 D).
-const TZgIMX219Mode CZgIMX219::ModeCentre = {"centre", 1000, 2279, 752, 1711, 640, 480};
+const TZgIMX219Mode CZgIMX219::ModeCentre = {"centre", 1000, 2279, 752, 1711, 640, 480, 3};
 // The whole array, binned (SPEC 6.7): 6.6 times the data, the full field
 // of view.
-const TZgIMX219Mode CZgIMX219::ModeFull = {"full", 0, 3279, 0, 2463, 1640, 1232};
+const TZgIMX219Mode CZgIMX219::ModeFull = {"full", 0, 3279, 0, 2463, 1640, 1232, 3};
+// The centre 1280x960 again, not binned: twice the detail of "centre".
+const TZgIMX219Mode CZgIMX219::ModeDetail = {"detail", 1000, 2279, 752, 1711, 1280, 960, 0};
+// The centre 2560x1920 (78 % of the width), binned to 1280x960.
+const TZgIMX219Mode CZgIMX219::ModeWide = {"wide", 360, 2919, 272, 2191, 1280, 960, 3};
+// The centre 1640x1232 (half the width), not binned.
+const TZgIMX219Mode CZgIMX219::ModeMid = {"mid", 820, 2459, 616, 1847, 1640, 1232, 0};
+
+static const TZgIMX219Mode *const Modes[] =
+{
+	&CZgIMX219::ModeCentre, &CZgIMX219::ModeFull, &CZgIMX219::ModeDetail,
+	&CZgIMX219::ModeWide, &CZgIMX219::ModeMid
+};
+
+const char CZgIMX219::ModeNames[] = "centre|full|detail|wide|mid";
+
+const TZgIMX219Mode *CZgIMX219::GetMode (const char *pName)
+{
+	for (unsigned i = 0; i < sizeof Modes / sizeof Modes[0]; i++)
+	{
+		if (strcmp (pName, Modes[i]->pName) == 0)
+		{
+			return Modes[i];
+		}
+	}
+	return 0;
+}
 
 CZgIMX219::CZgIMX219 (CI2CMaster *pI2C)
 :	m_pI2C (pI2C),
@@ -197,6 +224,8 @@ boolean CZgIMX219::Configure (const TZgIMX219Mode &rMode, unsigned nExposure, un
 		Values[2 * i + 1] = Window[i] & 0xFF;
 	}
 	if (   !Write (0x0164, Values, sizeof Values)
+	    || !Write8 (0x0174, rMode.nBinning)		// BINNING_MODE_H_A
+	    || !Write8 (0x0175, rMode.nBinning)		// BINNING_MODE_V_A
 	    || !Write16 (0x0624, rMode.nWidth)		// TP_WINDOW_WIDTH
 	    || !Write16 (0x0626, rMode.nHeight))	// TP_WINDOW_HEIGHT
 	{

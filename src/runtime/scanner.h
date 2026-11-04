@@ -90,6 +90,8 @@ private:
 
 	// for the log, when scanning stops: how long decoding takes here
 	unsigned m_nFrames, m_nDecodes;
+	unsigned m_nFound;			// decodes that found a code
+	unsigned long long m_nSideSum;		// their sides, in frame pixels
 	unsigned long long m_nDecodeTicks, m_nMaxDecodeTicks;
 
 	static CZgScanner *s_pActive;		// the scanner that has the camera

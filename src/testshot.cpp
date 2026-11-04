@@ -145,11 +145,16 @@ void CTestShot::Camera (const char *pArgs)
 		}
 		return;
 	}
-	if (strcmp (pArgs, "mode centre") == 0 || strcmp (pArgs, "mode full") == 0)
+	if (strncmp (pArgs, "mode ", 5) == 0)
 	{
-		boolean bFull = pArgs[5] == 'f';
-		m_pPiCamera->SetMode (bFull ? &CZgIMX219::ModeFull : &CZgIMX219::ModeCentre);
-		pLogger->Write ("camera", LogNotice, "pi mode %s (from the next start)", pArgs + 5);
+		const TZgIMX219Mode *pMode = CZgIMX219::GetMode (pArgs + 5);
+		if (pMode == 0)
+		{
+			pLogger->Write ("camera", LogWarning, "#camera mode %s", CZgIMX219::ModeNames);
+			return;
+		}
+		m_pPiCamera->SetMode (pMode);
+		pLogger->Write ("camera", LogNotice, "pi mode %s (from the next start)", pMode->pName);
 		return;
 	}
 	if (strncmp (pArgs, "pattern ", 8) == 0)
@@ -195,7 +200,7 @@ void CTestShot::Camera (const char *pArgs)
 	else
 	{
 		pLogger->Write ("camera", LogWarning,
-				"#camera qr <text> | scene | none | synth | pi | pattern <n> | mode centre|full");
+				"#camera qr <text> | scene | none | synth | pi | pattern <n> | mode <name>");
 		return;
 	}
 	CZgCamera::Set (&m_Camera);

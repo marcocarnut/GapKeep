@@ -8,6 +8,7 @@
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
+#include <math.h>
 #include <assert.h>
 
 CZgCamera *CZgCamera::s_pCamera = 0;
@@ -63,6 +64,8 @@ CZgScanner::CZgScanner (void)
 	m_nCornersUntil (0),
 	m_nFrames (0),
 	m_nDecodes (0),
+	m_nFound (0),
+	m_nSideSum (0),
 	m_nDecodeTicks (0),
 	m_nMaxDecodeTicks (0)
 {
@@ -114,7 +117,8 @@ boolean CZgScanner::Start (void)
 	m_pLast = 0;
 	m_nLastLength = 0;
 	m_nCornersUntil = 0;
-	m_nFrames = m_nDecodes = 0;
+	m_nFrames = m_nDecodes = m_nFound = 0;
+	m_nSideSum = 0;
 	m_nDecodeTicks = m_nMaxDecodeTicks = 0;
 
 	return TRUE;
@@ -132,11 +136,16 @@ void CZgScanner::Stop (void)
 
 	if (m_nDecodes > 0)
 	{
+		// "found": decodes that found a code, and its average side in
+		// frame pixels (how large the camera sees it)
 		CLogger::Get ()->Write ("scanner", LogNotice,
-			"%u frames, %u decoded, %u ms each on average, %u ms at most",
+			"%u frames, %u decoded, %u ms each on average, %u ms at most;"
+			" %u found, %u px side in %ux%u",
 			m_nFrames, m_nDecodes,
 			(unsigned) (m_nDecodeTicks / m_nDecodes / (CLOCKHZ / 1000)),
-			(unsigned) (m_nMaxDecodeTicks / (CLOCKHZ / 1000)));
+			(unsigned) (m_nMaxDecodeTicks / (CLOCKHZ / 1000)),
+			m_nFound, m_nFound > 0 ? (unsigned) (m_nSideSum / m_nFound) : 0,
+			m_nPreviewWidth, m_nPreviewHeight);
 	}
 	assert (s_pActive == this);
 	s_pActive = 0;
@@ -227,6 +236,15 @@ unsigned CZgScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 
 	const TZgQRCode &rCode = Codes[0];
 	memcpy (m_Corners, rCode.Corners, sizeof m_Corners);
+	m_nFound++;
+	double fSides = 0;
+	for (int k = 0; k < 4; k++)
+	{
+		double dx = m_Corners[(k + 1) % 4][0] - m_Corners[k][0];
+		double dy = m_Corners[(k + 1) % 4][1] - m_Corners[k][1];
+		fSides += sqrt (dx * dx + dy * dy);
+	}
+	m_nSideSum += (unsigned) (fSides / 4);
 	m_nCornersUntil = nDone + OutlineTicks;
 
 	boolean bSame =    m_pLast != 0 && m_nLastLength == rCode.nLength

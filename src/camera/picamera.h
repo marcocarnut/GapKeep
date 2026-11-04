@@ -43,9 +43,8 @@ public:
 	// the automatic exposure rests (the pattern does not depend on it).
 	void SetTestPattern (unsigned nPattern);
 
-	// The sensor's mode (imx219.h), from the next Start(): the centre at
-	// 640x480 (the default: 320x240 grey), or the whole field at
-	// 1640x1232 (820x616 grey).
+	// The sensor's mode (imx219.h), from the next Start(); the grey
+	// frame is half its size in each direction.
 	void SetMode (const TZgIMX219Mode *pMode)	{ m_pMode = pMode; }
 
 	boolean Start (void);
@@ -100,6 +99,8 @@ private:
 	unsigned long long m_nNextErrorLog;
 	u32 m_nErrorsSeen;
 	unsigned m_nFramesShown;
+	unsigned long long m_nGreyTicks;	// time spent in ToGrey, and the most
+	unsigned m_nMaxGreyTicks;
 };
 
 #endif
