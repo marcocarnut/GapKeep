@@ -15,10 +15,14 @@ CZgSynthCamera::CZgSynthCamera (void)
 :	m_Mode (ModeScene),
 	m_bStreaming (FALSE),
 	m_pPicture (new u8[FrameWidth * FrameHeight]),
+	m_nPictureWidth (FrameWidth),
+	m_nPictureHeight (FrameHeight),
 	m_pFrame (new u8[FrameWidth * FrameHeight]),
-	m_pLive (0),
-	m_nLiveWidth (0),
-	m_nLiveHeight (0),
+	m_Field (ZgFieldCenter),
+	m_pSource (0),
+	m_nSourceSize (0),
+	m_nSourceWidth (0),
+	m_nSourceHeight (0),
 	m_nSerial (0),
 	m_nLiveSerial (0),
 	m_nTakenLive (0),
@@ -32,7 +36,7 @@ CZgSynthCamera::~CZgSynthCamera (void)
 {
 	delete [] m_pPicture;
 	delete [] m_pFrame;
-	delete [] m_pLive;
+	delete [] m_pSource;
 }
 
 const char *CZgSynthCamera::GetMode (void) const
@@ -51,6 +55,8 @@ const char *CZgSynthCamera::GetMode (void) const
 // A soft diagonal gradient, the "room" the camera looks at.
 void CZgSynthCamera::DrawScene (void)
 {
+	m_nPictureWidth = FrameWidth;
+	m_nPictureHeight = FrameHeight;
 	for (unsigned y = 0; y < FrameHeight; y++)
 	{
 		for (unsigned x = 0; x < FrameWidth; x++)
@@ -156,55 +162,109 @@ boolean CZgSynthCamera::SetQR (const u8 *pData, unsigned nLength)
 	return TRUE;
 }
 
-boolean CZgSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
+// A picture or a live frame keeps its own resolution; each frame is made
+// from it as the field asks, as a real camera's would be: the middle at
+// full detail, or all of it, averaged down (less detail per degree).
+boolean CZgSynthCamera::SetSource (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
+				   unsigned nMaxSide)
 {
-	if (nWidth == 0 || nHeight == 0 || nWidth > 8192 || nHeight > 8192)
+	if (nWidth == 0 || nHeight == 0 || nWidth > nMaxSide || nHeight > nMaxSide)
 	{
 		return FALSE;
 	}
 
-	// scaled to fit (nearest pixel), centred on black
-	memset (m_pPicture, 0, FrameWidth * FrameHeight);
-	unsigned nW = FrameWidth, nH = nHeight * FrameWidth / nWidth;
-	if (nH > FrameHeight)
+	if (m_pSource == 0 || nWidth * nHeight > m_nSourceSize)
 	{
-		nH = FrameHeight;
-		nW = nWidth * FrameHeight / nHeight;
+		delete [] m_pSource;
+		m_pSource = new u8[nWidth * nHeight];
+		m_nSourceSize = nWidth * nHeight;
 	}
-	if (nW == 0) nW = 1;
-	if (nH == 0) nH = 1;
-	unsigned nX0 = (FrameWidth - nW) / 2, nY0 = (FrameHeight - nH) / 2;
-	for (unsigned y = 0; y < nH; y++)
+	memcpy (m_pSource, pGrey, nWidth * nHeight);
+	m_nSourceWidth = nWidth;
+	m_nSourceHeight = nHeight;
+	return TRUE;
+}
+
+void CZgSynthCamera::Derive (void)
+{
+	unsigned W = m_nSourceWidth, H = m_nSourceHeight;
+	if (m_Field == ZgFieldCenter || (W <= FrameWidth && H <= FrameHeight))
 	{
-		const u8 *pRow = pGrey + (y * nHeight / nH) * nWidth;
-		u8 *pOut = m_pPicture + (nY0 + y) * FrameWidth + nX0;
-		for (unsigned x = 0; x < nW; x++)
+		// the middle, pixel for pixel
+		unsigned w = W < FrameWidth ? W : FrameWidth;
+		unsigned h = H < FrameHeight ? H : FrameHeight;
+		unsigned x0 = (W - w) / 2, y0 = (H - h) / 2;
+		for (unsigned y = 0; y < h; y++)
 		{
-			pOut[x] = pRow[x * nWidth / nW];
+			memcpy (m_pPicture + y * w, m_pSource + (y0 + y) * W + x0, w);
 		}
+		m_nPictureWidth = w;
+		m_nPictureHeight = h;
+		return;
 	}
 
+	// all of it, scaled down to fit, each pixel the average of its area
+	unsigned w = FrameWidth, h = H * FrameWidth / W;
+	if (h > FrameHeight)
+	{
+		h = FrameHeight;
+		w = W * FrameHeight / H;
+	}
+	if (w == 0) w = 1;
+	if (h == 0) h = 1;
+	for (unsigned y = 0; y < h; y++)
+	{
+		unsigned sy0 = y * H / h, sy1 = (y + 1) * H / h;
+		for (unsigned x = 0; x < w; x++)
+		{
+			unsigned sx0 = x * W / w, sx1 = (x + 1) * W / w;
+			unsigned nSum = 0;
+			for (unsigned sy = sy0; sy < sy1; sy++)
+			{
+				const u8 *pRow = m_pSource + sy * W;
+				for (unsigned sx = sx0; sx < sx1; sx++)
+				{
+					nSum += pRow[sx];
+				}
+			}
+			m_pPicture[y * w + x] = (u8) (nSum / ((sy1 - sy0) * (sx1 - sx0)));
+		}
+	}
+	m_nPictureWidth = w;
+	m_nPictureHeight = h;
+}
+
+void CZgSynthCamera::SetField (TZgCameraField Field)
+{
+	m_Field = Field;
+	if (m_Mode == ModePicture)
+	{
+		Derive ();
+	}
+	if (m_Mode == ModeLive)
+	{
+		m_nTakenLive = m_nLiveSerial - 1;	// the last frame is made again
+	}
+}
+
+boolean CZgSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
+{
+	if (!SetSource (pGrey, nWidth, nHeight, MaxPictureSide))
+	{
+		return FALSE;
+	}
+	Derive ();
 	m_Mode = ModePicture;
 	return TRUE;
 }
 
 boolean CZgSynthCamera::PushFrame (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
 {
-	if (nWidth == 0 || nHeight == 0 || nWidth > MaxPushSide || nHeight > MaxPushSide)
+	if (!SetSource (pGrey, nWidth, nHeight, MaxPushSide))
 	{
 		return FALSE;
 	}
-
-	if (m_pLive == 0 || nWidth * nHeight != m_nLiveWidth * m_nLiveHeight)
-	{
-		delete [] m_pLive;
-		m_pLive = new u8[nWidth * nHeight];
-	}
-	memcpy (m_pLive, pGrey, nWidth * nHeight);
-	m_nLiveWidth = nWidth;
-	m_nLiveHeight = nHeight;
 	m_nLiveSerial++;
-
 	m_Mode = ModeLive;
 	return TRUE;
 }
@@ -235,7 +295,7 @@ void CZgSynthCamera::MakeFrame (void)
 {
 	// the picture plus noise of +-4 levels (xorshift32)
 	u32 n = m_nNoise;
-	for (unsigned i = 0; i < FrameWidth * FrameHeight; i++)
+	for (unsigned i = 0; i < m_nPictureWidth * m_nPictureHeight; i++)
 	{
 		n ^= n << 13;
 		n ^= n >> 17;
@@ -259,6 +319,7 @@ const u8 *CZgSynthCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigne
 		if (m_nTakenLive != m_nLiveSerial)
 		{
 			m_nTakenLive = m_nLiveSerial;
+			Derive ();
 			m_nSerial++;
 		}
 		if (*pSerial == m_nSerial)
@@ -266,9 +327,9 @@ const u8 *CZgSynthCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigne
 			return 0;
 		}
 		*pSerial = m_nSerial;
-		*pWidth = m_nLiveWidth;
-		*pHeight = m_nLiveHeight;
-		return m_pLive;
+		*pWidth = m_nPictureWidth;
+		*pHeight = m_nPictureHeight;
+		return m_pPicture;
 	}
 
 	unsigned long long nNow = CTimer::GetClockTicks64 ();
@@ -284,7 +345,7 @@ const u8 *CZgSynthCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigne
 	}
 
 	*pSerial = m_nSerial;
-	*pWidth = FrameWidth;
-	*pHeight = FrameHeight;
+	*pWidth = m_nPictureWidth;
+	*pHeight = m_nPictureHeight;
 	return m_pFrame;
 }

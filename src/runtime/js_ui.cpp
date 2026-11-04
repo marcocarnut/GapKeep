@@ -916,6 +916,45 @@ SETTER (SetDetect)
 	return 0;
 }
 
+static void StartScan (TZgNode *pNode);
+
+// Scanner "field": "center" (the middle of the camera's view, at full
+// detail) or "full" (all of it, less detailed). A running scanner restarts
+// with the new field.
+SETTER (SetField)
+{
+	const char *p = JS_IsString (v) ? JS_ToCString (ctx, v) : 0;
+	TZgCameraField Field = ZgFieldCenter;
+	boolean bOK = p != 0 && (strcmp (p, "center") == 0 || strcmp (p, "full") == 0);
+	if (bOK && strcmp (p, "full") == 0)
+	{
+		Field = ZgFieldFull;
+	}
+	JS_FreeCString (ctx, p);
+	if (!bOK)
+	{
+		JS_ThrowTypeError (ctx, "%s: \"center\" or \"full\" expected", pProp);
+		return -1;
+	}
+
+	CZgScanner *pScanner = pNode->pScan->pScanner;
+	if (Field != pScanner->GetField ())
+	{
+		pScanner->SetField (Field);
+		if (pScanner->IsScanning ())
+		{
+			pScanner->Stop ();
+			StartScan (pNode);
+		}
+	}
+	return 0;
+}
+
+GETTER (GetField)
+{
+	return JS_NewString (ctx, pNode->pScan->pScanner->GetField () == ZgFieldFull ? "full" : "center");
+}
+
 GETTER (GetDetect)
 {
 	unsigned nDetectors = pNode->pScan->pScanner->GetDetectors ();
@@ -1642,6 +1681,7 @@ static const TProp Props[] =
 	{"modules",     T (WQRCode), 0, GetQRModules},
 	{"src",         T (WImage), SetImageSrc, 0},
 	{"detect",      T (WScanner), SetDetect, GetDetect},
+	{"field",       T (WScanner), SetField, GetField},
 };
 static const unsigned PropCount = sizeof Props / sizeof Props[0];
 

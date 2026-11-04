@@ -68,6 +68,16 @@ camera (camera.h) -> greyscale frames -> CZgScanner (scanner.cpp) -> onDetect({ 
   an animated code (several parts, shown in turn) gets each part once each
   time it comes round, and puts them together itself: that is data, not
   pixels.
+- **The field** (`field` on the scanner) is what part of the camera's view
+  the frames show. `"center"`, the default: the middle at full detail,
+  640×480 grey (on the Pi camera the unbinned centre of the sensor, about
+  26° across: about 19 cm wide at 40 cm). `"full"`: all of the camera's
+  view, with less detail per degree (on the Pi, 820×616 grey over about
+  62°), so a code must take up more of the picture to be read. The
+  measurements behind the default are in
+  [camera/IMPLEMENTATION.md](camera/IMPLEMENTATION.md). The simulator and
+  the IDE do the same with pictures and webcam frames: the middle 640×480
+  pixel for pixel, or the whole picture averaged down to fit 640×480.
 - **The view** is the frame scaled to fit the widget (320×240 unless set), in
   grey, with a green outline around the code just read.
 - **One scanner at a time** has the camera; another gets the error "the

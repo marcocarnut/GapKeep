@@ -306,14 +306,16 @@ throws). See [CAMERA.md](CAMERA.md).
 | Property / method | Value | Notes |
 | --- | --- | --- |
 | `detect` | list of detector names | *Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. |
+| `field` | `"center"`, `"full"` | *Readable*. What part of the camera's view the scanner sees. `"center"` (the default): the middle, at full detail: about a 26° view on the Pi camera, best for a code at 30-60 cm or a phone at arm's length. `"full"`: all of the camera's view, with less detail per degree, so codes must be larger in the picture. Changing it restarts a running scanner. |
 | `scanning` | boolean | *Read-only*. Whether the camera is on for this scanner. |
 | `start()` |  | Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created. |
 | `stop()` |  | Turns the camera off. Deleting the widget, or the app ending, does too. |
 | `onDetect` | handler | Event `"detect"`. Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. |
 | `onError` | handler | Event `"error"`. The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. |
 
-The view is 320×240 unless you set `width` and `height`; the picture is
-scaled to fit, and a green outline marks what was just found. One scanner
+The view is 320×240 unless you set `width` and `height`; the picture
+(640×480 for `"center"`) is scaled to fit, and a green outline marks what
+was just found. One scanner
 at a time can have the camera.
 
 ```js

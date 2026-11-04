@@ -45,6 +45,16 @@ check("detect may be emptied", () => {
   eq(first.detect, ["qr"], "detect");
 });
 
+check("field", () => {
+  eq(first.field, "center", "default");
+  first.field = "full";
+  eq(first.field, "full", "full");
+  eq(first.scanning, true, "still scanning after the restart");
+  first.field = "center";
+  eq(first.field, "center", "center");
+  throws(() => (first.field = "wide"), /"center" or "full"/, "bad field");
+});
+
 // a second scanner: the camera is taken
 const second = new ui.Scanner({
   detect: ["qr"], width: 160, height: 120,

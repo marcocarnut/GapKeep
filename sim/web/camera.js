@@ -18,7 +18,11 @@ const $ = (id) => document.getElementById (id);
 
 const FRAME_MS = 1000 / 15;
 const PART_MS = 500;
-const WEBCAM_W = 640, WEBCAM_H = 480;
+// Webcam frames go to zerogap at their own resolution, up to 1920 a side
+// (zerogap.js / synthcam.h), and zerogap makes each frame as the Pi camera
+// would: the middle 640x480 pixel for pixel, or the whole picture averaged
+// down (the scanner's "field").
+const WEBCAM_W = 1920, WEBCAM_H = 1080, MAX_SIDE = 1920;
 
 export class CameraBar {
   // getMachine: () => the running Zerogap or null; log: (text, isError) => void
@@ -122,8 +126,7 @@ export class CameraBar {
     this.video.playsInline = true;
     this.video.srcObject = this.stream;
     await this.video.play ().catch (() => {});
-    const track = this.stream.getVideoTracks ()[0];
-    $("camera-info").textContent = track ? track.label : "";
+    $("camera-info").textContent = "";
   }
 
   stopWebcam () {
@@ -173,16 +176,20 @@ export class CameraBar {
         zg.camera ("scene");
         break;
       }
-      const canvas = new OffscreenCanvas (WEBCAM_W, WEBCAM_H);
-      const ctx = canvas.getContext ("2d", { willReadFrequently: true });
+      let canvas = null, ctx = null;
       this.timer = setInterval (() => {
         const v = this.video;
-        if (!v || v.readyState < 2 || this.getMachine () !== zg) return;
-        // fill the frame, keeping the aspect (crop the sides of wide webcams)
-        const s = Math.max (WEBCAM_W / v.videoWidth, WEBCAM_H / v.videoHeight);
-        const w = v.videoWidth * s, h = v.videoHeight * s;
-        ctx.drawImage (v, (WEBCAM_W - w) / 2, (WEBCAM_H - h) / 2, w, h);
-        zg.cameraPush (ctx.getImageData (0, 0, WEBCAM_W, WEBCAM_H).data, WEBCAM_W, WEBCAM_H);
+        if (!v || v.readyState < 2 || !v.videoWidth || this.getMachine () !== zg) return;
+        // the webcam's own resolution (scaled down only beyond MAX_SIDE)
+        const s = Math.min (1, MAX_SIDE / Math.max (v.videoWidth, v.videoHeight));
+        const w = Math.round (v.videoWidth * s), h = Math.round (v.videoHeight * s);
+        if (!canvas || canvas.width !== w || canvas.height !== h) {
+          canvas = new OffscreenCanvas (w, h);
+          ctx = canvas.getContext ("2d", { willReadFrequently: true });
+          $("camera-info").textContent = `${v.videoWidth}x${v.videoHeight}`;
+        }
+        ctx.drawImage (v, 0, 0, w, h);
+        zg.cameraPush (ctx.getImageData (0, 0, w, h).data, w, h);
       }, FRAME_MS);
       break;
     }

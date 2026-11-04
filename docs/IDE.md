@@ -84,9 +84,16 @@ with `ui.Scanner` ([CAMERA.md](CAMERA.md)):
   is a code, shown in turn twice a second: an animated code, for apps that
   read data in parts.
 - **Webcam**: your computer's camera (the browser asks first), 15 frames a
-  second. Hold a code up to it.
+  second, at up to 1920×1080. Hold a code up to it. As on the Pi, the
+  scanner sees the middle 640×480 at full detail by default (a narrow
+  view: hold the code in the middle), or the whole picture with
+  `field: "full"`.
 - **Picture...**: an image file, in any format the browser reads.
 - **No camera**: as a Pi without one.
+
+Example apps you already have in the IDE stay as they were when it first
+added them: to get a newer version of one (say `qrscan`, which now has a
+**Wide view** button), delete it and click **Examples**.
 
 The setting stays across reboots and reloads (the webcam and the picture
 are asked for again). zerogap decodes the codes itself, with the decoder it

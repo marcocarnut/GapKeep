@@ -382,6 +382,10 @@ ui:
           readable: true
           value: 'list of detector names'
           md: '*Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
+        - name: field
+          ts: '"center" | "full"'
+          readable: true
+          md: '*Readable*. What part of the camera''s view the scanner sees. `"center"` (the default): the middle, at full detail: about a 26° view on the Pi camera, best for a code at 30-60 cm or a phone at arm''s length. `"full"`: all of the camera''s view, with less detail per degree, so codes must be larger in the picture. Changing it restarts a running scanner.'
         - {name: scanning, ts: boolean, readonly: true, md: '*Read-only*. Whether the camera is on for this scanner.'}
       methods:
         - {name: start, signature: start(), ts: '() => void', md: 'Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created.'}
@@ -396,8 +400,9 @@ ui:
           ev_ts: '{ type: "error"; target: Scanner; reason: string }'
           md: 'The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again.'
       after_md: |
-        The view is 320×240 unless you set `width` and `height`; the picture is
-        scaled to fit, and a green outline marks what was just found. One scanner
+        The view is 320×240 unless you set `width` and `height`; the picture
+        (640×480 for `"center"`) is scaled to fit, and a green outline marks what
+        was just found. One scanner
         at a time can have the camera.
 
         ```js

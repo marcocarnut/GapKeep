@@ -28,6 +28,7 @@
 
 #include <circle/types.h>
 #include "qrdecode.h"
+#include "camera.h"
 
 #define ZG_DETECT_QR	(1u << 0)
 
@@ -45,6 +46,10 @@ public:
 	static const char *GetDetectorName (unsigned nIndex, unsigned *pBit = 0);
 
 	void SetDetectors (unsigned nDetectors)	{ m_nDetectors = nDetectors; }
+
+	// The camera's field (camera.h), from the next Start().
+	void SetField (TZgCameraField Field)		{ m_Field = Field; }
+	TZgCameraField GetField (void) const		{ return m_Field; }
 	unsigned GetDetectors (void) const	{ return m_nDetectors; }
 
 	// FALSE: the camera can't start (GetError says why)
@@ -75,6 +80,7 @@ private:
 
 private:
 	unsigned m_nDetectors;			// ZG_DETECT_* bits
+	TZgCameraField m_Field;
 	CZgCamera *m_pCamera;			// while scanning
 	const char *m_pError;
 	unsigned m_nFrameSerial;

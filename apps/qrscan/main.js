@@ -60,6 +60,16 @@ new ui.Button (buttons, {
     content.text = "";
   },
 });
+// the camera's field: the middle at full detail (the default), or all of
+// its view with less detail (for codes that fill less of it, use "center")
+const field = new ui.Button (buttons, {
+  text: "Wide view",
+  onClick: () => {
+    scanner.field = scanner.field === "center" ? "full" : "center";
+    field.text = scanner.field === "center" ? "Wide view" : "Detail";
+    console.log (`qrscan: field ${scanner.field}`);
+  },
+});
 new ui.Button (buttons, { text: ui.symbols.home + " Back", onClick: () => sys.exit () });
 
 toggle.focus ();

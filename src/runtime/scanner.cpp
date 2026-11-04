@@ -51,6 +51,7 @@ const char *CZgScanner::GetDetectorName (unsigned nIndex, unsigned *pBit)
 
 CZgScanner::CZgScanner (void)
 :	m_nDetectors (0),
+	m_Field (ZgFieldCenter),
 	m_pCamera (0),
 	m_pError (0),
 	m_nFrameSerial (0),
@@ -97,6 +98,7 @@ boolean CZgScanner::Start (void)
 		m_pError = "the camera is in use by another scanner";
 		return FALSE;
 	}
+	pCamera->SetField (m_Field);
 	if (!pCamera->Start ())
 	{
 		m_pError = pCamera->GetError ();

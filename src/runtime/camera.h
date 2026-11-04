@@ -18,10 +18,20 @@
 
 #include <circle/types.h>
 
+// What part of the camera's view frames show (ui.Scanner's "field").
+enum TZgCameraField
+{
+	ZgFieldCenter,		// the middle, at full detail (about 640x480 grey)
+	ZgFieldFull		// all of it, with less detail per degree
+};
+
 class CZgCamera
 {
 public:
 	virtual ~CZgCamera (void) {}
+
+	// From the next Start(). Cameras with one field ignore it.
+	virtual void SetField (TZgCameraField Field)	{ (void) Field; }
 
 	// Starts streaming (the camera's LED goes on). FALSE: it can't; GetError
 	// says why.
