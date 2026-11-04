@@ -1,0 +1,9 @@
+{
+  "id": "clockset",
+  "name": "Clock set (test)",
+  "version": "1.0.0",
+  "description": "Test builds only: sets the clock to fixed instants (tests/totp.txt).",
+  "icon": "settings",
+  "hidden": true,
+  "permissions": ["rtc"]
+}

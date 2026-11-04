@@ -1,0 +1,110 @@
+# Needs a test build (make TEST=1), and the simulator (it uses "launch"):
+# the Authenticator (apps/totp). The clock is set by tests/apps/clockset to
+# 1999999983 s (2033-05-18 03:33:03 UTC), 3 s into the 30 s step 66666666,
+# where RFC 6238's vectors for T = 2000000000 apply, with the RFC's seeds.
+# Codes are logged as the start of their SHA-256, never in clear:
+#   SHA512, 8 digits, step 66666666: 38618901  fc330d33d0c236b0
+#                     step 66666667: 41841313  eef8d29faf6c516b
+#   SHA1,   8 digits, step 66666666: 69279037  309b30280f860aff
+#   SHA256, 8 digits, step 66666666: 90698825  3c863695e5963342
+#   SHA1, 6 digits, JBSWY3DPEHPK3PXP: 890699   10ef2c0fb492cdef
+expect Keyboard attached 60
+expect launcher ready 60
+
+# 1. The clock is not set (it never is at boot): accounts can be added,
+# but no code is shown
+launch totp
+expect totp ready \(clock not set\) 10
+expect totp selftest: \d+ passed, 0 failed 20
+# focus starts on "Scan QR code"
+key ret
+camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
+expect totp: added account 1 \(SHA512, 8 digits, 30 s\), 1 in all 20
+wait 0.5
+shot 01-clock-not-set
+camera scene
+
+# 2. Set the clock (only an app with "rtc" may), then a plain otpauth code
+launch clockset
+expect clockset: set 1999999983 \(2033-05-18T03:33:03.000Z\), set true 10
+launch totp
+expect totp ready \(clock set\) 10
+expect totp selftest: \d+ passed, 0 failed 20
+key ret
+camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
+expect totp: added account 1 \(SHA512, 8 digits, 30 s\), 1 in all 20
+expect totp: account 1, step 66666666, code sha256 fc330d33d0c236b0 5
+camera scene
+
+# 3. A Google Authenticator export with two accounts (tests/totp/make_migration.py)
+key ret
+camera qr otpauth-migration://offline?data=CjgKFDEyMzQ1Njc4OTAxMjM0NTY3ODkwEhFhbGljZUBleGFtcGxlLmNvbRoHRXhhbXBsZSABKAIwAgo3CiAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMhILQUNNRSBDbzpib2IaACACKAIwAhABGAEgACi5YA%3D%3D
+expect totp: export part 1 of 1: 2 added, 0 already there, 0 refused 20
+expect totp: account 2, step 66666666, code sha256 309b30280f860aff 5
+expect totp: account 3, step 66666666, code sha256 3c863695e5963342 5
+camera scene
+
+# 4. Malformed and refused codes: the reason is on screen, nothing is added
+key ret
+camera qr otpauth://hotp/Example:alice?secret=JBSWY3DPEHPK3PXP&counter=1
+expect totp: refused a code: This is an HOTP 20
+camera qr otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PX1&issuer=Example
+expect totp: refused a code: The secret is not valid Base32 20
+wait 0.5
+shot 02-malformed
+camera qr hello, air gap
+expect totp: refused a code: This QR code is not an authenticator key 20
+camera scene
+key esc
+
+# 5. A key typed by hand: Tab to "Type a key"
+key tab
+key ret
+type Typed
+key tab
+type carol
+key tab
+# too short first: refused
+type jbsw y3dp
+key ret
+expect totp: typed key refused: The key is 8 characters long 5
+wait 0.5
+shot 03-type-refused
+type ehpk3pxp
+key ret
+expect totp: added account 4 \(SHA1, 6 digits, 30 s\), 4 in all 5
+expect totp: account 4, step 66666666, code sha256 10ef2c0fb492cdef 5
+wait 0.5
+shot 04-codes
+# Tab past the four buttons (Forget all is enabled now) to the first
+# account; Enter shows its details, Escape closes them
+key tab tab tab tab
+key ret
+wait 0.5
+shot 05-details
+key esc
+
+# 6. The code changes on the period mark (zg:clock every): 3 s before it
+launch clockset
+key ret
+expect clockset: set 2000000007 10
+launch totp
+expect totp ready \(clock set\) 10
+key ret
+camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
+expect totp: account 1, step 66666666, code sha256 fc330d33d0c236b0 5
+expect totp: account 1, step 66666667, code sha256 eef8d29faf6c516b 10
+wait 0.5
+shot 06-next-step
+camera scene
+
+# 7. Forget all (Tab to it, confirm with Tab and Enter)
+key tab tab
+key ret
+key tab
+key ret
+expect totp: forgot all accounts 5
+wait 0.5
+shot 07-forgotten
+key meta_l
+expect launcher ready
