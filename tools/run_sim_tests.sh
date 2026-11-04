@@ -39,8 +39,8 @@ for t in $SCENARIOS; do
 		echo "SKIP  sim:$name   (needs the serial port)"
 		continue
 	fi
-	if grep -q "^camera " "$t" && [ ! -f third_party/quirc/lib/quirc.c ]; then
-		echo "SKIP  sim:$name   (needs the QR decoder, third_party/quirc)"
+	if grep -q "^camera " "$t" && [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ]; then
+		echo "SKIP  sim:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
 	fi
 	if head -1 "$t" | grep -q "Needs a test build"; then

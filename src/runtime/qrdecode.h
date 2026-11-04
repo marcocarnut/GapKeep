@@ -1,10 +1,10 @@
 //
 // qrdecode.h
 //
-// Finds and decodes QR codes in a greyscale image, with quirc
-// (third_party/quirc). The image comes from the camera, so it is untrusted
-// input: quirc is fuzzed (tests/fuzz) and its results are copied out with
-// their lengths checked.
+// Finds and decodes QR codes in a greyscale image, with zxing-cpp
+// (third_party/zxing-cpp, its QR code reader only). The image comes from the
+// camera, so it is untrusted input: the decoder is fuzzed (tests/fuzz) and
+// its results are copied out with their lengths checked.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -13,11 +13,15 @@
 
 #include <circle/types.h>
 
-#define ZG_QR_MAX_PAYLOAD	8896	// quirc's QUIRC_MAX_PAYLOAD
+// more than a QR code holds (7089 digits, version 40-L): longer results are
+// left out
+#define ZG_QR_MAX_PAYLOAD	8896
 
 struct TZgQRCode
 {
-	const u8 *pData;		// valid until the next ZgDecodeQR call
+	const u8 *pData;		// the payload's bytes as encoded, without
+					// character set conversion; valid until the
+					// next ZgDecodeQR call
 	unsigned nLength;
 	int Corners[4][2];		// x, y in the image: top left, top right,
 					// bottom right, bottom left of the symbol

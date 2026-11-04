@@ -41,6 +41,8 @@ if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
 		cp "circle/boot/$f" $OUT/
 	done
 	cp src/kernel.img $OUT/
+	# kernel.img holds zxing-cpp (the QR decoder), whose licence goes with it
+	[ ! -f third_party/zxing-cpp/LICENSE ] || cp third_party/zxing-cpp/LICENSE $OUT/LICENCE.zxing-cpp
 	if [ $OUT = sdcard-standalone ]; then
 		mkdir $OUT/apps
 		for a in apps/*/; do

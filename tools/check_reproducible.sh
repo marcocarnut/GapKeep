@@ -25,6 +25,7 @@ for n in 1 2; do
 	( cd "$dir"			# submodules from the local copies: no network
 	  git config submodule.circle.url "$ROOT/circle"
 	  git config submodule.third_party/quickjs.url "$ROOT/third_party/quickjs"
+	  git config submodule.third_party/zxing-cpp.url "$ROOT/third_party/zxing-cpp"
 	  git -c protocol.file.allow=always submodule -q update --init
 	  git -C circle config submodule.addon/lvgl/lvgl.url "$ROOT/circle/addon/lvgl/lvgl"
 	  git -c protocol.file.allow=always -C circle submodule -q update --init addon/lvgl/lvgl

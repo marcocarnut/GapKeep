@@ -6,7 +6,7 @@
 #   ../lib/lvgl          LVGL with zerogap's configuration
 #   ../lib/quickjs       QuickJS engine
 #   ../lib/fatfs         FatFs, read-only (not for SEALED=1)
-#   ../lib/quirc         the QR decoder, if third_party/quirc is there
+#   ../lib/zxing         the QR decoder, if third_party/zxing-cpp is there
 #                        (without it, QR scanners report "no QR decoder")
 #   ../circle/addon/SDCard  SD card driver (not for SEALED=1)
 #
@@ -31,7 +31,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha256.o crypto/hwrng.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
-	  runtime/scanner.o runtime/qrdecode.o \
+	  runtime/scanner.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 
@@ -61,11 +61,13 @@ LIBS	+= ../lib/fatfs/libfatfs.a \
 	   $(CIRCLEHOME)/addon/SDCard/libsdcard.a
 endif
 
-ifneq ($(wildcard ../third_party/quirc/lib/quirc.c),)
-LIBS	+= ../lib/quirc/libquirc.a
-DEFINE	+= -DZG_HAVE_QUIRC
-QUIRCINCLUDE = -I ../third_party/quirc/lib
-BUILDMODE := $(BUILDMODE)-quirc
+# The QR decoder: zxing-cpp, with src/runtime/qrdecode.cpp, built in
+# ../lib/zxing (C++20, with the C++ library's headers). Without it,
+# qrdecode.cpp is built here and has no decoder.
+ifneq ($(wildcard ../third_party/zxing-cpp/core/src/ReadBarcode.cpp),)
+LIBS	+= ../lib/zxing/libzxing.a
+else
+OBJS	+= runtime/qrdecode.o
 endif
 
 LIBS	+= ../lib/lvgl/liblvgl.a \
@@ -78,7 +80,7 @@ LIBS	+= ../lib/lvgl/liblvgl.a \
 # every file including LVGL headers must see the same configuration
 DEFINE += -DLV_CONF_PATH="<zg_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
-EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src $(QUIRCINCLUDE)
+EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src
 
 include $(CIRCLEHOME)/Rules.mk
 
@@ -95,7 +97,7 @@ FORCE:
 # Recompile what depends on ZG_TEST / ZG_SEALED when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o runtime/qrdecode.o: .buildmode
+main.o kernel.o runtime/appstore.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d

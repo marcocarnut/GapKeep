@@ -6,15 +6,14 @@
 # The patches are in order (0001-..., 0002-...): each applies on top of
 # the ones before it.
 #
-#   tools/apply_patches.sh circle|quirc|zxing-cpp
+#   tools/apply_patches.sh circle|zxing-cpp
 #
 set -e
 cd "$(dirname "$0")/.."
 case "$1" in
 	circle) DIR=circle ;;
-	quirc)  DIR=third_party/quirc ;;
 	zxing-cpp) DIR=third_party/zxing-cpp ;;
-	*)      echo "usage: $0 circle|quirc|zxing-cpp" >&2; exit 2 ;;
+	*)      echo "usage: $0 circle|zxing-cpp" >&2; exit 2 ;;
 esac
 [ -e "$DIR/.git" ] || exit 0		# not checked out
 for p in patches/$1/*.patch; do

@@ -26,8 +26,8 @@ run() {	# scenario, SD card image
 		echo "SKIP  $name   (simulator only: tools/run_sim_tests.sh)"
 		return
 	fi
-	if grep -q "^camera " "$1" && [ ! -f third_party/quirc/lib/quirc.c ]; then
-		echo "SKIP  $name   (needs the QR decoder, third_party/quirc)"
+	if grep -q "^camera " "$1" && [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ]; then
+		echo "SKIP  $name   (needs the QR decoder, third_party/zxing-cpp)"
 		return
 	fi
 	if python3 tools/qemu_harness.py --sd "$2" --out "$OUT/$name" "$1" > "$OUT/$name.log" 2>&1; then
