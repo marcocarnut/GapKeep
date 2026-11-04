@@ -117,6 +117,9 @@ before the first screen. The device logs the work too, without the estimate.
 - **No serial port**: `send` in scenarios fails; test-build serial commands
   (`#shot`, `#crash`) are unavailable.
 - **No USB events**: the keyboard and mouse are always there.
+- **The clock** runs on the host's timer but otherwise as on the device:
+  `Date` counts from 1970 until the Clock app sets it, and `zerogap.txt` on
+  the card is read at boot ([CLOCK.md](CLOCK.md)).
 - **The camera** is synthetic (above); the Pi's has no driver yet
   ([CAMERA.md](CAMERA.md#status)).
 - **No kernel image**: `sys.kernel.build` is `"simulator"` and its `hash` is

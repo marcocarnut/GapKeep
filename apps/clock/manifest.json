@@ -1,0 +1,8 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "version": "0.1.0",
+  "description": "Sets the system clock, its UTC offset and its drift trim.",
+  "icon": "bell",
+  "permissions": ["rtc"]
+}

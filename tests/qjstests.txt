@@ -1,11 +1,5 @@
 # Needs a test build (make TEST=1): QuickJS's own test suite on the target.
 expect Keyboard attached 60
 expect launcher ready 60
-# dice39, gallery, hello, qrscan, crashtest, qjstests
-key right
-key right
-key right
-key right
-key right
-key ret
+tile qjstests
 expect qjstests done: 0 failed 120

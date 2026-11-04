@@ -27,6 +27,11 @@ Scenario file: one command per line, '#' starts a comment.
                                 test build (as on real hardware)
     send <text>                 send a line on the serial port (test builds
                                 take commands: #shot, #crash <kind>)
+    tile <id>                   open that app from the launcher: moves the
+                                focus to its tile (by the order in the
+                                launcher's last "launcher ready: ..." log
+                                line) and presses Enter. Works everywhere.
+    tilefocus <id>              the same, without pressing Enter
     launch <id>                 simulator only: start that app, as the
                                 launcher would
     camera qr <text>            what the camera films (test builds and the
@@ -496,6 +501,16 @@ def run_scenario(m, path, outdir):
             elif cmd == 'moveto':
                 x, y = (screen_coord(m, v, axis) for axis, v in enumerate(rest.split()))
                 m.moveto(x, y)
+            elif cmd in ('tile', 'tilefocus'):
+                app = rest.strip()
+                ready = re.findall(r'launcher ready: ([^\r\n]*)', m.serial()[m.mark:])
+                tiles = ready[-1].split(', ') if ready else []
+                if app not in tiles:
+                    raise SystemExit('%s: no tile %r in the launcher (%s)' % (where, app, ', '.join(tiles)))
+                for _ in range(tiles.index(app)):
+                    m.key('right')
+                if cmd == 'tile':
+                    m.key('ret')
             elif cmd == 'launch':
                 if not hasattr(m, 'launch'):
                     raise SystemExit('%s: launch works on the simulator only' % where)

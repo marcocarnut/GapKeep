@@ -13,11 +13,7 @@ expect camera: pi 5
 # red+blue, black, each pair the same grey)
 send #camera pattern 2
 expect test pattern 2 5
-# tiles: dice39, gallery, hello, qrscan
-key right
-key right
-key right
-key ret
+tile qrscan
 expect qrscan ready
 expect picamera: streaming 1280x960 10
 expect picamera: \d+ frames in \d+ ms: (29|30)\.\d frame/s, 960 lines 15

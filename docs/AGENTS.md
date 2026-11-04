@@ -87,8 +87,10 @@ Widgets without a parent go on `ui.screen`, a column with 16 px padding.
 ## What is not there
 
 No `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage`, `document`,
-`window`, `require`, `process`, `Buffer`, global `crypto`, file access or
-time of day (`Date.now()` starts near 1970 at each boot). Random bytes:
+`window`, `require`, `process`, `Buffer`, global `crypto` or file access.
+Time of day: `Date` works, but the clock is only right once the Clock app
+has set it after boot: check `status().set` from `zg:clock`, and use its
+`every(seconds, fn)` for things on the clock's marks. Random bytes:
 `import * as crypto from "zg:crypto"` (`randomBytes`, `getRandomValues`),
 hashing: `crypto.sha256`. Code written for WebCrypto needs the adapter in
 [API.md](API.md#zgcrypto). Don't add npm dependencies; vendor plain ES

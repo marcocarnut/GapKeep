@@ -1,0 +1,87 @@
+# The clock
+
+A Pi Zero has no battery-backed clock, and zerogap has no network to ask
+for the time. So the kernel keeps a clock in software, from the system
+timer, and someone sets it after each boot: the **Clock** app
+(`apps/clock`). Until then it counts from 1970-01-01 at boot.
+
+The clock runs whatever app is open. Every app can read it (`Date.now()`,
+`new Date()`, `zg:clock`); only apps with `"permissions": ["rtc"]` can set
+it: in practice only the Clock app.
+
+## Setting it
+
+In the Clock app:
+
+1. **UTC offset**, e.g. `-03:00`, Enter. Local time is UTC plus this
+   offset; there are no time zone rules, so daylight saving time is a new
+   offset, set by hand.
+2. **Local time**: type a time a little ahead of a reference clock (a
+   phone, a watch), `YYYY-MM-DD HH:MM:SS`, and press Enter when the
+   reference shows it. Done carefully, that is right to a few tenths of a
+   second.
+
+## Drift and the trim
+
+The system timer runs from the Pi's crystal, which is off by some parts per
+million (ppm): typically tens, so a few seconds a day. The **trim** corrects
+it: a trim of -21.4 ppm slows the clock by 21.4 µs per second.
+
+To measure it, set the clock, and set it again hours (or days) later. The
+second time, the Clock app shows how far off the clock was, and the trim
+that would have kept it right, with its uncertainty: a second's error in
+each setting over 10 hours is ±0.06 ppm. **Apply measured trim** uses it.
+Measurements over less than 10 minutes are not made: they would say more
+about the hand that typed the time than about the crystal.
+
+The crystal's error depends a little on temperature, so a trim measured
+over a day at room temperature is about as good as it gets: within a
+second or two a week.
+
+## zerogap.txt: keeping the trim and offset
+
+zerogap never writes to the SD card, so the clock's settings can't be saved
+by the device. Instead, put them in a text file at the top of the card,
+`zerogap.txt`, from another computer; the Clock app shows the lines to
+copy:
+
+```
+# zerogap's settings
+clock_trim_ppm = -21.4
+utc_offset = -03:00
+```
+
+zerogap reads it at boot (the log shows each setting, and a warning for
+anything it doesn't understand). The time itself can't be kept this way:
+set it after each boot. Sealed builds have no SD card code and don't read
+it.
+
+## For apps
+
+```js
+import * as clock from "zg:clock";
+
+if (!clock.status().set) {
+  // tell the person to set the clock in the Clock app
+}
+clock.every(30, ({ time, changed }) => redraw(time));   // at :00 and :30, and when it is set
+```
+
+- `Date.now()`, `new Date()`: UTC from this clock; `getHours()` and the
+  other local-time methods use its UTC offset.
+- `every(seconds, fn)` calls `fn` on the clock's marks (UTC multiples of the
+  period) and at once when the clock is set or its trim or offset change,
+  so codes that depend on the time (TOTP) are redrawn right away.
+- The details: [API.md](API.md#zgclock).
+
+## How it works
+
+`src/runtime/clock.cpp` keeps a base time and the timer's count at that
+moment; the time is the base plus the timer's count since, times
+(1 + trim). A new trim first makes the current time the base, so the time
+never jumps. Each setting after the first compares the time typed with the
+timer's (untrimmed) count since the previous setting: their ratio is the
+crystal's error.
+
+In the simulator and the IDE, the same clock runs on the host's monotonic
+timer: `Date` there also counts from 1970 until the Clock app sets it.

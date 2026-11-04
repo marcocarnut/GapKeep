@@ -2,8 +2,7 @@
 # check the results, the QR exports and a codex32 split.
 expect Keyboard attached 60
 expect launcher ready 60
-# tiles sorted by id: dice39 first
-key ret
+tile dice39
 expect dice39 selftest: \d+ passed, 0 failed 60
 wait 1
 shot 01-start

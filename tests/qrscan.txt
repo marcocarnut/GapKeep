@@ -3,11 +3,7 @@
 # decoder. The app logs each code's length and SHA-256, not its contents.
 expect Keyboard attached 60
 expect launcher ready 60
-# tiles: dice39, gallery, hello, qrscan
-key right
-key right
-key right
-key ret
+tile qrscan
 expect qrscan ready
 camera qr hello, air gap
 # sha256("hello, air gap")

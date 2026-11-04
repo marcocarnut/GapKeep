@@ -97,6 +97,10 @@ handler" safe.
 All properties are described by one table; constructors, `set()` and the
 per-type property accessors all go through it, with strict validation.
 
+The wall clock (`clock.cpp`, `zg:clock` in `js_clock.cpp`) is kept by the
+kernel from the system timer, with a trim and a UTC offset; see
+[CLOCK.md](CLOCK.md).
+
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for

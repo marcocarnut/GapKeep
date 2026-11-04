@@ -84,7 +84,7 @@ handlers and timers.
 | `description` | no | One line for the launcher tile. |
 | `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
-| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)). E.g. `["camera"]`. |
+| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 
 zerogap checks every manifest, and refuses an app with unknown keys, a bad
@@ -292,7 +292,9 @@ scenario check it.
   verify what the person types.
 - **Keep secrets on screen only as long as needed**, and give the person a
   way to clear them.
-- **Don't rely on the clock.** A Pi Zero has no real-time clock;
-  `Date.now()` starts near 1970 at every boot.
+- **Check the clock before relying on it.** A Pi Zero has no battery-backed
+  clock: the Clock app sets it after each boot, and until then `Date.now()`
+  counts from 1970. `zg:clock`'s `status().set` says which
+  ([CLOCK.md](CLOCK.md)).
 - **Be keyboard-friendly.** Order widgets so Tab follows the natural flow,
   and focus the first input when a screen appears (`widget.focus()`).

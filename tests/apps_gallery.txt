@@ -4,9 +4,7 @@ expect Keyboard attached 60
 expect launcher ready 60
 wait 1
 shot 01-launcher
-# tiles: dice39, gallery, hello (test builds: then qrscan, crashtest, qjstests)
-key right
-key ret
+tile gallery
 expect Starting gallery
 expect selftest: \d+ passed, 0 failed 30
 wait 1
