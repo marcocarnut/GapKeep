@@ -43,9 +43,14 @@ public:
 	// the automatic exposure rests (the pattern does not depend on it).
 	void SetTestPattern (unsigned nPattern);
 
-	// The sensor's mode (imx219.h), from the next Start(); the grey
-	// frame is half its size in each direction.
-	void SetMode (const TZgIMX219Mode *pMode)	{ m_pMode = pMode; }
+	// What frames show, from the next Start(): the centre at full detail
+	// ("detail": 1280x960 unbinned, 640x480 grey) or the whole view
+	// ("full": 3280x2464 binned, 820x616 grey). The scanner sets it.
+	void SetField (TZgCameraField Field)		{ m_Field = Field; }
+
+	// A mode (imx219.h) that overrides the field, for tests; 0: the
+	// field decides again. The grey frame is half its size each way.
+	void SetMode (const TZgIMX219Mode *pMode)	{ m_pForcedMode = pMode; }
 
 	boolean Start (void);
 	void Stop (void);
@@ -74,7 +79,9 @@ private:
 	boolean m_bStreaming;
 	const char *m_pError;
 	unsigned m_nTestPattern;
-	const TZgIMX219Mode *m_pMode;
+	TZgCameraField m_Field;
+	const TZgIMX219Mode *m_pForcedMode;	// or 0
+	const TZgIMX219Mode *m_pMode;		// of the current or last Start()
 
 	unsigned m_nStride;		// of the raw frames
 	unsigned m_nWidth;		// of the grey frames: half the sensor's

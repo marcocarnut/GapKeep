@@ -145,12 +145,18 @@ void CTestShot::Camera (const char *pArgs)
 		}
 		return;
 	}
+	if (strcmp (pArgs, "mode auto") == 0)
+	{
+		m_pPiCamera->SetMode (0);
+		pLogger->Write ("camera", LogNotice, "pi mode auto: from the scanner's field");
+		return;
+	}
 	if (strncmp (pArgs, "mode ", 5) == 0)
 	{
 		const TZgIMX219Mode *pMode = CZgIMX219::GetMode (pArgs + 5);
 		if (pMode == 0)
 		{
-			pLogger->Write ("camera", LogWarning, "#camera mode %s", CZgIMX219::ModeNames);
+			pLogger->Write ("camera", LogWarning, "#camera mode auto|%s", CZgIMX219::ModeNames);
 			return;
 		}
 		m_pPiCamera->SetMode (pMode);
@@ -195,6 +201,7 @@ void CTestShot::Camera (const char *pArgs)
 	}
 	else if (strcmp (pArgs, "synth") == 0)
 	{
+		m_pPiCamera->SetMode (0);	// a fresh start for the next "#camera pi"
 		pLogger->Write ("camera", LogNotice, "synthetic (%s)", m_Camera.GetMode ());
 	}
 	else

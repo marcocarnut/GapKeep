@@ -42,7 +42,9 @@ CZgPiCamera::CZgPiCamera (void)
 	m_bStreaming (FALSE),
 	m_pError (0),
 	m_nTestPattern (0),
-	m_pMode (&CZgIMX219::ModeDetail),	// measured best for QR codes (CAMERA.md)
+	m_Field (ZgFieldCenter),
+	m_pForcedMode (0),
+	m_pMode (&CZgIMX219::ModeDetail),
 	m_nStride (0),
 	m_nWidth (0),
 	m_nHeight (0),
@@ -237,6 +239,11 @@ boolean CZgPiCamera::StartStreaming (void)
 		Fail ("the camera receiver does not start");
 		return FALSE;
 	}
+
+	// The two fields' modes were chosen by measurement (IMPLEMENTATION.md,
+	// decision 15): "detail" reads small codes best, "full" shows it all.
+	m_pMode = m_pForcedMode != 0 ? m_pForcedMode
+		: m_Field == ZgFieldFull ? &CZgIMX219::ModeFull : &CZgIMX219::ModeDetail;
 
 	if (!m_pSensor->Configure (*m_pMode, m_nExposure, m_nAnalogue,
 				   m_nTestPattern != 0 ? CZgIMX219::MinDigitalGain : m_nDigital,

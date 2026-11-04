@@ -28,8 +28,10 @@
 // probe finds one ("#camera synth", or any of the commands above, goes
 // back to the synthetic camera). "#camera pattern <n>": the Pi Camera's
 // test pattern (0 off, 2 colour bars; docs/camera/SPEC.md 4.7). "#camera
-// mode <name>": the Pi Camera's mode from its next start (detail, the
-// default; centre, full, wide, mid: docs/CAMERA.md). A switch
+// mode <name>": the Pi Camera's mode from its next start (detail, centre,
+// full, wide, mid: docs/camera/IMPLEMENTATION.md), whatever the scanner's
+// field asks for; it sticks until "#camera mode auto" or "#camera synth",
+// after which the field decides again (center: detail, full: full). A switch
 // applies from the next scanner start: a running scanner keeps the camera
 // it started with.
 //
