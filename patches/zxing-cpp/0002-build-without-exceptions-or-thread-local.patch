@@ -1,0 +1,505 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: zerogap <zerogap@localhost>
+Date: Wed, 4 Nov 2026 12:50:25 -0300
+Subject: [PATCH] Build the QR code reader without exceptions (ZX_THROW) or
+ thread_local
+
+For bare-metal targets without an exception runtime or TLS (zerogap, on
+Circle on a Raspberry Pi Zero):
+
+- ZX_THROW(e) in ZXConfig.h: `throw e` when exceptions are enabled, and
+  otherwise a call to ZXing::Fatal("e"), which the application provides
+  and which must not return. Used for the throws in the files the QR code
+  reader is built from; the QR payload decoder itself does not throw on
+  any input (see the previous change). librscpp keeps a plain throw unless
+  ZXConfig.h was included first.
+- ZX_THREAD_LOCAL can be set by the build (e.g. -DZX_THREAD_LOCAL=static
+  for a single-threaded program); the default is still thread_local.
+---
+ core/src/BarcodeFormat.cpp   |  6 +++---
+ core/src/BitArray.h          |  4 ++--
+ core/src/BitMatrix.cpp       |  6 +++---
+ core/src/BitMatrix.h         |  2 +-
+ core/src/ImageView.h         |  8 +++++---
+ core/src/JSON.cpp            | 10 +++++-----
+ core/src/Matrix.h            |  3 ++-
+ core/src/ReadBarcode.cpp     | 14 +++++++-------
+ core/src/ReedSolomon.cpp     |  2 +-
+ core/src/ReedSolomon.h       |  4 +++-
+ core/src/StdGenerator.h      |  4 +++-
+ core/src/ZXAlgorithms.h      | 11 ++++++-----
+ core/src/ZXConfig.h          | 12 ++++++++++++
+ core/src/librscpp/decode.h   |  4 ++--
+ core/src/librscpp/encode.h   |  4 ++--
+ core/src/librscpp/field.h    | 10 +++++++---
+ core/src/qrcode/QRDataMask.h |  4 ++--
+ 17 files changed, 66 insertions(+), 42 deletions(-)
+
+diff --git a/core/src/BarcodeFormat.cpp b/core/src/BarcodeFormat.cpp
+index fe224dd1..7b8312fa 100644
+--- a/core/src/BarcodeFormat.cpp
++++ b/core/src/BarcodeFormat.cpp
+@@ -46,13 +46,13 @@ std::string_view EnumName(BarcodeFormat format)
+ BarcodeFormat BarcodeFormatFromString(std::string_view str)
+ {
+ 	if (str.size() < 3)
+-		throw std::invalid_argument(StrCat("This is not a valid barcode format: '", str, "'"));
++		ZX_THROW(std::invalid_argument(StrCat("This is not a valid barcode format: '", str, "'")));
+ #define X(NAME, SYM, VAR, FLAGS, ZINT, ENABLED, HRI) \
+ 	if ((str[0] == ']' && str[1] == SYM && str[2] == VAR) || IsEqualIgnoreCase(str, #NAME) || IsEqualIgnoreCaseAnd(str, HRI, " -_/")) \
+ 		return BarcodeFormat(ZX_BCF_ID(SYM, VAR));
+ 	ZX_BCF_LIST(X)
+ #undef X
+-	throw std::invalid_argument(StrCat("This is not a valid barcode format: '", str, "'"));
++	ZX_THROW(std::invalid_argument(StrCat("This is not a valid barcode format: '", str, "'")));
+ }
+ 
+ std::string ToString(BarcodeFormat format)
+@@ -286,7 +286,7 @@ BarcodeFormats BarcodeFormatsFromString(std::string_view str)
+ 		if (!token.empty()) {
+ 			auto bc = BarcodeFormatFromString(token);
+ 			if (bc == BarcodeFormat::None)
+-				throw std::invalid_argument("This is not a valid barcode format: '" + std::string(token) + "'");
++				ZX_THROW(std::invalid_argument("This is not a valid barcode format: '" + std::string(token) + "'"));
+ 			res |= bc;
+ 		}
+ 	});
+diff --git a/core/src/BitArray.h b/core/src/BitArray.h
+index b5ccca15..e7fb2dfa 100644
+--- a/core/src/BitArray.h
++++ b/core/src/BitArray.h
+@@ -147,7 +147,7 @@ public:
+ 	BitArrayView& skipBits(int n)
+ 	{
+ 		if (cur + n > bits.end())
+-			throw std::out_of_range("BitArrayView::skipBits() out of range.");
++			ZX_THROW(std::out_of_range("BitArrayView::skipBits() out of range."));
+ 		cur += n;
+ 		return *this;
+ 	}
+@@ -156,7 +156,7 @@ public:
+ 	{
+ 		assert(n <= 32);
+ 		if (cur + n > bits.end())
+-			throw std::out_of_range("BitArrayView::peekBits() out of range.");
++			ZX_THROW(std::out_of_range("BitArrayView::peekBits() out of range."));
+ 		int res = 0;
+ 		for (auto i = cur; n > 0; --n, i++)
+ 			AppendBit(res, *i);
+diff --git a/core/src/BitMatrix.cpp b/core/src/BitMatrix.cpp
+index f03cde74..3d5c022f 100644
+--- a/core/src/BitMatrix.cpp
++++ b/core/src/BitMatrix.cpp
+@@ -18,15 +18,15 @@ void
+ BitMatrix::setRegion(int left, int top, int width, int height)
+ {
+ 	if (top < 0 || left < 0) {
+-		throw std::invalid_argument("BitMatrix::setRegion(): Left and top must be nonnegative");
++		ZX_THROW(std::invalid_argument("BitMatrix::setRegion(): Left and top must be nonnegative"));
+ 	}
+ 	if (height < 1 || width < 1) {
+-		throw std::invalid_argument("BitMatrix::setRegion(): Height and width must be at least 1");
++		ZX_THROW(std::invalid_argument("BitMatrix::setRegion(): Height and width must be at least 1"));
+ 	}
+ 	int right = left + width;
+ 	int bottom = top + height;
+ 	if (bottom > _height || right > _width) {
+-		throw std::invalid_argument("BitMatrix::setRegion(): The region must fit inside the matrix");
++		ZX_THROW(std::invalid_argument("BitMatrix::setRegion(): The region must fit inside the matrix"));
+ 	}
+ 	for (int y = top; y < bottom; y++) {
+ 		auto offset = y * _width;
+diff --git a/core/src/BitMatrix.h b/core/src/BitMatrix.h
+index ceb110a0..15a416a2 100644
+--- a/core/src/BitMatrix.h
++++ b/core/src/BitMatrix.h
+@@ -63,7 +63,7 @@ public:
+ 	BitMatrix(int width, int height) : _width(width), _height(height), _bits(width * height, UNSET_V)
+ 	{
+ 		if (width != 0 && int(_bits.size()) / width != height)
+-			throw std::invalid_argument("Invalid size: width * height is too big");
++			ZX_THROW(std::invalid_argument("Invalid size: width * height is too big"));
+ 	}
+ 
+ 	explicit BitMatrix(int dimension) : BitMatrix(dimension, dimension) {} // Construct a square matrix.
+diff --git a/core/src/ImageView.h b/core/src/ImageView.h
+index 2b109f01..fd6196ac 100644
+--- a/core/src/ImageView.h
++++ b/core/src/ImageView.h
+@@ -5,6 +5,8 @@
+ 
+ #pragma once
+ 
++#include "ZXConfig.h"
++
+ #include <algorithm>
+ #include <cstdint>
+ #include <cstdio>
+@@ -83,10 +85,10 @@ public:
+ 		  _rowStride(rowStride ? rowStride : width * _pixStride)
+ 	{
+ 		if (_data == nullptr)
+-			throw std::invalid_argument("Can not construct an ImageView from a NULL pointer");
++			ZX_THROW(std::invalid_argument("Can not construct an ImageView from a NULL pointer"));
+ 
+ 		if (_width <= 0 || _height <= 0)
+-			throw std::invalid_argument("Neither width nor height of ImageView can be less or equal to 0");
++			ZX_THROW(std::invalid_argument("Neither width nor height of ImageView can be less or equal to 0"));
+ 	}
+ 
+ 	/**
+@@ -107,7 +109,7 @@ public:
+ 		: ImageView(data, width, height, format, rowStride, pixStride)
+ 	{
+ 		if (_rowStride < 0 || _pixStride < 0 || size < _height * _rowStride)
+-			throw std::invalid_argument("ImageView parameters are inconsistent (out of bounds)");
++			ZX_THROW(std::invalid_argument("ImageView parameters are inconsistent (out of bounds)"));
+ 	}
+ 
+ 	int width() const { return _width; }
+diff --git a/core/src/JSON.cpp b/core/src/JSON.cpp
+index 1417015f..7d88d0af 100644
+--- a/core/src/JSON.cpp
++++ b/core/src/JSON.cpp
+@@ -110,7 +110,7 @@ std::string JsonUnEscapeStr(std::string_view str)
+ 		char c = str[i];
+ 		if (c == '\\') {
+ 			if (++i >= str.size())
+-				throw std::runtime_error("Invalid escape sequence");
++				ZX_THROW(std::runtime_error("Invalid escape sequence"));
+ 
+ 			char esc = str[i];
+ 			switch (esc) {
+@@ -124,7 +124,7 @@ std::string JsonUnEscapeStr(std::string_view str)
+ 			case 't': res += '\t'; break;
+ 			case 'u': {
+ 				if (i + 4 >= str.size())
+-					throw std::runtime_error("Incomplete \\u escape");
++					ZX_THROW(std::runtime_error("Incomplete \\u escape"));
+ 
+ 				uint32_t code = 0;
+ 				auto first = str.data() + i + 1;
+@@ -132,16 +132,16 @@ std::string JsonUnEscapeStr(std::string_view str)
+ 
+ 				auto [ptr, ec] = std::from_chars(first, last, code, 16);
+ 				if (ec != std::errc() || ptr != last)
+-					throw std::runtime_error("Failed to parse hex code");
++					ZX_THROW(std::runtime_error("Failed to parse hex code"));
+ 
+ 				if (code > 0x1F)
+-					throw std::runtime_error("Unexpected code point in \\u escape");
++					ZX_THROW(std::runtime_error("Unexpected code point in \\u escape"));
+ 
+ 				res += static_cast<char>(code);
+ 				i += 4;
+ 				break;
+ 			}
+-			default: throw std::runtime_error("Unknown escape sequence");
++			default: ZX_THROW(std::runtime_error("Unknown escape sequence"));
+ 			}
+ 		} else {
+ 			res += c;
+diff --git a/core/src/Matrix.h b/core/src/Matrix.h
+index 928d896e..523f4b24 100644
+--- a/core/src/Matrix.h
++++ b/core/src/Matrix.h
+@@ -7,6 +7,7 @@
+ #pragma once
+ 
+ #include "Point.h"
++#include "ZXConfig.h"
+ 
+ #include <stdexcept>
+ #include <algorithm>
+@@ -38,7 +39,7 @@ public:
+ #endif
+ 	Matrix(int width, int height, value_t val = {}) : _width(width), _height(height), _data(_width * _height, val) {
+ 		if (width != 0 && int(_data.size()) / width != height)
+-			throw std::invalid_argument("Invalid size: width * height is too big");
++			ZX_THROW(std::invalid_argument("Invalid size: width * height is too big"));
+ 	}
+ 
+ 	Matrix(Matrix&&) noexcept = default;
+diff --git a/core/src/ReadBarcode.cpp b/core/src/ReadBarcode.cpp
+index bd2da264..c6785efa 100644
+--- a/core/src/ReadBarcode.cpp
++++ b/core/src/ReadBarcode.cpp
+@@ -181,7 +181,7 @@ class LumImagePyramid
+ 		case 2: addLayer<2>(); break;
+ 		case 3: addLayer<3>(); break;
+ 		case 4: addLayer<4>(); break;
+-		default: throw std::invalid_argument("Invalid ReaderOptions::downscaleFactor"); break;
++		default: ZX_THROW(std::invalid_argument("Invalid ReaderOptions::downscaleFactor")); break;
+ 		}
+ 	}
+ 
+@@ -191,7 +191,7 @@ public:
+ 	LumImagePyramid(const ImageView& iv, int threshold, int factor)
+ 	{
+ 		if (factor < 2)
+-			throw std::invalid_argument("Invalid ReaderOptions::downscaleFactor");
++			ZX_THROW(std::invalid_argument("Invalid ReaderOptions::downscaleFactor"));
+ 
+ 		layers.push_back(iv);
+ 		// TODO: if only matrix codes were considered, then using std::min would be sufficient (see #425)
+@@ -210,7 +210,7 @@ public:
+ ImageView SetupLumImageView(ImageView iv, LumImage& lum, const ReaderOptions& opts)
+ {
+ 	if (iv.format() == ImageFormat::None)
+-		throw std::invalid_argument("Invalid image format");
++		ZX_THROW(std::invalid_argument("Invalid image format"));
+ 
+ 	if (opts.binarizer() == Binarizer::GlobalHistogram || opts.binarizer() == Binarizer::LocalAverage) {
+ 		// manually spell out the 3 most common pixel formats to get at least gcc to vectorize the code
+@@ -252,10 +252,10 @@ Barcode ReadBarcode(const ImageView& _iv, const ReaderOptions& opts)
+ Barcodes ReadBarcodes(const ImageView& _iv, const ReaderOptions& opts)
+ {
+ 	if (sizeof(PatternType) < 4 && (_iv.width() > 0xffff || _iv.height() > 0xffff))
+-		throw std::invalid_argument("Maximum image width/height is 65535");
++		ZX_THROW(std::invalid_argument("Maximum image width/height is 65535"));
+ 
+ 	if (!_iv.data() || _iv.width() * _iv.height() == 0)
+-		throw std::invalid_argument("ImageView is null/empty");
++		ZX_THROW(std::invalid_argument("ImageView is null/empty"));
+ 
+ 	LumImage lum;
+ 	ImageView iv = SetupLumImageView(_iv, lum, opts);
+@@ -334,12 +334,12 @@ Barcodes ReadBarcodes(const ImageView& _iv, const ReaderOptions& opts)
+ 
+ Barcode ReadBarcode(const ImageView&, const ReaderOptions&)
+ {
+-	throw std::runtime_error("This build of zxing-cpp does not support reading barcodes.");
++	ZX_THROW(std::runtime_error("This build of zxing-cpp does not support reading barcodes."));
+ }
+ 
+ Barcodes ReadBarcodes(const ImageView&, const ReaderOptions&)
+ {
+-	throw std::runtime_error("This build of zxing-cpp does not support reading barcodes.");
++	ZX_THROW(std::runtime_error("This build of zxing-cpp does not support reading barcodes."));
+ }
+ 
+ #endif // ZXING_READERS
+diff --git a/core/src/ReedSolomon.cpp b/core/src/ReedSolomon.cpp
+index 20d8e43a..4ba3e57f 100644
+--- a/core/src/ReedSolomon.cpp
++++ b/core/src/ReedSolomon.cpp
+@@ -37,7 +37,7 @@ const GF2nI& GetGF2n(RSField field)
+ 	case RSField::DataMatrix: return gf2n_8_5_3_2;
+ 	case RSField::MaxiCode: return gf2n_6_1;
+ 	case RSField::QRCode: return gf2n_8_4_3_2;
+-	default: throw std::invalid_argument("Unsupported RSField");
++	default: ZX_THROW(std::invalid_argument("Unsupported RSField"));
+ 	}
+ }
+ 
+diff --git a/core/src/ReedSolomon.h b/core/src/ReedSolomon.h
+index 225dae80..2f2dd215 100644
+--- a/core/src/ReedSolomon.h
++++ b/core/src/ReedSolomon.h
+@@ -3,6 +3,8 @@
+ 
+ #pragma once
+ 
++#include "ZXConfig.h"
++
+ #include <cstdint>
+ #include <optional>
+ #include <span>
+@@ -32,7 +34,7 @@ inline RSField GF2nAztec(int wordSize)
+ 	case 8: return RSField::Aztec8;
+ 	case 10: return RSField::Aztec10;
+ 	case 12: return RSField::Aztec12;
+-	default: throw std::invalid_argument("Unsupported word size " + std::to_string(wordSize));
++	default: ZX_THROW(std::invalid_argument("Unsupported word size " + std::to_string(wordSize)));
+ 	}
+ }
+ 
+diff --git a/core/src/StdGenerator.h b/core/src/StdGenerator.h
+index 68a9ec28..62598d89 100644
+--- a/core/src/StdGenerator.h
++++ b/core/src/StdGenerator.h
+@@ -5,6 +5,8 @@
+ 
+ #pragma once
+ 
++#include "ZXConfig.h"
++
+ #include <version>
+ 
+ #if defined(__cpp_lib_generator)
+@@ -43,7 +45,7 @@ public:
+ 		static void return_void() noexcept {}
+ 		// Disallow co_await in generator coroutines.
+ 		void await_transform() = delete;
+-		[[noreturn]] static void unhandled_exception() { throw; }
++		[[noreturn]] static void unhandled_exception() { ZX_THROW(); }
+ 	};
+ 
+ 	using handle_type = std::coroutine_handle<promise_type>;
+diff --git a/core/src/ZXAlgorithms.h b/core/src/ZXAlgorithms.h
+index 400b9b0f..0b4686b2 100644
+--- a/core/src/ZXAlgorithms.h
++++ b/core/src/ZXAlgorithms.h
+@@ -6,6 +6,7 @@
+ #pragma once
+ 
+ #include "Error.h"
++#include "ZXConfig.h"
+ 
+ #include <algorithm>
+ #include <cassert>
+@@ -164,7 +165,7 @@ template <typename T = char>
+ T ToDigit(int i)
+ {
+ 	if (i < 0 || i > 9)
+-		throw FormatError("Invalid digit value");
++		ZX_THROW(FormatError("Invalid digit value"));
+ 	return static_cast<T>('0' + i);
+ }
+ 
+@@ -173,11 +174,11 @@ std::string ToString(T val, int len)
+ {
+ 	std::string result(len--, '0');
+ 	if (val < 0)
+-		throw FormatError("Invalid value");
++		ZX_THROW(FormatError("Invalid value"));
+ 	for (; len >= 0 && val != 0; --len, val /= 10)
+ 		result[len] = '0' + val % 10;
+ 	if (val)
+-		throw FormatError("Invalid value");
++		ZX_THROW(FormatError("Invalid value"));
+ 	return result;
+ }
+ 
+@@ -239,7 +240,7 @@ inline T FromString(std::string_view sv)
+ 	T val = {};
+ 	auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+ 	if (ec != std::errc() || ptr != sv.data() + sv.size())
+-		throw std::invalid_argument(StrCat("failed to parse '", TypeName<T>(), "' from '", sv, "'"));
++		ZX_THROW(std::invalid_argument(StrCat("failed to parse '", TypeName<T>(), "' from '", sv, "'")));
+ 
+ 	return val;
+ }
+@@ -250,7 +251,7 @@ std::string EnumToString(E val, std::initializer_list<const char*> names)
+ {
+ 	auto idx = std::to_underlying(val);
+ 	if (idx < 0 || idx >= Size(names))
+-		throw std::out_of_range(StrCat("Invalid index ", std::to_string(idx), " for enum ", TypeName<E>()));
++		ZX_THROW(std::out_of_range(StrCat("Invalid index ", std::to_string(idx), " for enum ", TypeName<E>())));
+ 	return names.begin()[idx];
+ }
+ 
+diff --git a/core/src/ZXConfig.h b/core/src/ZXConfig.h
+index dfcd5a80..e8353ec2 100644
+--- a/core/src/ZXConfig.h
++++ b/core/src/ZXConfig.h
+@@ -10,8 +10,20 @@
+ // your platform doesn't support thread_local, you can switch to static, but be aware that this makes the code not thread safe.
+ // For Windows in Visual Studio 2019 on Intel 64-bit using thread_local causes a dependency to VCRUNTIME140_1.dll, so you need 2019
+ // runtime DLLs instead of only 2015 version.
++#ifndef ZX_THREAD_LOCAL
+ #define ZX_THREAD_LOCAL thread_local // '' (nothing), 'thread_local' or 'static'
++#endif
+ 
+ // The Galois Field abstractions used in Reed-Solomon error correction code use more memory than required to improve performance (20% - 100%).
+ // If RAM is scarce, you can define LIBRSCPP_SAVE_MEMORY to reduce memory usage. The effect is a few kB big.
+ // #define LIBRSCPP_SAVE_MEMORY
++
++// Without C++ exceptions (-fno-exceptions), what the library would throw is a fatal error instead: a call to
++// ZXing::Fatal(), which the application provides and which must not return, with the throw expression as text.
++// (The QR code reader reports errors in a symbol's data in Barcode::error(), it does not throw on them.)
++#if defined(__cpp_exceptions) || defined(_CPPUNWIND)
++#define ZX_THROW(...) throw __VA_ARGS__
++#else
++namespace ZXing { [[noreturn]] void Fatal(const char* what); }
++#define ZX_THROW(...) ::ZXing::Fatal(#__VA_ARGS__)
++#endif
+diff --git a/core/src/librscpp/decode.h b/core/src/librscpp/decode.h
+index 1a2b936a..07abe1ce 100644
+--- a/core/src/librscpp/decode.h
++++ b/core/src/librscpp/decode.h
+@@ -164,9 +164,9 @@ template <typename Field, std::integral T>
+ 	int numErasures = std::ssize(erasures);
+ 
+ 	if (numErasures > numECC)
+-		throw std::invalid_argument("Too many erasures to correct");
++		ZX_THROW(std::invalid_argument("Too many erasures to correct"));
+ 	if (std::ranges::any_of(erasures, [cwLen](int e) { return e < 0 || e >= cwLen; }))
+-		throw std::invalid_argument("Erasure position out of range");
++		ZX_THROW(std::invalid_argument("Erasure position out of range"));
+ 
+ 	if constexpr (std::is_same_v<Field, GFp<typename Field::value_type>>) {
+ 		// prevent potentially out-of-range values from causing out-of-bounds access in GFp's exp/log tables
+diff --git a/core/src/librscpp/encode.h b/core/src/librscpp/encode.h
+index 4c0342b7..5939139d 100644
+--- a/core/src/librscpp/encode.h
++++ b/core/src/librscpp/encode.h
+@@ -42,7 +42,7 @@ template <typename Field, std::integral T>
+ void encode(const Field& field, std::span<const T> data, std::span<T> parity)
+ {
+ 	if (data.empty() || parity.empty())
+-		throw std::invalid_argument("Invalid number of data or parity symbols");
++		ZX_THROW(std::invalid_argument("Invalid number of data or parity symbols"));
+ 
+ 	using FT = typename Field::value_type;
+ 	std::vector<FT> tmp;
+@@ -93,7 +93,7 @@ void encode_inplace(const Field& field, R&& codeword, int num_parity)
+ 	std::span cw(codeword);
+ 	auto data_size = std::ranges::ssize(codeword) - num_parity;
+ 	if (data_size <= 0 || num_parity <= 0)
+-		throw std::invalid_argument("Invalid number of data or parity symbols");
++		ZX_THROW(std::invalid_argument("Invalid number of data or parity symbols"));
+ 	encode(field, cw.subspan(0, data_size), cw.subspan(data_size));
+ }
+ 
+diff --git a/core/src/librscpp/field.h b/core/src/librscpp/field.h
+index 081e3e99..ebe894a9 100644
+--- a/core/src/librscpp/field.h
++++ b/core/src/librscpp/field.h
+@@ -4,6 +4,10 @@
+ 
+ #pragma once
+ 
++#ifndef ZX_THROW // see ZXConfig.h
++#define ZX_THROW(...) throw __VA_ARGS__
++#endif
++
+ #include <cassert>
+ #include <concepts>
+ #include <cstdint>
+@@ -34,10 +38,10 @@ protected:
+ 	GFBase(int size, int fcr, std::function<T(T)> next) : _size(size), _fcr(fcr)
+ 	{
+ 		if (size <= 0 || size > (1 << (sizeof(T) * 8)))
+-			throw std::invalid_argument("Invalid field size " + std::to_string(size));
++			ZX_THROW(std::invalid_argument("Invalid field size " + std::to_string(size)));
+ 		if (fcr < 0 || fcr >= size)
+-			throw std::invalid_argument("Invalid first consecutive root " + std::to_string(fcr) + " for field of size "
+-										+ std::to_string(size));
++			ZX_THROW(std::invalid_argument("Invalid first consecutive root " + std::to_string(fcr) + " for field of size "
++										+ std::to_string(size)));
+ 
+ #ifdef LIBRSCPP_SAVE_MEMORY
+ 		_expTable.resize(size, 0);
+diff --git a/core/src/qrcode/QRDataMask.h b/core/src/qrcode/QRDataMask.h
+index d8f057a8..3a1c4285 100644
+--- a/core/src/qrcode/QRDataMask.h
++++ b/core/src/qrcode/QRDataMask.h
+@@ -24,7 +24,7 @@ inline bool GetDataMaskBit(int maskIndex, int x, int y, bool isMicro = false)
+ {
+ 	if (isMicro) {
+ 		if (maskIndex < 0 || maskIndex >= 4)
+-			throw std::invalid_argument("QRCode maskIndex out of range");
++			ZX_THROW(std::invalid_argument("QRCode maskIndex out of range"));
+ 		maskIndex = std::array{1, 4, 6, 7}[maskIndex]; // map from MQR to QR indices
+ 	}
+ 
+@@ -39,7 +39,7 @@ inline bool GetDataMaskBit(int maskIndex, int x, int y, bool isMicro = false)
+ 	case 7: return (y + x + ((y * x) % 3)) % 2 == 0;
+ 	}
+ 
+-	throw std::invalid_argument("QRCode maskIndex out of range");
++	ZX_THROW(std::invalid_argument("QRCode maskIndex out of range"));
+ }
+ 
+ inline bool GetMaskedBit(const BitMatrix& bits, int x, int y, int maskIndex, bool isMicro = false)

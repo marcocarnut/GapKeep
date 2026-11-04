@@ -1,0 +1,378 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: zerogap <zerogap@localhost>
+Date: Wed, 4 Nov 2026 12:48:39 -0300
+Subject: [PATCH] QRCode: decode the bit stream without exceptions (sticky
+ BitSource error)
+
+The QR code payload decoder used exceptions for flow control on malformed
+symbols: BitSource::readBits threw std::out_of_range on a truncated
+stream, and the segment decoders threw FormatError (or std::array::at
+std::out_of_range), all caught in DecodeBitStream. A build without
+exceptions turns each of those into a fatal error on bad input.
+
+Now BitSource keeps a sticky error: reading past the end (or 0 or more
+than 32 bits) returns 0 and records "Truncated bit stream"; decoders
+record their own errors with setError(). Only the first error is kept.
+DecodeBitStream stops at the first error and returns it, as before.
+
+- CodecModeForBits returns std::optional (nothing for an invalid mode)
+- ToAlphaNumericChar and DecodeNumericSegment check their values instead
+  of relying on std::array::at and ToString throwing
+- ParseECIValue records the error and returns ECI::Unknown
+- DataMatrix, the other BitSource user, checks the error after its loop
+
+Same results on the unit and black box tests.
+---
+ core/src/BitSource.cpp            | 11 +++---
+ core/src/BitSource.h              | 15 ++++++++
+ core/src/datamatrix/DMDecoder.cpp |  6 +--
+ core/src/qrcode/QRCodecMode.cpp   |  4 +-
+ core/src/qrcode/QRCodecMode.h     |  7 ++--
+ core/src/qrcode/QRDecoder.cpp     | 63 ++++++++++++++++++++-----------
+ test/unit/qrcode/QRModeTest.cpp   |  6 +--
+ 7 files changed, 72 insertions(+), 40 deletions(-)
+
+diff --git a/core/src/BitSource.cpp b/core/src/BitSource.cpp
+index ae496569..9fcf7fbc 100644
+--- a/core/src/BitSource.cpp
++++ b/core/src/BitSource.cpp
+@@ -9,8 +9,6 @@
+ #include "ByteArray.h"
+ #include "ZXAlgorithms.h"
+ 
+-#include <stdexcept>
+-
+ namespace ZXing {
+ 
+ int
+@@ -19,10 +17,11 @@ BitSource::available() const
+ 	return 8 * (Size(_bytes) - _byteOffset) - _bitOffset;
+ }
+ 
+-static int ReadBitsImpl(int numBits, const ByteArray& _bytes, int available, int& _byteOffset, int& _bitOffset)
++static int ReadBitsImpl(int numBits, const ByteArray& _bytes, int available, int& _byteOffset, int& _bitOffset, const BitSource& bits)
+ {
+ 	if (numBits < 1 || numBits > 32 || numBits > available) {
+-		throw std::out_of_range("BitSource::readBits: out of range");
++		bits.setError(FormatError("Truncated bit stream"));
++		return 0;
+ 	}
+ 
+ 	int result = 0;
+@@ -64,14 +63,14 @@ static int ReadBitsImpl(int numBits, const ByteArray& _bytes, int available, int
+ 
+ int BitSource::readBits(int numBits)
+ {
+-	return ReadBitsImpl(numBits, _bytes, available(), _byteOffset, _bitOffset);
++	return ReadBitsImpl(numBits, _bytes, available(), _byteOffset, _bitOffset, *this);
+ }
+ 
+ int BitSource::peekBits(int numBits) const
+ {
+ 	int bitOffset = _bitOffset;
+ 	int byteOffset = _byteOffset;
+-	return ReadBitsImpl(numBits, _bytes, available(), byteOffset, bitOffset);
++	return ReadBitsImpl(numBits, _bytes, available(), byteOffset, bitOffset, *this);
+ }
+ 
+ } // ZXing
+diff --git a/core/src/BitSource.h b/core/src/BitSource.h
+index a78a758f..f67bff78 100644
+--- a/core/src/BitSource.h
++++ b/core/src/BitSource.h
+@@ -6,6 +6,8 @@
+ 
+ #pragma once
+ 
++#include "Error.h"
++
+ namespace ZXing {
+ 
+ class ByteArray;
+@@ -24,6 +26,7 @@ class BitSource
+ 	const ByteArray& _bytes;
+ 	int _byteOffset = 0;
+ 	int _bitOffset = 0;
++	mutable Error _error;
+ 
+ public:
+ 	/**
+@@ -67,6 +70,18 @@ public:
+ 	* @return number of bits that can be read successfully
+ 	*/
+ 	int available() const;
++
++	/**
++	* Reading past the end (or 0 or more than 32 bits) returns 0 and sets error() to "Truncated bit stream".
++	* Decoders can report their own errors with setError(). Only the first error is kept.
++	* @return the first error, if any
++	*/
++	const Error& error() const { return _error; }
++
++	void setError(Error e) const {
++		if (!_error)
++			_error = std::move(e);
++	}
+ };
+ 
+ } // ZXing
+diff --git a/core/src/datamatrix/DMDecoder.cpp b/core/src/datamatrix/DMDecoder.cpp
+index dca84d78..0ea89c2b 100644
+--- a/core/src/datamatrix/DMDecoder.cpp
++++ b/core/src/datamatrix/DMDecoder.cpp
+@@ -295,7 +295,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
+ 
+ 	// See ISO 16022:2006, 5.2.3 and Annex C, Table C.2
+ 	try {
+-		while (!done && bits.available() >= 8) {
++		while (!done && !bits.error() && bits.available() >= 8) {
+ 			int oneByte = bits.readBits(8);
+ 			switch (oneByte) {
+ 			case 0: setError(FormatError("invalid 0 code word")); break;
+@@ -358,9 +358,9 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
+ 		}
+ 	} catch (Error e) {
+ 		setError(std::move(e));
+-	} catch (std::out_of_range&) { // see BitSource::readBits
+-		error = FormatError("Truncated bit stream");
+ 	}
++	if (bits.error()) // see BitSource::readBits
++		error = bits.error();
+ 
+ 	result.append(resultTrailer);
+ 	result.symbology.aiFlag = result.symbology.modifier == '2' ? AIFlag::GS1 : AIFlag::None;
+diff --git a/core/src/qrcode/QRCodecMode.cpp b/core/src/qrcode/QRCodecMode.cpp
+index b0e546a0..3f3ea223 100644
+--- a/core/src/qrcode/QRCodecMode.cpp
++++ b/core/src/qrcode/QRCodecMode.cpp
+@@ -15,7 +15,7 @@
+ 
+ namespace ZXing::QRCode {
+ 
+-CodecMode CodecModeForBits(int bits, Type type)
++std::optional<CodecMode> CodecModeForBits(int bits, Type type)
+ {
+ 	if (type == Type::Micro) {
+ 		constexpr CodecMode Bits2Mode[4] = {CodecMode::NUMERIC, CodecMode::ALPHANUMERIC, CodecMode::BYTE, CodecMode::KANJI};
+@@ -33,7 +33,7 @@ CodecMode CodecModeForBits(int bits, Type type)
+ 			return static_cast<CodecMode>(bits);
+ 	}
+ 
+-	throw FormatError("Invalid codec mode");
++	return {};
+ }
+ 
+ int CharacterCountBits(CodecMode mode, const Version& version)
+diff --git a/core/src/qrcode/QRCodecMode.h b/core/src/qrcode/QRCodecMode.h
+index eff1e18b..6666344f 100644
+--- a/core/src/qrcode/QRCodecMode.h
++++ b/core/src/qrcode/QRCodecMode.h
+@@ -6,6 +6,8 @@
+ 
+ #pragma once
+ 
++#include <optional>
++
+ namespace ZXing::QRCode {
+ 
+ enum class Type;
+@@ -32,10 +34,9 @@ enum class CodecMode
+ /**
+  * @param bits variable number of bits encoding a QR Code data mode
+  * @param type type of QR Code
+- * @return Mode encoded by these bits
+- * @throws FormatError if bits do not correspond to a known mode
++ * @return Mode encoded by these bits, nothing if bits do not correspond to a known mode
+  */
+-CodecMode CodecModeForBits(int bits, Type type);
++std::optional<CodecMode> CodecModeForBits(int bits, Type type);
+ 
+ /**
+  * @param version version in question
+diff --git a/core/src/qrcode/QRDecoder.cpp b/core/src/qrcode/QRDecoder.cpp
+index 1b9bbed0..24f938b6 100644
+--- a/core/src/qrcode/QRDecoder.cpp
++++ b/core/src/qrcode/QRDecoder.cpp
+@@ -89,7 +89,7 @@ static void DecodeByteSegment(BitSource& bits, int count, Content& result)
+ 		result.push_back(bits.readBits(8));
+ }
+ 
+-static char ToAlphaNumericChar(int value)
++static char ToAlphaNumericChar(int value, const BitSource& bits)
+ {
+ 	/**
+ 	* See ISO 18004:2006, 6.4.4 Table 5
+@@ -101,7 +101,11 @@ static char ToAlphaNumericChar(int value)
+ 		' ', '$', '%', '*', '+', '-', '.', '/', ':'
+ 	};
+ 
+-	return ALPHANUMERIC_CHARS.at(value);
++	if (value < 0 || value >= Size(ALPHANUMERIC_CHARS)) {
++		bits.setError(FormatError("Invalid alphanumeric value"));
++		return 0;
++	}
++	return ALPHANUMERIC_CHARS[value];
+ }
+ 
+ static void DecodeAlphanumericSegment(BitSource& bits, int count, Content& result)
+@@ -110,13 +114,13 @@ static void DecodeAlphanumericSegment(BitSource& bits, int count, Content& resul
+ 	std::string buffer;
+ 	while (count > 1) {
+ 		int nextTwoCharsBits = bits.readBits(11);
+-		buffer += ToAlphaNumericChar(nextTwoCharsBits / 45);
+-		buffer += ToAlphaNumericChar(nextTwoCharsBits % 45);
++		buffer += ToAlphaNumericChar(nextTwoCharsBits / 45, bits);
++		buffer += ToAlphaNumericChar(nextTwoCharsBits % 45, bits);
+ 		count -= 2;
+ 	}
+ 	if (count == 1) {
+ 		// special case: one character left
+-		buffer += ToAlphaNumericChar(bits.readBits(6));
++		buffer += ToAlphaNumericChar(bits.readBits(6), bits);
+ 	}
+ 	// See section 6.4.8.1, 6.4.8.2
+ 	if (result.symbology.aiFlag != AIFlag::None) {
+@@ -146,6 +150,10 @@ static void DecodeNumericSegment(BitSource& bits, int count, Content& result)
+ 	while (count) {
+ 		int n = std::min(count, 3);
+ 		int nDigits = bits.readBits(1 + 3 * n); // read 4, 7 or 10 bits into 1, 2 or 3 digits
++		if (nDigits >= (n == 3 ? 1000 : n == 2 ? 100 : 10)) {
++			bits.setError(FormatError("Invalid numeric value"));
++			return;
++		}
+ 		result.append(ZXing::ToString(nDigits, n));
+ 		count -= n;
+ 	}
+@@ -168,7 +176,8 @@ static ECI ParseECIValue(BitSource& bits)
+ 		int secondThirdBytes = bits.readBits(16);
+ 		return ECI(((firstByte & 0x1F) << 16) | secondThirdBytes);
+ 	}
+-	throw FormatError("ParseECIValue: invalid value");
++	bits.setError(FormatError("ParseECIValue: invalid value"));
++	return ECI::Unknown;
+ }
+ 
+ /**
+@@ -214,14 +223,17 @@ DecoderResult DecodeBitStream(ByteArray&& bytes, const Version& version, ErrorCo
+ 	if (version.isModel1())
+ 		bits.readBits(4); // Model 1 is leading with 4 0-bits -> drop them
+ 
+-	try
+ 	{
+-		while(!IsEndOfStream(bits, version)) {
++		while(!bits.error() && !IsEndOfStream(bits, version)) {
+ 			CodecMode mode;
+ 			if (modeBitLength == 0)
+ 				mode = CodecMode::NUMERIC; // MicroQRCode version 1 is always NUMERIC and modeBitLength is 0
+-			else
+-				mode = CodecModeForBits(bits.readBits(modeBitLength), version.type());
++			else if (auto m = CodecModeForBits(bits.readBits(modeBitLength), version.type()))
++				mode = *m;
++			else {
++				bits.setError(FormatError("Invalid codec mode"));
++				break;
++			}
+ 
+ 			switch (mode) {
+ 			case CodecMode::FNC1_FIRST_POSITION:
+@@ -231,16 +243,20 @@ DecoderResult DecodeBitStream(ByteArray&& bytes, const Version& version, ErrorCo
+ 				result.symbology.aiFlag = AIFlag::GS1; // In Alphanumeric mode undouble doubled '%' and treat single '%' as <GS>
+ 				break;
+ 			case CodecMode::FNC1_SECOND_POSITION:
+-				if (!result.empty())
+-					throw FormatError("AIM Application Indicator (FNC1 in second position) at illegal position");
++				if (!result.empty()) {
++					bits.setError(FormatError("AIM Application Indicator (FNC1 in second position) at illegal position"));
++					break;
++				}
+ 				result.symbology.modifier = '5'; // As above
+ 				// ISO/IEC 18004:2015 7.4.8.3 AIM Application Indicator (FNC1 in second position), "00-99" or "A-Za-z"
+ 				if (int appInd = bits.readBits(8); appInd < 100) // "00-09"
+ 					result.append(ZXing::ToString(appInd, 2));
+ 				else if ((appInd >= 165 && appInd <= 190) || (appInd >= 197 && appInd <= 222)) // "A-Za-z"
+ 					result.push_back(appInd - 100);
+-				else
+-					throw FormatError("Invalid AIM Application Indicator");
++				else {
++					bits.setError(FormatError("Invalid AIM Application Indicator"));
++					break;
++				}
+ 				result.symbology.aiFlag = AIFlag::AIM; // see also above
+ 				break;
+ 			case CodecMode::STRUCTURED_APPEND:
+@@ -251,16 +267,20 @@ DecoderResult DecodeBitStream(ByteArray&& bytes, const Version& version, ErrorCo
+ 				structuredAppend.id    = std::to_string(bits.readBits(8));
+ 				break;
+ 			case CodecMode::ECI:
+-				if (version.isModel1())
+-					throw FormatError("QRCode Model 1 does not support ECI");
++				if (version.isModel1()) {
++					bits.setError(FormatError("QRCode Model 1 does not support ECI"));
++					break;
++				}
+ 				// Count doesn't apply to ECI
+ 				result.switchEncoding(ParseECIValue(bits));
+ 				break;
+ 			case CodecMode::HANZI: {
+ 				// First handle Hanzi mode which does not start with character count
+ 				// chinese mode contains a sub set indicator right after mode indicator
+-				if (int subset = bits.readBits(4); subset != 1) // GB2312_SUBSET is the only supported one right now
+-					throw FormatError("Unsupported HANZI subset");
++				if (int subset = bits.readBits(4); subset != 1) { // GB2312_SUBSET is the only supported one right now
++					bits.setError(FormatError("Unsupported HANZI subset"));
++					break;
++				}
+ 				int count = bits.readBits(CharacterCountBits(mode, version));
+ 				DecodeHanziSegment(bits, count, result);
+ 				break;
+@@ -274,17 +294,14 @@ DecoderResult DecodeBitStream(ByteArray&& bytes, const Version& version, ErrorCo
+ 				case CodecMode::ALPHANUMERIC: DecodeAlphanumericSegment(bits, count, result); break;
+ 				case CodecMode::BYTE:         DecodeByteSegment(bits, count, result); break;
+ 				case CodecMode::KANJI:        DecodeKanjiSegment(bits, count, result); break;
+-				default:                      throw FormatError("Invalid CodecMode");
++				default:                      bits.setError(FormatError("Invalid CodecMode")); break;
+ 				}
+ 				break;
+ 			}
+ 			}
+ 		}
+-	} catch (std::out_of_range&) { // see BitSource::readBits
+-		error = FormatError("Truncated bit stream");
+-	} catch (Error e) {
+-		error = std::move(e);
+ 	}
++	error = bits.error();
+ 
+ 	return DecoderResult(std::move(result))
+ 		.setError(std::move(error))
+diff --git a/test/unit/qrcode/QRModeTest.cpp b/test/unit/qrcode/QRModeTest.cpp
+index fb951175..62f86e8a 100644
+--- a/test/unit/qrcode/QRModeTest.cpp
++++ b/test/unit/qrcode/QRModeTest.cpp
+@@ -20,7 +20,7 @@ TEST(QRModeTest, ForBits)
+ 	ASSERT_EQ(CodecMode::ALPHANUMERIC, CodecModeForBits(0x02, Type::Model2));
+ 	ASSERT_EQ(CodecMode::BYTE, CodecModeForBits(0x04, Type::Model2));
+ 	ASSERT_EQ(CodecMode::KANJI, CodecModeForBits(0x08, Type::Model2));
+-	ASSERT_THROW(CodecModeForBits(0x10, Type::Model2), Error);
++	ASSERT_FALSE(CodecModeForBits(0x10, Type::Model2));
+ }
+ 
+ TEST(QRModeTest, CharacterCount)
+@@ -52,7 +52,7 @@ TEST(QRModeTest, MicroForBits)
+ 	ASSERT_EQ(CodecMode::BYTE, CodecModeForBits(0x02, Type::Micro));
+ 	ASSERT_EQ(CodecMode::KANJI, CodecModeForBits(0x03, Type::Micro));
+ 
+-	ASSERT_THROW(CodecModeForBits(0x04, Type::Micro), Error);
++	ASSERT_FALSE(CodecModeForBits(0x04, Type::Micro));
+ }
+ 
+ TEST(QRModeTest, MicroCharacterCount)
+@@ -76,7 +76,7 @@ TEST(QRModeTest, RMQRForBits)
+ 	ASSERT_EQ(CodecMode::FNC1_FIRST_POSITION, CodecModeForBits(0x05, Type::rMQR));
+ 	ASSERT_EQ(CodecMode::FNC1_SECOND_POSITION, CodecModeForBits(0x06, Type::rMQR));
+ 	ASSERT_EQ(CodecMode::ECI, CodecModeForBits(0x07, Type::rMQR));
+-	ASSERT_THROW(CodecModeForBits(0x08, Type::rMQR), Error);
++	ASSERT_FALSE(CodecModeForBits(0x08, Type::rMQR));
+ }
+ 
+ TEST(QRModeTest, RMQRCharacterCount)

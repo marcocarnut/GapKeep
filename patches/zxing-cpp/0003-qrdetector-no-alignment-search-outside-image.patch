@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: zerogap <zerogap@localhost>
+Date: Wed, 4 Nov 2026 13:19:29 -0300
+Subject: [PATCH] QRDetector: no alignment pattern search far outside the image
+
+SampleQR estimates the bottom right alignment pattern where two pairs of
+lines meet. For (almost) parallel lines that point is huge, infinite or
+NaN, and LocateAlignmentPattern converted it to int (in a log line that
+is evaluated even without PRINT_DEBUG): undefined behaviour, found by
+fuzzing with UBSan (-fsanitize=float-cast-overflow).
+
+None of the points LocateAlignmentPattern looks at (within 2.8 module
+sizes of the estimate) is in the image then, so return early: same
+results.
+---
+ core/src/qrcode/QRDetector.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/core/src/qrcode/QRDetector.cpp b/core/src/qrcode/QRDetector.cpp
+index f96a8620..9b4cdbfd 100644
+--- a/core/src/qrcode/QRDetector.cpp
++++ b/core/src/qrcode/QRDetector.cpp
+@@ -402,6 +402,10 @@ static PerspectiveTransform Mod2Pix(int dimension, PointF brOffset, Quadrilatera
+ 
+ static std::optional<PointF> LocateAlignmentPattern(const BitMatrix& image, double moduleSize, PointF estimate)
+ {
++	// an estimate far outside the image (where almost parallel lines meet, or NaN): none of the points below is in it
++	if (!image.isIn(estimate, -int(std::ceil(3 * moduleSize))))
++		return {};
++
+ 	log(estimate, LOG_R);
+ 	log_l("LocateAlignmentPattern: local modSize = %.3f @ (%d, %d)", moduleSize, PointI(estimate).x * 5 + 2, PointI(estimate).y * 5 + 2);
+ 
