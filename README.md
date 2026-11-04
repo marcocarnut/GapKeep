@@ -28,7 +28,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
 - [Browser IDE](docs/IDE.md): edit and run apps in the browser.
-- [The camera and QR codes](docs/CAMERA.md): `ui.QRScanner`, and testing it without a camera.
+- [The camera and QR codes](docs/CAMERA.md): `ui.Scanner`, and testing it without a camera.
 - [Guide for coding agents](docs/AGENTS.md): writing apps with an AI agent.
 - [Architecture and security model](docs/ARCHITECTURE.md)
 - [Hardware test rig](docs/RIG.md)

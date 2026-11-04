@@ -48,7 +48,7 @@ formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 ## The camera
 
 The simulator has a camera that films what you tell it, for apps with
-`ui.QRScanner` ([CAMERA.md](CAMERA.md)). The decoder is the real one.
+`ui.Scanner` ([CAMERA.md](CAMERA.md)). The decoder is the real one.
 
 | Command | The camera films |
 | --- | --- |

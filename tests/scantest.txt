@@ -1,0 +1,11 @@
+# Needs a test build (make TEST=1), and the simulator (it uses "launch"):
+# ui.Scanner's rules (tests/apps/scantest).
+expect Keyboard attached 60
+expect launcher ready 60
+launch scantest
+expect scantest ready
+camera qr zerogap 🎲
+expect scantest: text ok 20
+# 0xc3 0x28 is not UTF-8: the text is null
+camera qrhex 00ffc328
+expect scantest done: 0 failed 20

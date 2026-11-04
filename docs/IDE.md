@@ -77,7 +77,7 @@ For scripts and agents, the page exposes `window.zgide`: `run(id)`,
 ## The camera
 
 Under the screen, **Camera** sets what zerogap's camera films, for apps
-with `ui.QRScanner` ([CAMERA.md](CAMERA.md)):
+with `ui.Scanner` ([CAMERA.md](CAMERA.md)):
 
 - **Empty scene**: nothing in particular.
 - **QR code**: a code of the text you type. With **one per line**, each line

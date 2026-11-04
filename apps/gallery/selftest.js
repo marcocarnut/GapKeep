@@ -56,6 +56,11 @@ export async function runSelfTest(parent) {
     throws(() => new ui.Label(box).set({ checked: true }), TypeError, "wrong widget");
   });
 
+  await test("the camera needs its permission", () => {
+    // the gallery doesn't ask for "camera" in its manifest
+    throws(() => new ui.Scanner(box, { detect: ["qr"] }), TypeError, "Scanner");
+  });
+
   await test("bad values throw", () => {
     const c = new ui.Container(box);
     throws(() => c.set({ width: "wide" }), TypeError, "size");

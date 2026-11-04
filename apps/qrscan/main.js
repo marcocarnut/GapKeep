@@ -1,4 +1,4 @@
-// QR Scanner: the example for ui.QRScanner (docs/CAMERA.md). Shows the
+// QR Scanner: the example for ui.Scanner (docs/CAMERA.md). Shows the
 // camera's view, and the text (or the bytes, in hex) of each code read.
 //
 // The log gets each code's length and the start of its SHA-256, never its
@@ -15,10 +15,11 @@ const hex = (bytes) => Array.from (bytes, (b) => b.toString (16).padStart (2, "0
 const wide = ui.width >= 800;
 ui.screen.set ({ layout: wide ? "row" : "column", gap: wide ? 16 : 8 });
 
-const scanner = new ui.QRScanner ({
+const scanner = new ui.Scanner ({
+  detect: ["qr"],
   width: wide ? 400 : 280,
   height: wide ? 300 : 210,
-  onCode: ({ bytes, text }) => {
+  onDetect: ({ bytes, text }) => {
     count++;
     title.text = `Code ${count}: ${bytes.length} byte${bytes.length === 1 ? "" : "s"}` +
       (text === null ? ", binary" : "");

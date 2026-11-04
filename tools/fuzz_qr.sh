@@ -11,9 +11,10 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 Q=$ROOT/third_party/quirc/lib
 [ -f "$Q/quirc.c" ] || { echo "fuzz_qr: needs the QR decoder, third_party/quirc" >&2; exit 2; }
+"$ROOT/tools/apply_patches.sh" quirc
 OUT=$ROOT/sim/build/fuzz
 mkdir -p "$OUT"
-SAN="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1"
+SAN="-fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1"
 INC="-I $ROOT/src/runtime -I $ROOT/sim/include -I $ROOT/lib/lvgl -idirafter $ROOT/circle/addon -I $Q"
 DEF="-DZG_SIM -DZG_HAVE_QUIRC -DLV_CONF_PATH=<zg_lv_conf.h>"
 for c in "$Q"/*.c; do

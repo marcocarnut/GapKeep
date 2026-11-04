@@ -24,6 +24,8 @@ declare module "zg:ui" {
   export type Size = number | string;
   /** A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`. */
   export type Color = number | string;
+  /** A **detector** is something a `Scanner` can recognise: `"qr"` for QR codes. */
+  export type Detector = "qr";
   /**
    * An **image source** is `{ width, height, data }`: `data` holds
    * `width * height * 4` bytes of RGBA (straight alpha, rows top to bottom),
@@ -32,7 +34,7 @@ declare module "zg:ui" {
   export type ImageSource = { width: number; height: number; data: Uint8Array | ArrayBuffer };
   export type SymbolName = "audio" | "video" | "list" | "ok" | "close" | "power" | "settings" | "home" | "download" | "drive" | "refresh" | "mute" | "volume-mid" | "volume-max" | "image" | "tint" | "prev" | "play" | "pause" | "stop" | "next" | "eject" | "left" | "right" | "plus" | "minus" | "eye-open" | "eye-close" | "warning" | "shuffle" | "up" | "down" | "loop" | "directory" | "upload" | "call" | "cut" | "copy" | "save" | "bars" | "envelope" | "charge" | "paste" | "bell" | "keyboard" | "gps" | "file" | "wifi" | "battery-full" | "battery-3" | "battery-2" | "battery-1" | "battery-empty" | "usb" | "bluetooth" | "trash" | "edit" | "backspace" | "sd-card" | "new-line";
   export type SymbolTable = { readonly [name in SymbolName]: string };
-  export type EventName = "click" | "change" | "submit" | "focus" | "blur" | "longpress" | "key" | "press" | "drag" | "release" | "code" | "error";
+  export type EventName = "click" | "change" | "submit" | "focus" | "blur" | "longpress" | "key" | "press" | "drag" | "release" | "detect" | "error";
   /** The event object handlers receive (`this` is the widget). */
   export interface WidgetEvent {
     /** Event name. */
@@ -209,11 +211,13 @@ declare module "zg:ui" {
     /** `data`: a `Uint8Array` or `ArrayBuffer` of `width * height * 4` bytes, RGBA with straight alpha, rows top to bottom (as canvas `ImageData`). Up to 1024 px a side. Copied: the app may reuse its buffer. `sys.app.image` and the `image` of `apps.list()` entries are in this form. */
     src?: ImageSource;
   }
-  export interface QRScannerProps extends CommonProps {
-    /** Handler for `"code"`: A QR code was read: `bytes` (a `Uint8Array`) is its content, `text` the same as a string if it is valid UTF-8, else `null`. Fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. */
-    onCode?: (this: QRScanner, ev: { type: "code"; target: QRScanner; bytes: Uint8Array; text: string | null }) => void;
+  export interface ScannerProps extends CommonProps {
+    /** *Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. */
+    detect?: Detector[];
+    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. */
+    onDetect?: (this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null }) => void;
     /** Handler for `"error"`: The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. */
-    onError?: (this: QRScanner, ev: { type: "error"; target: QRScanner; reason: string }) => void;
+    onError?: (this: Scanner, ev: { type: "error"; target: Scanner; reason: string }) => void;
   }
   export interface TabViewProps extends CommonProps {
     /** *Readable*. Index of the shown tab. */
@@ -461,25 +465,28 @@ declare module "zg:ui" {
     src: ImageSource;
   }
   /**
-   * The camera's view, and the QR codes in it. The app gets the decoded
-   * contents of each code, never the picture: the kernel draws the view and
-   * reads the codes. Needs `"permissions": ["camera"]` in the manifest
-   * (otherwise the constructor throws). See [CAMERA.md](CAMERA.md).
+   * The camera's view, and what the kernel recognises in it: the detectors
+   * in `detect`. The app gets what was found (a QR code's contents), never
+   * the picture: the kernel draws the view and runs the detectors. Needs
+   * `"permissions": ["camera"]` in the manifest (otherwise the constructor
+   * throws). See [CAMERA.md](CAMERA.md).
    */
-  export class QRScanner extends Widget {
-    constructor(props?: QRScannerProps);
-    constructor(parent: Widget, props?: QRScannerProps);
-    set(props: QRScannerProps): this;
+  export class Scanner extends Widget {
+    constructor(props?: ScannerProps);
+    constructor(parent: Widget, props?: ScannerProps);
+    set(props: ScannerProps): this;
+    /** *Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. */
+    detect: Detector[];
     /** *Read-only*. Whether the camera is on for this scanner. */
     readonly scanning: boolean;
     /** Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created. */
     start(): void;
     /** Turns the camera off. Deleting the widget, or the app ending, does too. */
     stop(): void;
-    /** Handler for `"code"`: A QR code was read: `bytes` (a `Uint8Array`) is its content, `text` the same as a string if it is valid UTF-8, else `null`. Fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. */
-    onCode: ((this: QRScanner, ev: { type: "code"; target: QRScanner; bytes: Uint8Array; text: string | null }) => void) | null;
+    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. */
+    onDetect: ((this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null }) => void) | null;
     /** Handler for `"error"`: The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. */
-    onError: ((this: QRScanner, ev: { type: "error"; target: QRScanner; reason: string }) => void) | null;
+    onError: ((this: Scanner, ev: { type: "error"; target: Scanner; reason: string }) => void) | null;
   }
   /** Tabs along the top, each with its own page. */
   export class TabView extends Widget {

@@ -57,6 +57,7 @@ INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -idirafter $(ROOT)/c
 # build has no QR decoder".
 QUIRC    := $(ROOT)/third_party/quirc/lib
 ifneq ($(wildcard $(QUIRC)/quirc.c),)
+$(shell $(ROOT)/tools/apply_patches.sh quirc >&2)
 QUIRCSRC := $(wildcard $(QUIRC)/*.c)
 DEFS     += -DZG_HAVE_QUIRC
 INCS     += -I $(QUIRC)
@@ -70,7 +71,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/js_crypto.cpp $(ROOT)/src/runtime/zg_bridge.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \
 	    $(ROOT)/src/runtime/cursor_install.c \
-	    $(ROOT)/src/runtime/qrscan.cpp $(ROOT)/src/runtime/qrdecode.cpp \
+	    $(ROOT)/src/runtime/scanner.cpp $(ROOT)/src/runtime/qrdecode.cpp \
 	    $(ROOT)/src/runtime/synthcam.cpp \
 	    $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/kbdindev.cpp

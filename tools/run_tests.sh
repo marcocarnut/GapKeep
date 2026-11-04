@@ -17,6 +17,10 @@ FAILED=0
 
 run() {	# scenario, SD card image
 	name=$(basename "$1" .txt)
+	if grep -q "^launch " "$1"; then
+		echo "SKIP  $name   (simulator only: tools/run_sim_tests.sh)"
+		return
+	fi
 	if grep -q "^camera " "$1" && [ ! -f third_party/quirc/lib/quirc.c ]; then
 		echo "SKIP  $name   (needs the QR decoder, third_party/quirc)"
 		return

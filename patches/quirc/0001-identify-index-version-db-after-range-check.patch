@@ -1,0 +1,22 @@
+diff --git a/lib/identify.c b/lib/identify.c
+index c149c21..34beb45 100644
+--- a/lib/identify.c
++++ b/lib/identify.c
+@@ -773,7 +773,7 @@ static int fitness_all(const struct quirc *q, int index)
+ {
+ 	const struct quirc_grid *qr = &q->grids[index];
+ 	int version = (qr->grid_size - 17) / 4;
+-	const struct quirc_version_info *info = &quirc_version_db[version];
++	const struct quirc_version_info *info;
+ 	int score = 0;
+ 	int i, j;
+ 	int ap_count;
+@@ -794,6 +794,8 @@ static int fitness_all(const struct quirc *q, int index)
+ 	if (version < 0 || version > QUIRC_MAX_VERSION)
+ 		return score;
+ 
++	info = &quirc_version_db[version];
++
+ 	/* Check alignment patterns */
+ 	ap_count = 0;
+ 	while ((ap_count < QUIRC_MAX_ALIGNMENT) && info->apat[ap_count])

@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# Applies zerogap's fixes to third-party code: patches/<name>/*.patch to
+# the submodule, each once (already applied: skipped). Called by
+# tools/build.sh, sim/Makefile and tools/fuzz_qr.sh.
+#
+#   tools/apply_patches.sh circle|quirc
+#
+set -e
+cd "$(dirname "$0")/.."
+case "$1" in
+	circle) DIR=circle ;;
+	quirc)  DIR=third_party/quirc ;;
+	*)      echo "usage: $0 circle|quirc" >&2; exit 2 ;;
+esac
+[ -e "$DIR/.git" ] || exit 0		# not checked out
+for p in patches/$1/*.patch; do
+	[ -f "$p" ] || continue
+	if ! git -C "$DIR" apply --check -R "$PWD/$p" 2>/dev/null; then
+		echo "apply_patches: $p" >&2
+		git -C "$DIR" apply "$PWD/$p"
+	fi
+done

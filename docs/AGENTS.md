@@ -120,8 +120,8 @@ modules into the app if you must, and check they use nothing above.
 - **Rebuilding a screen:** `ui.screen.clear()` deletes every widget; then
   create the new ones. Deleting a widget inside its own handler is safe.
 - **Log lines are at most 2 KB.** Split big dumps.
-- **QR codes come in through `ui.QRScanner`** (permission `"camera"`): you
-  get the decoded bytes, never pixels. Test with `camera qr <text>` in
+- **QR codes come in through `ui.Scanner`** (`detect: ["qr"]`, permission
+  `"camera"`): you get the decoded bytes, never pixels. Test with `camera qr <text>` in
   scenarios ([CAMERA.md](CAMERA.md)), and don't log what a code holds.
 - **Images are raw RGBA** (`{ width, height, data }`); there is no PNG or JPEG
   decoder.

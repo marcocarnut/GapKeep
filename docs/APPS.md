@@ -84,7 +84,7 @@ handlers and timers.
 | `description` | no | One line for the launcher tile. |
 | `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
-| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.QRScanner`, [CAMERA.md](CAMERA.md)). E.g. `["camera"]`. |
+| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 
 zerogap checks every manifest, and refuses an app with unknown keys, a bad

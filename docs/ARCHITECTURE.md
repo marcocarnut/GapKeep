@@ -97,7 +97,7 @@ handler" safe.
 All properties are described by one table; constructors, `set()` and the
 per-type property accessors all go through it, with strict validation.
 
-`ui.QRScanner` is driven by `qrscan.cpp` (camera frames, decoding with
+`ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for
 the simulator and test builds. See [CAMERA.md](CAMERA.md).

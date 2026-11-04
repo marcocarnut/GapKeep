@@ -32,7 +32,7 @@ import * as ui from "zg:ui";
 | Name | Type | Description |
 | --- | --- | --- |
 | `Widget` | class | Base class of all widgets. Not constructible; use for `instanceof`. |
-| `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `QRScanner`, `TabView` | classes | [Widgets](#widgets) |
+| `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `Scanner`, `TabView` | classes | [Widgets](#widgets) |
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
 | `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. |
@@ -295,28 +295,31 @@ scale it to fit (keeping its aspect ratio); `radius` rounds its corners.
 new ui.Image({ src: sys.app.image, radius: 12 });
 ```
 
-#### QRScanner
+#### Scanner
 
-The camera's view, and the QR codes in it. The app gets the decoded
-contents of each code, never the picture: the kernel draws the view and
-reads the codes. Needs `"permissions": ["camera"]` in the manifest
-(otherwise the constructor throws). See [CAMERA.md](CAMERA.md).
+The camera's view, and what the kernel recognises in it: the detectors
+in `detect`. The app gets what was found (a QR code's contents), never
+the picture: the kernel draws the view and runs the detectors. Needs
+`"permissions": ["camera"]` in the manifest (otherwise the constructor
+throws). See [CAMERA.md](CAMERA.md).
 
 | Property / method | Value | Notes |
 | --- | --- | --- |
+| `detect` | list of detector names | *Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. |
 | `scanning` | boolean | *Read-only*. Whether the camera is on for this scanner. |
 | `start()` |  | Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created. |
 | `stop()` |  | Turns the camera off. Deleting the widget, or the app ending, does too. |
-| `onCode` | handler | Event `"code"`. A QR code was read: `bytes` (a `Uint8Array`) is its content, `text` the same as a string if it is valid UTF-8, else `null`. Fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. |
+| `onDetect` | handler | Event `"detect"`. Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. |
 | `onError` | handler | Event `"error"`. The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. |
 
 The view is 320×240 unless you set `width` and `height`; the picture is
-scaled to fit, and a green outline marks the code just read. One scanner
+scaled to fit, and a green outline marks what was just found. One scanner
 at a time can have the camera.
 
 ```js
-new ui.QRScanner({
-  onCode: ({ bytes, text }) => console.log(`read ${bytes.length} bytes`),
+new ui.Scanner({
+  detect: ["qr"],
+  onDetect: ({ kind, bytes, text }) => console.log(`${kind}: ${bytes.length} bytes`),
   onError: ({ reason }) => (status.text = reason),
 });
 ```

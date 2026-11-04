@@ -461,7 +461,7 @@ const MANIFEST_SCHEMA = {
       ],
     },
     entry: { type: "string", description: "Entry module (default main.js)." },
-    permissions: { type: "array", items: { enum: ["apps", "camera"] }, description: "Extra rights: \"apps\" (zg:apps), \"camera\" (ui.QRScanner)." },
+    permissions: { type: "array", items: { enum: ["apps", "camera"] }, description: "Extra rights: \"apps\" (zg:apps), \"camera\" (ui.Scanner)." },
     hidden: { type: "boolean", description: "true: not listed in the launcher." },
   },
 };

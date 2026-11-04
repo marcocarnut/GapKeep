@@ -1,24 +1,56 @@
 //
-// qrscan.cpp
+// scanner.cpp
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-#include "qrscan.h"
+#include "scanner.h"
 #include "camera.h"
+#include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
 #include <assert.h>
 
 CZgCamera *CZgCamera::s_pCamera = 0;
-CZgQRScanner *CZgQRScanner::s_pActive = 0;
+CZgScanner *CZgScanner::s_pActive = 0;
 
 // a code that was out of sight this long is reported again when it comes back
 static const unsigned long long ForgetTicks = 2 * CLOCKHZ;
 // the outline of a code read stays on the preview this long
 static const unsigned long long OutlineTicks = CLOCKHZ / 2;
 
-CZgQRScanner::CZgQRScanner (void)
-:	m_pCamera (0),
+static const struct { const char *pName; unsigned nBit; } Detectors[] =
+{
+	{"qr", ZG_DETECT_QR},
+};
+
+unsigned CZgScanner::GetDetector (const char *pName)
+{
+	for (unsigned i = 0; i < sizeof Detectors / sizeof Detectors[0]; i++)
+	{
+		if (strcmp (pName, Detectors[i].pName) == 0)
+		{
+			return Detectors[i].nBit;
+		}
+	}
+	return 0;
+}
+
+const char *CZgScanner::GetDetectorName (unsigned nIndex, unsigned *pBit)
+{
+	if (nIndex >= sizeof Detectors / sizeof Detectors[0])
+	{
+		return 0;
+	}
+	if (pBit != 0)
+	{
+		*pBit = Detectors[nIndex].nBit;
+	}
+	return Detectors[nIndex].pName;
+}
+
+CZgScanner::CZgScanner (void)
+:	m_nDetectors (0),
+	m_pCamera (0),
 	m_pError (0),
 	m_nFrameSerial (0),
 	m_pPreviewFrame (0),
@@ -28,18 +60,22 @@ CZgQRScanner::CZgQRScanner (void)
 	m_pLast (0),
 	m_nLastLength (0),
 	m_nLastSeenAt (0),
-	m_nCornersUntil (0)
+	m_nCornersUntil (0),
+	m_nFrames (0),
+	m_nDecodes (0),
+	m_nDecodeTicks (0),
+	m_nMaxDecodeTicks (0)
 {
 }
 
-CZgQRScanner::~CZgQRScanner (void)
+CZgScanner::~CZgScanner (void)
 {
 	Stop ();
 	delete [] m_pPreviewFrame;
 	delete [] m_pLast;
 }
 
-boolean CZgQRScanner::Start (void)
+boolean CZgScanner::Start (void)
 {
 	if (m_pCamera != 0)
 	{
@@ -78,11 +114,13 @@ boolean CZgQRScanner::Start (void)
 	m_pLast = 0;
 	m_nLastLength = 0;
 	m_nCornersUntil = 0;
+	m_nFrames = m_nDecodes = 0;
+	m_nDecodeTicks = m_nMaxDecodeTicks = 0;
 
 	return TRUE;
 }
 
-void CZgQRScanner::Stop (void)
+void CZgScanner::Stop (void)
 {
 	if (m_pCamera == 0)
 	{
@@ -91,17 +129,27 @@ void CZgQRScanner::Stop (void)
 
 	m_pCamera->Stop ();
 	m_pCamera = 0;
+
+	if (m_nDecodes > 0)
+	{
+		CLogger::Get ()->Write ("scanner", LogNotice,
+			"%u frames, %u decoded, %u ms each on average, %u ms at most",
+			m_nFrames, m_nDecodes,
+			(unsigned) (m_nDecodeTicks / m_nDecodes / (CLOCKHZ / 1000)),
+			(unsigned) (m_nMaxDecodeTicks / (CLOCKHZ / 1000)));
+	}
 	assert (s_pActive == this);
 	s_pActive = 0;
 }
 
-const u8 *CZgQRScanner::GetCode (unsigned *pLength) const
+unsigned CZgScanner::GetDetection (const u8 **ppData, unsigned *pLength) const
 {
+	*ppData = m_pLast;
 	*pLength = m_nLastLength;
-	return m_pLast;
+	return ZG_DETECT_QR;		// the only detector so far
 }
 
-unsigned CZgQRScanner::Poll (void)
+unsigned CZgScanner::Poll (void)
 {
 	if (m_pCamera == 0)
 	{
@@ -132,28 +180,49 @@ unsigned CZgQRScanner::Poll (void)
 	m_nPreviewWidth = nWidth;
 	m_nPreviewHeight = nHeight;
 	unsigned nResult = PollFrame;
+	m_nFrames++;
 
-	// Decode at most half the time: a decode that took D waits D before the
-	// next one, so the UI stays responsive on a slow CPU.
+	if (m_nDetectors & ZG_DETECT_QR)
+	{
+		nResult |= PollQR (pFrame, nWidth, nHeight);
+		if (m_pCamera == 0)
+		{
+			return nResult;		// stopped (no decoder)
+		}
+	}
+
+	return nResult;
+}
+
+// Decodes at most half the time: a decode that took D waits D before the
+// next one, so the UI stays responsive on a slow CPU.
+unsigned CZgScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight)
+{
 	unsigned long long nNow = CTimer::GetClockTicks64 ();
 	if (nNow < m_nNextDecodeAt)
 	{
-		return nResult;
+		return 0;
 	}
 
 	TZgQRCode Codes[1];
 	int nFound = ZgDecodeQR (pFrame, nWidth, nHeight, Codes, 1);
 	unsigned long long nDone = CTimer::GetClockTicks64 ();
 	m_nNextDecodeAt = nDone + (nDone - nNow);
+	m_nDecodes++;
+	m_nDecodeTicks += nDone - nNow;
+	if (nDone - nNow > m_nMaxDecodeTicks)
+	{
+		m_nMaxDecodeTicks = nDone - nNow;
+	}
 	if (nFound < 0)
 	{
 		m_pError = "this build has no QR decoder";
 		Stop ();
-		return nResult | PollError;
+		return PollError;
 	}
 	if (nFound == 0)
 	{
-		return nResult;
+		return 0;
 	}
 
 	const TZgQRCode &rCode = Codes[0];
@@ -166,7 +235,7 @@ unsigned CZgQRScanner::Poll (void)
 	m_nLastSeenAt = nDone;
 	if (!bReport)
 	{
-		return nResult;
+		return 0;
 	}
 
 	if (!bSame)
@@ -177,7 +246,7 @@ unsigned CZgQRScanner::Poll (void)
 		m_nLastLength = rCode.nLength;
 	}
 
-	return nResult | PollCode;
+	return PollDetect;
 }
 
 static inline u16 Grey565 (unsigned v)
@@ -185,7 +254,7 @@ static inline u16 Grey565 (unsigned v)
 	return (u16) (((v >> 3) << 11) | ((v >> 2) << 5) | (v >> 3));
 }
 
-boolean CZgQRScanner::DrawPreview (u16 *pPixels, unsigned nWidth, unsigned nHeight) const
+boolean CZgScanner::DrawPreview (u16 *pPixels, unsigned nWidth, unsigned nHeight) const
 {
 	if (m_pPreviewFrame == 0 || nWidth == 0 || nHeight == 0)
 	{

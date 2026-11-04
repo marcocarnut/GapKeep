@@ -10,8 +10,8 @@
 # LVGL, QuickJS and the kernel are rebuilt from scratch; otherwise this is
 # an ordinary incremental make.
 #
-# zerogap's fixes to Circle (patches/circle/*.patch) are applied to the
-# submodule first, once.
+# zerogap's fixes to Circle and quirc (patches/*/) are applied to the
+# submodules first, once (tools/apply_patches.sh).
 #
 set -e
 cd "$(dirname "$0")/.."
@@ -28,12 +28,8 @@ J=-j"$(nproc)"
 SOURCE_DATE_EPOCH=$(git log -1 --format=%ct 2>/dev/null || echo 0)
 export SOURCE_DATE_EPOCH
 
-for p in patches/circle/*.patch; do
-	if ! git -C circle apply --check -R "../$p" 2>/dev/null; then
-		echo "build: applying $p"
-		git -C circle apply "../$p"
-	fi
-done
+tools/apply_patches.sh circle
+tools/apply_patches.sh quirc
 
 # Circle's configuration. USB: only hubs, keyboards and mice (boot
 # protocol); every other class driver is left out of the image, since a USB

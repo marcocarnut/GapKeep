@@ -1,6 +1,6 @@
 #
 # Builds Daniel Beer's quirc (third_party/quirc, pinned), the QR code
-# decoder behind ui.QRScanner (src/runtime/qrdecode.cpp), as a static
+# decoder behind ui.Scanner's "qr" (src/runtime/qrdecode.cpp), as a static
 # library for Circle. Only lib/: no demos, no tools.
 #
 

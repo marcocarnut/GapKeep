@@ -1,5 +1,5 @@
 // camera.js - the IDE's camera bar: what zerogap's (simulated) camera
-// films, for apps with ui.QRScanner. Kept across reboots: apply() after
+// films, for apps with ui.Scanner. Kept across reboots: apply() after
 // each boot.
 //
 //   Empty scene   nothing in particular

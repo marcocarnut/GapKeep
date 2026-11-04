@@ -36,6 +36,10 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (set ZG_RIG_SDAPPS=1 once the rig's card has tests/sdcard/apps)"
 		continue
 	fi
+	if grep -q "^launch " "$t"; then
+		echo "SKIP  hw:$name   (simulator only)"
+		continue
+	fi
 	if grep -q "^camera " "$t" && [ ! -f third_party/quirc/lib/quirc.c ]; then
 		echo "SKIP  hw:$name   (needs the QR decoder, third_party/quirc)"
 		continue

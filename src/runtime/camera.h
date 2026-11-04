@@ -1,7 +1,7 @@
 //
 // camera.h
 //
-// The camera, as the QR scanner (qrscan.cpp) sees it: a source of greyscale
+// The camera, as the scanner (scanner.cpp) sees it: a source of greyscale
 // frames. Apps never get frames: the kernel draws them as the scanner's
 // preview and decodes them (docs/CAMERA.md). Recognising anything in the
 // images is the kernel's job, never JavaScript's.

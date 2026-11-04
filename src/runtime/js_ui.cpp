@@ -24,7 +24,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
-#include "qrscan.h"
+#include "scanner.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
 #include <lvgl/lvgl/src/libs/qrcode/qrcodegen.h>
 #include <lvgl/lvgl/src/misc/cache/instance/lv_image_cache.h>
@@ -52,14 +52,14 @@ enum TWidgetType
 	WQRCode,
 	WTabView,
 	WImage,
-	WQRScanner,
+	WScanner,
 	WTypeCount
 };
 
 static const char *TypeNames[WTypeCount] =
 {
 	"Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
-	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "QRScanner"
+	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner"
 };
 
 #define T(t)		(1u << (t))
@@ -77,7 +77,7 @@ enum TEventSlot
 	EvPress,
 	EvDrag,
 	EvRelease,
-	EvCode,
+	EvDetect,
 	EvError,
 	EvCount
 };
@@ -104,8 +104,8 @@ Events[EvCount] =
 	{"press",     "onPress",     LV_EVENT_PRESSED, 0xFFFFFFFFu},
 	{"drag",      "onDrag",      LV_EVENT_PRESSING, 0xFFFFFFFFu},
 	{"release",   "onRelease",   LV_EVENT_RELEASED, 0xFFFFFFFFu},
-	{"code",      "onCode",      ZG_EVENT, 1u << WQRScanner},
-	{"error",     "onError",     ZG_EVENT, 1u << WQRScanner},
+	{"detect",    "onDetect",    ZG_EVENT, 1u << WScanner},
+	{"error",     "onError",     ZG_EVENT, 1u << WScanner},
 };
 
 struct TZgNode
@@ -122,7 +122,7 @@ struct TZgNode
 	char *pAccepted;		// TextArea accepted chars (LVGL keeps the pointer)
 	struct TZgQR *pQR;		// QRCode settings
 	lv_image_dsc_t *pImage;		// Image: the picture (pixels follow the descriptor)
-	struct TZgScan *pScan;		// QRScanner
+	struct TZgScan *pScan;		// Scanner
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
 };
 
@@ -137,11 +137,12 @@ struct TZgQR
 	int nModules;			// side length of the current symbol, 0: none
 };
 
-// QRScanner: the scanner (qrscan.h), polled by an LVGL timer, and its
+// Scanner: the scanner (scanner.h), polled by an LVGL timer, and its
 // preview, drawn by the widget's draw callback. Freed with the LVGL object.
 struct TZgScan
 {
-	CZgQRScanner *pScanner;
+	CZgScanner *pScanner;
+	boolean bDetectSet;		// "detect" given (it is required)
 	lv_timer_t *pTimer;
 	boolean bErrorPending;		// Start() failed: report it from the timer
 	lv_image_dsc_t Preview;		// RGB565, the widget's content size
@@ -866,6 +867,70 @@ SETTER (SetHidden)     { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_HIDDE
 SETTER (SetClickable)  { return SetFlag (ctx, pNode, v, pProp, LV_OBJ_FLAG_CLICKABLE, FALSE); }
 GETTER (GetHidden)     { return JS_NewBool (ctx, lv_obj_has_flag (OBJ, LV_OBJ_FLAG_HIDDEN)); }
 
+// Scanner "detect": a list of detector names (scanner.h), e.g. ["qr"]
+SETTER (SetDetect)
+{
+	CString Known;
+	for (unsigned i = 0; CZgScanner::GetDetectorName (i) != 0; i++)
+	{
+		Known.Append (i ? ", \"" : "\"");
+		Known.Append (CZgScanner::GetDetectorName (i));
+		Known.Append ("\"");
+	}
+
+	uint32_t nLength = 0;
+	if (JS_IsArray (ctx, v))
+	{
+		JSValue Length = JS_GetPropertyStr (ctx, v, "length");
+		JS_ToUint32 (ctx, &nLength, Length);
+		JS_FreeValue (ctx, Length);
+	}
+	if (!JS_IsArray (ctx, v) || nLength > 16)
+	{
+		JS_ThrowTypeError (ctx, "%s: a list of detectors expected, from %s", pProp, (const char *) Known);
+		return -1;
+	}
+
+	unsigned nDetectors = 0;
+	for (uint32_t i = 0; i < nLength; i++)
+	{
+		JSValue Item = JS_GetPropertyUint32 (ctx, v, i);
+		const char *pName = JS_IsString (Item) ? JS_ToCString (ctx, Item) : 0;
+		unsigned nBit = pName != 0 ? CZgScanner::GetDetector (pName) : 0;
+		if (nBit == 0)
+		{
+			JS_ThrowTypeError (ctx, "%s: unknown detector \"%s\" (this system has %s)",
+					   pProp, pName ? pName : "?", (const char *) Known);
+		}
+		JS_FreeCString (ctx, pName);
+		JS_FreeValue (ctx, Item);
+		if (nBit == 0)
+		{
+			return -1;
+		}
+		nDetectors |= nBit;
+	}
+
+	pNode->pScan->pScanner->SetDetectors (nDetectors);
+	pNode->pScan->bDetectSet = TRUE;
+	return 0;
+}
+
+GETTER (GetDetect)
+{
+	unsigned nDetectors = pNode->pScan->pScanner->GetDetectors ();
+	JSValue List = JS_NewArray (ctx);
+	unsigned nBit, n = 0;
+	for (unsigned i = 0; CZgScanner::GetDetectorName (i, &nBit) != 0; i++)
+	{
+		if (nDetectors & nBit)
+		{
+			JS_SetPropertyUint32 (ctx, List, n++, JS_NewString (ctx, CZgScanner::GetDetectorName (i)));
+		}
+	}
+	return List;
+}
+
 static lv_style_t s_FocusStyle;		// the focus ring (see ApplyTheme)
 
 // The focus ring is drawn outside the widget: RingWidth px wide, RingGap px
@@ -1576,6 +1641,7 @@ static const TProp Props[] =
 	{"ecc",         T (WQRCode), SetQRECC, 0},
 	{"modules",     T (WQRCode), 0, GetQRModules},
 	{"src",         T (WImage), SetImageSrc, 0},
+	{"detect",      T (WScanner), SetDetect, GetDetect},
 };
 static const unsigned PropCount = sizeof Props / sizeof Props[0];
 
@@ -2077,23 +2143,26 @@ static void ScanTimerCallback (lv_timer_t *pTimer)
 	{
 		return;
 	}
-	if (nPoll & (CZgQRScanner::PollFrame | CZgQRScanner::PollError))
+	if (nPoll & (CZgScanner::PollFrame | CZgScanner::PollError))
 	{
 		lv_obj_invalidate (pNode->pObj);
 	}
-	if (nPoll & CZgQRScanner::PollCode)
+	if (nPoll & CZgScanner::PollDetect)
 	{
 		unsigned nLength;
-		const u8 *pData = pScan->pScanner->GetCode (&nLength);
+		const u8 *pData;
+		unsigned nKind = pScan->pScanner->GetDetection (&pData, &nLength);
+		assert (nKind == ZG_DETECT_QR);
 		JSValue Ev = JS_NewObject (ctx);
+		JS_SetPropertyStr (ctx, Ev, "kind", JS_NewString (ctx, "qr"));
 		JSValue Buffer = JS_NewArrayBufferCopy (ctx, pData, nLength);
 		JSValue Args[3] = {Buffer, JS_NewInt32 (ctx, 0), JS_NewInt32 (ctx, (int32_t) nLength)};
 		JS_SetPropertyStr (ctx, Ev, "bytes", JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8));
 		JS_FreeValue (ctx, Buffer);
 		JS_SetPropertyStr (ctx, Ev, "text", Utf8OrNull (ctx, pData, nLength));
-		FireEvent (pNode, EvCode, Ev);
+		FireEvent (pNode, EvDetect, Ev);
 	}
-	if ((nPoll & CZgQRScanner::PollError) && pNode->pScan != 0)
+	if ((nPoll & CZgScanner::PollError) && pNode->pScan != 0)
 	{
 		JSValue Ev = JS_NewObject (ctx);
 		JS_SetPropertyStr (ctx, Ev, "reason", JS_NewString (ctx, pScan->pScanner->GetError ()));
@@ -2105,7 +2174,7 @@ static void CreateScan (TZgNode *pNode)
 {
 	TZgScan *pScan = new TZgScan;
 	memset (pScan, 0, sizeof *pScan);
-	pScan->pScanner = new CZgQRScanner;
+	pScan->pScanner = new CZgScanner;
 	pScan->pTimer = lv_timer_create (ScanTimerCallback, 30, pNode);
 	pNode->pScan = pScan;
 }
@@ -2159,7 +2228,7 @@ static void ScanDrawCallback (lv_event_t *e)
 		return;
 	}
 
-	CZgQRScanner *pScanner = pScan->pScanner;
+	CZgScanner *pScanner = pScan->pScanner;
 	const char *pText = 0;
 	CString Status;
 	if (!pScanner->IsScanning ())
@@ -2227,7 +2296,7 @@ static TZgNode *GetScanner (JSContext *ctx, JSValueConst this_val)
 	TZgNode *pNode = GetNode (ctx, this_val);
 	if (pNode != 0 && pNode->pScan == 0)
 	{
-		JS_ThrowTypeError (ctx, "not a QRScanner");
+		JS_ThrowTypeError (ctx, "not a Scanner");
 		return 0;
 	}
 	return pNode;
@@ -2296,7 +2365,7 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent)
 		// natural size, or scaled down/up to fit a width and height set by the app
 		lv_image_set_inner_align (p, LV_IMAGE_ALIGN_CONTAIN);
 		break;
-	case WQRScanner:
+	case WScanner:
 		p = lv_obj_create (pParent);
 		lv_obj_remove_style_all (p);
 		lv_obj_set_size (p, 320, 240);
@@ -2344,9 +2413,9 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 		Props = argv[nArg];
 	}
 
-	if (Type == WQRScanner && !(pApp->pBundle->permissions & ZG_PERM_CAMERA))
+	if (Type == WScanner && !(pApp->pBundle->permissions & ZG_PERM_CAMERA))
 	{
-		return JS_ThrowTypeError (ctx, "ui.QRScanner needs \"permissions\": [\"camera\"] in manifest.json");
+		return JS_ThrowTypeError (ctx, "ui.Scanner needs \"permissions\": [\"camera\"] in manifest.json");
 	}
 
 	// support subclasses: class MyButton extends ui.Button { ... }
@@ -2363,7 +2432,7 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 	}
 
 	TZgNode *pNode = (TZgNode *) JS_GetOpaque (Obj, s_WidgetClass);
-	if (Type == WQRScanner)
+	if (Type == WScanner)
 	{
 		CreateScan (pNode);
 	}
@@ -2373,8 +2442,14 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 		JS_FreeValue (ctx, Obj);
 		return JS_EXCEPTION;
 	}
-	if (Type == WQRScanner)
+	if (Type == WScanner)
 	{
+		if (!pNode->pScan->bDetectSet)
+		{
+			DeferDelete (ctx, pNode);
+			JS_FreeValue (ctx, Obj);
+			return JS_ThrowTypeError (ctx, "ui.Scanner: \"detect\" is required: what to look for, e.g. [\"qr\"]");
+		}
 		StartScan (pNode);	// after the props: onError may be among them
 	}
 
@@ -2691,7 +2766,7 @@ const char *ZgSymbolByName (const char *pName)
 static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
-	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "QRScanner",
+	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
 	"screen", "width", "height", "fonts", "symbols", "alert", "onKey", "theme"
 };
 
@@ -2771,7 +2846,7 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 		{
 			DefineMethod (ctx, Proto, "addTab", js_tabview_add_tab, 1);
 		}
-		if (t == WQRScanner)
+		if (t == WScanner)
 		{
 			DefineMethod (ctx, Proto, "start", js_scanner_start, 0);
 			DefineMethod (ctx, Proto, "stop", js_scanner_stop, 0);

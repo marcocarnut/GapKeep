@@ -47,6 +47,9 @@ ui:
     - name: Color
       ts: number | string
       md: 'A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.'
+    - name: Detector
+      ts: '"qr"'
+      md: 'A **detector** is something a `Scanner` can recognise: `"qr"` for QR codes.'
     - name: ImageSource
       ts: '{ width: number; height: number; data: Uint8Array | ArrayBuffer }'
       md: |
@@ -366,34 +369,41 @@ ui:
         new ui.Image({ src: sys.app.image, radius: 12 });
         ```
 
-    - name: QRScanner
+    - name: Scanner
       md: |
-        The camera's view, and the QR codes in it. The app gets the decoded
-        contents of each code, never the picture: the kernel draws the view and
-        reads the codes. Needs `"permissions": ["camera"]` in the manifest
-        (otherwise the constructor throws). See [CAMERA.md](CAMERA.md).
+        The camera's view, and what the kernel recognises in it: the detectors
+        in `detect`. The app gets what was found (a QR code's contents), never
+        the picture: the kernel draws the view and runs the detectors. Needs
+        `"permissions": ["camera"]` in the manifest (otherwise the constructor
+        throws). See [CAMERA.md](CAMERA.md).
       props:
+        - name: detect
+          ts: 'Detector[]'
+          readable: true
+          value: 'list of detector names'
+          md: '*Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
         - {name: scanning, ts: boolean, readonly: true, md: '*Read-only*. Whether the camera is on for this scanner.'}
       methods:
         - {name: start, signature: start(), ts: '() => void', md: 'Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created.'}
         - {name: stop, signature: stop(), ts: '() => void', md: 'Turns the camera off. Deleting the widget, or the app ending, does too.'}
       events:
-        - name: code
-          prop: onCode
-          ev_ts: '{ type: "code"; target: QRScanner; bytes: Uint8Array; text: string | null }'
-          md: 'A QR code was read: `bytes` (a `Uint8Array`) is its content, `text` the same as a string if it is valid UTF-8, else `null`. Fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once.'
+        - name: detect
+          prop: onDetect
+          ev_ts: '{ type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null }'
+          md: 'Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code''s content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once.'
         - name: error
           prop: onError
-          ev_ts: '{ type: "error"; target: QRScanner; reason: string }'
+          ev_ts: '{ type: "error"; target: Scanner; reason: string }'
           md: 'The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again.'
       after_md: |
         The view is 320×240 unless you set `width` and `height`; the picture is
-        scaled to fit, and a green outline marks the code just read. One scanner
+        scaled to fit, and a green outline marks what was just found. One scanner
         at a time can have the camera.
 
         ```js
-        new ui.QRScanner({
-          onCode: ({ bytes, text }) => console.log(`read ${bytes.length} bytes`),
+        new ui.Scanner({
+          detect: ["qr"],
+          onDetect: ({ kind, bytes, text }) => console.log(`${kind}: ${bytes.length} bytes`),
           onError: ({ reason }) => (status.text = reason),
         });
         ```
