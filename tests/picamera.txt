@@ -28,6 +28,18 @@ send #camera pattern 0
 expect test pattern 0 5
 expect qrscan: code 1, \d+ bytes 30
 serialshot 02-code
+# the wide view (buttons: Stop, Clear, Wide view, Back; focus on Stop): the
+# whole field, binned (docs/camera/IMPLEMENTATION.md, decision 16). The
+# code is half as large there, but zxing-cpp still reads it on about 88 %
+# of decodes, and the restart reports it again.
+key tab
+key tab
+key ret
+expect qrscan: field full 5
+expect picamera: streaming 1640x1232 RAW8 \(full\) 10
+expect qrscan: code 2, \d+ bytes 20
+expect picamera: \d+ frames in \d+ ms: (29|30)\.\d frame/s, 1232 lines 15
+serialshot 03-wide
 key meta_l
 expect picamera: stopped: \d+ frames started 10
 expect launcher ready

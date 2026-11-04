@@ -166,6 +166,15 @@ No camera driver code of any project was opened or searched (Linux, rsta2/libcam
       Raspberry Pi's camera module specifications), scaled by the window's
       share of the 3280-pixel width. It is not in SPEC.md.
 
+16. **The scanner's field** (`ui.Scanner`'s `field`, through
+    `CZgCamera::SetField` before each start): `center` uses `detail`
+    (1280x960 unbinned, 640x480 grey) and `full` uses `full` (3280x2464
+    binned, 820x616 grey). In test builds, `#camera mode <name>` overrides
+    the field until `#camera mode auto` or `#camera synth`, so the rig can
+    still try any mode. With zxing-cpp, `full` reads the printed code as
+    reliably as `detail`, at half the size (64 px against 128). With quirc
+    it never did (benchmark below).
+
 Open questions:
 
 - **Orientation** (0x0172 = 0x03, both flips, as specified): unconfirmed.
@@ -246,3 +255,31 @@ found, N px side`) and the log times of `streaming`, `test pattern 0` and
 
 Every run: 30.0 frame/s, every line received. DMA buffers: 4 x 300 KiB
 (centre), 4 x 1200 KiB (detail, wide), 4 x 2002 KiB (full, mid).
+
+### The same benchmark with zxing-cpp (replacing quirc)
+
+Same scenario and code. Two runs per mode, for `detail`, `mid` and `full`,
+on the merged zxing-cpp decoder:
+
+| Run | Grey | Decodes, found | Decode avg/max | Side | First read | After bars |
+| --- | --- | --- | --- | --- | --- | --- |
+| detail 1 | 10065 µs | 318, 279 (88 %) | 35/42 ms | 128 px | 0.57 s | 0.08 s |
+| detail 2 | 10069 µs | 311, 241 (77 %) | 38/54 ms | 129 px | 0.48 s | 0.18 s |
+| mid 1 | 16680 µs | 244, 213 (87 %) | 56/68 ms | 128 px | 0.71 s | 0.25 s |
+| mid 2 | 16709 µs | 245, 215 (88 %) | 56/68 ms | 128 px | 0.74 s | 0.22 s |
+| full 1 | 16698 µs | 253, 222 (88 %) | 51/68 ms | 64 px | 0.76 s | 0.21 s |
+| full 2 | 16694 µs | 254, 223 (88 %) | 51/68 ms | 64 px | 0.72 s | 0.21 s |
+
+Side by side, the averages of the two runs:
+
+| Mode | Grey | quirc: found, decode, first read | zxing-cpp: found, decode, first read |
+| --- | --- | --- | --- |
+| detail (640x480) | 10.1 ms | 49 %, 66 ms, 0.68 s | 83 %, 37 ms, 0.53 s |
+| mid (820x616) | 16.7 ms | 41 %, 81 ms, 0.81 s | 88 %, 56 ms, 0.73 s |
+| full (820x616) | 16.7 ms | 0 %, 76 ms, never | 88 %, 51 ms, 0.74 s |
+
+zxing-cpp's decode time hardly depends on whether a code is found (the
+maximum stays at 42-68 ms), where quirc's ranged from 13 to 134 ms. It
+reads the 64-pixel code in `full`, which quirc never did. `tests/picamera.txt`
+therefore expects a read in the wide view as well. There it was read
+0.25 s after the switch, on 26 of 27 decodes.
