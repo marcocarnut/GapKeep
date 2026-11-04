@@ -1,15 +1,18 @@
 //
 // js_crypto.cpp
 //
-// The "zg:crypto" module: SHA-256 and health-checked hardware random bytes.
+// The "zg:crypto" module: SHA-1, SHA-256, SHA-512, HMAC, and health-checked
+// hardware random bytes.
 // See docs/API.md.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
-#include "../crypto/sha256.h"
+#include "../crypto/hmac.h"
 #include "../crypto/hwrng.h"
 #include <circle/util.h>
+#include <circle/logger.h>
+#include <circle/timer.h>
 
 static const unsigned MaxRandomBytes = 65536;	// as WebCrypto's getRandomValues
 
@@ -64,36 +67,178 @@ static u8 *GetBytes (JSContext *ctx, JSValueConst v, size_t *pLength, JSValue *p
 	return 0;
 }
 
-// sha256(data) -> Uint8Array(32); data: Uint8Array (any typed array),
-// ArrayBuffer or string (hashed as UTF-8)
+// The bytes of an argument that may also be a string (taken as UTF-8).
+// Release() must be called whenever Get() succeeded.
+class CBytesArg
+{
+public:
+	CBytesArg (JSContext *ctx) : m_ctx (ctx), m_pString (0), m_pData (0), m_nLength (0), m_Hold (JS_UNDEFINED) {}
+	~CBytesArg (void) { Release (); }
+
+	// FALSE: neither (no exception set), or a string conversion failed
+	// (exception set: *pException)
+	boolean Get (JSValueConst v, boolean *pException)
+	{
+		*pException = FALSE;
+		if (JS_IsString (v))
+		{
+			m_pString = JS_ToCStringLen (m_ctx, &m_nLength, v);
+			if (m_pString == 0)
+			{
+				*pException = TRUE;
+				return FALSE;
+			}
+			m_pData = (const u8 *) m_pString;
+			return TRUE;
+		}
+		m_pData = GetBytes (m_ctx, v, &m_nLength, &m_Hold);
+		return m_pData != 0;
+	}
+
+	void Release (void)
+	{
+		if (m_pString != 0)
+		{
+			JS_FreeCString (m_ctx, m_pString);	// the heap wipes it
+			m_pString = 0;
+		}
+		JS_FreeValue (m_ctx, m_Hold);
+		m_Hold = JS_UNDEFINED;
+		m_pData = 0;
+	}
+
+	const u8 *Data (void) const	{ return m_pData; }
+	size_t Length (void) const	{ return m_nLength; }
+
+private:
+	JSContext *m_ctx;
+	const char *m_pString;
+	const u8 *m_pData;
+	size_t m_nLength;
+	JSValue m_Hold;
+};
+
+static JSValue ThrowBytesExpected (JSContext *ctx, const char *pFunction, const char *pWhat)
+{
+	return JS_ThrowTypeError (ctx, "%s: %s must be a Uint8Array (or other typed array), "
+				  "an ArrayBuffer or a string", pFunction, pWhat);
+}
+
+// The HMAC test vectors (hmac.c), which also check SHA-1 and SHA-512, run
+// once, before their first use. (SHA-256 is checked at boot, by the RNG.)
+// If they fail, sha1, sha512 and hmac throw, until reboot.
+static boolean HashesOK (JSContext *ctx)
+{
+	static int s_nResult = -1;	// not run yet
+	if (s_nResult < 0)
+	{
+		unsigned nStart = CTimer::Get ()->GetClockTicks ();
+		s_nResult = zg_hmac_selftest ();
+		unsigned nTicks = CTimer::Get ()->GetClockTicks () - nStart;
+		if (s_nResult == 0)
+		{
+			CLogger::Get ()->Write ("crypto", LogNotice, "HMAC self-test passed (%u us)", nTicks);
+		}
+		else
+		{
+			CLogger::Get ()->Write ("crypto", LogError, "HMAC self-test FAILED (%d)", s_nResult);
+		}
+	}
+	if (s_nResult != 0)
+	{
+		JS_ThrowInternalError (ctx, "SHA-1, SHA-512 and HMAC are disabled: their self-test failed");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+// sha1/sha256/sha512(data) -> Uint8Array; data: typed array, ArrayBuffer or
+// string (hashed as UTF-8)
+static JSValue Digest (JSContext *ctx, int argc, JSValueConst *argv, const zg_hash_t *pHash,
+		       const char *pFunction)
+{
+	if (pHash != &zg_hash_sha256 && !HashesOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+
+	CBytesArg Data (ctx);
+	boolean bException;
+	if (!Data.Get (argc > 0 ? argv[0] : JS_UNDEFINED, &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, pFunction, "data");
+	}
+
+	u8 Digest[ZG_HASH_MAX_DIGEST];
+	zg_hash_ctx_t Hash;
+	pHash->init (&Hash);
+	pHash->update (&Hash, Data.Data (), Data.Length ());
+	pHash->final (&Hash, Digest);
+	Data.Release ();
+
+	JSValue Result = NewUint8Array (ctx, Digest, pHash->digest_size);
+	memset (Digest, 0, sizeof Digest);
+
+	return Result;
+}
+
+static JSValue js_crypto_sha1 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return Digest (ctx, argc, argv, &zg_hash_sha1, "sha1");
+}
+
 static JSValue js_crypto_sha256 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	JSValueConst v = argc > 0 ? argv[0] : JS_UNDEFINED;
-	u8 Digest[ZG_SHA256_DIGEST_SIZE];
+	return Digest (ctx, argc, argv, &zg_hash_sha256, "sha256");
+}
 
-	if (JS_IsString (v))
+static JSValue js_crypto_sha512 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return Digest (ctx, argc, argv, &zg_hash_sha512, "sha512");
+}
+
+// hmac(hash, key, data) -> Uint8Array; hash: "SHA-1", "SHA-256", "SHA-512"
+static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!HashesOK (ctx))
 	{
-		size_t nLength;
-		const char *p = JS_ToCStringLen (ctx, &nLength, v);
-		if (p == 0) return JS_EXCEPTION;
-		zg_sha256 (p, nLength, Digest);
-		JS_FreeCString (ctx, p);
+		return JS_EXCEPTION;
 	}
-	else
+
+	const zg_hash_t *pHash = 0;
+	if (argc > 0 && JS_IsString (argv[0]))
 	{
-		JSValue Hold;
-		size_t nLength;
-		u8 *p = GetBytes (ctx, v, &nLength, &Hold);
-		if (p == 0)
+		const char *pName = JS_ToCString (ctx, argv[0]);
+		if (pName == 0)
 		{
-			return JS_ThrowTypeError (ctx, "sha256: Uint8Array, ArrayBuffer or string expected");
+			return JS_EXCEPTION;
 		}
-		zg_sha256 (p, nLength, Digest);
-		JS_FreeValue (ctx, Hold);
+		pHash = zg_hash_find (pName);
+		JS_FreeCString (ctx, pName);
+	}
+	if (pHash == 0)
+	{
+		return JS_ThrowTypeError (ctx, "hmac: hash must be \"SHA-1\", \"SHA-256\" or \"SHA-512\"");
 	}
 
-	JSValue Result = NewUint8Array (ctx, Digest, sizeof Digest);
-	memset (Digest, 0, sizeof Digest);
+	CBytesArg Key (ctx), Data (ctx);
+	boolean bException;
+	if (!Key.Get (argc > 1 ? argv[1] : JS_UNDEFINED, &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "hmac", "key");
+	}
+	if (!Data.Get (argc > 2 ? argv[2] : JS_UNDEFINED, &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "hmac", "data");
+	}
+
+	u8 Mac[ZG_HASH_MAX_DIGEST];
+	zg_hmac (pHash, Key.Data (), Key.Length (), Data.Data (), Data.Length (), Mac);
+	Key.Release ();
+	Data.Release ();
+
+	JSValue Result = NewUint8Array (ctx, Mac, pHash->digest_size);
+	memset (Mac, 0, sizeof Mac);
 
 	return Result;
 }
@@ -177,7 +322,10 @@ static JSValue js_crypto_rng_status (JSContext *ctx, JSValueConst this_val, int 
 
 static int CryptoModuleInit (JSContext *ctx, JSModuleDef *m)
 {
+	JS_SetModuleExport (ctx, m, "sha1", JS_NewCFunction (ctx, js_crypto_sha1, "sha1", 1));
 	JS_SetModuleExport (ctx, m, "sha256", JS_NewCFunction (ctx, js_crypto_sha256, "sha256", 1));
+	JS_SetModuleExport (ctx, m, "sha512", JS_NewCFunction (ctx, js_crypto_sha512, "sha512", 1));
+	JS_SetModuleExport (ctx, m, "hmac", JS_NewCFunction (ctx, js_crypto_hmac, "hmac", 3));
 	JS_SetModuleExport (ctx, m, "randomBytes", JS_NewCFunction (ctx, js_crypto_random_bytes, "randomBytes", 1));
 	JS_SetModuleExport (ctx, m, "getRandomValues", JS_NewCFunction (ctx, js_crypto_get_random_values, "getRandomValues", 1));
 	JS_SetModuleExport (ctx, m, "rngStatus", JS_NewCFunction (ctx, js_crypto_rng_status, "rngStatus", 0));
@@ -193,7 +341,10 @@ JSModuleDef *ZgInitCryptoModule (JSContext *ctx, const char *pName)
 		return 0;
 	}
 
+	JS_AddModuleExport (ctx, m, "sha1");
 	JS_AddModuleExport (ctx, m, "sha256");
+	JS_AddModuleExport (ctx, m, "sha512");
+	JS_AddModuleExport (ctx, m, "hmac");
 	JS_AddModuleExport (ctx, m, "randomBytes");
 	JS_AddModuleExport (ctx, m, "getRandomValues");
 	JS_AddModuleExport (ctx, m, "rngStatus");

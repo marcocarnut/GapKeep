@@ -64,15 +64,17 @@ the last whole byte are ignored, as other authenticators do.
 
 ## Security notes
 
-- **Nothing is stored.** zerogap never writes to the SD card, so the accounts
-  live only in the app's memory, and are gone when you leave the app or
-  switch off. **Your QR codes (or keys) are the backup**: keep them, on
-  paper, somewhere safe. Anyone who has them can make your codes.
-- The key itself isn't kept after an account is added: only HMAC's state
-  after the key's padded blocks (which is as good as the key for making
-  codes), and a fingerprint (SHA-256 of the settings and key, cut to 64
-  bits, shown in the account's details) to recognise the same key scanned
-  twice. Forget all and Remove overwrite that state.
+- **Nothing is written to the card.** zerogap never writes to the SD card.
+  The accounts are kept in RAM, in the app's session store
+  ([`zg:session`](../../docs/API.md#zgsession)): they are still there when
+  you come back after using other apps, and gone when you switch off. No
+  other app can read them. **Your QR codes (or keys) are the backup**: keep
+  them, on paper, somewhere safe. Anyone who has them can make your codes.
+- Each account's key is kept (in the app, and in the session store, to
+  outlive the app), with a fingerprint (SHA-256 of the settings and key, cut
+  to 64 bits, shown in the account's details) to recognise the same key
+  scanned twice. Remove and Forget all overwrite the key, in the app and in
+  the session store; switching off forgets everything.
 - **The log never holds a key or a code.** It goes to the serial port in
   test builds. For the tests, each code is logged as a tag: the first 64
   bits of an HMAC of the code under the account's own key, which only
@@ -85,22 +87,19 @@ the last whole byte are ignored, as other authenticators do.
 
 ## How it works
 
-- `lib/sha.js`: SHA-1 and SHA-512 (FIPS 180-4) in JavaScript, with 64-bit
-  words as pairs of 32-bit halves (no BigInt). SHA-256 is zg:crypto's.
-- `lib/hotp.js`: HMAC (RFC 2104), HOTP (RFC 4226), TOTP (RFC 6238). The
-  padded key blocks are hashed once per account, so a code costs two block
-  compressions: about 2-3 ms of JavaScript on a Pi Zero for SHA-1 and
-  SHA-512 (simulator's estimate), much less for SHA-256 (native).
+- `lib/hotp.js`: HOTP (RFC 4226) and TOTP (RFC 6238), on zg:crypto's HMAC
+  (native: SHA-1, SHA-256 and SHA-512 in the kernel).
 - `lib/parse.js`: Base32, Base64, UTF-8, the two URI formats and the
   protocol buffer.
 - `lib/selftest.js`: the RFC 4226 HOTP vectors, the RFC 6238 TOTP vectors
   for all three hashes, HMAC with keys longer than a block (RFC 2202, RFC
-  4231), SHA-1 and SHA-512 known answers, the RFC 4648 Base32 vectors, and
-  the parsers on good and bad input. It runs at start, after the first
-  screen is up (about 170 ms on a Zero, in small steps), and logs
+  4231), the RFC 4648 Base32 vectors, and the parsers on good and bad
+  input. It runs at start, after the first screen is up, in small steps, and logs
   `totp selftest: N passed, 0 failed`; if anything fails, no codes are
-  shown. Under Node: `node --experimental-default-type=module tests/totp/run_node.mjs`.
-- `main.js`: the screens. `zg:clock`'s `every(1, ...)` ticks on each
+  shown. Under Node, with Node's HMAC:
+  `node --experimental-default-type=module tests/totp/run_node.mjs`.
+- `main.js`: the screens, and the accounts saved to the session store
+  after each change (restored at start). `zg:clock`'s `every(1, ...)` ticks on each
   second: it moves the countdowns, and computes an account's code only when
   its period turns; when the clock is set or changed, every code is
   recomputed at once.

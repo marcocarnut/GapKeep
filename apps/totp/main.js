@@ -2,25 +2,27 @@
 // Authenticator shows them, on an air-gapped Pi Zero.
 //
 // Accounts come from QR codes (otpauth://totp/... or Google Authenticator's
-// export, otpauth-migration://...) or are typed in. They live only in this
-// app's memory: zerogap never writes to the card, and they are gone when
-// the app exits. The codes need the right time: the clock app sets it after
-// each boot; until then (clock.status().set false) no code is shown.
+// export, otpauth-migration://...) or are typed in. They are kept in RAM
+// only, in the app's session store (zg:session): they survive leaving the
+// app for another, and are gone at power-off. zerogap never writes to the
+// card. The codes need the right time: the clock app sets it after each
+// boot; until then (clock.status().set false) no code is shown.
 //
-// The log never holds a secret or a code: codes are logged as the start of
-// their SHA-256, for the tests (tests/totp.txt).
+// The log never holds a secret or a code: codes are logged as tags only
+// the account's key can check, for the tests (tests/totp.txt).
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as clock from "zg:clock";
-import { sha256 } from "zg:crypto";
-import { setSha256, makeHmac, totpCounter, hotp, groupCode, ALGORITHMS } from "./lib/hotp.js";
+import * as session from "zg:session";
+import { sha256, hmac } from "zg:crypto";
+import { setHmac, makeHmac, totpCounter, hotp, groupCode, ALGORITHMS } from "./lib/hotp.js";
 import { parseCode, base32Decode, ParseError, MAX_PERIOD } from "./lib/parse.js";
 import { runSelfTest } from "./lib/selftest.js";
 
-setSha256(sha256);
+setHmac(hmac);
 
 const MUTED = "#8a9199", RED = "#ef5350", AMBER = "#ffb300", GREEN = "#66bb6a";
 const wide = ui.width >= 1000;
@@ -28,50 +30,104 @@ const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const state = {
-  accounts: [],     // { n, issuer, name, algorithm, digits, period, hmac, fingerprint, counter, code, ui }
+  accounts: [],     // { n, issuer, name, algorithm, digits, period, key, hmac, fingerprint, counter, code, ui }
   nextNumber: 1,
   batches: new Map(), // export batch id -> { size, seen: Set of indices }
   page: null,       // "list", "scan", "type"
   notice: null,     // { text, color }: what the last action did, shown on the list
   selftest: null,   // { passed, failed }
   clockSet: clock.status().set,
+  unkept: false,    // the last save() failed: the accounts won't outlive the app
 };
 
 // --- accounts ----------------------------------------------------------------
 
 const title = (a) => (a.issuer && a.name ? `${a.issuer}: ${a.name}` : a.issuer || a.name);
 
+function newAccount(n, a, key, fingerprint) {
+  return {
+    n, issuer: a.issuer, name: a.name, algorithm: a.algorithm, digits: a.digits, period: a.period,
+    key, hmac: makeHmac(a.algorithm, key), fingerprint, counter: null, code: null, ui: null,
+  };
+}
+
 // Adds an account unless the same key is there already. Returns false then.
-// The secret itself is not kept: only the HMAC's prepared state, and a
-// fingerprint to recognise the same key scanned twice.
+// A fingerprint recognises the same key scanned twice.
 function addAccount(a) {
   const fingerprint = hex(sha256(`${a.algorithm}/${a.digits}/${a.period}/${hex(a.secret)}`)).slice(0, 32);
   if (state.accounts.some((b) => b.fingerprint === fingerprint && b.issuer === a.issuer && b.name === a.name)) {
     a.secret.fill(0);
+    console.log("totp: that account is there already");
     return false;
   }
-  const hmac = makeHmac(a.algorithm, a.secret);
+  const key = a.secret.slice();
   a.secret.fill(0);
   const n = state.nextNumber++;
-  state.accounts.push({
-    n, issuer: a.issuer, name: a.name, algorithm: a.algorithm, digits: a.digits, period: a.period,
-    hmac, fingerprint, counter: null, code: null, ui: null,
-  });
+  state.accounts.push(newAccount(n, a, key, fingerprint));
   console.log(`totp: added account ${n} (${a.algorithm}, ${a.digits} digits, ${a.period} s), ${state.accounts.length} in all`);
   return true;
 }
 
-function removeAccount(a) {
+function wipe(a) {
   a.hmac.wipe();
+  a.key.fill(0);
+}
+
+function removeAccount(a) {
+  wipe(a);
   state.accounts = state.accounts.filter((b) => b !== a);
   console.log(`totp: removed account ${a.n}, ${state.accounts.length} left`);
+  save();
 }
 
 function forgetAll() {
-  for (const a of state.accounts) a.hmac.wipe();
+  for (const a of state.accounts) wipe(a);
   state.accounts = [];
   state.batches.clear();
+  state.nextNumber = 1;
+  session.clear();
   console.log("totp: forgot all accounts");
+}
+
+// --- the session store: the accounts outlive the app, until power-off -------
+
+// Over zg:session's 64 KiB (some 300 accounts) they are still shown, but
+// not kept: say so.
+function save() {
+  try {
+    keep();
+    state.unkept = false;
+  } catch (e) {
+    if (!(e instanceof RangeError)) throw e;
+    state.unkept = true;
+    console.log(`totp: accounts not kept: ${e.message}`);
+  }
+}
+
+function keep() {
+  session.set("accounts", {
+    nextNumber: state.nextNumber,
+    accounts: state.accounts.map((a) => ({
+      n: a.n, issuer: a.issuer, name: a.name, algorithm: a.algorithm, digits: a.digits, period: a.period,
+      key: a.key, fingerprint: a.fingerprint,
+    })),
+    batches: Array.from(state.batches, ([id, b]) => [id, b.size, Array.from(b.seen)]),
+  });
+}
+
+function restore() {
+  const saved = session.get("accounts");
+  if (saved === undefined) {
+    console.log("totp: no accounts kept from before");
+    return;
+  }
+  state.nextNumber = saved.nextNumber;
+  for (const a of saved.accounts) {
+    state.accounts.push(newAccount(a.n, a, a.key.slice(), a.fingerprint));
+    a.key.fill(0);
+  }
+  for (const [id, size, seen] of saved.batches) state.batches.set(id, { size, seen: new Set(seen) });
+  console.log(`totp: restored ${plural(state.accounts.length, "account")} kept from before`);
 }
 
 // Codes are shown only when they can be right: the clock set, the self-test
@@ -181,6 +237,9 @@ function showList() {
   new ui.Button(buttons, { text: ui.symbols.home + " Leave", onClick: () => sys.exit() });
 
   if (state.notice) paragraph(col, state.notice.text, { color: state.notice.color });
+  if (state.unkept) {
+    paragraph(col, ui.symbols.warning + " Too many accounts to keep: leaving this app will forget them.", { color: AMBER });
+  }
 
   const list = new ui.Container(col, { layout: "column", gap: 8, width: "100%", grow: 1, scrollable: true });
   if (state.accounts.length === 0) {
@@ -189,8 +248,8 @@ function showList() {
   }
   for (const a of state.accounts) accountRow(list, a);
 
-  paragraph(col, "Accounts are kept in memory only: nothing is stored, and they are gone when you leave " +
-    "this app or switch off. Keep the QR codes (or keys) safe: they are your backup.", { color: MUTED, font: wide ? 14 : 12 });
+  paragraph(col, "Accounts are kept in memory only, until you switch off (using other apps meanwhile is fine): " +
+    "nothing is written to the card. Keep the QR codes (or keys) safe: they are your backup.", { color: MUTED, font: wide ? 14 : 12 });
 
   scan.focus();
   update(clock.now());
@@ -274,6 +333,7 @@ function scanned(content) {
   }
   if (r.kind === "totp") {
     const added = addAccount(r.account);
+    save();
     state.notice = added ? { text: `Added ${title(r.account)}.`, color: GREEN }
                          : { text: `${title(r.account)} is already in the list.`, color: MUTED };
     showList();
@@ -287,6 +347,7 @@ function scanned(content) {
   const batch = state.batches.get(id) || { size, seen: new Set() };
   batch.seen.add(index);
   state.batches.set(id, batch);
+  save();
   const missing = [];
   for (let i = 0; i < size; i++) if (!batch.seen.has(i)) missing.push(i + 1);
   let text = (size > 1 ? `Part ${index + 1} of ${size}: ` : "") +
@@ -353,6 +414,7 @@ function showType() {
     }
     account.period = p;
     const added = addAccount(account);
+    save();
     state.notice = added ? { text: `Added ${title(account)}.`, color: GREEN }
                          : { text: `${title(account)} is already in the list.`, color: MUTED };
     showList();
@@ -374,6 +436,7 @@ ui.onKey((ev) => {
 
 // --- start ---------------------------------------------------------------------
 
+restore();
 showList();
 console.log(`totp ready (clock ${state.clockSet ? "set" : "not set"})`);
 

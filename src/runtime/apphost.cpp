@@ -685,6 +685,10 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	{
 		return ZgInitClockModule (pContext, pName);
 	}
+	if (strcmp (pName, "zg:session") == 0)
+	{
+		return ZgInitSessionModule (pContext, pName);
+	}
 	if (strcmp (pName, "zg:apps") == 0)
 	{
 		if (!(pApp->pBundle->permissions & ZG_PERM_APPS))

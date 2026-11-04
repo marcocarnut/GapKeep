@@ -9,7 +9,9 @@ modules below, imported by name:
 | --- | --- | --- |
 | [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
 | [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
-| [`zg:crypto`](#zgcrypto) | every app | SHA-256, hardware random bytes |
+| [`zg:crypto`](#zgcrypto) | every app | SHA-1, SHA-256, SHA-512, HMAC, hardware random bytes |
+| [`zg:clock`](#zgclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
+| [`zg:session`](#zgsession) | every app | Values kept across the app's runs, in RAM, until power-off |
 | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -426,10 +428,20 @@ import * as crypto from "zg:crypto";
 
 | Name | Description |
 | --- | --- |
+| `sha1(data)` | SHA-1, a `Uint8Array(20)`. Broken for collisions: for HMAC-SHA1 (TOTP) and protocols that require it, not to identify data. |
 | `sha256(data)` | SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous. |
+| `sha512(data)` | SHA-512, a `Uint8Array(64)`. |
+| `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
+
+`data` and `key` are typed arrays (their bytes: a `subarray` hashes just its
+part), `ArrayBuffer`s, or strings, taken as UTF-8. Hashes and HMAC run in
+the kernel (src/crypto, written from FIPS 180-4 and RFC 2104, checked
+against their test vectors): microseconds per block on a Pi Zero, where the
+same in JavaScript takes about a millisecond. The copies made of keys and
+data are overwritten after use.
 
 **Where the randomness comes from.** The BCM2835's hardware random number
 generator, treated as a noise source of unknown quality. Every raw byte
@@ -449,7 +461,8 @@ To run code written for WebCrypto unchanged, give it a small adapter:
 ```js
 globalThis.crypto = {
   getRandomValues: zgcrypto.getRandomValues,
-  subtle: { digest: async (alg, data) => zgcrypto.sha256(data).buffer },
+  subtle: { digest: async (alg, data) => ({ "SHA-1": zgcrypto.sha1, "SHA-256": zgcrypto.sha256,
+                                             "SHA-512": zgcrypto.sha512 })[alg](data).buffer },
 };
 ```
 
@@ -482,6 +495,48 @@ saving rules). Every app may read it; setting it needs
 
 ---
 
+## zg:session
+
+```js
+import * as session from "zg:session";
+```
+
+Values an app keeps across its runs: leave it, use other apps, come back,
+and they are still there. **Only until the device is switched off**: the
+store is in the kernel's RAM, and nothing is ever written to the card. Each
+app has its own, which no other app can read, and neither can another
+version of the app: the store is filed under the app's id and its
+[hash](APPS.md). Up to 64 KiB per app (keys and values), 1 MiB for all.
+
+```js
+const accounts = session.get("accounts") ?? [];
+// ... the person adds one ...
+session.set("accounts", accounts);
+```
+
+Values are copied in and out, as a structured clone: objects, arrays,
+strings, numbers, booleans, `null`, BigInts, `Date`s, `ArrayBuffer`s and
+typed arrays. Changing a value after `set` doesn't change what is stored:
+`set` it again. Not stored (a `TypeError`, and the store is left as it
+was): functions, `Map`, `Set`, getters, cycles. Objects come back as
+plain objects (not their class). A typed array is stored with its whole
+buffer: store `a.slice()` rather than a view into a larger buffer.
+
+What is removed, replaced or cleared is overwritten in memory before it is
+freed. Secrets kept here are still in RAM until power-off: give the person
+a way to forget them (`clear()`).
+
+| Name | Description |
+| --- | --- |
+| `set(key, value)` | Stores a copy of `value` under `key` (1 to 64 bytes of UTF-8), replacing what was there; `undefined` removes the key. A `RangeError` if the app's values would take over 64 KiB (or the store is full), and nothing changes. |
+| `get(key)` | A fresh copy of the value, or `undefined`. |
+| `remove(key)` | Removes the key; `false` if it wasn't there. |
+| `keys()` | The app's keys, in the order they were first set. |
+| `clear()` | Removes all of the app's values. |
+| `usage()` | Bytes the app's keys and values take, and its limit (65536). |
+
+---
+
 ## zg:apps
 
 Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
@@ -503,7 +558,8 @@ throws a `ReferenceError`. Used by the launcher.
 | `setTimeout(fn, ms)`, `setInterval(fn, ms)` | Return a numeric id. Extra arguments are not passed on; use a closure. Interval minimum 1 ms. |
 | `clearTimeout(id)`, `clearInterval(id)` | Unknown ids are ignored. |
 
-Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage`,
+Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage` (see
+[`zg:session`](#zgsession)),
 `require`, `process`, the DOM, and the global `crypto` object (use
 [`zg:crypto`](#zgcrypto)).
 

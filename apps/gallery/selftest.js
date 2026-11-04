@@ -4,6 +4,7 @@
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as crypto from "zg:crypto";
+import * as session from "zg:session";
 import { double } from "./lib/util.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -261,6 +262,40 @@ export async function runSelfTest(parent) {
     eq(hex(crypto.sha256(buf.buffer.slice(1, 4))), hex(crypto.sha256("abc")), "ArrayBuffer");
     eq(hex(crypto.sha256("\u00e9")), hex(crypto.sha256(new Uint8Array([0xc3, 0xa9]))), "UTF-8");
     throws(() => crypto.sha256(42), TypeError, "number");
+  });
+
+  await test("sha1, sha512, hmac vectors", () => {
+    eq(hex(crypto.sha1("abc")), "a9993e364706816aba3e25717850c26c9cd0d89d", "sha1 abc");
+    eq(hex(crypto.sha512("abc")), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a" +
+      "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f", "sha512 abc");
+    // FIPS 180-4's two-block message
+    eq(hex(crypto.sha512("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu")),
+      "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018" +
+      "501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909", "sha512 two blocks");
+    // RFC 2202 case 2, RFC 4231 case 2 and 6
+    eq(hex(crypto.hmac("SHA-1", "Jefe", "what do ya want for nothing?")), "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79", "hmac sha1");
+    eq(hex(crypto.hmac("SHA-256", "Jefe", "what do ya want for nothing?")),
+      "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843", "hmac sha256");
+    eq(hex(crypto.hmac("SHA-512", new Uint8Array(131).fill(0xaa), "Test Using Larger Than Block-Size Key - Hash Key First")),
+      "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f352" +
+      "6b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598", "hmac sha512 long key");
+    throws(() => crypto.hmac("MD5", "k", "m"), TypeError, "unknown hash");
+    // how fast, for the log: a TOTP code is one HMAC of 8 bytes
+    const key = new Uint8Array(64), msg = new Uint8Array(8);
+    const t0 = Date.now();
+    for (let i = 0; i < 200; i++) crypto.hmac("SHA-512", key, msg);
+    console.log(`selftest: 200 HMAC-SHA512 in ${Date.now() - t0} ms`);
+  });
+
+  await test("session store", () => {
+    const value = { bytes: new Uint8Array([1, 2, 255]), list: [1, "two", null], when: new Date(0) };
+    session.set("selftest", value);
+    const back = session.get("selftest");
+    eq(back !== value && back.bytes instanceof Uint8Array, true, "a copy");
+    eq(hex(back.bytes) + JSON.stringify(back.list) + back.when.getTime(), "0102ff[1,\"two\",null]0", "round trip");
+    throws(() => session.set("selftest", { f() {} }), TypeError, "function");
+    eq(session.remove("selftest"), true, "remove");
+    eq(session.get("selftest"), undefined, "removed");
   });
 
   await test("random bytes", () => {

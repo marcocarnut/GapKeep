@@ -26,7 +26,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 ## Documentation
 
 - [Writing apps](docs/APPS.md): start here.
-- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:crypto`, `zg:apps`, globals.
+- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:crypto`, `zg:clock`, `zg:session`, `zg:apps`, globals.
   Generated from [docs/api/zerogap-api.yaml](docs/api/zerogap-api.yaml), which a
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
@@ -128,6 +128,8 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Apps from the SD card's `apps` folder, checked and hashed at boot; sealed builds with every app built in
 - [x] Simulator (native and WebAssembly) running the same runtime, a browser IDE, an API description checked against the runtime, and a guide for coding agents
 - [x] Step 6: hardening: USB drivers cut to hub, keyboard and mouse, with control-transfer timeouts; no serial port in production; W^X memory protection, stack canaries and a stack guard; reproducible builds with a pinned compiler and firmware; the kernel's hash on screen ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model))
+- [x] Clock with trim and UTC offset (`zg:clock`), the Clock and Authenticator (TOTP) apps
+- [x] Native SHA-1, SHA-512 and HMAC (`zg:crypto`); a per-app session store in RAM (`zg:session`)
 
 ## Layout
 

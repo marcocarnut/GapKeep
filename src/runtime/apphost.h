@@ -140,6 +140,7 @@ JSModuleDef *ZgInitAppsModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitCryptoModule (JSContext *pContext, const char *pName);
 JSModuleDef *ZgInitClockModule (JSContext *pContext, const char *pName);
 void ZgClockFree (TZgApp *pApp);		// js_clock.cpp: the app's alarms
+JSModuleDef *ZgInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void ZgInitGlobals (JSContext *pContext);

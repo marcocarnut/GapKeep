@@ -1,82 +1,27 @@
-// HMAC (RFC 2104), HOTP (RFC 4226) and TOTP (RFC 6238).
-//
-// HMAC-SHA1 and HMAC-SHA512 use lib/sha.js; HMAC-SHA256 uses a SHA-256
-// given by the caller (zg:crypto's, native, in the app; Node's in tests),
-// through setSha256().
-//
-// A key is prepared once (makeHmac): for SHA-1 and SHA-512 the padded key
-// blocks are hashed then, and each code starts from those two states, so a
-// code costs two compressions. On the Pi Zero that keeps a SHA-512 code
-// cheap enough to compute on the second it is due.
+// HOTP (RFC 4226) and TOTP (RFC 6238), on an HMAC given by the caller
+// through setHmac(): zg:crypto's (native) in the app, Node's in the tests.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { SHA1, SHA512 } from "./sha.js";
-
-let sha256 = null;
-export function setSha256(fn) {
-  sha256 = fn;
+let hmacFn = null;
+// fn(hash, key, message) -> Uint8Array; hash: "SHA-1", "SHA-256", "SHA-512"
+export function setHmac(fn) {
+  hmacFn = fn;
 }
 
 export const ALGORITHMS = ["SHA1", "SHA256", "SHA512"];
+const HASH_NAMES = { SHA1: "SHA-1", SHA256: "SHA-256", SHA512: "SHA-512" };
 
-function concat(a, b) {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a);
-  out.set(b, a.length);
-  return out;
-}
-
-// The key XORed with ipad and opad (RFC 2104): keys longer than a block
-// are hashed first, shorter ones padded with zeros.
-function padKeys(key, blockSize, hash) {
-  if (key.length > blockSize) key = hash(key);
-  const ipad = new Uint8Array(blockSize).fill(0x36);
-  const opad = new Uint8Array(blockSize).fill(0x5c);
-  for (let i = 0; i < key.length; i++) {
-    ipad[i] ^= key[i];
-    opad[i] ^= key[i];
-  }
-  return [ipad, opad];
-}
-
-// An HMAC with a fixed key: { mac(message) -> Uint8Array, wipe() }.
+// An HMAC with a fixed key: { mac(message) -> Uint8Array, wipe() }. Keeps
+// its own copy of the key, which wipe() overwrites.
 export function makeHmac(algorithm, key) {
-  if (algorithm === "SHA256") {
-    if (!sha256) throw new Error("HMAC-SHA256: no SHA-256 (setSha256)");
-    const [ipad, opad] = padKeys(key, 64, sha256);
-    return {
-      mac: (message) => {
-        const inner = sha256(concat(ipad, message));
-        const out = sha256(concat(opad, inner));
-        inner.fill(0);
-        return out;
-      },
-      wipe: () => {
-        ipad.fill(0);
-        opad.fill(0);
-      },
-    };
-  }
-  const alg = algorithm === "SHA1" ? SHA1 : algorithm === "SHA512" ? SHA512 : null;
-  if (!alg) throw new Error("unknown algorithm " + algorithm);
-  const [ipad, opad] = padKeys(key, alg.blockSize, alg.hash);
-  const istate = alg.init(), ostate = alg.init();
-  alg.compress(istate, ipad, 0);
-  alg.compress(ostate, opad, 0);
-  ipad.fill(0);
-  opad.fill(0);
+  const hash = HASH_NAMES[algorithm];
+  if (!hash) throw new Error("unknown algorithm " + algorithm);
+  if (!hmacFn) throw new Error("HMAC: none given (setHmac)");
+  const k = key.slice();
   return {
-    mac: (message) => {
-      const inner = alg.finish(istate.slice(), message, alg.blockSize);
-      const out = alg.finish(ostate.slice(), inner, alg.blockSize);
-      inner.fill(0);
-      return out;
-    },
-    wipe: () => {
-      istate.fill(0);
-      ostate.fill(0);
-    },
+    mac: (message) => hmacFn(hash, k, message),
+    wipe: () => k.fill(0),
   };
 }
 

@@ -1,0 +1,8 @@
+{
+  "id": "sessiontest",
+  "name": "Session test",
+  "version": "1.0.0",
+  "description": "Test builds only: zg:session across runs, and zg:crypto's hashes (tests/session.txt).",
+  "icon": "settings",
+  "hidden": true
+}

@@ -2,18 +2,21 @@
 # the Authenticator (apps/totp). The clock is set by tests/apps/clockset to
 # 1999999983 s (2033-05-18 03:33:03 UTC), 3 s into the 30 s step 66666666,
 # where RFC 6238's vectors for T = 2000000000 apply, with the RFC's seeds.
-# Codes are logged as the start of their SHA-256, never in clear:
-#   SHA512, 8 digits, step 66666666: 38618901  fc330d33d0c236b0
-#                     step 66666667: 41841313  eef8d29faf6c516b
-#   SHA1,   8 digits, step 66666666: 69279037  309b30280f860aff
-#   SHA256, 8 digits, step 66666666: 90698825  3c863695e5963342
-#   SHA1, 6 digits, JBSWY3DPEHPK3PXP: 890699   10ef2c0fb492cdef
+# Codes are logged as tags, never in clear: the start of the HMAC, under
+# the account's key, of "zerogap log <code>":
+#   SHA512, 8 digits, step 66666666: 38618901  68541462523f8061
+#                     step 66666667: 41841313  333950ef241255b9
+#   SHA1,   8 digits, step 66666666: 69279037  03f8ca84c736ba76
+#   SHA256, 8 digits, step 66666666: 90698825  bcb2d91df57850d2
+#   SHA1, 6 digits, JBSWY3DPEHPK3PXP: 890699   3d10ac4a71bb51a0
+# The accounts are kept in the session store (zg:session) between runs.
 expect Keyboard attached 60
 expect launcher ready 60
 
 # 1. The clock is not set (it never is at boot): accounts can be added,
 # but no code is shown
 launch totp
+expect totp: no accounts kept from before 10
 expect totp ready \(clock not set\) 10
 expect totp selftest: \d+ passed, 0 failed 20
 # focus starts on "Scan QR code"
@@ -24,16 +27,18 @@ wait 0.5
 shot 01-clock-not-set
 camera scene
 
-# 2. Set the clock (only an app with "rtc" may), then a plain otpauth code
+# 2. Set the clock (only an app with "rtc" may): the account added before
+# is still there, with its code; scanning it again adds nothing
 launch clockset
 expect clockset: set 1999999983 \(2033-05-18T03:33:03.000Z\), set true 10
 launch totp
+expect totp: restored 1 account kept from before 10
 expect totp ready \(clock set\) 10
+expect totp: account 1, step 66666666, code tag 68541462523f8061 5
 expect totp selftest: \d+ passed, 0 failed 20
 key ret
 camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
-expect totp: added account 1 \(SHA512, 8 digits, 30 s\), 1 in all 20
-expect totp: account 1, step 66666666, code tag 68541462523f8061 5
+expect totp: that account is there already 20
 camera scene
 
 # 3. A Google Authenticator export with two accounts (tests/totp/make_migration.py)
@@ -84,19 +89,19 @@ wait 0.5
 shot 05-details
 key esc
 
-# 6. The code changes on the period mark (zg:clock every): 3 s before it
+# 6. The code changes on the period mark (zg:clock every): 3 s before it.
+# All four accounts come back
 launch clockset
 key ret
 expect clockset: set 2000000007 10
 launch totp
+expect totp: restored 4 accounts kept from before 10
 expect totp ready \(clock set\) 10
-key ret
-camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
 expect totp: account 1, step 66666666, code tag 68541462523f8061 5
+expect totp: account 4, step 66666666, code tag 3d10ac4a71bb51a0 5
 expect totp: account 1, step 66666667, code tag 333950ef241255b9 10
 wait 0.5
 shot 06-next-step
-camera scene
 
 # 7. Forget all (Tab to it, confirm with Tab and Enter)
 key tab tab
@@ -106,5 +111,8 @@ key ret
 expect totp: forgot all accounts 5
 wait 0.5
 shot 07-forgotten
+# forgotten for good: the next run starts empty
+launch totp
+expect totp: no accounts kept from before 10
 key meta_l
 expect launcher ready

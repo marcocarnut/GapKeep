@@ -1,0 +1,21 @@
+# Needs a test build (make TEST=1), and the simulator (it uses "launch"):
+# zg:session keeps an app's values across its runs, for it only
+# (tests/apps/sessiontest, tests/apps/sessionpeer), and zg:crypto's hashes.
+expect Keyboard attached 60
+expect launcher ready 60
+
+launch sessiontest
+expect sessiontest: run 1, \d+ passed, 0 failed 10
+launch sessionpeer
+expect sessionpeer: 0 keys, record absent, used 0 10
+launch sessiontest
+expect sessiontest: run 2, \d+ passed, 0 failed 10
+launch sessiontest
+expect sessiontest: run 3, \d+ passed, 0 failed 10
+# Clear, then the next run starts afresh
+key ret
+expect sessiontest: cleared, 0 keys, used 0 5
+launch sessiontest
+expect sessiontest: run 1, \d+ passed, 0 failed 10
+key meta_l
+expect launcher ready

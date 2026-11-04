@@ -29,9 +29,10 @@ QJSDIR     = ../third_party/quickjs
 OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
-	  crypto/sha256.o crypto/hwrng.o \
+	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/js_clock.o \
+	  runtime/session.o runtime/js_session.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 

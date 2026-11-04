@@ -101,6 +101,12 @@ The wall clock (`clock.cpp`, `zg:clock` in `js_clock.cpp`) is kept by the
 kernel from the system timer, with a trim and a UTC offset; see
 [CLOCK.md](CLOCK.md).
 
+The session store (`session.cpp`, `zg:session` in `js_session.cpp`) keeps
+values for each app across its runs, in the kernel's heap, until power-off.
+Entries are filed under the app's id and hash; values are serialized by
+QuickJS's object writer (plain data only: no bytecode, no references) and
+copied in and out. Every byte is overwritten before it is freed.
+
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for
@@ -110,10 +116,17 @@ frames and automatic exposure). See [CAMERA.md](CAMERA.md).
 
 ### Cryptography (`src/crypto/`)
 
-SHA-256 written from FIPS 180-4, self-tested at boot and testable on the
-development machine (`tests/native/test_sha256.c`). The hardware RNG wrapper
-(`hwrng.*`) applies NIST SP 800-90B health tests to every raw byte and
-conditions output through SHA-256; see `zg:crypto` in [API.md](API.md).
+SHA-1, SHA-256 and SHA-512 written from FIPS 180-4, and HMAC from RFC 2104
+(`hmac.*`, generic over the three through `zg_hash_t`), all plain C that
+also builds on the development machine: `tests/native/test_sha256.c`, and
+`tools/check_hashes.py`, which runs every self-test and compares thousands
+of random inputs with Python's `hashlib`. SHA-256's self-test runs at boot;
+HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1 and
+SHA-512) run before their first use, and disable them if they fail. Every
+context and buffer that held key material is overwritten after use. The
+hardware RNG wrapper (`hwrng.*`) applies NIST SP 800-90B health tests to
+every raw byte and conditions output through SHA-256; see `zg:crypto` in
+[API.md](API.md).
 
 ### C runtime
 
@@ -151,13 +164,13 @@ for them to leave, other than what a person reads off the screen.
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at boot, then by zerogap, once, for `/apps` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
+| SD card | Read by the firmware at boot, then by zerogap, once, for `/apps` and `zerogap.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **What is absent by design:** network stack, Wi-Fi and Bluetooth (the
 plain Pi Zero has no radio at all), writing to storage, file access for
 apps, code loading after boot, a clock you can trust, and any way for apps
-to reach each other.
+to reach each other (each app's session store is its own).
 
 **Apps on the card** are as trustworthy as the card: whoever can write it
 can replace `kernel.img` too, so loading apps from it does not move the

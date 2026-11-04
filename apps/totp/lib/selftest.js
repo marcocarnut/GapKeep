@@ -1,11 +1,10 @@
-// The Authenticator's self-test: published vectors for the hashes, HMAC,
+// The Authenticator's self-test: published vectors for HMAC (zg:crypto's),
 // HOTP and TOTP, and the parsers on known inputs. Runs in the app at start
 // (after the first screen is up, yielding between tests) and under Node
 // (tests/totp/run_node.mjs).
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { SHA1, SHA512 } from "./sha.js";
 import { makeHmac, hotp, totp, groupCode } from "./hotp.js";
 import { base32Decode, parseCode, ParseError } from "./parse.js";
 
@@ -77,18 +76,6 @@ export async function runSelfTest() {
     throw new Error("accepted: " + text.slice(0, 40));
   }
 
-  await test("SHA-1", () => {
-    eq(hex(SHA1.hash(ascii("abc"))), "a9993e364706816aba3e25717850c26c9cd0d89d", "abc");
-    eq(hex(SHA1.hash(ascii("a".repeat(1000)))), "291e9a6c66994949b57ba5e650361e98fc36b1ba", "1000 a");
-  });
-  await test("SHA-512", () => {
-    eq(hex(SHA512.hash(ascii("abc"))), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a" +
-       "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f", "abc");
-    // FIPS 180-2's two-block message
-    const m = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu";
-    eq(hex(SHA512.hash(ascii(m))), "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018" +
-       "501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909", "two blocks");
-  });
   await test("HMAC, long keys", () => {
     for (const [alg, n, want] of LONG_KEY_VECTORS) {
       eq(hex(makeHmac(alg, new Uint8Array(n).fill(0xaa)).mac(ascii(LONG_KEY_MESSAGE))), want, alg);
