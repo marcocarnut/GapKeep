@@ -9,7 +9,7 @@ showed.
 
 | File | What |
 | --- | --- |
-| `src/camera/imx219.*` | The sensor over I2C: chip ID, the LP-11 stream toggle, the mode (SPEC 4.3 A-E), exposure and gains, test patterns, standby. Two modes: the recommended 640x480 centre crop (default) and the 1640x1232 full field (SPEC 6.7). |
+| `src/camera/imx219.*` | The sensor over I2C: chip ID, the LP-11 stream toggle, the mode (SPEC 4.3 A-E), exposure and gains, test patterns, standby. Five modes (decision 15): `detail`, the centre 1280x960 unbinned (default); `centre`, the spec's recommended binned 640x480; `full`, the binned full field (SPEC 6.7); `wide` and `mid`. |
 | `src/camera/unicam.*` | Unicam1: power domain, CAM1 clock, lane clock gate, bring-up (SPEC 5.3) and stop (5.6), the frame interrupt, rotation over four DMA buffers, cache maintenance, error and frame counters. |
 | `src/camera/picamera.*` | `CZgPiCamera`, the `CZgCamera`: power (GPIO 41, LED GPIO 32), probe, start/stop, 2x2 Bayer average to grey, automatic exposure, logging, errors ("no camera", "no frames from the camera", ...). |
 | `src/kernel.*` | Production and sealed builds probe at boot and register the camera if found. |
@@ -115,21 +115,62 @@ No camera driver code of any project was opened or searched (Linux, rsta2/libcam
 12. **Stop:** sensor standby, the Unicam stop sequence, one frame time
     (34 ms), then the power domain, the CAM1 clock and GPIO 41/32 go off,
     and I2C is released.
-13. **Full-field mode** (SPEC 6.7, values from its table) is available in
-    test builds (`#camera mode full`), for diagnosis. The default stays the
-    recommended centre crop. The full mode's 820x616 grey takes about 35 ms
-    per decode on the Zero, against 5 ms for 320x240.
+13. **Full-field mode** (SPEC 6.7, values from its table): one of the
+    modes of decision 15.
 14. **Production probe at boot:** powers the camera for about 20 ms, reads
     the chip ID and powers it down. The camera is registered only if the ID
     is 0x0219. Test builds keep the synthetic camera until `#camera pi`.
+
+15. **Modes, and the default "detail"** (added after the first version,
+    which used the spec's recommended binned 640x480). Each mode is a
+    window, an output size and a binning (0 or 3 in BINNING_MODE_H/V_A).
+    Every window is centred on the array centre (1640, 1232) and starts on
+    an even pixel:
+
+    | Mode | X | Y | Output | Binning | Grey |
+    | --- | --- | --- | --- | --- | --- |
+    | `centre` | 1000-2279 | 752-1711 | 640x480 | 3 | 320x240 |
+    | `full` | 0-3279 | 0-2463 | 1640x1232 | 3 | 820x616 |
+    | `detail` | 1000-2279 | 752-1711 | 1280x960 | 0 | 640x480 |
+    | `wide` | 360-2919 | 272-2191 | 1280x960 | 3 | 640x480 |
+    | `mid` | 820-2459 | 616-1847 | 1640x1232 | 0 | 820x616 |
+
+    All modes keep LINE_LENGTH_A 3448 and FRM_LENGTH_A 1763, and all
+    measured 30.0 frame/s. `detail` was chosen by measurement on the rig
+    (docs/CAMERA.md, "Why detail", has the table). The unbinned modes give
+    a small printed code twice the pixels (126 px against 62 px). quirc
+    found it on about half the decodes, against 0-10 % for the binned
+    modes. They read it 0.7-1.2 s after the start, and 0.2-0.3 s after
+    it came back into view. `detail` beats `mid` (same detail, 28 % wider
+    view) on cost: 10 ms of grey conversion and about 66 ms of decoding
+    per frame, against 17 and 81 ms, and 4.7 MB of DMA buffers against
+    7.8 MB.
+
+    Spec gaps for these modes, and the choices made:
+    - **Line length:** SPEC 4.3 gives LINE_LENGTH_A only for the binned
+      mode. 3448 was kept for the unbinned ones. It suffices for a
+      1280- or 1640-pixel line, and SPEC 6.7 lists 1763 frame lines (30
+      frame/s) for unbinned 1920x1080 too.
+    - **FRM_LENGTH_A units:** SPEC 4.5 says they are 2 lines in analogue
+      binning. If so, the binned and unbinned modes would differ by a
+      factor of 2. They don't: 1763 gives 30.0 frame/s in both. So one
+      unit is one line time (18.9 µs) either way.
+    - **Window alignment:** the spec does not say whether binned windows
+      must start on even, or multiple-of-4, coordinates. The new windows
+      start on even pixels (360, 272, 820, 616), like SPEC's own (1000,
+      752, 0, 0). Every one produced a clean picture and colour bars.
+    - **Test-pattern window:** set to the output size in every mode
+      (decision 7).
+    - **Field of view:** the "about 26 degrees" in docs/CAMERA.md comes
+      from the module's published horizontal field of view (62.2 degrees,
+      Raspberry Pi's camera module specifications), scaled by the window's
+      share of the 3280-pixel width. It is not in SPEC.md.
 
 Open questions:
 
 - **Orientation** (0x0172 = 0x03, both flips, as specified): unconfirmed.
   On the rig the camera looks at the ceiling (a lamp and a curtain rail),
   and which way the module lies is unknown.
-- **QR decoding from the real camera: not verified** on the hardware, since
-  no QR code was in the camera's view (see Measurements).
 - **Power domain off:** after the domain was turned off and on again (about
   1.4 s apart), Unicam read ANA 0x778 and CLK 0xC0000005, its state from
   before. Either the firmware does not really power the block down, or not
@@ -173,8 +214,35 @@ Open questions:
 - **Stage d (scene, AE):** a real, sharp picture of the room. The AE
   converges within about 2 s, e.g. `exposure 1759 lines (33.2 ms), gain
   8.00, digital 1.01, mean 104` in the dim centre view.
-- **Stage e (QR decode): not reached.** The camera on the rig faces the
-  ceiling, and no QR code is in its field of view in either mode. The
-  scanner ran on every frame (about 5 ms each at 320x240) and found
-  nothing. `tests/picamera.txt` therefore fails at its last step,
-  `expect qrscan: code 1`; everything before it passes.
+- **Stage e (QR decode):** first, no code was in view (the camera faced
+  the ceiling). Once a printed code was put in front of the lens,
+  `tests/picamera.txt` read it, in the binned 640x480 mode, about 1 s
+  after the colour bars went off. With the `detail` default, it reads it
+  in 0.2-0.3 s (below).
+
+### The mode benchmark (Camera Module v2.1 looking at the printed code "Hello ZeroGap!")
+
+Two rounds of `start, 15 s, colour bars 3 s, 12 s` per mode, plus an
+earlier round with `expect`s for centre, detail and mid. Per run, from the
+camera's and the scanner's stop lines (`grey in N us`, `N decoded`, `N
+found, N px side`) and the log times of `streaming`, `test pattern 0` and
+`qrscan: code N`:
+
+| Run | Grey | Decodes, found | Decode avg/max | Side | First read | After bars |
+| --- | --- | --- | --- | --- | --- | --- |
+| centre, round 0 | 2525 µs | 304, 29 | 50/95 ms | 62 px | 6.8 s | 12.2 s |
+| centre 1 | 2523 µs | 252, 17 | 52/96 ms | 62 px | 4.8 s | 5.9 s |
+| centre 2 | 2520 µs | 639, 0 | 13/95 ms | - | never | never |
+| full 1 | 16736 µs | 159, 0 | 92/131 ms | - | never | never |
+| full 2 | 16697 µs | 222, 0 | 60/134 ms | - | never | never |
+| detail, round 0 | 10058 µs | 166, 54 | 52/113 ms | 126 px | 1.2 s | 0.23 s |
+| detail 1 | 10058 µs | 217, 111 | 68/117 ms | 126 px | 0.67 s | 0.17 s |
+| detail 2 | 10056 µs | 229, 107 | 64/112 ms | 126 px | 0.68 s | 0.33 s |
+| wide 1 | 10071 µs | 246, 0 | 60/112 ms | - | never | never |
+| wide 2 | 10077 µs | 497, 0 | 29/114 ms | - | never | never |
+| mid, round 0 | 16679 µs | 123, 34 | 69/131 ms | 126 px | 1.1 s | 0.22 s |
+| mid 1 | 16684 µs | 189, 66 | 75/132 ms | 126 px | 0.77 s | 0.33 s |
+| mid 2 | 16690 µs | 169, 79 | 87/130 ms | 126 px | 0.85 s | 0.21 s |
+
+Every run: 30.0 frame/s, every line received. DMA buffers: 4 x 300 KiB
+(centre), 4 x 1200 KiB (detail, wide), 4 x 2002 KiB (full, mid).

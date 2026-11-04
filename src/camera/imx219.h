@@ -3,9 +3,8 @@
 //
 // The Sony IMX219 sensor of the Raspberry Pi Camera Module v2.1, over I2C
 // (CCI): identification, the modes zerogap uses (RAW8 on two CSI-2 lanes,
-// 2x2 analogue binning, 30 frame/s: the recommended 640x480 from the
-// centred 1280x960, or 1640x1232 from the whole array), exposure and gain,
-// and the test patterns. Written from docs/camera/SPEC.md (section 4);
+// 30 frame/s, windows centred on the array, binned 2x2 or not), exposure and
+// gain, and the test patterns. Written from docs/camera/SPEC.md (section 4);
 // docs/camera/IMPLEMENTATION.md has the decisions.
 //
 // The sensor has no automatic exposure: CZgPiCamera computes it and calls
@@ -35,7 +34,7 @@ class CZgIMX219
 public:
 	static const TZgIMX219Mode ModeCentre;	// 640x480 (SPEC 1)
 	static const TZgIMX219Mode ModeFull;	// 1640x1232
-	static const TZgIMX219Mode ModeDetail;	// 1280x960 unbinned centre
+	static const TZgIMX219Mode ModeDetail;	// 1280x960 unbinned centre (default)
 	static const TZgIMX219Mode ModeWide;	// 1280x960 from 2560x1920 binned
 	static const TZgIMX219Mode ModeMid;	// 1640x1232 unbinned centre
 

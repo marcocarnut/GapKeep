@@ -42,7 +42,7 @@ CZgPiCamera::CZgPiCamera (void)
 	m_bStreaming (FALSE),
 	m_pError (0),
 	m_nTestPattern (0),
-	m_pMode (&CZgIMX219::ModeCentre),
+	m_pMode (&CZgIMX219::ModeDetail),	// measured best for QR codes (CAMERA.md)
 	m_nStride (0),
 	m_nWidth (0),
 	m_nHeight (0),

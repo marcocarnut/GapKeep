@@ -19,8 +19,8 @@ key right
 key right
 key ret
 expect qrscan ready
-expect picamera: streaming 640x480 10
-expect picamera: \d+ frames in \d+ ms: (29|30)\.\d frame/s, 480 lines 15
+expect picamera: streaming 1280x960 10
+expect picamera: \d+ frames in \d+ ms: (29|30)\.\d frame/s, 960 lines 15
 wait 1
 serialshot 01-colour-bars
 # the scene: the automatic exposure settles, and the code is read

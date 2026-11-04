@@ -5,9 +5,9 @@
 // camera connector, as a CZgCamera (src/runtime/camera.h): power (GPIO 41),
 // the sensor over I2C 0 on GPIO 28/29 (imx219.h), the CSI-2 receiver
 // Unicam1 (unicam.h), and what the scanner needs from them: 8-bit grey
-// frames, the average of each 2x2 Bayer tile of the sensor's RAW8 (320x240
-// from 640x480 by default), with an automatic exposure the sensor itself
-// lacks.
+// frames, the average of each 2x2 Bayer tile of the sensor's RAW8 (640x480
+// from the unbinned centre 1280x960 by default), with an automatic exposure
+// the sensor itself lacks.
 //
 // Written from docs/camera/SPEC.md, without other camera drivers' code
 // (docs/camera/IMPLEMENTATION.md). Kernel only: this is Circle-specific,

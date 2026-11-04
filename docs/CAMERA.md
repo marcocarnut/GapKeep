@@ -83,7 +83,7 @@ camera (camera.h) -> greyscale frames -> CZgScanner (scanner.cpp) -> onDetect({ 
 | `ui.Scanner`, scanning, preview, permission | Done, in the runtime (Pi and simulator). |
 | QR decoder | [quirc](https://github.com/dlbeer/quirc) (ISC licence), `third_party/quirc`, pinned; zerogap's fixes in `patches/quirc/`, both found by the fuzzer: an array index computed before its range check, and integer overflows on degenerate perspectives (huge coordinates). Worth sending upstream. Without the submodule, builds say "this build has no QR decoder". |
 | Simulated camera | Done: the simulator, the IDE (QR codes from text, pictures, the webcam) and test kernels (`#camera` on the serial line). |
-| Pi Camera driver | Camera Module v2.1 (IMX219) on the Zero v1.3: `src/camera/`, kernel only. Frames, colour bars and automatic exposure checked on the rig; reading a real printed code not yet (see below). |
+| Pi Camera driver | Camera Module v2.1 (IMX219) on the Zero v1.3: `src/camera/`, kernel only. Checked on the rig: frames, colour bars, automatic exposure, and a printed code read within a second. |
 
 The builds (`sim/Makefile`, `src/Makefile` with `lib/quirc/Makefile`, and
 `tools/fuzz_qr.sh`) apply `patches/quirc/` (`tools/apply_patches.sh`) and use
@@ -99,11 +99,12 @@ code (whose licence, GPL-2.0 only, doesn't combine with zerogap's GPLv3).
 [camera/IMPLEMENTATION.md](camera/IMPLEMENTATION.md) records the decisions
 and the measurements.
 
-- **The mode:** 640x480 RAW8 on two CSI-2 lanes, the centre 1280x960 of the
-  sensor binned 2x2, 30 frame/s. The average of each 2x2 Bayer tile gives
-  a 320x240 grey frame. It is a modest zoom: a code must be held in front
-  of the lens. (Test builds also offer the full field, 1640x1232, for
-  diagnosis.)
+- **The mode:** "detail": the centre 1280x960 of the sensor, not binned,
+  as RAW8 on two CSI-2 lanes at 30 frame/s. The average of each 2x2 Bayer
+  tile gives a **640x480 grey frame**. The view is the central 39 % of the
+  sensor's width, about 26 degrees: 19 cm wide at 40 cm, 28 cm at 60 cm.
+  A code must be held in front of the lens, but it gets twice the pixels
+  of the binned modes.
 - **Exposure:** the sensor has no automatic exposure, so the kernel sets
   exposure time, analogue gain and digital gain from the picture's
   brightness. Exposure comes first, up to 13 ms against motion blur.
@@ -119,6 +120,49 @@ and the measurements.
 
 Camera Modules 1 (OV5647) and 3 (IMX708) and the HQ camera are not
 supported: the probe finds no IMX219 and reports no camera.
+
+#### Why "detail": the modes measured
+
+Resolution matters as much as the decoder, so the default was chosen by
+measurement. On the rig, a printed code ("Hello ZeroGap!", a small code)
+hangs in front of the camera, and each mode ran twice on the Zero with
+quirc. Each run: start the scanner, 15 s of scanning, 3 s of colour bars
+(the code out of sight), then 12 s more.
+
+| Mode | Sensor window, binning | Grey | View (of the width) | Grey per frame | Decode per frame | Code side | Decodes that found it | First read after start | Read again after bars off | DMA buffers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `centre` (A) | 1280x960, binned | 320x240 | 39 % | 2.5 ms | 13-52 ms | 62 px | 7 % / 0 % | 4.8 s / never | 5.9 s / never | 1.2 MB |
+| `full` (B) | 3280x2464, binned | 820x616 | 100 % | 16.7 ms | 60-92 ms | (62 px) | 0 % / 0 % | never | never | 7.8 MB |
+| **`detail` (C)** | 1280x960, not binned | 640x480 | 39 % | 10.1 ms | 64-68 ms | 126 px | **51 % / 47 %** | **0.67 s / 0.68 s** | **0.17 s / 0.33 s** | 4.7 MB |
+| `wide` (D) | 2560x1920, binned | 640x480 | 78 % | 10.1 ms | 29-60 ms | (62 px) | 0 % / 0 % | never | never | 4.7 MB |
+| `mid` | 1640x1232, not binned | 820x616 | 50 % | 16.7 ms | 75-87 ms | 126 px | 35 % / 47 % | 0.77 s / 0.85 s | 0.33 s / 0.21 s | 7.8 MB |
+
+All modes ran at 30.0 frame/s. "Decode per frame" is quirc's average (the
+maximum was 95-134 ms). Under 15 ms means no code was in the picture
+(quirc gives up early). The scanner decodes at most half the time, so
+about half the frames are decoded. The code side in parentheses is what
+the binned modes' scale implies: they found no code to measure.
+
+- **The binned modes see too little of a small code.** The full field and
+  the 2560-wide window cover more of the room, but at the same detail per
+  degree as `centre`: 2-3 pixels per module, softened by the analogue
+  binning. `centre` found the code on 7-10 % of decodes in two of its
+  three runs, taking 5-7 s; `full` and `wide` never found it.
+- **The unbinned modes read it at once.** At twice the detail (5-6
+  pixels per module), `detail` and `mid` found it on about half the
+  decodes. Each read it 0.7-1.2 s after the scanner started, and in
+  0.2-0.3 s once it came back into view.
+- **`detail` over `mid`:** the same detail, so the same success. `mid`'s
+  view is 28 % wider, but it costs about 30 % more CPU per frame (17 ms of grey
+  conversion and 75-87 ms of decoding, against 10 and 64-68 ms) and
+  7.8 MB of buffers instead of 4.7. On the Zero's single core, the
+  narrower view keeps the screen more responsive. For a paper code at
+  30-50 cm or a phone at arm's length, the code is held in front of the
+  lens anyway.
+
+The other modes stay available in test builds: `#camera mode centre`,
+`full`, `wide` or `mid` (below). The measurements are from quirc; another
+decoder would shift the decode times, but not the pixels a code gets.
 
 ## Testing with and without a camera
 
@@ -144,7 +188,7 @@ are the same code as with a real camera.
   | `#camera pi` | the Pi Camera, if the probe finds one (logs `picamera: IMX219 found (model 0219)` and `camera: pi`) |
   | `#camera synth` | back to the synthetic camera (so do `qr`, `scene` and `none`) |
   | `#camera pattern <n>` | the sensor's test pattern: 0 off, 1 solid colour, 2 colour bars, 7 column counter, ... |
-  | `#camera mode centre` / `full` | the Pi Camera's mode, from the next start: 640x480 (default) or the full field, 1640x1232 |
+  | `#camera mode <name>` | the Pi Camera's mode, from the next start: `detail` (default), `centre`, `full`, `wide`, `mid` (see above) |
 
   A switch applies from the next scanner start: a running scanner keeps the
   camera it started with. In grey, the colour bars are five bands: white,
