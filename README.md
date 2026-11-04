@@ -11,7 +11,10 @@ ever read: a computer for creating and handling secrets that have no way out
 except what you read off the screen.
 
 Built on [Circle](https://github.com/rsta2/circle) (bare-metal C++ for the
-Pi). Licensed under the GPLv3.
+Pi). Licensed under the GPLv3. The QR decoder,
+[zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), is under the Apache
+License 2.0 (`third_party/zxing-cpp/LICENSE`, and `LICENCE.zxing-cpp` on
+the cards `tools/make_sdcard.sh` makes).
 
 ```js
 import * as ui from "zg:ui";
@@ -43,7 +46,7 @@ Toolchain 13.2.Rel1, checked by SHA-256) into `toolchain/`; without it,
 reproducible.
 
 ```sh
-git submodule update --init                              # Circle, QuickJS
+git submodule update --init                              # Circle, QuickJS, zxing-cpp
 git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
 tools/toolchain.sh                                       # the pinned compiler
 
@@ -53,9 +56,11 @@ tools/build.sh pi TEST=1     # ... with the test-only apps and serial screenshot
 tools/build.sh pi SEALED=1   # ... with every app built in and no SD card code
 ```
 
-`build.sh` applies zerogap's fixes to Circle (`patches/circle/`), configures
-Circle for the target (QEMU lacks a few peripherals, so the two need
-different Circle libraries) and builds Circle, LVGL, QuickJS and the kernel.
+`build.sh` applies zerogap's changes to Circle and zxing-cpp (`patches/`),
+configures Circle for the target (QEMU lacks a few peripherals, so the two
+need different Circle libraries) and builds Circle, LVGL, QuickJS, the QR
+decoder (zxing-cpp, [docs/CAMERA.md](docs/CAMERA.md#the-qr-decoder)) and the
+kernel. zxing-cpp's own submodule (zint, for writing barcodes) is not needed.
 Switching targets rebuilds everything (about 40 s); otherwise builds are
 incremental. Builds are reproducible: `tools/check_reproducible.sh` builds
 the current commit twice, in fresh checkouts, and compares the images. zerogap needs Circle's 8 MB kernel limit and a 1 MB stack, which
@@ -129,8 +134,8 @@ activates, and the Windows (Super) key always returns to the launcher.
 | --- | --- |
 | `apps/` | The apps: `launcher` (built in), `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test). |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
-| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers) and read-only FatFs. |
-| `circle/`, `third_party/quickjs/` | Pinned submodules. Circle gets the fixes in `patches/circle/`. |
+| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader and read-only FatFs. |
+| `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
 | `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
 | `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |
 | `tools/` | Build script, app bundler, QEMU harness, test runner; `tools/rig/` drives real hardware. |
