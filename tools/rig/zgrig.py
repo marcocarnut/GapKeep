@@ -159,7 +159,15 @@ class RigMachine:
         return False
 
     def send(self, line):
-        self.port.write((line + '\n').encode())
+        # Test builds read the UART by polling its 16-byte FIFO from the main
+        # loop, which can stall for a few hundred ms (a QR decode on the
+        # Zero): longer lines would overflow it. Send them in pieces, with
+        # pauses longer than such a stall.
+        data = (line + '\n').encode()
+        for i in range(0, len(data), 12):
+            if i:
+                time.sleep(0.6)
+            self.port.write(data[i:i + 12])
 
     def reset(self):
         """Reset the Zero and upload the kernel again (the bootloader on its

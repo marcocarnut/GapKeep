@@ -53,6 +53,15 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
   `/dev/hidg1`). **Do this before resetting the Zero after every rig
   reboot**, or install `tools/rig/zerogap-gadget.service` to do it at boot
   (instructions inside). See "Known issues".
+- **If the Zero stops finding the keyboard** (its log: `dwhci: Control
+  transfer timed out`, `Cannot get device descriptor`; the Pi 5's `dmesg`
+  shows `new device is high-speed` but no `new address`), the gadget is
+  wedged although its service says active: `sudo systemctl restart
+  zerogap-gadget` (or `sudo tools/rig/gadget.sh up`). Seen once, on
+  2026-11-04, after the rig had been up for two days.
+- Test commands on the serial line (`#camera ...`, `#crash ...`) are read
+  by polling the UART's 16-byte FIFO from the main loop, so `zgrig.py`
+  sends long lines in pieces of 12 bytes, 0.6 s apart.
 
 ## Using it
 
