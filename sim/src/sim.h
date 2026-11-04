@@ -23,6 +23,10 @@ extern "C" {
  * launcher. Returns 0 on success. */
 int zg_sim_boot (int width, int height, const char *card);
 
+/* Before zg_sim_boot: <dir>/<id> replaces the built-in app <id> (e.g.
+ * <dir>/launcher, to work on the launcher). 0: none. */
+void zg_sim_set_builtin_dir (const char *dir);
+
 /* One pass of the main loop, as the kernel's: keyboard, LVGL (input,
  * timers, drawing), app host. Call often (every millisecond or so). */
 void zg_sim_step (void);

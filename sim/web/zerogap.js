@@ -54,12 +54,24 @@ export class Zerogap {
     this.hasCard = true;
   }
 
+  // Replacements for built-in apps: { "<id>/<path>": string or Uint8Array },
+  // e.g. "launcher/main.js". Simulator only. Call before boot().
+  writeBuiltin (files) {
+    for (const [path, data] of Object.entries (files)) {
+      const full = "/builtin/" + path.replace (/^\/+/, "");
+      this.m.FS.mkdirTree (full.slice (0, full.lastIndexOf ("/")));
+      this.m.FS.writeFile (full, data);
+    }
+    this.hasBuiltin = true;
+  }
+
   // Boots with a screen of width x height (320x240 to 4096x4096). Without
   // writeCard(), there is no SD card.
   boot (width = 640, height = 480) {
     this.width = width;
     this.height = height;
     const card = this.hasCard ? this.m.stringToNewUTF8 ("/card") : 0;
+    if (this.hasBuiltin) this.m._zg_sim_set_builtin_dir (this.m.stringToNewUTF8 ("/builtin"));
     if (this.m._zg_sim_boot (width, height, card) !== 0) {
       throw new Error ("zerogap did not boot (see the log)");
     }

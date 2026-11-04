@@ -110,6 +110,11 @@ static void InitGUI (void)
 	ZgInstallCursor ();
 }
 
+void zg_sim_set_builtin_dir (const char *dir)
+{
+	ZgSimSetBuiltinRoot (dir);
+}
+
 int zg_sim_boot (int width, int height, const char *card)
 {
 	ZgSimClockStart ();

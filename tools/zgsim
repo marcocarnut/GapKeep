@@ -12,7 +12,9 @@
 #   tools/zgsim --for 3 --shot /tmp/x.png myapp    # run 3 s, screenshot, exit
 #
 # The card is a copy: edit the app, run again. Each APP_DIR is a folder
-# with manifest.json; its name must be the app's id.
+# with manifest.json; its name must be the app's id. A folder named
+# launcher replaces the built-in launcher (simulator only, see --builtin
+# in docs/SIMULATOR.md):  tools/zgsim apps/launcher
 #
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -25,17 +27,20 @@ while [ $# -gt 0 ]; do
 	*) APPS="$APPS $1"; shift ;;
 	esac
 done
-[ -n "$APPS" ] || { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ -n "$APPS" ] || { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 make -C "$ROOT/sim" -s -j"$(nproc)" >/dev/null
 CARD=$(mktemp -d -t zgsim-card-XXXXXX)
 trap 'rm -rf "$CARD"' EXIT
-mkdir "$CARD/apps"
+mkdir "$CARD/apps" "$CARD/builtin"
 FIRST=
 for a in $APPS; do
 	a=${a%/}
 	[ -f "$a/manifest.json" ] || { echo "zgsim: $a has no manifest.json" >&2; exit 2; }
-	cp -r "$a" "$CARD/apps/"
+	case $(basename "$a") in
+	launcher) cp -r "$a" "$CARD/builtin/" ;;
+	*) cp -r "$a" "$CARD/apps/" ;;
+	esac
 	FIRST=${FIRST:-$(basename "$a")}
 done
-"$ROOT/sim/build/zgsim" --card "$CARD" --app "$FIRST" $ARGS
+"$ROOT/sim/build/zgsim" --card "$CARD" --builtin "$CARD/builtin" --app "$FIRST" $ARGS

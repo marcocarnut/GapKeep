@@ -805,6 +805,66 @@ static char *HashApp (const zg_file_t *pFiles, unsigned nCount)
 	return pHex;
 }
 
+// Reads, checks and hashes the app in pDir (e.g. "SD:/apps/hello"), whose
+// id must be pFolder; pLabel names it in the log. Returns 0 and the reason
+// in *pError if it fails.
+static zg_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFolder,
+			  CString *pError)
+{
+	TFileList List;
+	List.pFiles = new zg_file_t[MaxFiles];
+	List.nCount = 0;
+	List.nTotalSize = 0;
+
+	if (!ReadFolder (pDir, "", 1, &List, pError))
+	{
+		FreeFiles (&List);
+		return 0;
+	}
+	SortFiles (&List);
+
+	const zg_file_t *pManifest = FindFile (&List, "manifest.json");
+	if (pManifest == 0)
+	{
+		*pError = "no manifest.json";
+		FreeFiles (&List);
+		return 0;
+	}
+
+	zg_app_t *pApp = new zg_app_t;
+	memset (pApp, 0, sizeof *pApp);
+	if (!ParseManifest (pManifest, pFolder, pApp, pError))
+	{
+		delete pApp;
+		FreeFiles (&List);
+		return 0;
+	}
+	if (FindFile (&List, pApp->entry) == 0)
+	{
+		pError->Format ("entry module \"%s\" not found", pApp->entry);
+		delete [] (char *) pApp->id;
+		delete [] (char *) pApp->name;
+		delete [] (char *) pApp->version;
+		delete [] (char *) pApp->description;
+		delete [] (char *) pApp->entry;
+		delete [] pApp->icon_rgba;
+		delete pApp;
+		FreeFiles (&List);
+		return 0;
+	}
+
+	pApp->files = List.pFiles;
+	pApp->file_count = List.nCount;
+	pApp->hash = HashApp (List.pFiles, List.nCount);
+	pApp->source = ZG_APP_SDCARD;
+
+	CLogger::Get ()->Write (From, LogNotice, "%s: %s %s, %u files, %u bytes, sha256 %s",
+				pLabel, pApp->id, pApp->version, List.nCount, List.nTotalSize,
+				pApp->hash);
+
+	return pApp;
+}
+
 static void LoadApp (const char *pFolder)
 {
 	if (!IsValidID (pFolder))
@@ -818,63 +878,16 @@ static void LoadApp (const char *pFolder)
 		return;
 	}
 
-	CString Dir;
+	CString Dir, Label;
 	Dir.Format ("SD:/apps/%s", pFolder);
-
-	TFileList List;
-	List.pFiles = new zg_file_t[MaxFiles];
-	List.nCount = 0;
-	List.nTotalSize = 0;
-
+	Label.Format ("apps/%s", pFolder);
 	CString Error;
-	if (!ReadFolder (Dir, "", 1, &List, &Error))
+	zg_app_t *pApp = ReadApp (Dir, Label, pFolder, &Error);
+	if (pApp == 0)
 	{
 		AddProblem (pFolder, Error);
-		FreeFiles (&List);
 		return;
 	}
-	SortFiles (&List);
-
-	const zg_file_t *pManifest = FindFile (&List, "manifest.json");
-	if (pManifest == 0)
-	{
-		AddProblem (pFolder, "no manifest.json");
-		FreeFiles (&List);
-		return;
-	}
-
-	zg_app_t *pApp = new zg_app_t;
-	memset (pApp, 0, sizeof *pApp);
-	if (!ParseManifest (pManifest, pFolder, pApp, &Error))
-	{
-		AddProblem (pFolder, Error);
-		delete pApp;
-		FreeFiles (&List);
-		return;
-	}
-	if (FindFile (&List, pApp->entry) == 0)
-	{
-		Error.Format ("entry module \"%s\" not found", pApp->entry);
-		AddProblem (pFolder, Error);
-		delete [] (char *) pApp->id;
-		delete [] (char *) pApp->name;
-		delete [] (char *) pApp->version;
-		delete [] (char *) pApp->description;
-		delete [] (char *) pApp->entry;
-		delete [] pApp->icon_rgba;
-		delete pApp;
-		FreeFiles (&List);
-		return;
-	}
-
-	pApp->files = List.pFiles;
-	pApp->file_count = List.nCount;
-	pApp->hash = HashApp (List.pFiles, List.nCount);
-	pApp->source = ZG_APP_SDCARD;
-
-	CLogger::Get ()->Write (From, LogNotice, "apps/%s: %s %s, %u files, %u bytes, sha256 %s",
-				pFolder, pApp->id, pApp->version, List.nCount, List.nTotalSize,
-				pApp->hash);
 
 	s_ppApps[s_nApps++] = pApp;
 }
@@ -931,6 +944,44 @@ static void LoadCard (void)
 	}
 }
 
+#ifdef ZG_SIM
+
+// The simulator can replace a built-in app with a folder of the same name
+// in its "builtin" folder (zgsim --builtin DIR, the IDE's copy of the
+// launcher), to work on the launcher without rebuilding. The replacement
+// gets the built-in app's rights; if it fails a check, the built-in app
+// stays. The Pi has no such folder: built-in apps come only from the
+// kernel image.
+static const zg_app_t *SimReplacement (const zg_app_t *pBuiltin)
+{
+	CString Dir, Label;
+	Dir.Format ("SIM:/%s", pBuiltin->id);
+	Label.Format ("builtin/%s", pBuiltin->id);
+
+	DIR Probe;
+	if (f_opendir (&Probe, Dir) != FR_OK)
+	{
+		return pBuiltin;
+	}
+	f_closedir (&Probe);
+
+	CString Error;
+	zg_app_t *pApp = ReadApp (Dir, Label, pBuiltin->id, &Error);
+	if (pApp == 0)
+	{
+		CLogger::Get ()->Write (From, LogWarning, "%s not loaded: %s; using the built-in %s",
+					(const char *) Label, (const char *) Error, pBuiltin->id);
+		return pBuiltin;
+	}
+
+	pApp->source = ZG_APP_BUILTIN;
+	CLogger::Get ()->Write (From, LogNotice, "%s replaces the built-in %s (simulator only)",
+				(const char *) Label, pBuiltin->id);
+	return pApp;
+}
+
+#endif	// ZG_SIM
+
 #endif	// !ZG_SEALED
 
 void CAppStore::Initialize (boolean bCardPresent)
@@ -940,7 +991,11 @@ void CAppStore::Initialize (boolean bCardPresent)
 
 	for (unsigned i = 0; i < zg_builtin_app_count; i++)
 	{
-		s_ppApps[s_nApps++] = &zg_builtin_apps[i];
+		const zg_app_t *pApp = &zg_builtin_apps[i];
+#if defined (ZG_SIM) && !defined (ZG_SEALED)
+		pApp = SimReplacement (pApp);
+#endif
+		s_ppApps[s_nApps++] = pApp;
 	}
 	CLogger::Get ()->Write (From, LogNotice, "%u app(s) built in", zg_builtin_app_count);
 

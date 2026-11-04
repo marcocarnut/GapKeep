@@ -41,6 +41,8 @@ FRESULT f_close (FIL *fp);
 
 // simulator: the folder that plays the SD card (0: no card)
 void ZgSimSetCardRoot (const char *pRoot);
+// "SIM:/x" is <root>/x: replacements for built-in apps (appstore.cpp, simulator only)
+void ZgSimSetBuiltinRoot (const char *pRoot);
 
 #ifdef __cplusplus
 }

@@ -89,7 +89,7 @@ web: build/web/zgsim$(if $(filter test,$(MODE)),-test).js
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
 	    -sMODULARIZE=1 -sEXPORT_NAME=createZerogap -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
 	    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAPU16,UTF8ToString,stringToNewUTF8 \
-	    -sEXPORTED_FUNCTIONS=_malloc,_free,_zg_sim_boot,_zg_sim_key_down_qemu,_zg_sim_key_down_dom,_zg_sim_key_up,_zg_sim_pointer,_zg_sim_launch,_zg_sim_frame_serial,_zg_web_run,_zg_web_frame,_zg_web_width,_zg_web_height \
+	    -sEXPORTED_FUNCTIONS=_malloc,_free,_zg_sim_boot,_zg_sim_set_builtin_dir,_zg_sim_key_down_qemu,_zg_sim_key_down_dom,_zg_sim_key_up,_zg_sim_pointer,_zg_sim_launch,_zg_sim_frame_serial,_zg_web_run,_zg_web_frame,_zg_web_width,_zg_web_height \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
 build/web/zgsim.js build/web/zgsim-test.js: $(OBJS)

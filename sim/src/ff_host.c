@@ -5,20 +5,30 @@
 #include <stdio.h>
 #include <string.h>
 
-static char s_Root[1024];
+static char s_Root[1024];		// "SD:"
+static char s_BuiltinRoot[1024];	// "SIM:", the built-in app replacements (appstore.cpp)
 
 void ZgSimSetCardRoot (const char *pRoot)
 {
 	snprintf (s_Root, sizeof s_Root, "%s", pRoot ? pRoot : "");
 }
 
+void ZgSimSetBuiltinRoot (const char *pRoot)
+{
+	snprintf (s_BuiltinRoot, sizeof s_BuiltinRoot, "%s", pRoot ? pRoot : "");
+}
+
 static int HostPath (const char *path, char *out, size_t size)
 {
-	if (s_Root[0] == '\0' || strncmp (path, "SD:", 3) != 0)
+	if (s_Root[0] != '\0' && strncmp (path, "SD:", 3) == 0)
 	{
-		return 0;
+		return snprintf (out, size, "%s%s", s_Root, path + 3) < (int) size;
 	}
-	return snprintf (out, size, "%s%s", s_Root, path + 3) < (int) size;
+	if (s_BuiltinRoot[0] != '\0' && strncmp (path, "SIM:", 4) == 0)
+	{
+		return snprintf (out, size, "%s%s", s_BuiltinRoot, path + 4) < (int) size;
+	}
+	return 0;
 }
 
 FRESULT f_mount (FATFS *fs, const char *path, BYTE opt)

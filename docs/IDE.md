@@ -28,7 +28,7 @@ current browsers should work.
   renaming an app also changes the `id` in its manifest. **Import** takes a
   folder from your computer: one app's folder, or a folder of apps (a card's
   `apps/`). **Export .zip** downloads the selected app. **Examples** adds back
-  any of `hello`, `gallery` and `dice39` that you deleted. A dot marks
+  any of `launcher`, `hello`, `gallery` and `dice39` that you deleted. A dot marks
   unsaved files, a triangle the running app.
 - **Editor** (middle): Monaco, as in VS Code. JavaScript is checked as
   zerogap runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
@@ -41,7 +41,8 @@ current browsers should work.
   the log says why and you stay on the launcher). **Stop** halts the machine.
   **Home** goes back to the launcher. **Restart** boots again into the
   launcher, as switching the device on does. The menu sets the screen size
-  (640x480 to 1824x984), which reboots.
+  (640x480, 800x480, 800x600, 1024x600, 1024x768, 1280x720, 1824x984),
+  which reboots.
 - **Console** (bottom): zerogap's log. Errors are red. File references in
   stack traces (`main.js:4:2`) and `apps/<id> not loaded` lines are links
   that open the file at that line. `console.log` in an app shows up as
@@ -72,6 +73,22 @@ edits.
 For scripts and agents, the page exposes `window.zgide`: `run(id)`,
 `openFile(path, line)`, `home()`, `files` (path to contents), `machine` (the
 `Zerogap` instance of `sim/web/zerogap.js`), `editor`, `monaco`.
+
+## Changing the launcher
+
+The launcher is an app too (`apps/launcher` in the repository), but built
+into zerogap rather than read from the card: the device refuses a card app
+named `launcher`. In the IDE, `launcher` (marked *built in*) is a copy you
+can edit: at each boot it replaces the built-in launcher, in the simulator
+only, with the built-in launcher's rights (`zg:apps`). Restart or Run shows
+your changes.
+
+zerogap starts with the launcher, so a launcher that fails to load stops
+the boot: the log links to the error. Fix it, or delete `apps/launcher` to
+get the built-in one back (**Examples** brings back a fresh copy).
+
+To put your launcher on the device, **Export .zip** it, unzip it over
+`apps/launcher` in the repository and rebuild the kernel.
 
 ## Putting an app on a real SD card
 

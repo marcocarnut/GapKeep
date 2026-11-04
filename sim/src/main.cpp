@@ -15,8 +15,10 @@
 //                           launcher would
 //   quit                    exit
 //
-// Usage: zgsim [--size WxH] [--card DIR] [--app ID] [--for SECONDS] [--shot FILE.png]
+// Usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--for SECONDS] [--shot FILE.png]
 //   --card DIR      DIR plays the SD card: apps load from DIR/apps
+//   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
+//                   a launcher to try out; see docs/SIMULATOR.md)
 //   --app ID        start that app right after boot
 //   --for SECONDS   run that long, then exit (default: until "quit" or EOF)
 //   --shot FILE     with --for: take a screenshot before exiting
@@ -121,7 +123,7 @@ static int Command (char *pLine)
 int main (int argc, char **argv)
 {
 	int nWidth = 640, nHeight = 480;
-	const char *pCard = 0, *pShot = 0, *pApp = 0;
+	const char *pCard = 0, *pBuiltin = 0, *pShot = 0, *pApp = 0;
 	double fFor = -1;
 	for (int i = 1; i < argc; i++)
 	{
@@ -131,12 +133,13 @@ int main (int argc, char **argv)
 			i++;
 		}
 		else if (strcmp (argv[i], "--card") == 0 && i + 1 < argc)	pCard = argv[++i];
+		else if (strcmp (argv[i], "--builtin") == 0 && i + 1 < argc)	pBuiltin = argv[++i];
 		else if (strcmp (argv[i], "--app") == 0 && i + 1 < argc)	pApp = argv[++i];
 		else if (strcmp (argv[i], "--for") == 0 && i + 1 < argc)	fFor = atof (argv[++i]);
 		else if (strcmp (argv[i], "--shot") == 0 && i + 1 < argc)	pShot = argv[++i];
 		else
 		{
-			fprintf (stderr, "usage: zgsim [--size WxH] [--card DIR] [--app ID] [--for SECONDS] [--shot FILE.png]\n");
+			fprintf (stderr, "usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}
 	}
@@ -146,6 +149,7 @@ int main (int argc, char **argv)
 		return 2;
 	}
 
+	zg_sim_set_builtin_dir (pBuiltin);
 	if (zg_sim_boot (nWidth, nHeight, pCard) != 0)
 	{
 		return 1;

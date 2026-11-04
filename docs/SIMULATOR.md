@@ -41,7 +41,24 @@ Answers to commands start with `#`; everything else on stdout is the log,
 formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 
 `sim/build/zgsim` itself takes `--card DIR` (DIR plays the SD card: apps in
-`DIR/apps`), `--app ID`, `--size WxH`, `--for SECONDS` and `--shot FILE`.
+`DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`,
+`--for SECONDS` and `--shot FILE`.
+
+## Working on the launcher
+
+The launcher is built in: the device refuses a card app with its id. The
+simulator can replace it without rebuilding: with `--builtin DIR`, a
+folder `DIR/launcher` replaces the built-in launcher, with its rights, and
+the log says so (`appstore: builtin/launcher replaces the built-in
+launcher (simulator only)`). If the folder fails the checks, the log says
+why and the built-in launcher stays. `tools/zgsim` does this for a folder
+named `launcher`:
+
+```sh
+tools/zgsim apps/launcher apps/hello     # your launcher, with hello on the card
+```
+
+The Pi has no such folder: there, change `apps/launcher` and rebuild.
 
 ## Scenarios
 

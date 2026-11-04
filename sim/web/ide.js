@@ -12,7 +12,11 @@ import { makeZip } from "./zip.js";
 const $ = (id) => document.getElementById (id);
 const here = (rel) => new URL (rel, import.meta.url).href;
 
-const SIZES = [[640, 480], [800, 480], [1024, 600], [1280, 720], [1824, 984]];
+const SIZES = [[640, 480], [800, 480], [800, 600], [1024, 600], [1024, 768], [1280, 720], [1824, 984]];
+// Apps built into zerogap. The IDE's copy of one replaces it in the
+// simulator (its "builtin" folder), so the launcher can be worked on here;
+// on the device, built-in apps come from the kernel image only.
+const BUILTIN = new Set (["launcher"]);
 const EXAMPLES_URL = here ("../build/web/examples.json");   // written by tools/zgide.sh
 const EXAMPLES_DIR = here ("../build/web/examples/");
 const TYPES_URL = here ("types/zerogap.d.ts");
@@ -39,7 +43,8 @@ let machine = null;         // the running Zerogap instance
 let runToken = 0;           // the latest run() wins when several overlap
 let runningApp = null;      // the app zerogap says it started (from the log)
 let lastApp = null;         // what Run launched last (for screen size changes)
-let size = SIZES[Number (localStorage.getItem ("zgide.size")) || 0] || SIZES[0];
+const sizeName = ([w, h]) => `${w}x${h}`;
+let size = SIZES.find ((s) => sizeName (s) === localStorage.getItem ("zgide.size")) || SIZES[0];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,7 +96,7 @@ let logApp = null;          // the app the log is about, to resolve "main.js:3:5
 const ERROR_RE = /not loaded:|uncaught exception|Error|FAIL/;
 // "lib/x.js:2:7", "main.js:4", "apps/hello/main.js:1:1"
 const FILE_REF_RE = /([A-Za-z0-9_.\/-]+\.(?:m?js|json|txt)):(\d+)(?::(\d+))?/g;
-const NOT_LOADED_RE = /appstore: (apps\/([^\s:]+)) not loaded: (.*)$/;
+const NOT_LOADED_RE = /appstore: ((?:apps|builtin)\/([^\s:]+)) not loaded: (.*)$/;
 
 function consoleAppend (text, cls) {
   const box = $("console");
@@ -321,7 +326,11 @@ function renderTree () {
     if (node.kind === "app") {
       const meta = document.createElement ("span");
       meta.className = "meta";
-      meta.textContent = appName (node.name);
+      meta.textContent = appName (node.name) + (BUILTIN.has (node.name) ? " (built in)" : "");
+      if (BUILTIN.has (node.name)) {
+        meta.title = "Built into zerogap. This copy replaces it in the simulator; " +
+          "on the device, change apps/" + node.name + " in the repository and rebuild the kernel.";
+      }
       row.append (meta);
       if (machine && runningApp === node.name) name.classList.add ("running");
     }
@@ -549,9 +558,14 @@ async function run (appId, { focus = true } = {}) {
   if (token !== runToken) return;   // a later run() took over
   machine = zg;
   logApp = null;
-  const card = {};
-  for (const [path, data] of files) if (path.startsWith ("apps/")) card[path] = data;
+  const card = {}, builtin = {};
+  for (const [path, data] of files) {
+    if (!path.startsWith ("apps/")) continue;
+    if (BUILTIN.has (appOf (path))) builtin[path.slice (5)] = data;
+    else card[path] = data;
+  }
   if (Object.keys (card).length) zg.writeCard (card);
+  if (Object.keys (builtin).length) zg.writeBuiltin (builtin);
   const canvas = $("screen");
   canvas.width = w;
   canvas.height = h;
@@ -561,6 +575,10 @@ async function run (appId, { focus = true } = {}) {
     zg.boot (w, h);
   } catch (e) {
     ideLog (e.message, true);
+    if (builtin["launcher/main.js"] !== undefined) {
+      ideLog ("zerogap starts with the launcher, and that is the copy in apps/launcher: " +
+        "fix it (see the error above), or delete apps/launcher to use the built-in one", true);
+    }
     stopMachine ();
     updateStatus ();
     return;
@@ -617,7 +635,7 @@ function setupScreen () {
   sel.value = SIZES.indexOf (size);
   sel.onchange = () => {
     size = SIZES[sel.value];
-    localStorage.setItem ("zgide.size", sel.value);
+    localStorage.setItem ("zgide.size", sizeName (size));
     run (machine ? lastApp : null);
   };
 
@@ -724,7 +742,7 @@ async function newApp () {
   const id = prompt ("New app id (a-z, 0-9 and -; also its folder name):", "myapp")?.trim ();
   if (!id) return;
   if (!APP_ID.test (id)) return alert (`"${id}" is not a valid app id: use a-z, 0-9 and -.`);
-  if (id === "launcher") return alert ("\"launcher\" is the built-in launcher's id.");
+  if (BUILTIN.has (id)) return alert (`"${id}" is a built-in app's id; Examples adds a copy of it to edit.`);
   if (appIds ().has (id)) return alert (`There is already an app "${id}".`);
   await addFiles (template (id));
   openFile (`apps/${id}/main.js`);
@@ -841,7 +859,9 @@ async function exportApp () {
   if (saved) ideLog (`saved ${saved} file${saved === 1 ? "" : "s"} of ${id} before exporting`);
   const entries = pathsUnder (`apps/${id}`).sort ().map ((p) => ({ name: `${id}/${relOf (p)}`, data: files.get (p) }));
   download (makeZip (entries), `${id}.zip`);
-  ideLog (`exported ${id}.zip (${entries.length} files): unzip it into the card's apps/ folder`);
+  ideLog (BUILTIN.has (id)
+    ? `exported ${id}.zip (${entries.length} files): ${id} is built in, so unzip it over apps/${id} in the repository and rebuild the kernel`
+    : `exported ${id}.zip (${entries.length} files): unzip it into the card's apps/ folder`);
 }
 
 // The example apps that tools/zgide.sh copies to sim/build/web/examples.
