@@ -49,6 +49,7 @@ check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/c
 check native_hmac python3 tools/check_hashes.py
 check dice39_node node tests/dice39/run_node.mjs
 check totp_node node --experimental-default-type=module tests/totp/run_node.mjs
+check psbt_node node --experimental-default-type=module tests/psbt/run_node.mjs
 
 # the two SD cards
 mkdir -p "$OUT/card-apps/apps"
