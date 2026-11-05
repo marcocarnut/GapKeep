@@ -51,6 +51,7 @@ check native_secp python3 tools/check_secp.py
 check secp256k1_suite python3 tools/check_secp.py --suite 2
 check dice39_node node tests/dice39/run_node.mjs
 check totp_node node --experimental-default-type=module tests/totp/run_node.mjs
+check codex32_node node --experimental-default-type=module tests/codex32/run_node.mjs
 
 # the two SD cards
 mkdir -p "$OUT/card-apps/apps"

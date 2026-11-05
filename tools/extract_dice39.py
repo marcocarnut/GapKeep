@@ -82,9 +82,9 @@ def match_brackets(text, start):
 
 
 def extract_decl(text, name):
-    """Source of the top-level declaration of `name` (function, const or
+    """Source of the top-level declaration of `name` (function, async function, const or
     let), including the comment block directly above it."""
-    m = re.search(r'^([ \t]*)(function %s\s*\(|(?:const|let) %s\s*=)' % (name, name), text, re.M)
+    m = re.search(r'^([ \t]*)((?:async )?function %s\s*\(|(?:const|let) %s\s*=)' % (name, name), text, re.M)
     if not m:
         fail('declaration of %s not found' % name)
     start = m.start()
@@ -103,7 +103,7 @@ def extract_decl(text, name):
         else:
             break
     comment_start = len('\n'.join(lines_before[:k])) + (1 if k else 0)
-    if m.group(2).startswith('function'):
+    if 'function' in m.group(2).split('(')[0]:
         body = text.index('{', text.index(')', match_brackets(text, text.index('(', m.end() - 1)) - 1))
         end = match_brackets(text, body)
     else:
