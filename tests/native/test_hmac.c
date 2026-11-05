@@ -1,10 +1,19 @@
-/* Host build: cc -O2 -I src/crypto tests/native/test_hmac.c src/crypto/{sha1,sha256,sha512,hmac}.c && ./a.out
+/* Host build: cc -O2 -I src/crypto tests/native/test_hmac.c \
+ *     src/crypto/{sha1,sha256,sha512,hmac,ripemd160,pbkdf2}.c && ./a.out
  *
- * The C self-tests (FIPS 180-4, RFC 2202, RFC 4231), then random inputs
- * printed for tools/check_hashes.py to compare with Python's hashlib. */
+ * The C self-tests (FIPS 180-4, RFC 2202, RFC 4231, RIPEMD-160's, PBKDF2's),
+ * then random inputs printed for tools/check_hashes.py to compare with
+ * Python's hashlib. */
 #include <stdio.h>
 #include <stdlib.h>
 #include "hmac.h"
+#include "ripemd160.h"
+#include "pbkdf2.h"
+
+static void hex (const uint8_t *p, size_t n)
+{
+	for (size_t i = 0; i < n; i++) printf ("%02x", p[i]);
+}
 
 int main (int argc, char **argv)
 {
@@ -12,6 +21,8 @@ int main (int argc, char **argv)
 	if (r == 0) r = zg_sha256_selftest () ? 2000 : 0;
 	if (r == 0) r = zg_sha512_selftest () ? 3000 : 0;
 	if (r == 0) r = zg_hmac_selftest ();
+	if (r == 0) r = zg_ripemd160_selftest (1) ? 4000 + zg_ripemd160_selftest (1) : 0;
+	if (r == 0) r = zg_pbkdf2_selftest (1) ? 5000 + zg_pbkdf2_selftest (1) : 0;
 	printf ("hash and hmac selftests: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	if (r != 0 || argc < 2)
 	{
@@ -46,6 +57,26 @@ int main (int argc, char **argv)
 		printf (" ");
 		for (size_t i = 0; i < h->digest_size; i++) printf ("%02x", mac[i]);
 		printf ("\n");
+
+		/* "RIPEMD-160 - msghex digest hash160" */
+		uint8_t r160[20], h160[20];
+		zg_ripemd160 (m, ml, r160);
+		zg_hash160 (m, ml, h160);
+		printf ("RIPEMD-160 - ");
+		hex (m, ml); printf (" "); hex (r160, 20); printf (" "); hex (h160, 20);
+		printf ("\n");
+
+		/* every 10th: "PBKDF2 hash pwhex salthex iterations dkhex" */
+		if (c % 10 == 0)
+		{
+			uint32_t it = 1 + (uint32_t) rand () % 50;
+			size_t dl = 1 + (size_t) rand () % 150, pl = kl % 150, sl = ml % 80;
+			uint8_t dk[150];
+			zg_pbkdf2 (h, k, pl, m, sl, it, dk, dl);
+			printf ("PBKDF2 %s ", h->name);
+			hex (k, pl); printf (" "); hex (m, sl); printf (" %u ", (unsigned) it); hex (dk, dl);
+			printf ("\n");
+		}
 	}
 	return 0;
 }

@@ -47,6 +47,8 @@ check() {	# name, command...
 }
 check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/crypto/sha256.c -o "$0/sha256test" && "$0/sha256test"' "$OUT"
 check native_hmac python3 tools/check_hashes.py
+check native_secp python3 tools/check_secp.py
+check secp256k1_suite python3 tools/check_secp.py --suite 2
 check dice39_node node tests/dice39/run_node.mjs
 check totp_node node --experimental-default-type=module tests/totp/run_node.mjs
 

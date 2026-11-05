@@ -128,6 +128,26 @@ hardware RNG wrapper (`hwrng.*`) applies NIST SP 800-90B health tests to
 every raw byte and conditions output through SHA-256; see `zg:crypto` in
 [API.md](API.md).
 
+RIPEMD-160 (`ripemd160.*`, from its authors' paper, with HASH160) and
+PBKDF2 (`pbkdf2.*`, RFC 8018, over `zg_hash_t`) are checked the same way
+(`tools/check_hashes.py`). secp256k1 is Bitcoin Core's libsecp256k1
+(`third_party/secp256k1`, pinned to a release; built by
+`lib/secp256k1/secp256k1.mk` with the extrakeys and schnorrsig modules and
+a 16 KiB verification table, about 100 KiB of code and tables in all).
+`secp.*` turns its opaque structures into bytes for `zg:crypto`: ECDSA
+with RFC 6979 nonces, low S and Bitcoin Core's low-R grinding, BIP-340,
+and the BIP-32 and Taproot tweaks. Its context lives in a static buffer
+(no allocation), is blinded with random bytes, and halts the system on an
+illegal-argument or internal-error callback, which only a bug can reach.
+`tools/check_secp.py` compares it with an independent pure-Python
+implementation (SEC 1, RFC 6979, BIP-340, BIP-341) on random keys and edge
+cases, runs BIP-340's test vectors, writes the known answers of the
+kernel's self-test (`secp_kat.h`), and runs the library's own test suite
+built as for the Zero (32-bit arithmetic); that suite also passes compiled
+for ARMv6 under `qemu-arm`. RIPEMD-160, PBKDF2 and secp256k1 run their
+self-tests before their first use. BIP-32, addresses and transactions are
+left to apps, in JavaScript on these primitives.
+
 ### C runtime
 
 QuickJS is a hosted C program. zerogap provides only what it needs:

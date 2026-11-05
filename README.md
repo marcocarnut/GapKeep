@@ -14,7 +14,9 @@ Built on [Circle](https://github.com/rsta2/circle) (bare-metal C++ for the
 Pi). Licensed under the GPLv3. The QR decoder,
 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), is under the Apache
 License 2.0 (`third_party/zxing-cpp/LICENSE`, and `LICENCE.zxing-cpp` on
-the cards `tools/make_sdcard.sh` makes).
+the cards `tools/make_sdcard.sh` makes); Bitcoin Core's
+[libsecp256k1](https://github.com/bitcoin-core/secp256k1), under the MIT
+licence (`LICENCE.secp256k1` on the cards).
 
 ```js
 import * as ui from "zg:ui";
@@ -47,7 +49,7 @@ Toolchain 13.2.Rel1, checked by SHA-256) into `toolchain/`; without it,
 reproducible.
 
 ```sh
-git submodule update --init                              # Circle, QuickJS, zxing-cpp
+git submodule update --init                              # Circle, QuickJS, zxing-cpp, libsecp256k1
 git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
 tools/toolchain.sh                                       # the pinned compiler
 
@@ -130,6 +132,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Step 6: hardening: USB drivers cut to hub, keyboard and mouse, with control-transfer timeouts; no serial port in production; W^X memory protection, stack canaries and a stack guard; reproducible builds with a pinned compiler and firmware; the kernel's hash on screen ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model))
 - [x] Clock with trim and UTC offset (`zg:clock`), the Clock and Authenticator (TOTP) apps
 - [x] Native SHA-1, SHA-512 and HMAC (`zg:crypto`); a per-app session store in RAM (`zg:session`)
+- [x] Bitcoin's primitives in `zg:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
 
 ## Layout
 
@@ -137,8 +140,8 @@ activates, and the Windows (Super) key always returns to the launcher.
 | --- | --- |
 | `apps/` | The apps: `launcher` (built in), `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test). |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
-| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader and read-only FatFs. |
-| `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
+| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs. |
+| `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
 | `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
 | `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |
 | `tools/` | Build script, app bundler, QEMU harness, test runner; `tools/rig/` drives real hardware. |

@@ -6,6 +6,7 @@
 #   ../lib/lvgl          LVGL with zerogap's configuration
 #   ../lib/quickjs       QuickJS engine
 #   ../lib/fatfs         FatFs, read-only (not for SEALED=1)
+#   ../lib/secp256k1     libsecp256k1 (third_party/secp256k1)
 #   ../lib/zxing         the QR decoder, if third_party/zxing-cpp is there
 #                        (without it, QR scanners report "no QR decoder")
 #   ../circle/addon/SDCard  SD card driver (not for SEALED=1)
@@ -30,6 +31,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
+	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/js_clock.o \
 	  runtime/session.o runtime/js_session.o \
@@ -71,7 +73,8 @@ else
 OBJS	+= runtime/qrdecode.o
 endif
 
-LIBS	+= ../lib/lvgl/liblvgl.a \
+LIBS	+= ../lib/secp256k1/libsecp256k1.a \
+	  ../lib/lvgl/liblvgl.a \
 	  ../lib/quickjs/libquickjs.a \
 	  $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/input/libinput.a \
@@ -81,7 +84,7 @@ LIBS	+= ../lib/lvgl/liblvgl.a \
 # every file including LVGL headers must see the same configuration
 DEFINE += -DLV_CONF_PATH="<zg_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
-EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src
+EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src -I ../third_party/secp256k1/include
 
 include $(CIRCLEHOME)/Rules.mk
 

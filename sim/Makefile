@@ -83,8 +83,12 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/js_session.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
+	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
 	    $(ROOT)/src/kbdindev.cpp
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
+# libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
+include $(ROOT)/lib/secp256k1/secp256k1.mk
+SECPSRC  := $(addprefix $(SECP_DIR)/,$(SECP_SOURCES))
 QJSSRC   := $(QJS)/quickjs.c $(QJS)/dtoa.c $(QJS)/libregexp.c $(QJS)/libunicode.c $(QJS)/cutils.c
 LVGLSRC  := $(shell find $(LVGL)/src -name '*.c')
 
@@ -97,9 +101,11 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC)) $(OBJDIR)/apps_bundle.c.o
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC)) $(OBJDIR)/apps_bundle.c.o
 ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
+SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
+$(SECPOBJS): CFLAGS += $(SECP_DEFINES) $(SECP_INCLUDE) -I $(SECP_DIR) -Wno-unused-function
 
 .PHONY: all web clean FORCE
 all: build/zgsim$(if $(filter test,$(MODE)),-test)

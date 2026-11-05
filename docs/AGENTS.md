@@ -92,8 +92,11 @@ Time of day: `Date` works, but the clock is only right once the Clock app
 has set it after boot: check `status().set` from `zg:clock`, and use its
 `every(seconds, fn)` for things on the clock's marks. Random bytes:
 `import * as crypto from "zg:crypto"` (`randomBytes`, `getRandomValues`),
-hashing: `crypto.sha1`, `sha256`, `sha512`, `hmac(hash, key, data)`, native
-(don't write hashes in JavaScript). To keep data while the person uses
+hashing: `crypto.sha1`, `sha256`, `sha512`, `ripemd160`, `hash160`,
+`hmac(hash, key, data)`, `pbkdf2`, and secp256k1 (`publicKey`, `ecdsaSign`,
+`schnorrSign`, the BIP-32 and Taproot tweaks...), all native: don't write
+hashes or curve arithmetic in JavaScript, and don't vendor JS crypto
+libraries. To keep data while the person uses
 other apps (until power-off; never on the card): `zg:session`'s
 `set(key, value)` and `get(key)`. Code written for WebCrypto needs the adapter in
 [API.md](API.md#zgcrypto). Don't add npm dependencies; vendor plain ES

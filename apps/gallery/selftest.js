@@ -287,6 +287,79 @@ export async function runSelfTest(parent) {
     console.log(`selftest: 200 HMAC-SHA512 in ${Date.now() - t0} ms`);
   });
 
+  await test("bitcoin crypto vectors", () => {
+    const unhex = (s) => new Uint8Array(s.match(/../g).map((b) => parseInt(b, 16)));
+    const u32 = (i) => new Uint8Array([i >>> 24, (i >>> 16) & 255, (i >>> 8) & 255, i & 255]);
+    const cat = (...a) => { const r = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let o = 0; for (const x of a) { r.set(x, o); o += x.length; } return r; };
+    // RIPEMD-160 (its authors' vectors), HASH160
+    eq(hex(crypto.ripemd160("abc")), "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc", "ripemd160 abc");
+    eq(hex(crypto.ripemd160("")), "9c1185a5c5e9fc54612808977ee8f548b2258d31", "ripemd160 empty");
+    // BIP-39's first vector (passphrase "TREZOR"), then the seed of the BIP-84/86 vectors
+    const words = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    eq(hex(crypto.pbkdf2("SHA-512", words, "mnemonicTREZOR", 2048, 64)).slice(0, 32), "c55257c360c07c72029aebc1b53c05ed", "bip39");
+    const t0 = Date.now();
+    const seed = crypto.pbkdf2("SHA-512", words, "mnemonic", 2048, 64);
+    console.log(`selftest: BIP-39 seed (PBKDF2, 2048 iterations) in ${Date.now() - t0} ms`);
+    // BIP-32, from HMAC-SHA512 and the tweaks
+    const master = (s) => { const i = crypto.hmac("SHA-512", "Bitcoin seed", s); return { k: i.slice(0, 32), c: i.slice(32) }; };
+    const child = (n, i) => {
+      const data = i >= 0x80000000 ? cat([0], n.k, u32(i)) : cat(crypto.publicKey(n.k), u32(i));
+      const I = crypto.hmac("SHA-512", n.c, data);
+      return { k: crypto.privateKeyTweakAdd(n.k, I.slice(0, 32)), c: I.slice(32) };
+    };
+    const derive = (s, path) => path.reduce(child, master(s));
+    const H = 0x80000000;
+    let n = master(unhex("000102030405060708090a0b0c0d0e0f"));
+    eq(hex(crypto.publicKey(n.k)), "0339a36013301597daef41fbe593a02cc513d0b55527ec2df1050e2e8ff49c85c2", "bip32 m");
+    eq(hex(crypto.hash160(crypto.publicKey(n.k)).slice(0, 4)), "3442193e", "bip32 fingerprint");
+    const t1 = Date.now();
+    n = derive(unhex("000102030405060708090a0b0c0d0e0f"), [H, 1, H + 2, 2, 1000000000]);
+    console.log(`selftest: BIP-32 derivation of 5 levels in ${Date.now() - t1} ms`);
+    eq(hex(n.k), "471b76e389e528d6de6d816857e012c5455051cad6660850e58372a6c3e6e7c8", "bip32 m/0'/1/2'/2/1000000000");
+    eq(hex(n.c), "c783e67b921d2beb8f6b389cc646d7263b4145701dadd2161548a8b078e65e9e", "chain code");
+    // public derivation agrees with private derivation (m/0'/1: non-hardened)
+    const p = derive(unhex("000102030405060708090a0b0c0d0e0f"), [H]);
+    const I = crypto.hmac("SHA-512", p.c, cat(crypto.publicKey(p.k), u32(1)));
+    eq(hex(crypto.publicKeyTweakAdd(crypto.publicKey(p.k), I.slice(0, 32))), hex(crypto.publicKey(child(p, 1).k)), "public child");
+    // BIP-84: m/84'/0'/0'/0/0, HASH160 of the key (the bc1q... address's program)
+    n = derive(seed, [H + 84, H, H, 0, 0]);
+    eq(hex(crypto.hash160(crypto.publicKey(n.k))), "c0cebcd6c3d3ca8c75dc5ec62ebe55330ef910e2", "bip84");
+    // BIP-86: m/86'/0'/0'/0/0, Taproot output key (key path only)
+    n = derive(seed, [H + 86, H, H, 0, 0]);
+    const internal = crypto.xOnlyPublicKey(n.k);
+    eq(hex(internal), "cc8a4bc64d897bddc5fbc2f670f7a8ba0b386779106cf1223c6fc5d7cd6fc115", "bip86 internal key");
+    const tag = crypto.sha256("TapTweak"), tweak = crypto.sha256(cat(tag, tag, internal));
+    const out = crypto.taprootTweakPublicKey(internal, tweak);
+    eq(hex(out.key), "a60869f0dbcf1dc659c9cecbaf8050135ea9e8cdc487053f1dc6880949dc684c", "bip86 output key");
+    const tk = crypto.taprootTweakPrivateKey(n.k, tweak);
+    eq(hex(crypto.xOnlyPublicKey(tk)), hex(out.key), "tweaked private key");
+    const msg = crypto.sha256("taproot");
+    eq(crypto.schnorrVerify(crypto.schnorrSign(msg, tk), msg, out.key), true, "key path signature");
+    // BIP-340 vector 1; ECDSA with a fixed answer (tools/check_secp.py)
+    eq(hex(crypto.schnorrSign(unhex("243f6a8885a308d313198a2e03707344a4093822299f31d0082efa98ec4e6c89"),
+      unhex("b7e151628aed2a6abf7158809cf4f3c762e7160f38b4da56a784d9045190cfef"), unhex("00".repeat(31) + "01"))),
+      "6896bd60eeae296db48a229ff71dfe071bde413e6d43f917dc8dcf8c78de33418906d11ac976abccb20b091292bff4ea897efcb639ea871cfa95f6de339e4b0a", "bip340");
+    const sk = unhex("a21a34790d3f9500557103d4fa928af2d38f60f8aa6afffaeca13ade4dbebf6b");
+    const h = unhex("16a953f4f7310ae79ca041f85b5517a4dfeb71ea22cf2589f5fde8d9f1a865dd");
+    const t2 = Date.now();
+    const sig = crypto.ecdsaSign(h, sk);
+    console.log(`selftest: ECDSA signature in ${Date.now() - t2} ms`);
+    eq(hex(sig), "3044022002425694db6e80cdfb7b4794b4aaa4fb02fe4767bac24111e11f37d4ee473ace02204639f435238b9d280f4434736c5698d57dd3e07926f3f2f5fc0bf293b2dec816", "ecdsa");
+    const pub = crypto.publicKey(sk, false);
+    eq(pub.length, 65, "uncompressed");
+    eq(crypto.ecdsaVerify(sig, h, pub) && crypto.ecdsaVerify(sig, h, crypto.publicKeyConvert(pub)), true, "verify");
+    h[0] ^= 1;
+    eq(crypto.ecdsaVerify(sig, h, pub), false, "verify fails");
+    // bad input
+    eq(crypto.isPrivateKey(new Uint8Array(32)), false, "zero key");
+    eq(crypto.isPrivateKey(unhex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")), false, "key = n");
+    eq(crypto.isPublicKey(unhex("02" + "00".repeat(32))), false, "not on the curve");
+    throws(() => crypto.publicKey(new Uint8Array(32)), RangeError, "publicKey(0)");
+    throws(() => crypto.publicKey("secret"), TypeError, "a key as a string");
+    throws(() => crypto.ecdsaSign(new Uint8Array(31), sk), RangeError, "short hash");
+    throws(() => crypto.pbkdf2("SHA-512", "p", "s", 0, 64), RangeError, "0 iterations");
+  });
+
   await test("session store", () => {
     const value = { bytes: new Uint8Array([1, 2, 255]), list: [1, "two", null], when: new Date(0) };
     session.set("selftest", value);

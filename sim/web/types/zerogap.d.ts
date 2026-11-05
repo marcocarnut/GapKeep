@@ -3,6 +3,8 @@
 
 type BytesLike = ArrayBufferView | ArrayBuffer | string;
 
+type Bytes = ArrayBufferView | ArrayBuffer;
+
 type SessionValue = string | number | boolean | null | bigint | Date | ArrayBuffer | ArrayBufferView
   | SessionValue[] | { [key: string]: SessionValue };
 
@@ -561,6 +563,38 @@ declare module "zg:crypto" {
   export function sha512(data: BytesLike): Uint8Array;
   /** HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). */
   export function hmac(hash: "SHA-1" | "SHA-256" | "SHA-512", key: BytesLike, data: BytesLike): Uint8Array;
+  /** RIPEMD-160, a `Uint8Array(20)`. */
+  export function ripemd160(data: BytesLike): Uint8Array;
+  /** RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. */
+  export function hash160(data: BytesLike): Uint8Array;
+  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done. */
+  export function pbkdf2(hash: "SHA-1" | "SHA-256" | "SHA-512", password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
+  /** Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). */
+  export function isPrivateKey(key: Bytes): boolean;
+  /** Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). */
+  export function isPublicKey(key: Bytes): boolean;
+  /** The public key, 33 bytes (compressed) or 65. */
+  export function publicKey(privateKey: Bytes, compressed?: boolean): Uint8Array;
+  /** The same key, compressed or not. A `RangeError` if it isn't on the curve. */
+  export function publicKeyConvert(publicKey: Bytes, compressed?: boolean): Uint8Array;
+  /** (privateKey + tweak) mod n: BIP-32's private child keys. A `RangeError` if `tweak` ≥ n or the result is 0 (BIP-32: skip to the next index). */
+  export function privateKeyTweakAdd(privateKey: Bytes, tweak: Bytes): Uint8Array;
+  /** publicKey + tweak·G: BIP-32's public child keys (from an xpub). A `RangeError` as above. */
+  export function publicKeyTweakAdd(publicKey: Bytes, tweak: Bytes, compressed?: boolean): Uint8Array;
+  /** ECDSA signature of a 32-byte hash, DER-encoded (at most 71 bytes; add the sighash byte yourself). Deterministic (RFC 6979), low S, and low R as Bitcoin Core's (retried with extra nonce data until R is below 2²⁵⁵). */
+  export function ecdsaSign(hash: Bytes, privateKey: Bytes): Uint8Array;
+  /** Checks a strict-DER signature (without the sighash byte). High-S signatures fail, as in Bitcoin's standard rules. */
+  export function ecdsaVerify(signature: Bytes, hash: Bytes, publicKey: Bytes): boolean;
+  /** The BIP-340 public key: the point's X, 32 bytes. */
+  export function xOnlyPublicKey(privateKey: Bytes): Uint8Array;
+  /** BIP-340 signature (64 bytes) of a 32-byte message. `aux`: 32 bytes of auxiliary randomness; by default fresh random bytes, as BIP-340 recommends (pass zeros for a reproducible signature). */
+  export function schnorrSign(message: Bytes, privateKey: Bytes, aux?: Bytes): Uint8Array;
+  /** Checks a BIP-340 signature against an x-only public key; the message may have any length. */
+  export function schnorrVerify(signature: Bytes, message: Bytes, publicKey: Bytes): boolean;
+  /** Taproot's output key Q = P + tweak·G for the x-only internal key P (BIP-341): `key` is Q's X, `parity` its Y's (a script path's control block needs it). The tweak is the app's: the `TapTweak` tagged hash of P (and the script tree's root, if any). */
+  export function taprootTweakPublicKey(publicKey: Bytes, tweak: Bytes): { key: Uint8Array; parity: 0 | 1 };
+  /** The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. */
+  export function taprootTweakPrivateKey(privateKey: Bytes, tweak: Bytes): Uint8Array;
   /** `Uint8Array(n)` of random bytes, `n` ≤ 65536. */
   export function randomBytes(n: number): Uint8Array;
   /** Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. */

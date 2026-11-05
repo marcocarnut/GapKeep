@@ -23,7 +23,7 @@ intro: |
   | --- | --- | --- |
   | [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
   | [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
-  | [`zg:crypto`](#zgcrypto) | every app | SHA-1, SHA-256, SHA-512, HMAC, hardware random bytes |
+  | [`zg:crypto`](#zgcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
   | [`zg:clock`](#zgclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
   | [`zg:session`](#zgsession) | every app | Values kept across the app's runs, in RAM, until power-off |
   | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
@@ -514,16 +514,50 @@ modules:
       - {name: sha256, signature: sha256(data), ts: '(data: BytesLike) => Uint8Array', md: 'SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous.'}
       - {name: sha512, signature: sha512(data), ts: '(data: BytesLike) => Uint8Array', md: 'SHA-512, a `Uint8Array(64)`.'}
       - {name: hmac, signature: 'hmac(hash, key, data)', ts: '(hash: "SHA-1" | "SHA-256" | "SHA-512", key: BytesLike, data: BytesLike) => Uint8Array', md: 'HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash''s size. Keys of any length (longer than a block are hashed first, as the RFC says).'}
+      - {name: ripemd160, signature: ripemd160(data), ts: '(data: BytesLike) => Uint8Array', md: 'RIPEMD-160, a `Uint8Array(20)`.'}
+      - {name: hash160, signature: hash160(data), ts: '(data: BytesLike) => Uint8Array', md: 'RIPEMD-160 of SHA-256 (Bitcoin''s HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`.'}
+      - {name: pbkdf2, signature: 'pbkdf2(hash, password, salt, iterations, length)', ts: '(hash: "SHA-1" | "SHA-256" | "SHA-512", password: BytesLike, salt: BytesLike, iterations: number, length: number) => Uint8Array', md: 'PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done.'}
+      - {name: isPrivateKey, signature: isPrivateKey(key), ts: '(key: Bytes) => boolean', md: 'Whether `key` is 32 bytes from 1 to n-1 (n: the curve''s order).'}
+      - {name: isPublicKey, signature: isPublicKey(key), ts: '(key: Bytes) => boolean', md: 'Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes).'}
+      - {name: publicKey, signature: 'publicKey(privateKey, compressed = true)', ts: '(privateKey: Bytes, compressed?: boolean) => Uint8Array', md: 'The public key, 33 bytes (compressed) or 65.'}
+      - {name: publicKeyConvert, signature: 'publicKeyConvert(publicKey, compressed = true)', ts: '(publicKey: Bytes, compressed?: boolean) => Uint8Array', md: 'The same key, compressed or not. A `RangeError` if it isn''t on the curve.'}
+      - {name: privateKeyTweakAdd, signature: 'privateKeyTweakAdd(privateKey, tweak)', ts: '(privateKey: Bytes, tweak: Bytes) => Uint8Array', md: '(privateKey + tweak) mod n: BIP-32''s private child keys. A `RangeError` if `tweak` ≥ n or the result is 0 (BIP-32: skip to the next index).'}
+      - {name: publicKeyTweakAdd, signature: 'publicKeyTweakAdd(publicKey, tweak, compressed = true)', ts: '(publicKey: Bytes, tweak: Bytes, compressed?: boolean) => Uint8Array', md: 'publicKey + tweak·G: BIP-32''s public child keys (from an xpub). A `RangeError` as above.'}
+      - {name: ecdsaSign, signature: 'ecdsaSign(hash, privateKey)', ts: '(hash: Bytes, privateKey: Bytes) => Uint8Array', md: 'ECDSA signature of a 32-byte hash, DER-encoded (at most 71 bytes; add the sighash byte yourself). Deterministic (RFC 6979), low S, and low R as Bitcoin Core''s (retried with extra nonce data until R is below 2²⁵⁵).'}
+      - {name: ecdsaVerify, signature: 'ecdsaVerify(signature, hash, publicKey)', ts: '(signature: Bytes, hash: Bytes, publicKey: Bytes) => boolean', md: 'Checks a strict-DER signature (without the sighash byte). High-S signatures fail, as in Bitcoin''s standard rules.'}
+      - {name: xOnlyPublicKey, signature: xOnlyPublicKey(privateKey), ts: '(privateKey: Bytes) => Uint8Array', md: 'The BIP-340 public key: the point''s X, 32 bytes.'}
+      - {name: schnorrSign, signature: 'schnorrSign(message, privateKey, aux)', ts: '(message: Bytes, privateKey: Bytes, aux?: Bytes) => Uint8Array', md: 'BIP-340 signature (64 bytes) of a 32-byte message. `aux`: 32 bytes of auxiliary randomness; by default fresh random bytes, as BIP-340 recommends (pass zeros for a reproducible signature).'}
+      - {name: schnorrVerify, signature: 'schnorrVerify(signature, message, publicKey)', ts: '(signature: Bytes, message: Bytes, publicKey: Bytes) => boolean', md: 'Checks a BIP-340 signature against an x-only public key; the message may have any length.'}
+      - {name: taprootTweakPublicKey, signature: 'taprootTweakPublicKey(publicKey, tweak)', ts: '(publicKey: Bytes, tweak: Bytes) => { key: Uint8Array; parity: 0 | 1 }', md: 'Taproot''s output key Q = P + tweak·G for the x-only internal key P (BIP-341): `key` is Q''s X, `parity` its Y''s (a script path''s control block needs it). The tweak is the app''s: the `TapTweak` tagged hash of P (and the script tree''s root, if any).'}
+      - {name: taprootTweakPrivateKey, signature: 'taprootTweakPrivateKey(privateKey, tweak)', ts: '(privateKey: Bytes, tweak: Bytes) => Uint8Array', md: 'The private key for that Q (BIP-341''s `taproot_tweak_seckey`: negated if its point''s Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`.'}
       - {name: randomBytes, signature: randomBytes(n), ts: '(n: number) => Uint8Array', md: '`Uint8Array(n)` of random bytes, `n` ≤ 65536.'}
       - {name: getRandomValues, signature: getRandomValues(array), ts: '<T extends ArrayBufferView>(array: T) => T', md: "Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes."}
       - {name: rngStatus, signature: rngStatus(), ts: '() => { healthy: boolean; failure: string | null; rawBytes: number }', md: '`{ healthy, failure, rawBytes }`.'}
     after_md: |
-      `data` and `key` are typed arrays (their bytes: a `subarray` hashes just its
-      part), `ArrayBuffer`s, or strings, taken as UTF-8. Hashes and HMAC run in
-      the kernel (src/crypto, written from FIPS 180-4 and RFC 2104, checked
-      against their test vectors): microseconds per block on a Pi Zero, where the
-      same in JavaScript takes about a millisecond. The copies made of keys and
-      data are overwritten after use.
+      `data`, `key`, `password` and `salt` are typed arrays (their bytes: a
+      `subarray` hashes just its part), `ArrayBuffer`s, or strings, taken as
+      UTF-8. Hashes, HMAC and PBKDF2 run in the kernel (src/crypto, written from
+      FIPS 180-4, the RIPEMD-160 paper, RFC 2104 and RFC 8018, checked against
+      their test vectors): microseconds per block on a Pi Zero, where the same
+      in JavaScript takes about a millisecond. The copies made of keys and data
+      are overwritten after use.
+
+      **secp256k1** (Bitcoin's curve) is Bitcoin Core's
+      [libsecp256k1](https://github.com/bitcoin-core/secp256k1) (MIT), whose
+      arithmetic on secrets is constant-time. Its keys, hashes, tweaks and
+      signatures are typed arrays or `ArrayBuffer`s, never strings: 32 bytes for
+      private keys, hashes, messages to sign and tweaks; public keys SEC 1
+      encoded (33 bytes compressed, 65 not) or, for BIP-340 and Taproot, x-only
+      (32). Wrong types throw a `TypeError`, wrong sizes and keys that aren't
+      keys a `RangeError`; the `verify` and `is` functions return `false`
+      instead. BIP-32, addresses and transactions are the app's, in JavaScript
+      on these: e.g. a child key is `privateKeyTweakAdd(k, I.slice(0, 32))` with
+      `I = hmac("SHA-512", chainCode, data)`. On a Pi Zero, an ECDSA signature
+      takes about 9 ms, a BIP-32 derivation step under 2 ms, a BIP-39 seed 93 ms.
+
+      Each group (RIPEMD-160, PBKDF2, secp256k1) checks itself against known
+      answers before its first use; if that fails, it throws an `InternalError`
+      until reboot.
 
       **Where the randomness comes from.** The BCM2835's hardware random number
       generator, treated as a noise source of unknown quality. Every raw byte
@@ -632,6 +666,8 @@ modules:
 shared_ts:
   BytesLike: |
     ArrayBufferView | ArrayBuffer | string
+  Bytes: |
+    ArrayBufferView | ArrayBuffer
   SessionValue: |
     string | number | boolean | null | bigint | Date | ArrayBuffer | ArrayBufferView
       | SessionValue[] | { [key: string]: SessionValue }

@@ -9,7 +9,7 @@ modules below, imported by name:
 | --- | --- | --- |
 | [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
 | [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
-| [`zg:crypto`](#zgcrypto) | every app | SHA-1, SHA-256, SHA-512, HMAC, hardware random bytes |
+| [`zg:crypto`](#zgcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
 | [`zg:clock`](#zgclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
 | [`zg:session`](#zgsession) | every app | Values kept across the app's runs, in RAM, until power-off |
 | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
@@ -432,16 +432,50 @@ import * as crypto from "zg:crypto";
 | `sha256(data)` | SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous. |
 | `sha512(data)` | SHA-512, a `Uint8Array(64)`. |
 | `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
+| `ripemd160(data)` | RIPEMD-160, a `Uint8Array(20)`. |
+| `hash160(data)` | RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. |
+| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done. |
+| `isPrivateKey(key)` | Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). |
+| `isPublicKey(key)` | Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). |
+| `publicKey(privateKey, compressed = true)` | The public key, 33 bytes (compressed) or 65. |
+| `publicKeyConvert(publicKey, compressed = true)` | The same key, compressed or not. A `RangeError` if it isn't on the curve. |
+| `privateKeyTweakAdd(privateKey, tweak)` | (privateKey + tweak) mod n: BIP-32's private child keys. A `RangeError` if `tweak` ≥ n or the result is 0 (BIP-32: skip to the next index). |
+| `publicKeyTweakAdd(publicKey, tweak, compressed = true)` | publicKey + tweak·G: BIP-32's public child keys (from an xpub). A `RangeError` as above. |
+| `ecdsaSign(hash, privateKey)` | ECDSA signature of a 32-byte hash, DER-encoded (at most 71 bytes; add the sighash byte yourself). Deterministic (RFC 6979), low S, and low R as Bitcoin Core's (retried with extra nonce data until R is below 2²⁵⁵). |
+| `ecdsaVerify(signature, hash, publicKey)` | Checks a strict-DER signature (without the sighash byte). High-S signatures fail, as in Bitcoin's standard rules. |
+| `xOnlyPublicKey(privateKey)` | The BIP-340 public key: the point's X, 32 bytes. |
+| `schnorrSign(message, privateKey, aux)` | BIP-340 signature (64 bytes) of a 32-byte message. `aux`: 32 bytes of auxiliary randomness; by default fresh random bytes, as BIP-340 recommends (pass zeros for a reproducible signature). |
+| `schnorrVerify(signature, message, publicKey)` | Checks a BIP-340 signature against an x-only public key; the message may have any length. |
+| `taprootTweakPublicKey(publicKey, tweak)` | Taproot's output key Q = P + tweak·G for the x-only internal key P (BIP-341): `key` is Q's X, `parity` its Y's (a script path's control block needs it). The tweak is the app's: the `TapTweak` tagged hash of P (and the script tree's root, if any). |
+| `taprootTweakPrivateKey(privateKey, tweak)` | The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
 
-`data` and `key` are typed arrays (their bytes: a `subarray` hashes just its
-part), `ArrayBuffer`s, or strings, taken as UTF-8. Hashes and HMAC run in
-the kernel (src/crypto, written from FIPS 180-4 and RFC 2104, checked
-against their test vectors): microseconds per block on a Pi Zero, where the
-same in JavaScript takes about a millisecond. The copies made of keys and
-data are overwritten after use.
+`data`, `key`, `password` and `salt` are typed arrays (their bytes: a
+`subarray` hashes just its part), `ArrayBuffer`s, or strings, taken as
+UTF-8. Hashes, HMAC and PBKDF2 run in the kernel (src/crypto, written from
+FIPS 180-4, the RIPEMD-160 paper, RFC 2104 and RFC 8018, checked against
+their test vectors): microseconds per block on a Pi Zero, where the same
+in JavaScript takes about a millisecond. The copies made of keys and data
+are overwritten after use.
+
+**secp256k1** (Bitcoin's curve) is Bitcoin Core's
+[libsecp256k1](https://github.com/bitcoin-core/secp256k1) (MIT), whose
+arithmetic on secrets is constant-time. Its keys, hashes, tweaks and
+signatures are typed arrays or `ArrayBuffer`s, never strings: 32 bytes for
+private keys, hashes, messages to sign and tweaks; public keys SEC 1
+encoded (33 bytes compressed, 65 not) or, for BIP-340 and Taproot, x-only
+(32). Wrong types throw a `TypeError`, wrong sizes and keys that aren't
+keys a `RangeError`; the `verify` and `is` functions return `false`
+instead. BIP-32, addresses and transactions are the app's, in JavaScript
+on these: e.g. a child key is `privateKeyTweakAdd(k, I.slice(0, 32))` with
+`I = hmac("SHA-512", chainCode, data)`. On a Pi Zero, an ECDSA signature
+takes about 9 ms, a BIP-32 derivation step under 2 ms, a BIP-39 seed 93 ms.
+
+Each group (RIPEMD-160, PBKDF2, secp256k1) checks itself against known
+answers before its first use; if that fails, it throws an `InternalError`
+until reboot.
 
 **Where the randomness comes from.** The BCM2835's hardware random number
 generator, treated as a noise source of unknown quality. Every raw byte

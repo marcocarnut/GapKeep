@@ -65,6 +65,7 @@ if [ "$(cat .buildtarget 2>/dev/null)" != "$TARGET $CONFIG $OPTIMIZE" ]; then
 	make -C lib/quickjs -s clean >/dev/null
 	make -C lib/fatfs -s clean >/dev/null
 	make -C lib/zxing -s clean >/dev/null
+	make -C lib/secp256k1 -s clean >/dev/null
 	make -C circle/addon/SDCard -s clean >/dev/null
 	make -C src -s clean >/dev/null
 	( cd circle && ./makeall --nosample $J >/dev/null )
@@ -74,6 +75,7 @@ fi
 make -C lib/lvgl -s $J >/dev/null
 make -C lib/quickjs -s $J >/dev/null
 make -C lib/fatfs -s $J >/dev/null
+make -C lib/secp256k1 -s $J >/dev/null
 # the QR decoder (QR scanners report "no QR decoder" without the submodule)
 [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ] || make -C lib/zxing -s $J >/dev/null
 make -C circle/addon/SDCard -s $J >/dev/null
