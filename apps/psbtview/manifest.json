@@ -1,0 +1,8 @@
+{
+  "id": "psbtview",
+  "name": "PSBT Viewer",
+  "version": "0.1.0",
+  "description": "Shows what a transaction from Electrum (a PSBT in a QR code) spends, pays and costs.",
+  "icon": "eye-open",
+  "permissions": ["camera"]
+}

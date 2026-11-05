@@ -130,12 +130,13 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Step 6: hardening: USB drivers cut to hub, keyboard and mouse, with control-transfer timeouts; no serial port in production; W^X memory protection, stack canaries and a stack guard; reproducible builds with a pinned compiler and firmware; the kernel's hash on screen ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model))
 - [x] Clock with trim and UTC offset (`zg:clock`), the Clock and Authenticator (TOTP) apps
 - [x] Native SHA-1, SHA-512 and HMAC (`zg:crypto`); a per-app session store in RAM (`zg:session`)
+- [ ] Signing Electrum's transactions: first the PSBT Viewer (`apps/psbtview`: BIP-174/370 PSBTs from Electrum's QR codes, explained)
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `apps/` | The apps: `launcher` (built in), `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test). |
+| `apps/` | The apps: `launcher` (built in), `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `psbtview` (what an Electrum transaction does, from its QR code). |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader and read-only FatFs. |
 | `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
