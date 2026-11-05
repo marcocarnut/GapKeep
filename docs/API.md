@@ -459,6 +459,7 @@ supplement to entropy the person provides (dice, coins), not a replacement.
 To run code written for WebCrypto unchanged, give it a small adapter:
 
 ```js
+import * as zgcrypto from "zg:crypto";
 globalThis.crypto = {
   getRandomValues: zgcrypto.getRandomValues,
   subtle: { digest: async (alg, data) => ({ "SHA-1": zgcrypto.sha1, "SHA-256": zgcrypto.sha256,
