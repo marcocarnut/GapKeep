@@ -18,7 +18,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PSBT_LIB = ["analyze.js", "basen.js", "bech32.js", "bytes.js", "hashes.js",
-            "psbt.js", "script.js", "transport.js", "tx.js"]
+            "psbt.js", "script.js", "transport.js", "tx.js", "view.js"]
 
 # (home, copy), relative to the repository
 COPIES = (
