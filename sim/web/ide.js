@@ -18,6 +18,9 @@ const SIZES = [[640, 480], [800, 480], [800, 600], [1024, 600], [1024, 768], [12
 // simulator (its "builtin" folder), so the launcher can be worked on here;
 // on the device, built-in apps come from the kernel image only.
 const BUILTIN = new Set (["launcher"]);
+// Fetched with cache: "no-cache": a hard reload doesn't refresh what a page
+// fetches later, and http.server sends no cache headers, so a browser would
+// otherwise keep an old copy after tools/zgide.sh rebuilds them.
 const EXAMPLES_URL = here ("../build/web/examples.json");   // written by tools/zgide.sh
 const EXAMPLES_DIR = here ("../build/web/examples/");
 const TYPES_URL = here ("types/zerogap.d.ts");
@@ -486,7 +489,7 @@ async function setupEditor () {
   });
   js.setEagerModelSync (true);   // other files' models resolve "./lib/x.js"
   try {
-    const r = await fetch (TYPES_URL);
+    const r = await fetch (TYPES_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error (r.status + " " + r.statusText);
     js.addExtraLib (await r.text (), "file:///types/zerogap.d.ts");
   } catch (e) {
@@ -871,14 +874,14 @@ async function exportApp () {
 // The example apps that tools/zgide.sh copies to sim/build/web/examples.
 // only: the apps to add (default: all).
 async function fetchExamples (only = null) {
-  const r = await fetch (EXAMPLES_URL);
+  const r = await fetch (EXAMPLES_URL, { cache: "no-cache" });
   if (!r.ok) throw new Error (`${EXAMPLES_URL}: ${r.status} (start the IDE with tools/zgide.sh)`);
   const index = (await r.json ()).apps;
   const add = {};
   for (const [id, list] of Object.entries (index)) {
     if (only && !only.includes (id)) continue;
     await Promise.all (list.map (async (rel) => {
-      const f = await fetch (EXAMPLES_DIR + id + "/" + rel);
+      const f = await fetch (EXAMPLES_DIR + id + "/" + rel, { cache: "no-cache" });
       if (!f.ok) throw new Error (`${id}/${rel}: ${f.status}`);
       add[`apps/${id}/${rel}`] = decode (await f.arrayBuffer ());
     }));
@@ -889,7 +892,7 @@ async function fetchExamples (only = null) {
 
 async function restoreExamples () {
   try {
-    const r = await fetch (EXAMPLES_URL);
+    const r = await fetch (EXAMPLES_URL, { cache: "no-cache" });
     const ids = Object.keys ((await r.json ()).apps).filter ((id) => !appIds ().has (id));
     if (!ids.length) return ideLog ("all the example apps are there already");
     await fetchExamples (ids);
