@@ -25,7 +25,7 @@ import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as crypto from "zg:crypto";
 import { setHashes } from "./lib/psbt/hashes.js";
-import { DecodeError } from "./lib/psbt/bytes.js";
+import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { readPayload, electrumQrText } from "./lib/psbt/transport.js";
 import { parsePsbt, serializePsbt } from "./lib/psbt/psbt.js";
 import { analyze } from "./lib/psbt/analyze.js";
@@ -122,8 +122,8 @@ function showSelftest() {
   const st = state.selftest;
   if (!st) page.selftest.set({ text: "Self-test running...", color: MUTED });
   else if (!st.failed.length) {
-    page.selftest.set({ text: `${ui.symbols.ok} Self-test passed (${st.passed} checks: codex32, BIP-39, BIP-32, ` +
-      "signatures against the BIPs' test vectors).", color: GREEN });
+    page.selftest.set({ text: `${ui.symbols.ok} Self-test passed (${st.passed} checks: BIP-39, BIP-32, ` +
+      "signatures, against the BIPs' test vectors).", color: GREEN });
   } else {
     page.selftest.set({ text: `${ui.symbols.close} Self-test FAILED: do not sign with this device.\n` +
       st.failed.join("\n"), color: RED });
@@ -321,9 +321,12 @@ function showKeyLoaded() {
   newPage("loaded", ui.symbols.ok + " Key loaded");
   new ui.Label({ text: `Master fingerprint: ${k.fingerprint}`, font: FONT.big });
   paragraph(ui.screen, `From ${k.description}.`);
-  paragraph(ui.screen, "Check it: Electrum shows the same fingerprint for this wallet (Wallet, Information: " +
-    "\"Keystore fingerprint\" or the key origin). A different one means another passphrase, another share " +
-    "set, or the other choice of what the shares hold.", { color: MUTED });
+  const acct = wallet.exportKey(k, "p2wpkh", "mainnet");
+  paragraph(ui.screen, `Native segwit account ${acct.path}: fingerprint ${acct.fingerprint}.`);
+  paragraph(ui.screen, "Check one of them against what you know of this wallet: a wallet made from the seed " +
+    "phrase shows the master fingerprint; Electrum's watch-only wallet, made from the public key this device " +
+    "exports, shows the account's (Wallet, Information). A different one means another passphrase, " +
+    "other shares, or the other choice of what the shares hold.", { color: MUTED });
   const buttons = buttonRow(ui.screen);
   const scan = new ui.Button(buttons, { text: ui.symbols.image + " Scan a transaction", onClick: showScan });
   new ui.Button(buttons, { text: ui.symbols.upload + " Public key for Electrum", onClick: showExport });
@@ -410,7 +413,7 @@ function drawExport() {
   const x = wallet.exportKey(state.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork);
   const size = Math.min(ui.height - 200, ui.width - 64, 420);
   new ui.QRCode(page.out, { data: x.text, size, ecc: "M" });
-  new ui.Label(page.out, { text: `${x.path}  [${state.key.fingerprint}]`, font: FONT.text });
+  new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}`, font: FONT.text });
   new ui.Label(page.out, { text: x.text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
   console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork})`);
 }
@@ -467,10 +470,16 @@ function showReview() {
     for (const o of a.outputs) {
       const p = plan.outputs[o.index];
       if (o.mine && !p.ours) {
-        o.mine = false;
         a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but its key ` +
           `doesn't derive from this wallet${p.problem ? ` (${p.problem})` : ""}: it pays someone else.` });
       }
+      o.mine = p.ours;
+      o.unchecked = false;
+      if (p.ours) {
+        o.role = p.role || "mine";
+        o.derivations = [{ ...o.derivations[0], path: p.path }];
+      }
+      for (const odd of p.oddities || []) a.warnings.push({ level: "warn", text: `Output ${o.index + 1}: ${odd}` });
     }
     a.toSelf = a.outputs.filter((o) => o.mine).reduce((s, o) => s + o.amount, 0);
     a.sent = a.totalOut === null ? null : a.totalOut - a.toSelf;
@@ -530,7 +539,9 @@ async function sign(a) {
     busy = false;
   }
   state.signed = r;
-  console.log(`signer: signed ${plural(r.count, "input")}` + (r.tx ? ", transaction complete" : ""));
+  // (a transaction is not secret: its hash lets the tests compare it with Electrum's)
+  console.log(`signer: signed ${plural(r.count, "input")}` +
+    (r.tx ? `, transaction complete (SHA-256 ${toHex(crypto.sha256(r.tx).subarray(0, 8))})` : ""));
   showSigned(r.tx ? "tx" : "psbt");
 }
 
