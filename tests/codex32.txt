@@ -1,3 +1,4 @@
+# Needs a test build (make TEST=1) or the simulator: the synthetic camera.
 # codex32 (apps/codex32): recombine BIP-93 shares typed by keyboard or
 # shown to the camera. The shares are BIP-93's own test vectors:
 #   vector 2 (2 of n, NAME): seed d1808e096b35b209ca12132b264662a5
