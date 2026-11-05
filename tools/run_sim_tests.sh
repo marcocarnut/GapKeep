@@ -72,5 +72,12 @@ else
 	echo "FAIL  sim:check_api   (see $OUT/check_api.log)"; FAILED=1
 fi
 
+# apps that carry a copy of another app's library (tools/share_libs.py)
+if python3 tools/share_libs.py --check > "$OUT/share_libs.log" 2>&1; then
+	echo "PASS  sim:share_libs"
+else
+	echo "FAIL  sim:share_libs   (see $OUT/share_libs.log)"; FAILED=1
+fi
+
 echo "screenshots and logs: $OUT"
 exit $FAILED

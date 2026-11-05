@@ -53,6 +53,7 @@ check dice39_node node tests/dice39/run_node.mjs
 check totp_node node --experimental-default-type=module tests/totp/run_node.mjs
 check codex32_node node --experimental-default-type=module tests/codex32/run_node.mjs
 check psbt_node node --experimental-default-type=module tests/psbt/run_node.mjs
+check signer_node node --experimental-default-type=module tests/signer/run_node.mjs
 
 # the two SD cards
 mkdir -p "$OUT/card-apps/apps"

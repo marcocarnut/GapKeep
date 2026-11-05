@@ -1,0 +1,90 @@
+# Needs a test build (make TEST=1) or the simulator: the synthetic camera.
+# The Signer (apps/signer): load a key from codex32 shares, export the
+# account's public key, sign Electrum's PSBTs, give the signed transaction.
+# The key is the BIP-39 test phrase "abandon ... about" (entropy: 16 zero
+# bytes; public, no real funds), split 2-of-3 with identifier ZGSQ. The PSBTs
+# are Electrum 4.8.3's own QR codes (tests/signer/electrum.json): the signed
+# transactions must hash as Electrum's own (SHA-256 shown, first 8 bytes).
+# The log holds no share, word or key: only counts, sizes and hashes.
+expect Keyboard attached 60
+expect launcher ready 60
+tile signer
+expect signer ready 10
+expect signer selftest: 4 passed, 0 failed 30
+wait 0.5
+shot 01-home
+
+# 1. The key: share A, then share C, grouped as on paper
+key ret
+wait 0.3
+type ms12zgsqa40sgqvwltnun3f8drxxujvljm648z42my97v2h0
+key ret
+type MS12 ZGSQ CADP 5Q7M V8JL JHZE GN00 LY7V YXSZ CJRW FVJA X6ZD
+key ret
+wait 0.3
+shot 02-shares
+# Enter in the empty passphrase: load
+key ret
+expect signer: key loaded \(bip39, 2 shares\) 30
+wait 0.5
+shot 03-loaded
+
+# 2. The public key for Electrum (zpub of m/84'/0'/0', fingerprint fd13aac9)
+key tab
+key ret
+expect signer: showing the p2wpkh public key \(mainnet\) 10
+wait 0.5
+shot 04-export
+key esc
+
+# 3. A watch-only wallet's PSBT (Electrum knows only the account's fingerprint)
+key ret
+wait 0.3
+camera qr 24D1-88RR-Z.WXKTJI46L4B:3/95:7CP3QT$3E:3SN+G4E2JB9V2EQ2*-OT-6WI5GK-8XX-I42$8JDY*ER.$/FP35IB+KFKUEY/UR79LODWR1ZOC2NF0MEQCW5X4*+6XXCWGZXXROIYX569TB9NT-QJED3ZFU9N+6YA*UCL2IQGJP8X.*AG25JNGSYA:SG.JYXUJ8+/B8K6*ZM-EV9.ICB1JEWLHYI-PX9I-2SLCTRM$6DQ-8D6M$HI*JO998OW0QV7R1VPSDJM0POA5UX2CM8WV0LTHS:5VGJVXFUHL8Y94S$QI-H:ZV.-J/A-UUV$SWCUTAIO0OS0GYWAPQSLT8D8ZA3F.3T3D31QZF/LGC2L2872O:3UK+3HDMFZCI+M/JKKWW$C-FU261X-MH8Y$9MW5K5TL+8NB/W9C$U68X65JFKJ2*63ZVZYF06O-$-P9KAGCFCE35B4VU6.-.V7ZZX++LWLNIJ/UC-19N/2S7:$BRBSK-61TER08H:T0E:O757V1UKS7N$CX0K::89P35ND63ZP+M70AE*:K:H45X.Z0SL0E7FDEJISIHCZGZ4G$OL/M2.5$GWIUZMSPYUIC.QKBHI-0-LOO
+expect signer: read a PSBT \(base43, 608 characters 15
+expect signer: review: 2 inputs, 2 to sign, 3 outputs 5
+camera scene
+wait 0.5
+shot 05-review
+key ret
+expect signer: signed 2 inputs, transaction complete \(SHA-256 dd31fe69d7368962\) 30
+wait 0.5
+shot 06-signed
+key tab
+key ret
+expect signer: showing the signed psbt 10
+wait 0.5
+shot 07-signed-psbt
+key esc
+
+# 4. A seed wallet's PSBT on testnet (master fingerprint 73c5da0a, full paths)
+key ret
+wait 0.3
+camera qr AD6H+D4K-EL8*EM/J3/DX4+WW1MLYZ8*03*TE2W:F3F:NWVCXXFHDJKI4-I-OV**X5-BGZYO*2WIB3LEP-U$0YJ*RP1N1E:3YO0O2J/.U.:JL95S:JZ-CUD6JW-DF6OWO-TTO33CQO2X4XFZ36SX.*1PUVPQAYJH:X*T5U6BW6815:5ZK0P+RE.7:/Z:.0EYHC/3GBT+YFA9PQOZWD$U5QX55-OPO9EHWFF9G2F3+B$8B3YJVP9B:BI*24M$/7$D4I8WHY2$84SL-U4T7D-9FICVP0:T:.G2MUI4MR51EJWDLXW0.RDAACGF22C+Q8UMR0CSX8VU4/9N.-/MYN0ERGBCPALDCOCZZ707X*4DJ62*DWS*-L08*J.EX+$B41*Y25L8CZI00$U/*T-HY:*F6*.AV4/8J0Y1/QHAT/SHH+T5+UJ-N1VX418V0X+D26DA1$PYHT9GYTKTY4UMWKZ6DZ3SGLN34C1F7C+B//43FZN:GFL8GCQ7BCKF2S4*ZQ3KF8.I+ZGN02QQA2ISJWNWGJU*N1CGX:IGHJLYM3FAAT0MOZ2$A8K-/W:3-+T-O3EU$ABD:7K812V$M7AQN20K8L9FB*ZH$121U195
+expect signer: read a PSBT \(base43, 612 characters 15
+expect signer: review: 2 inputs, 2 to sign 5
+camera scene
+key ret
+expect signer: signed 2 inputs, transaction complete \(SHA-256 0baf3b76d1d92827\) 30
+key esc
+
+# 5. P2PKH from a QR code: Electrum leaves out the previous transaction, so
+# nothing can be signed
+key ret
+wait 0.3
+camera qr $/RGYI/KR5/BT8*G/3RZHQ1/2YTO7$AC0-$8G9UHZ/YCQRF:SJRE2+DGJ0QXS.NKTM6VU7*6YQQNC$6$LOH9USBMAJ8JDFAH6Z1X6APKM8VK/2NUB.69D.H$UB/LD*QQIW4DWSCPSWI4YP+H$VMEJY0JZ4H:ESRM41VPJJ7RF2$:M6EFJU.3MDO1XKI*S6UO0AYN146V-Q5J76SJ-RDFQ11OS.281LQD9ZOOM/HFKK:1CFW-GJQ1ROWMQ4+PEJI.P7:SG/GJNC16S1/VE$P0L:Y$YMQPZH.E0+*6QRY89GZ*7/ZSAE1Y9$L+KJD09O6:-VYX1$SX8L69:U3:SFHD5Z::FRAS+ENS3X*RVVZ*NZJ6E.M-YI6*6SVZAE1-IM:KSDQEMQBR.5:B54R/OPN/AK1AWA+8PSV.1LUX
+expect signer: read a PSBT \(base43, 420 characters 15
+expect signer: review: 1 input, 0 to sign 5
+camera scene
+wait 0.5
+shot 08-p2pkh-refused
+key esc
+
+# 6. Forget the key (Scan, Public key, Last transaction, Forget)
+key tab
+key tab
+key tab
+key ret
+expect signer: key forgotten 5
+wait 0.5
+shot 09-forgotten

@@ -1,0 +1,95 @@
+# Tests for the signing library (apps/signer/lib)
+
+    node --experimental-default-type=module tests/signer/run_node.mjs [-v]
+
+runs BIP-39, BIP-32, the sighashes and PSBT signing against the vectors
+below, with `crypto_ref.mjs` in place of `zg:crypto`: node:crypto's hashes,
+HMAC and PBKDF2, and secp256k1 in BigInt, ported from the pure-Python
+reference in `tools/check_secp.py` (RFC 6979 as libsecp256k1 applies it,
+Bitcoin Core's low-R grinding, BIP-340, BIP-341's tweaks). The reference is
+itself checked first against `src/crypto/secp_kat.h` (answers from the
+kernel's libsecp256k1, one of them needing low-R grinding) and BIP-340's
+vectors. Test-only: slow and not constant-time. `tools/run_tests.sh` runs
+it as `signer_node`.
+
+On the device, the app (or a gallery self-test) calls
+`selfTest(crypto)` from `apps/signer/lib/selftest.js` with `zg:crypto`:
+four known answers through the real libsecp256k1.
+
+## What is checked
+
+- **reference**: `crypto_ref.mjs` against libsecp256k1's answers and BIP-340.
+- **bip39**: the 24 English Trezor vectors (entropy, words, seed with
+  passphrase "TREZOR", master xprv), 4 Japanese ones (NFKD of the words,
+  ideographic spaces), the passphrase's NFKD, bad words and checksums.
+- **bip32**: BIP-32 test vectors 1 to 4 (xpub and xprv of every chain,
+  public derivation), every invalid key of test vector 5, paths.
+- **slip132, bip84, bip49, bip86**: SLIP-132's version bytes; BIP-84's,
+  BIP-49's and BIP-86's vectors (account xpubs, keys, addresses, taproot
+  output keys) from the "abandon ... about" mnemonic.
+- **bip143, legacy, bip341**: BIP-143's P2WPKH and P2SH-P2WPKH sighashes
+  and signatures (byte for byte), its P2PK input's old signature against our
+  legacy sighash, BIP-341's key-path vectors (every sigMsg, sighash, tweak
+  and signature, all hash types).
+- **bip174**: BIP-174's signer vector is 2-of-2 multisig, which the signer
+  doesn't sign: our sighashes reproduce its signatures, and `signPsbt`
+  skips both inputs saying why.
+- **rules, negative, change, oddities**: PSBTs built in the test for each
+  input type, and each safety rule broken one at a time (fingerprint, key
+  at the path, script, redeemScript, taproot tweak and script tree, missing
+  amounts, previous transaction txid, sighash types, fake change outputs,
+  odd paths).
+- **electrum**: PSBTs from Electrum itself (`electrum.json`, below).
+
+## Where the vectors come from
+
+`vectors.json` is made by `extract_vectors.py SOURCES_DIR` from:
+
+| Source | What | Licence |
+| --- | --- | --- |
+| [bitcoin/bips](https://github.com/bitcoin/bips) `bip-0032.mediawiki` | Test vectors 1-5 | BSD-2-Clause |
+| `bip-0049.mediawiki`, `bip-0084.mediawiki`, `bip-0086.mediawiki` | Account keys and addresses of "abandon ... about" | public domain, CC0-1.0, BSD-2-Clause |
+| `bip-0143.mediawiki` | Native P2WPKH and P2SH-P2WPKH examples | public domain |
+| `bip-0341/wallet-test-vectors.json` | keyPathSpending, scriptPubKey tweaks | BSD-3-Clause (BIP-341's) |
+| [trezor/python-mnemonic](https://github.com/trezor/python-mnemonic) `vectors.json` | BIP-39: English, Japanese (first 4) | MIT |
+| [satoshilabs/slips](https://github.com/satoshilabs/slips) `slip-0132.md` | Version bytes | BSD-2-Clause |
+
+Fetched on 2026-11-05 (bitcoin/bips master, as for tests/psbt). BIP-174's
+vectors are read from `tests/psbt/vectors.json`, BIP-340's from
+`tests/native/bip340-vectors.csv`.
+
+## Electrum end to end
+
+`electrum.json` is made by `make_electrum_vectors.py` with Electrum 4.8.3
+(commit 9242c505, installed as in tests/psbt/README.md, in a throwaway
+virtualenv). From "abandon ... about" (public; made-up funding
+transactions, nothing touches a network):
+
+| Case | |
+| --- | --- |
+| `testnet-p2wpkh-seed` | BIP-39 seed wallet in Electrum, two inputs and change |
+| `testnet-p2sh-p2wpkh-seed` | the same, P2SH-P2WPKH |
+| `testnet-p2pkh-qr` | P2PKH as a QR code: no previous transaction, so not signed |
+| `testnet-p2pkh-file` | the same with previous transactions (Electrum's file export) |
+| `mainnet-p2wpkh-watch-only` | watch-only wallet from the account zpub alone: Electrum writes the account's fingerprint and m/0/i |
+| `mainnet-p2sh-p2wpkh-watch-only` | the same from a ypub |
+
+For each, Electrum also signs the same PSBT with its seed wallet. The test
+checks that our exported xpub is the one Electrum uses, that `plan` finds
+the same change as Electrum's wallet, that our signatures are byte for byte
+Electrum's (both deterministic: RFC 6979 with low-R grinding), and that our
+final transaction is Electrum's.
+
+Then Electrum checks ours:
+
+    /tmp/el/bin/python tests/signer/make_electrum_vectors.py
+    node --experimental-default-type=module tests/signer/run_node.mjs --electrum-out /tmp/signed.json
+    /tmp/el/bin/python tests/signer/make_electrum_vectors.py --check /tmp/signed.json
+
+`--check` loads each signed PSBT and each final transaction from their QR
+text with `tx_from_any` (as "Load transaction" does), adds the wallet's
+information (the watch-only wallet for the watch-only cases), verifies
+every signature with Electrum's own sighash code, checks that the PSBT is
+complete and that Electrum's finalized transaction is ours byte for byte,
+and records what it accepted in `electrum.json`; `run_node.mjs` then
+checks that it still makes exactly that.
