@@ -1,0 +1,91 @@
+# PSBT Viewer (apps/psbtview): Electrum's QR codes of transactions, read
+# with the simulated camera. The codes are Electrum's own to_qr_data() output
+# (tests/psbt/electrum_made.json, made by tests/psbt/make_electrum_psbts.py
+# from the BIP-39 test mnemonic "abandon ... about": test coins only).
+# Warning counts vary: without zg:crypto's ripemd160 (older systems) the
+# summary adds a note that some keys were not checked.
+# Made from tests/psbt/psbtview.txt.in by tests/psbt/make_scenario.py.
+expect launcher ready 60
+launch psbtview
+expect psbtview ready 10
+wait 0.5
+shot 01-home
+
+# 1. A testnet P2WPKH payment with change (Electrum: 600000 sat out, 1500 fee)
+key ret
+camera qr @testnet-p2wpkh-change@
+expect psbtview: read a PSBT \(base43, 412 characters, \d+ bytes\) 20
+expect psbtview: 1 input, 2 outputs, sent 600000 sat, change 398500 sat, fee 1500 sat, 141 vB, testnet, \d+ warnings? 10
+camera scene
+wait 0.5
+shot 02-summary
+# arrows go through the rows; Enter opens one, Escape closes it
+key down down
+key ret
+wait 0.5
+shot 03-output-details
+key esc
+# the network button: up to the first row, Shift+Tab twice to it; Enter
+# cycles mainnet, testnet, regtest
+key up up up up up up
+key shift-tab shift-tab
+key ret
+expect psbtview: network regtest 5
+expect psbtview: .*, regtest, \d+ warnings? 5
+wait 0.5
+shot 04-regtest
+
+# 2. Not a transaction, and a payment request: refused, the scanner goes on
+key esc
+key ret
+camera qr hello, air gap
+expect psbtview: refused a code: This code is not a transaction 20
+camera qr bitcoin:tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx?amount=0.001
+expect psbtview: refused a code: This is a payment request 20
+wait 0.5
+shot 05-refused
+
+# 3. A P2PKH wallet: the QR code leaves out the previous transaction
+camera qr @testnet-p2pkh@
+expect psbtview: 1 input, 2 outputs, sent 100000 sat, change 197700 sat, fee 2300 sat, 223 vB, testnet, \d+ warnings? 20
+expect psbtview: warn: Input 1: only the spent output is given 5
+camera scene
+wait 0.5
+shot 06-p2pkh-warning
+
+# 4. 2-of-3 multisig, then mainnet with two payments
+key ret
+camera qr @testnet-2of3-p2wsh@
+expect psbtview: 1 input, 2 outputs, sent 300000 sat, change 498000 sat, fee 2000 sat, 189 vB, testnet 20
+camera scene
+key ret
+camera qr @mainnet-p2wpkh-two-payments@
+expect psbtview: 1 input, 3 outputs, sent 1434567 sat, change 3562613 sat, fee 2820 sat, 173 vB, mainnet 20
+camera scene
+wait 0.5
+shot 07-mainnet
+
+# 5. The first one, signed by Electrum: a complete transaction. It says
+# nothing of its network: the last one chosen or guessed is kept
+key ret
+camera qr @testnet-p2wpkh-signed@
+expect psbtview: read a signed transaction \(base43, 327 characters 20
+expect psbtview: 1 input, 2 outputs, sent 998500 sat, change 0 sat, fee \? sat, 141 vB, mainnet 5
+camera scene
+wait 0.5
+shot 08-signed
+
+# 6. A large one: 13 inputs, 2821 characters (the simulated camera makes
+# byte-mode codes, 2953 characters at most; Electrum's alphanumeric codes
+# hold up to 4296)
+key ret
+camera qr @testnet-13-inputs@
+expect psbtview: read a PSBT \(base43, 2821 characters, \d+ bytes\) in \d+ ms 30
+expect psbtview: 13 inputs, 2 outputs, sent 120000 sat, change 7000 sat, fee 3078 sat, 957 vB, testnet, \d+ warnings? 10
+camera scene
+wait 0.5
+shot 09-many-inputs
+key esc
+expect psbtview ready 1
+key meta_l
+expect launcher ready
