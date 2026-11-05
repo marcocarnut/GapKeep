@@ -8,6 +8,7 @@
 //   zg.start ();                     // runs the main loop
 //   zg.draw (canvas);                // paint the screen (call per animation frame)
 //   zg.keyDown (event.key, mods); zg.keyUp ();
+//   zg.type (text);                  // typed as key presses (pasting)
 //   zg.pointer (x, y, pressed);
 //   zg.stop ();
 //
@@ -31,19 +32,40 @@ function toGrey (pixels, width, height) {
   return grey;
 }
 
+// The simulator's build date, from the server, goes into the URLs of
+// zgsim.js and zgsim.wasm: the page loads them after it starts, so a hard
+// reload doesn't refresh them, and Python's http.server sends no cache
+// headers. Without it a browser can keep running an old build after
+// "make web".
+let buildTag = null;
+const withTag = (url) => (buildTag ? url + (url.includes ("?") ? "&" : "?") + "build=" + buildTag : url);
+
+async function buildDate (url) {
+  if (!/^https?:/.test (url)) return null;
+  try {
+    const r = await fetch (url, { method: "HEAD", cache: "no-cache" });
+    const date = r.ok && r.headers.get ("Last-Modified");
+    return date ? String (Date.parse (date) / 1000) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export class Zerogap {
   // options: { onLog(line), onHalt(), moduleUrl } - moduleUrl: zgsim.js
   // (default: next to this file, as "make web" puts it in sim/build/web)
   static async create (options = {}) {
     if (!factory) {
       const url = options.moduleUrl || new URL ("../build/web/zgsim.js", import.meta.url).href;
-      factory = (await import (url)).default;
+      buildTag = await buildDate (url);
+      factory = (await import (withTag (url))).default;
     }
     const zg = new Zerogap ();
     zg.onLog = options.onLog || ((line) => console.log (line));
     zg.onHalt = options.onHalt || (() => {});
     zg.halted = false;
     zg.m = await factory ({
+      locateFile: (path, prefix) => withTag (prefix + path),
       onLog: (line) => zg.onLog (line),
       onHalt: () => { zg.halted = true; zg.stop (); zg.onHalt (); },
     });
@@ -126,6 +148,37 @@ export class Zerogap {
 
   keyUp () {
     this.m._zg_sim_key_up ();
+  }
+
+  // Types text as key presses (Ctrl+V on the IDE's screen): printable ASCII,
+  // newlines as Enter, tabs as Tab; other characters are skipped. Paced:
+  // zerogap's key queue holds 64 keys and LVGL reads it every 33 ms or so.
+  // Returns the number of keys it will type.
+  type (text) {
+    const keys = [];
+    for (const c of text.replace (/\r\n?/g, "\n")) {
+      if (c === "\n") keys.push ("Enter");
+      else if (c === "\t") keys.push ("Tab");
+      else if (c >= " " && c < "\x7f") keys.push (c);
+    }
+    this.typing = (this.typing || []).concat (keys);
+    if (!this.typeTimer) {
+      const batch = () => {
+        if (this.halted || !this.typing.length) {
+          clearInterval (this.typeTimer);
+          this.typeTimer = null;
+          this.typing = [];
+          return;
+        }
+        for (const key of this.typing.splice (0, 16)) {
+          this.keyDown (key);
+          this.keyUp ();
+        }
+      };
+      this.typeTimer = setInterval (batch, 50);
+      batch ();
+    }
+    return keys.length;
   }
 
   // Starts the app with this id, as the launcher would (no id: the

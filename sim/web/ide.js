@@ -667,6 +667,8 @@ function setupScreen () {
       e.preventDefault ();
       return;
     }
+    // Ctrl+V (Cmd+V on a Mac): the browser's paste, below, types the text
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase () === "v") return;
     const mods = (e.shiftKey ? MOD_SHIFT : 0) | (e.ctrlKey ? MOD_CTRL : 0) | (e.altKey ? MOD_ALT : 0);
     if (machine.keyDown (e.key, mods)) {
       heldCode = e.code;
@@ -674,6 +676,17 @@ function setupScreen () {
     } else if (BROWSER_KEYS.has (e.key)) {
       e.preventDefault ();
     }
+  });
+  // Pasting types the clipboard's text into zerogap, a key at a time (a
+  // simulator convenience: the device has no clipboard). Browsers send the
+  // paste to the document when the focus isn't on something editable.
+  document.addEventListener ("paste", (e) => {
+    if (document.activeElement !== canvas || !machine) return;
+    e.preventDefault ();
+    // without the newline that copying a whole line brings: no Enter at the end
+    const text = e.clipboardData.getData ("text/plain").replace (/[\r\n]+$/, "").replace (/\r\n?/g, "\n");
+    const n = machine.type (text);
+    ideLog (n === text.length ? `pasted ${n} characters` : `pasted ${n} of ${text.length} characters (zerogap types ASCII only)`);
   });
   canvas.addEventListener ("keyup", (e) => {
     // zerogap has one key down at a time: release it only when that key is

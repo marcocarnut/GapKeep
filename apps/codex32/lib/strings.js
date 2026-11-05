@@ -19,8 +19,8 @@ export function plain(html) {
 const page = STRINGS.en;
 
 const overrides = {
-  warnHtml: "Do this on the <b>offline device</b> you will use the phrase on. The moment enough shares are in " +
-    "one place, the seed exists again — that is the point of the exercise and also its whole risk. " +
+  // the page's first sentence (do this offline) goes without saying here
+  warnHtml: "The moment enough shares are in one place, the seed exists again — that is the point of the exercise and also its whole risk. " +
     "Press Clear when you are done: it erases the shares and the result from this app.",
   inputHeading: "Type your shares",
   inputHelp: "One per box. You need exactly as many as the threshold the shares were made with — a 2-of-3 " +

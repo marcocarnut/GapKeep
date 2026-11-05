@@ -55,6 +55,10 @@ current browsers should work.
   it). Then every key goes to zerogap: Tab, arrows, Enter, Backspace, Escape
   and Ctrl shortcuts included, and Ctrl+S and Ctrl+Enter go to the app, not
   the IDE. Click the editor to type there again.
+- **Ctrl+V** (Cmd+V) on the screen types the clipboard's text into zerogap,
+  as key presses: a codex32 share, a test address. ASCII only; a newline
+  inside it is Enter, one at the end is dropped. A simulator convenience:
+  the device has no clipboard.
 - zerogap's Home key is the Windows (Super) key, which the desktop or the
   browser usually keeps for itself: use the **Home** button.
 - The mouse works on the screen; zerogap draws its own cursor, so the
