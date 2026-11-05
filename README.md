@@ -135,7 +135,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 
 | Path | What |
 | --- | --- |
-| `apps/` | The apps: `launcher` (built in), `dice39`, `hello`, `gallery` (all widgets plus a runtime self-test). |
+| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test). |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader and read-only FatFs. |
 | `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |

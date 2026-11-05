@@ -1,0 +1,133 @@
+# codex32 (apps/codex32): recombine BIP-93 shares typed by keyboard or
+# shown to the camera. The shares are BIP-93's own test vectors:
+#   vector 2 (2 of n, NAME): seed d1808e096b35b209ca12132b264662a5
+#   vector 3 (3 of 5, cash): seed ffeeddccbbaa99887766554433221100
+#   vector 1 (threshold 0, test), vector 5 (512 bits, 0C8V)
+# The log holds no share, seed or word: only codes, counts and sizes.
+expect Keyboard attached 60
+expect launcher ready 60
+tile codex32
+expect codex32 ready 10
+expect codex32 selftest: \d+ passed, 0 failed 30
+wait 0.5
+shot 01-start
+
+# 1. Vector 2 with a typo in the last character: refused, and pointed at
+type MS12NAMEA320ZYXWVUTSRQPNMLKJHGFEDCAXRPP870HKKQRQ
+key ret
+expect codex32: box 1 refused: checksum, a fix suggested 5
+wait 0.5
+shot 02-typo
+key backspace
+type M
+key ret
+# box 2: a share of another split first
+type ms13casha320zyxwvutsrqpnmlkjhgfedca2a8d0zehn8a0t
+key ret
+expect codex32: recovery refused: mismatch \(share 2\) 5
+wait 0.5
+shot 03-mismatch
+key backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace
+key backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace
+key backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace
+key backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace backspace
+# grouped in fours, as on paper: spaces are ignored
+type MS12 NAME CACD EFGH JKLM NPQR STUV WXYZ 023F TR2G DZMP Y6PN
+key ret
+expect codex32: recovered a 16-byte seed \(12 words\) from 2 shares 5
+wait 0.5
+shot 04-result
+
+# 2. The exports: each behind its confirmation. Focus starts on "QR of the words"
+key ret
+key spc
+key tab
+key ret
+expect codex32: showing the single QR export 5
+wait 0.5
+shot 05-words-qr
+key tab
+key ret
+expect codex32: showing the split QR export 5
+wait 0.5
+shot 06-words-split
+key esc
+# SeedQR and Compact SeedQR
+key tab
+key ret
+key spc
+key tab
+key tab
+key ret
+expect codex32: showing the compact QR export 5
+wait 0.5
+shot 07-compact
+key esc
+
+# 3. Clear (fourth button): everything goes
+key tab tab tab
+key ret
+expect codex32: cleared 5
+
+# 4. A letter codex32 does not have, then the unshared secret of vector 1
+# (threshold 0: one string, which dice39's cxRecover refuses)
+type ms10testsxxxxxxxxxxxxbxxxxxxxxxxxxx4nzvca9cmczlw
+key ret
+expect codex32: box 1 refused: char, a fix suggested 5
+wait 0.5
+shot 08-bad-char
+# Tab to Clear past box 2, Recover and Scan
+key tab tab tab tab
+key ret
+expect codex32: cleared 5
+type ms10testsxxxxxxxxxxxxxxxxxxxxxxxxxx4nzvca9cmczlw
+key ret
+expect codex32: recovered a 16-byte seed \(12 words\) from 1 share 5
+# Back to the shares (third button), then Clear
+key tab tab
+key ret
+key tab tab
+key ret
+expect codex32: cleared 5
+
+# 5. A 512-bit secret is valid BIP-93, but no 12- or 24-word phrase:
+# refused, as on the page
+type MS100C8VSM32ZXFGUHPCHTLUPZRY9X8GF2TVDW0S3JN54KHCE6MUA7LQPZYGSFJD6AN074RXVCEMLH8WU3TK925ACDEFGHJKLMNPQRSTUVWXY06FHPV80UNDVARHRAK
+key ret
+expect codex32: recovered 64 bytes, not a 12- or 24-word phrase: refused 5
+wait 0.5
+shot 09-wrong-size
+# Tab to Clear (one box: Recover, Scan, Clear)
+key tab tab tab
+key ret
+expect codex32: cleared 5
+
+# 6. The camera: vector 3, three shares, with the scanner's refusals.
+# Tab past box 2 and Recover to Scan
+key tab tab tab
+key ret
+camera qr hello, air gap
+expect codex32: scanned a code that is not a codex32 share 10
+camera qr MS13CASHA320ZYXWVUTSRQPNMLKJHGFEDCA2A8D0ZEHN8A0T
+expect codex32: scanned share 1 of 3 10
+camera scene
+wait 2.5
+camera qr MS13CASHA320ZYXWVUTSRQPNMLKJHGFEDCA2A8D0ZEHN8A0T
+expect codex32: scanned a share already there 10
+camera qr MS12NAMEA320ZYXWVUTSRQPNMLKJHGFEDCAXRPP870HKKQRM
+expect codex32: scanned a share of another split 10
+wait 0.5
+shot 10-scan
+camera qr MS13CASHCACDEFGHJKLMNPQRSTUVWXYZ023949XQ35MY48DR
+expect codex32: scanned share 2 of 3 10
+camera qr MS13CASHF8JH6SDRKPYRSP5UT94PJ8KTEHHW2HFVYRJ48704
+expect codex32: scanned share 3 of 3 10
+camera scene
+# back on the shares, with Recover focused
+key ret
+expect codex32: recovered a 16-byte seed \(12 words\) from 3 shares 5
+key tab tab tab
+key ret
+expect codex32: cleared 5
+key meta_l
+expect launcher ready
