@@ -133,13 +133,14 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Clock with trim and UTC offset (`zg:clock`), the Clock and Authenticator (TOTP) apps
 - [x] Native SHA-1, SHA-512 and HMAC (`zg:crypto`); a per-app session store in RAM (`zg:session`)
 - [x] Bitcoin's primitives in `zg:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
-- [ ] Signing Electrum's transactions: first the PSBT Viewer (`apps/psbtview`: BIP-174/370 PSBTs from Electrum's QR codes, explained)
+- [x] The PSBT Viewer (`apps/psbtview`: BIP-174/370 PSBTs from Electrum's QR codes, explained)
+- [ ] The Signer (`apps/signer`): signs Electrum's PSBTs with a key from codex32 shares
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `psbtview` (what an Electrum transaction does, from its QR code). |
+| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `psbtview` (what an Electrum transaction does, from its QR code), `signer` (signs it, with a key from codex32 shares). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs. |
 | `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
