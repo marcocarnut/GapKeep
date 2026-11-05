@@ -13,7 +13,7 @@
 set -e
 cd "$(dirname "$0")/.."
 PORT=${1:-8039}
-EXAMPLES="launcher hello gallery dice39 qrscan clock totp codex32 psbtview"
+EXAMPLES="launcher hello gallery dice39 qrscan clock totp codex32 psbtview signer"
 
 # 1. The simulator (make is incremental, so this is quick when up to date).
 if [ -z "$EMSDK" ] && [ -f "$HOME/emsdk/emsdk_env.sh" ]; then

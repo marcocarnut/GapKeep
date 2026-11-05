@@ -3,6 +3,36 @@
 Signs the transactions (PSBTs) Electrum shows as a QR code, with a key
 recombined from codex32 shares, and gives back a QR code Electrum loads.
 
+## Using it
+
+1. **Load the key.** Type or scan the codex32 shares (as many as the
+   threshold). Say what they hold: a seed phrase's entropy, as dice39 makes
+   them (the default: 12 or 24 words, then the BIP-39 passphrase if any),
+   or a BIP-32 master seed, as BIP-93 says. The app shows the master
+   fingerprint and the native segwit account's: check one against what you
+   know of the wallet. The key stays in the app's memory only, until
+   "Forget the key" or leaving the app.
+2. **Once: the public key for Electrum.** "Public key for Electrum" shows
+   the account's zpub (BIP-84) or ypub (BIP-49), vpub/upub on testnet, as
+   a QR code. In Electrum: File, New/Restore, Standard wallet, Use a master
+   key, and scan it. That watch-only wallet makes the transactions.
+3. **Each payment.** In Electrum, make the transaction, then Export (or
+   Share), Show as QR code. Here: Scan a transaction. The review shows what
+   it spends and pays, the fee, warnings, and for each input whether it
+   will be signed (and with which key path) or why not. Change counts as
+   change only when deriving its key proves it. Sign, then in Electrum:
+   Tools, Load transaction, From QR code, and broadcast.
+
+The signed transaction is shown complete (the smaller QR code) when every
+input is signed, or as the PSBT with this device's signatures. Electrum's
+QR codes leave out the previous transactions, so legacy (P2PKH) coins can't
+be signed from them. Electrum has no taproot wallets; the library signs
+BIP-86 key-path inputs, but only the BIP test vectors exercise that.
+
+Never logged: shares, words, the passphrase, keys. The log gets counts,
+sizes, and the hash of a signed transaction (not secret: it is about to be
+broadcast), which `tests/signer.txt` compares with Electrum's own.
+
 ## Signing library (`lib/`)
 
 Pure modules like the PSBT library (`lib/psbt/`, a copy of
