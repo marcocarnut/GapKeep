@@ -134,6 +134,9 @@ build/web/zgsim.js build/web/zgsim-test.js: $(OBJS)
 
 $(OBJDIR)/apps_bundle.c: FORCE
 	@mkdir -p $(dir $@)
+ifeq ($(strip $(TEST)),1)
+	@python3 $(ROOT)/tools/make_qjstests.py $(QJS) $(ROOT)/tests/apps/qjstests/suites.js
+endif
 	@python3 $(ROOT)/tools/bundle_apps.py $@ $(BUNDLE)
 
 $(OBJDIR)/apps_bundle.c.o: $(OBJDIR)/apps_bundle.c
