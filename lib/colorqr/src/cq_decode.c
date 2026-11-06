@@ -1280,6 +1280,9 @@ static cq_status decode(const uint8_t *rgb, unsigned width, unsigned height, uns
 			status = CQ_ERR_PAYLOAD;
 			goto done;
 		}
+		/* All zeros is a valid codeword with a valid CRC, and damage can land on it. */
+		if (len == 0)
+			goto no_colour;
 		if (!r->payload || len > r->payload_cap) {
 			r->payload_len = len;
 			status = CQ_ERR_TOO_BIG;

@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CQ_VERSION "1.1.0"
+#define CQ_VERSION "1.1.1"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +22,7 @@ typedef enum {
 	CQ_ERR_ARGS,         /* bad arguments */
 	CQ_ERR_NOMEM,        /* work buffer too small: see cq_result.work_used */
 	CQ_ERR_BASE,         /* the base QR code could not be rebuilt */
-	CQ_ERR_NO_COLOUR,    /* a plain QR code: no colour layer */
+	CQ_ERR_NO_COLOUR,    /* no colour layer: a plain QR code, or an empty payload */
 	CQ_ERR_PAYLOAD,      /* a colour layer that could not be decoded */
 	CQ_ERR_TOO_BIG       /* decoded, but larger than the caller's payload buffer */
 } cq_status;

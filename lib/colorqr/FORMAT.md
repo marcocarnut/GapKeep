@@ -91,6 +91,9 @@ The message is:
 It fills exactly `k` bits, where `k = (n * num div den) div 8 * 8` for rate `num/den`. So
 `capacity = k div 8 - 6` bytes. Message bytes become bits most significant bit first.
 
+A decoder treats an empty payload as no colour layer: an all-zero stream is a valid codeword with a
+valid CRC, so damage can produce one.
+
 ## Error-correcting code
 
 A repeat-accumulate code, generated at any `n` and `k`, with `m = n - k` checks. `shuffle(a)` is
