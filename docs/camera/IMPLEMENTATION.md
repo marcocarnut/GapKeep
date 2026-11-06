@@ -218,7 +218,9 @@ Open questions:
 - **Stage a (power, I2C):** `picamera: IMX219 found (model 0219)`, in test
   builds (`#camera pi`) and at boot in a production build (with
   `LOG=serial`: 20 ms). Unicam powered: `ANA 777, CLK d000002`, VPU clock
-  250 MHz.
+  250 MHz with the ARM at 700 MHz; 400 MHz with the ARM at 1 GHz
+  (`CCPUThrottle`, src/kernel.cpp: the firmware's turbo raises both).
+  Frames and I2C were unchanged at 400 MHz.
 - **Stage b (frames):** `90 frames in 2966 ms: 30.0 frame/s, 480 lines in
   the last` (640x480); `91 frames in 2999 ms: 30.0 frame/s` with 1232
   lines (1640x1232). No receiver errors were logged in any run. The only

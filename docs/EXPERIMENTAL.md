@@ -69,7 +69,9 @@ specification: soft focus is untested.
   colours), 25 (2,218), 30 (3,060), 36 (4,257), and version 40 (5,204
   bytes) at about 3.1, the code filling most of the frame. A large code
   must be framed with care: one cut off at an edge isn't found. Decoding
-  takes about 0.9 s at version 20, 2.3 s at 36 and 3 s at 40 on a Pi Zero.
+  took about 0.9 s at version 20, 2.3 s at 36 and 3 s at 40 on a Pi Zero
+  with the ARM at 700 MHz and colorqr v1.0. At 1 GHz (zerogap's clock
+  since, `src/kernel.cpp`) colorqr v1.0.1 reads version 40 in 1.4 s.
   From version 20 the decoder corrects the grid locally (the lens bends it
   by up to half a module at the corners), which these reads need: with it
   they have good margin (version 36: 0.1 % of symbols wrong, version 40:

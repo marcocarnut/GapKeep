@@ -17,6 +17,7 @@
 #include <circle/interrupt.h>
 #include <circle/timer.h>
 #include <circle/logger.h>
+#include <circle/cputhrottle.h>
 #include <circle/usb/usbhcidevice.h>
 #ifndef ZG_SEALED
 #include <SDCard/emmc.h>
@@ -58,6 +59,8 @@ public:
 	TShutdownMode Run (void);
 
 private:
+	void LogClocks (void);
+
 	// do not change this order
 	CActLED			m_ActLED;
 	CKernelOptions		m_Options;
@@ -72,6 +75,7 @@ private:
 	CInterruptSystem	m_Interrupt;
 	CTimer			m_Timer;
 	CLogger			m_Logger;
+	CCPUThrottle		m_CPUThrottle;	// the ARM at its 1 GHz, slowed when hot
 	CUSBHCIDevice		m_USBHCI;
 #ifndef ZG_SEALED
 	CEMMCDevice		m_EMMC;		// read once at boot, for /apps
