@@ -36,17 +36,17 @@ codes but cannot draw them.
 
 ### Showing colour codes to the camera
 
-Measured on the rig's Pi camera with codes on a monitor (2026-11-05, few
-frames, one monitor; soft focus not yet tried):
+Measured on the rig's Pi camera with codes on a monitor (2026-11-05: a few
+frames, one monitor; soft focus not yet tried). A recommendation, not a
+measured limit:
 
-- **At least 3 camera pixels a module, unresampled.** Version 5 and 10
-  codes read at the first try from 7 down to 2.8 pixels a module (the
-  scanner's log gives the code's side in pixels: divide by the modules,
-  21 + 4 per version above 1). At 1.4 neither the code nor its colours read.
-- **Show codes at 100 % zoom, or a whole multiple.** Resampling matters
-  more than size: at 2.8 pixels a module the same code had 1 symbol in 2,522
-  wrong as displayed, and 11 % wrong when the image viewer had scaled it to
-  50 %, just within what the decoder corrects.
+- **Aim for 4 camera pixels a module or more**, in the scanner field you
+  use (the scanner's log gives the code's side in pixels: divide by the
+  modules, 17 + 4 per version). Reads have succeeded down to about 2 pixels
+  a module in the `"full"` field, near the limit of rate 3/4; at 1.4 neither
+  the code nor its colours read.
+- **Prefer 100 % zoom** (or a whole multiple), as a precaution: whether an
+  image viewer's resampling hurts is not settled yet.
 - **Profiles:** a4.50 at rate 3/4 is the safe default; a8.50 at rate 3/4
   (about 50 % more data) read as well here, and suits steady, in-focus
   setups.
