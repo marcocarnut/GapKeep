@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "kernel.h"
+#include <circle/bcmpropertytags.h>
 #include <circle/machineinfo.h>
 #include <circle/gpiopin.h>
 #include <circle/pagetable.h>
@@ -26,6 +27,7 @@ CKernel::CKernel (void)
 :	m_Screen (m_Options.GetWidth (), m_Options.GetHeight ()),
 	m_Timer (&m_Interrupt),
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
+	m_CPUThrottle (CPUSpeedMaximum),
 	m_USBHCI (&m_Interrupt, &m_Timer, TRUE),	// TRUE: plug-and-play
 #ifndef ZG_SEALED
 	m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
@@ -141,6 +143,7 @@ boolean CKernel::Initialize (void)
 
 		m_Logger.Write (FromKernel, LogNotice, "zerogap " ZEROGAP_VERSION ", built " __DATE__ " " __TIME__);
 		m_Logger.Write (FromKernel, LogNotice, "Screen %ux%u", m_Screen.GetWidth (), m_Screen.GetHeight ());
+		LogClocks ();
 
 #ifndef ZG_TEST
 		// A Pi Camera on the connector? The probe powers it for a moment
@@ -171,10 +174,33 @@ TShutdownMode CKernel::Run (void)
 			ZgInstallCursor ();		// a mouse may have turned up
 		}
 		m_AppHost.Update ();			// JS jobs, deferred work, app switches
+		m_CPUThrottle.Update ();		// down to the minimum when hot
 #ifdef ZG_TEST
 		m_TestShot.Update ();			// serial screenshots
 #endif
 	}
 
 	return ShutdownHalt;
+}
+
+// The ARM's clock as the firmware has it: the Pi Zero boots at its minimum
+// (700 MHz; config.txt has no turbo), and m_CPUThrottle asks for the
+// maximum (1 GHz). The firmware's turbo mode raises the core clock too:
+// logged, for the peripherals that derive their clocks from it.
+void CKernel::LogClocks (void)
+{
+	CBcmPropertyTags Tags;
+	unsigned Rates[2];
+	static const u32 Clocks[2] = {CLOCK_ID_ARM, CLOCK_ID_CORE};
+	for (unsigned i = 0; i < 2; i++)
+	{
+		TPropertyTagClockRate Tag;
+		Tag.nClockId = Clocks[i];
+		Tag.nRate = 0;
+		Rates[i] = Tags.GetTag (PROPTAG_GET_CLOCK_RATE, &Tag, sizeof Tag, 4) ? Tag.nRate / 1000000 : 0;
+	}
+	m_Logger.Write (FromKernel, LogNotice, "ARM %u MHz (%s, %u..%u), core %u MHz, %u C",
+			Rates[0], m_CPUThrottle.IsDynamic () ? "throttled when hot" : "fixed",
+			m_CPUThrottle.GetMinClockRate () / 1000000, m_CPUThrottle.GetMaxClockRate () / 1000000,
+			Rates[1], m_CPUThrottle.GetTemperature ());
 }
