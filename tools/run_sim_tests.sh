@@ -87,5 +87,17 @@ else
 	echo "FAIL  sim:share_libs   (see $OUT/share_libs.log)"; FAILED=1
 fi
 
+# libraries outside apps (lib/js), under Node
+if command -v node >/dev/null; then
+	if node --experimental-default-type=module tests/bbqr/run_node.mjs > "$OUT/bbqr.log" 2>&1 \
+		&& python3 tests/bbqr/check_capacity.py >> "$OUT/bbqr.log" 2>&1; then
+		echo "PASS  sim:bbqr"
+	else
+		echo "FAIL  sim:bbqr   (see $OUT/bbqr.log)"; FAILED=1
+	fi
+else
+	echo "SKIP  sim:bbqr   (needs Node)"
+fi
+
 echo "screenshots and logs: $OUT"
 exit $FAILED

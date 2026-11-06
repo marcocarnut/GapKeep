@@ -4,8 +4,9 @@ Copies the JavaScript libraries one app shares with another.
 
 An app imports only its own files (docs/APPS.md), so an app that builds on
 another app's library carries a copy of it. Each library has one home, the
-app it was written for; the copies below are made from it byte for byte,
-and never edited by hand.
+app it was written for, or lib/js/ for libraries written for no app in
+particular (lib/js/README.md); the copies below are made from it byte for
+byte, and never edited by hand.
 
 Usage:
   tools/share_libs.py           copy (after changing a library at home)
