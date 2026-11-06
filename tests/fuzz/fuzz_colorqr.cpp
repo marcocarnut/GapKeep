@@ -206,7 +206,11 @@ static void Call (const TFrame &F, unsigned nStride, const std::vector<unsigned 
 			s_nOK++;
 			if (R.payload_len > nCap) { fprintf (stderr, "payload_len %zu > cap %zu\n", R.payload_len, nCap); abort (); }
 		}
-		if (Results[k] == CQ_ERR_TOO_BIG && R.payload_len <= nCap)
+		// (colorqr 1.1.0 reports an empty payload as too big for no buffer:
+		// an all-zero stream is a valid codeword and decodes to length 0.
+		// Fixed on colorqr's branch fix-empty-payload, not released yet.)
+		if (Results[k] == CQ_ERR_TOO_BIG && R.payload_len <= nCap
+		    && !(R.payload_len == 0 && nCap == 0))
 		{
 			fprintf (stderr, "CQ_ERR_TOO_BIG with payload_len %zu <= cap %zu\n", R.payload_len, nCap);
 			abort ();
