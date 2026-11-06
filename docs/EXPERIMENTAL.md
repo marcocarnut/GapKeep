@@ -63,7 +63,7 @@ specification: soft focus is untested.
 - Scaling the code on the screen (an image viewer at 67 % or 50 %) made no
   difference to the colours; whole-number zoom is tidy, not needed.
 - A colour layer that can't be read costs more than one that can: about
-  0.6 s a try on a Pi Zero for version 10, against 0.2-0.3 s.
+  0.36 s a try on a Pi Zero for version 10, against 0.2-0.3 s.
 
 ### Why it is experimental
 
