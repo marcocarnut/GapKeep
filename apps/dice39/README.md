@@ -55,16 +55,17 @@ came back unchanged is still checked, but only a failure is shown (in red);
 the page's table of each typed word against the output is gone.
 
 **The account's public key** (not on dice39's page): the BIP-84 native
-segwit account `m/84'/0'/N'` on mainnet, as a zpub (QR code and text, for
-Electrum), and the master fingerprint. Account 0 and no passphrase at
-first; the account number and the BIP-39 passphrase can be changed, and
-Enter derives the key again (PBKDF2 of 2048 rounds: about 0.1 s on a Pi
-Zero, with "Working" on screen first). `lib/pubkey.js` does it with the
-signer's `bip39.js` and `bip32.js` (and `crypto.js`, `psbt/bytes.js`,
-`psbt/basen.js`, `psbt/hashes.js`), copies made by `tools/share_libs.py`:
-never edit them here. The output descriptor joins the zpub once the
-signer's library exports descriptors (`descriptor` in `lib/pubkey.js`).
-The log has the zpub's length, never the zpub or the fingerprint.
+segwit account `m/84'/0'/N'` on mainnet, as an output descriptor
+(`wpkh([fingerprint/84h/0h/Nh]xpub.../<0;1>/*)#checksum`) or a zpub (for
+Electrum), one QR code at a time with its text (a dropdown picks which;
+the descriptor first), and the master fingerprint. Account 0 and no
+passphrase at first; the account number and the BIP-39 passphrase can be
+changed, and Enter derives the key again (PBKDF2 of 2048 rounds: about
+0.1 s on a Pi Zero, with "Working" on screen first). `lib/pubkey.js` does
+it with the signer's `bip39.js`, `bip32.js` and `descriptor.js` (and
+`crypto.js`, `psbt/bytes.js`, `psbt/basen.js`, `psbt/hashes.js`), copies
+made by `tools/share_libs.py`: never edit them here. The log has the keys'
+lengths, never the keys or the fingerprint.
 
 **codex32 shares**: a share's QR code is shown directly, with one warning
 line on its page (a share alone reveals nothing). The split stays while

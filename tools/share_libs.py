@@ -29,9 +29,9 @@ COPIES = (
        ("apps/codex32/vendor/recover.js", "apps/signer/vendor/recover.js"),
        ("apps/codex32/vendor/wordlist.js", "apps/signer/vendor/wordlist.js"),
        ("apps/codex32/LICENSE-dice39.txt", "apps/signer/LICENSE-dice39.txt")]
-    # dice39 shows the account's public key with the signer's BIP-39 and
-    # BIP-32, and what they import
-    + [("apps/signer/lib/" + f, "apps/dice39/lib/" + f) for f in ("bip39.js", "bip32.js", "crypto.js")]
+    # dice39 shows the account's public key with the signer's BIP-39, BIP-32
+    # and descriptors, and what they import
+    + [("apps/signer/lib/" + f, "apps/dice39/lib/" + f) for f in ("bip39.js", "bip32.js", "crypto.js", "descriptor.js")]
     + [("apps/psbtview/lib/" + f, "apps/dice39/lib/psbt/" + f) for f in ("bytes.js", "basen.js", "hashes.js")]
 )
 

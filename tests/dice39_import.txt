@@ -1,8 +1,9 @@
 # dice39: "I already have a seed phrase". All 12 words typed; a bad checksum
 # is refused as a likely typo, never corrected; fixed, the phrase is used
 # as typed. Then the account's public key: BIP-84's test vector (account 0,
-# no passphrase), then account 1 with a passphrase; the zpub QR codes are
-# decoded from the screenshots and checked by tests/dice39/check_zpub.py.
+# no passphrase), then account 1 with a passphrase, as descriptors and
+# zpubs; their QR codes are decoded from the screenshots and checked by
+# tests/dice39/check_zpub.py.
 # Then a codex32 split, and a share's QR code, shown directly.
 # The phrase is BIP-39's all-"abandon" test vector, never a real seed.
 expect Keyboard attached 60
@@ -59,16 +60,28 @@ wait 0.5
 key ret
 expect dice39: imported a 12-word phrase 10
 expect dice39: verbatim check ok 10
-expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+expect dice39: account key shown: zpub of 111 characters, descriptor of 154, no passphrase 10
 wait 1
 shot 12a-results
-# Tab and back to "QR codes": the page scrolls down to the key above it
+# Tab and back to "QR codes": the page scrolls down to the key above it,
+# the descriptor first
+expect dice39: key QR: descriptor of 154 characters 10
 key tab
 key shift-tab
 wait 1
+shot 12-descriptor
+# Shift+Tab to the QR code dropdown: the zpub; Tab back to "QR codes"
+key shift-tab
+key down
+key down
+key ret
+expect dice39: key QR: zpub of 111 characters 10
+key tab
+wait 1
 shot 12-zpub
-# Shift+Tab to the account box (Show, Update, passphrase, account): account
-# 1, and a passphrase
+# Shift+Tab to the account box (dropdown, Show, Update, passphrase,
+# account): account 1, and a passphrase
+key shift-tab
 key shift-tab
 key shift-tab
 key shift-tab
@@ -80,12 +93,22 @@ shot 12b-changed
 key tab
 type TREZOR
 key ret
-expect dice39: account key shown: zpub of 111 characters, with a passphrase 10
+expect dice39: account key shown: zpub of 111 characters, descriptor of 154, with a passphrase 10
+key tab
 key tab
 key tab
 key tab
 wait 1
 shot 13-zpub-account1-pass
+# the descriptor again, for these
+key shift-tab
+key down
+key up
+key ret
+expect dice39: key QR: descriptor of 154 characters 10
+key tab
+wait 1
+shot 13-descriptor-account1-pass
 # "Split into shares": scheme focused; Tab, Tab to Split
 key tab
 key ret

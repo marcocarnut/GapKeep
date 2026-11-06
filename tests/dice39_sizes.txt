@@ -44,7 +44,7 @@ key tab
 key ret
 expect dice39: generated a 18-word phrase, 99 bits from dice, 93 from the device 30
 expect dice39: verbatim check ok 10
-expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+expect dice39: account key shown: zpub of 111 characters, descriptor of 154, no passphrase 10
 wait 1
 shot 18-b-results
 # Start over: Tab, Tab from "QR codes", and Erase
@@ -90,7 +90,7 @@ key tab
 key ret
 expect dice39: generated a 15-word phrase, 88 bits from dice, 72 from the device 30
 expect dice39: verbatim check ok 10
-expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+expect dice39: account key shown: zpub of 111 characters, descriptor of 154, no passphrase 10
 wait 1
 shot 15-b-results
 # Start over: Tab, Tab from "QR codes", and Erase
@@ -132,6 +132,6 @@ key tab
 key ret
 expect dice39: generated a 12-word phrase, 66 bits from dice, 62 from the device 30
 expect dice39: verbatim check ok 10
-expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+expect dice39: account key shown: zpub of 111 characters, descriptor of 154, no passphrase 10
 wait 1
 shot 12-b-results

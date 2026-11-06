@@ -63,8 +63,9 @@ export const S = {
 
   // the account's public key
   pubkeyHeading: "Public key, for a watch-only wallet",
-  pubkeyBody: "The native segwit account (BIP-84) on Bitcoin's main network, as a zpub: give it to Electrum or " +
-    "another wallet that watches an account, to see its balance and receive addresses. It cannot spend. " +
+  pubkeyBody: "The native segwit account (BIP-84) on Bitcoin's main network, as an output descriptor or a zpub " +
+    "(for Electrum): give it to a wallet that watches an account, to see its balance and receive addresses. " +
+    "It cannot spend. " +
     "It depends on the BIP-39 passphrase as much as on the words: each passphrase is a different wallet.",
   pubkeyNoPassphrase: "No passphrase: this is the key of the words alone. If you use a BIP-39 passphrase with " +
     "them, type it above and press Enter.",
