@@ -108,8 +108,8 @@ private:
 	unsigned m_nPreviewWidth, m_nPreviewHeight;
 	unsigned long long m_nNextDecodeAt;	// clock ticks
 
-	unsigned m_nPending;			// ZG_DETECT_* bits GetDetection hands out
 	unsigned long long m_nMissedSince;	// the first decode without the code, or 0
+	unsigned m_nPending;			// ZG_DETECT_* bits GetDetection hands out
 
 	u8 *m_pLast;				// the last QR code reported
 	unsigned m_nLastLength;
