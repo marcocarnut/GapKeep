@@ -1,0 +1,387 @@
+# Needs a test build (make TEST=1) or the simulator: the synthetic camera.
+# Made from tests/signer/signer.txt.in by tests/signer/make_scenario.py.
+# The Signer (apps/signer): the transaction first, then the keys. Each PSBT
+# is seen with its change only claimed, then checked once the keys are in.
+# The key is the BIP-39 test phrase "abandon ... about" (entropy: 16 zero
+# bytes; public, no real funds), split 2-of-3 with identifier ZGSQ. Electrum's
+# PSBTs are Electrum 4.8.3's own QR codes (tests/signer/electrum.json): the
+# signed transactions must hash as Electrum's own (SHA-256 shown, first 8
+# bytes). The others come from tests/signer/run_node.mjs --made-out.
+# The log holds no share, word or key: only counts, sizes and hashes.
+expect Keyboard attached 60
+expect launcher ready 60
+tile signer
+expect signer ready 10
+expect signer selftest: 4 passed, 0 failed 30
+wait 0.5
+shot 01-home
+
+# 1. A watch-only wallet's PSBT (Electrum knows only the account's
+# fingerprint): Scan, Review (claimed), Keys, Review (checked), Sign
+mark
+key ret
+wait 0.3
+mark
+camera qr @electrum1@
+expect signer: read a PSBT \(base43, 608 characters 15
+expect signer: review: 2 inputs, 0 to sign, 3 outputs 5
+expect signer: change: 1 claimed, 0 checked, 0 stray, 0 unverified, 0 refuted 5
+camera scene
+wait 0.5
+shot 02-review-claimed
+key ret
+wait 0.3
+shot 03-keys-empty
+key ret
+wait 0.3
+# share A, then share C, grouped as on paper
+type ms12zgsqa40sgqvwltnun3f8drxxujvljm648z42my97v2h0
+key ret
+type MS12 ZGSQ CADP 5Q7M V8JL JHZE GN00 LY7V YXSZ CJRW FVJA X6ZD
+key ret
+wait 0.3
+shot 04-shares
+# Enter in the empty passphrase: load
+mark
+key ret
+expect signer: key loaded \(bip39, 2 shares\) 30
+wait 0.5
+shot 05-keys-loaded
+mark
+key ret
+expect signer: review: 2 inputs, 2 to sign, 3 outputs 5
+expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted 5
+wait 0.5
+shot 06-review-checked
+mark
+key ret
+expect signer: signed 2 inputs, transaction complete \(SHA-256 dd31fe69d7368962\) 30
+wait 0.5
+shot 07-signed
+# Done, Next transaction, Show as PSBT
+key tab
+key tab
+mark
+key ret
+expect signer: showing the signed psbt 10
+wait 0.5
+shot 08-signed-psbt
+
+# 2. Next transaction (keep keys): a seed wallet's PSBT on testnet
+# (master fingerprint 73c5da0a, full paths)
+key tab
+mark
+key ret
+wait 0.3
+mark
+camera qr @electrum2@
+expect signer: read a PSBT \(base43, 612 characters 15
+expect signer: review: 2 inputs, 2 to sign 5
+camera scene
+mark
+key ret
+expect signer: signed 2 inputs, transaction complete \(SHA-256 0baf3b76d1d92827\) 30
+wait 0.3
+key tab
+key ret
+wait 0.3
+
+# 3. P2PKH from a QR code: Electrum leaves out the previous transaction, so
+# nothing can be signed
+mark
+camera qr @electrum3@
+expect signer: read a PSBT \(base43, 420 characters 15
+expect signer: review: 1 input, 0 to sign 5
+camera scene
+wait 0.5
+shot 09-p2pkh-refused
+key esc
+wait 0.3
+
+# 4. Change that is ours, at a path the wallet never scans: amber, counted as sent
+mark
+key ret
+wait 0.3
+mark
+camera qr @stray@
+expect signer: review: 2 inputs, 2 to sign 15
+expect signer: change: 0 claimed, 0 checked, 1 stray, 0 unverified, 0 refuted 5
+camera scene
+wait 0.5
+shot 10-stray
+key esc
+wait 0.3
+
+# 5. Change the PSBT claims, paying an attacker's key: red, and signing asks
+mark
+key ret
+wait 0.3
+mark
+camera qr @refuted@
+expect signer: review: 2 inputs, 2 to sign 15
+expect signer: change: 0 claimed, 0 checked, 0 stray, 0 unverified, 1 refuted 5
+camera scene
+wait 0.5
+shot 11-refuted
+key ret
+wait 0.5
+shot 12-sign-anyway
+# "Don't sign" has the focus
+key ret
+wait 0.3
+key esc
+wait 0.3
+
+# 6. Forget the keys (Scan, Last transaction, Public key, Forget)
+key tab
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.5
+shot 13-forgotten
+
+# 7. The same PSBT seen first, claimed; then with a key that can't check it
+mark
+key ret
+wait 0.3
+mark
+camera qr @refuted@
+expect signer: change: 1 claimed, 0 checked, 0 stray, 0 unverified, 0 refuted 15
+camera scene
+wait 0.3
+# Load the keys, xprv or WIF: a single key
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+type notakey
+mark
+key ret
+expect signer: private key refused 5
+wait 0.3
+shot 14-key-refused
+@backspaces@
+type @wif0@
+mark
+key ret
+expect signer: key loaded \(wif\) 10
+wait 0.5
+shot 15-keys-wif
+mark
+key ret
+expect signer: review: 2 inputs, 1 to sign 5
+expect signer: change: 0 claimed, 0 checked, 0 stray, 1 unverified, 0 refuted 5
+wait 0.5
+shot 16-unverified
+# 8. Partly signed: one key of two, then done, and the keys go
+mark
+key ret
+wait 0.5
+expect signer: signed 1 input 15
+expect signer: showing the signed psbt 10
+wait 0.3
+shot 17-partly-signed
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+
+# 9. Merge two half-signed copies: complete with no key loaded
+mark
+key ret
+wait 0.3
+mark
+camera qr @half0@
+expect signer: review: 2 inputs, 0 to sign 15
+camera scene
+wait 0.3
+# Load the keys, Merge a copy
+key tab
+mark
+key ret
+wait 0.3
+mark
+camera qr @other@
+expect signer: refused a code: That is a different transaction 15
+mark
+camera qr @half1@
+expect signer: merged a copy \(base43, 1 new field\) 15
+expect signer: review: 2 inputs, 0 to sign 5
+camera scene
+wait 0.5
+shot 18-merged
+mark
+key ret
+expect signer: signed 0 inputs, transaction complete 10
+expect signer: showing the signed tx 10
+wait 0.3
+shot 19-merged-signed
+key ret
+wait 0.3
+
+# 10. A finished transaction is only shown
+mark
+key ret
+wait 0.3
+mark
+camera qr @finished@
+expect signer: read a finished transaction 15
+expect signer: finished transaction: 2 inputs, 2 outputs 5
+camera scene
+wait 0.5
+shot 20-finished
+key esc
+wait 0.3
+
+# 11. Seed words, a word wrong then right, signing with the account's tprv too
+mark
+key ret
+wait 0.3
+mark
+camera qr @plain@
+expect signer: change: 1 claimed 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key ret
+wait 0.3
+type abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abouz
+wait 0.3
+# Tab to the passphrase; Enter there loads
+key tab
+mark
+key ret
+expect signer: words refused 5
+wait 0.3
+shot 21-words-refused
+key shift-tab
+key backspace
+type t
+key tab
+mark
+key ret
+expect signer: key loaded \(seed words\) 15
+wait 0.5
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+type @accountTprv@
+mark
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+shot 22-two-keys
+mark
+key ret
+expect signer: review: 2 inputs, 2 to sign 5
+expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted 5
+mark
+key ret
+expect signer: signed 2 inputs, transaction complete 15
+wait 0.3
+# Escape is Done: the keys go
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+
+# 12. The public key for Electrum needs a master key (Scan, Public key)
+key tab
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+type @xprv@
+mark
+key ret
+expect signer: key loaded \(xprv\) 10
+expect signer: showing the p2wpkh public key \(mainnet\) 10
+wait 0.5
+shot 23-export
+key esc
+wait 0.3
+
+# 13. Scanning keeps what was typed: one share typed, the other scanned, then
+# forgotten; the passphrase field goes with them. Back on the keys' page (Home:
+# Scan, Public key, Forget)
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key tab
+key ret
+wait 0.3
+key ret
+wait 0.3
+type ms12zgsqa40sgqvwltnun3f8drxxujvljm648z42my97v2h0
+wait 0.3
+# share, second share, dropdown, passphrase, show, Load, Scan shares
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+mark
+camera qr MS12ZGSQCADP5Q7MV8JLJHZEGN00LY7VYXSZCJRWFVJAX6ZD
+expect signer: scanned share 2 of 2 15
+camera scene
+wait 0.5
+shot 24-share-scanned
+mark
+key ret
+expect signer: key loaded \(bip39, 2 shares\) 30
+expect signer: showing the p2wpkh public key 10
+wait 0.5
+key esc
+wait 0.3
+
+# 14. A key scanned, into the xprv page; forget (Scan, Public key, Forget)
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+mark
+camera qr @plain@
+expect signer: change: 1 claimed 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+# key, show, Load, Scan
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+mark
+camera qr @accountTprv@
+expect signer: scanned a key 15
+camera scene
+wait 0.5
+shot 25-key-scanned
+mark
+key ret
+expect signer: key loaded \(xprv\) 10

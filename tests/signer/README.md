@@ -16,6 +16,15 @@ On the device, the app (or a gallery self-test) calls
 `selfTest(crypto)` from `apps/signer/lib/selftest.js` with `zg:crypto`:
 four known answers through the real libsecp256k1.
 
+## The scenario
+
+`tests/signer.txt` is made from `tests/signer/signer.txt.in` by
+`python3 tests/signer/make_scenario.py`: Electrum's codes, and PSBTs built in
+`run_node.mjs` (`--made-out`) that a signer must not take at their word: change
+rerouted to a path the wallet doesn't scan, and change paying an attacker's
+key. Each step starts with `mark`: `expect` otherwise matches a line from
+any earlier step.
+
 ## What is checked
 
 - **reference**: `crypto_ref.mjs` against libsecp256k1's answers and BIP-340.
@@ -34,6 +43,11 @@ four known answers through the real libsecp256k1.
 - **bip174**: BIP-174's signer vector is 2-of-2 multisig, which the signer
   doesn't sign: our sighashes reproduce its signatures, and `signPsbt`
   skips both inputs saying why.
+- **keys, keyring**: WIF and xprv parsing and refusals, wiping; an account
+  xprv and WIF keys signing, byte for byte as the master; several keys.
+- **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
+- **review**: change claimed, proved, refuted, unverifiable and stray (each
+  way of rerouting it, and the gap's limit).
 - **rules, negative, change, oddities**: PSBTs built in the test for each
   input type, and each safety rule broken one at a time (fingerprint, key
   at the path, script, redeemScript, taproot tweak and script tree, missing
