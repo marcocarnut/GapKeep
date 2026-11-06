@@ -1,5 +1,5 @@
 // Extracted from dice39 by tools/extract_codex32.py - do not edit.
-// Source: codex32_recover.html (sha256 6ab1b53c74045669cad1c449c1208288aed386b52c130b15d26daf8ac5723606), page script (selected declarations) starting at line 13046.
+// Source: codex32_recover.html (sha256 5be40379e29864054befe322d7439f7f06ab800d2b7ef09ac429228f372ee9c0), page script (selected declarations) starting at line 13046.
 // dice39 is licensed under the GNU AGPL v3; see apps/codex32/LICENSE-dice39.txt.
 // The code between the prelude and the export line is copied verbatim.
 
@@ -13,7 +13,7 @@ const STRINGS = {
 en: {
   pageTitle: 'codex32 recover — dice39',
   h1Title: 'Recombine codex32 shares',
-  subtitle: 'Rebuilds a BIP-39 phrase (12 or 24 words) from shares made by dice39.',
+  subtitle: 'Rebuilds a BIP-39 phrase (12, 15, 18 or 24 words) from shares made by dice39.',
   warnHtml: 'Do this on the <b>same offline machine</b> you will use the phrase on. The moment enough shares are in one place, the seed exists again — that is the point of the exercise and also its whole risk. Close this page when you are done, and do not leave the shares in a text file.',
   inputHeading: 'Paste your shares',
   inputHelp: 'One per line. You need exactly as many as the threshold the shares were made with — a 2-of-3 split needs 2, no more and no fewer. Case does not matter.',
@@ -39,10 +39,10 @@ en: {
   copyOk: 'Copied. Paste it into your wallet now, then copy something else to overwrite it.',
   copyFail: 'This browser would not give the page access to the clipboard. Type the words in by hand from the list above, or use the QR export.',
   qrIntro: 'Use this if your wallet is on another device — a hardware wallet, or a phone.',
-  qrWarningHtml: 'A QR code of your seed is scannable the instant a camera sees it. Only reveal this on your air-gapped device, scan it live with the importing wallet\u2019s camera, and never let it sit as a saved photo (camera roll, cloud backup, screenshot). Prefer the 3-part split below if your wallet supports scanning multiple codes \u2014 it raises the bar against an opportunistic single photo, though each part alone still leaks those 8 words in the clear.',
+  qrWarningHtml: 'A QR code of your seed is scannable the instant a camera sees it. Only reveal this on your air-gapped device, scan it live with the importing wallet\u2019s camera, and never let it sit as a saved photo (camera roll, cloud backup, screenshot). Prefer the 3-part split below if your wallet supports scanning multiple codes \u2014 it raises the bar against an opportunistic single photo, though each part alone still leaks those {third} words in the clear.',
   qrConfirmLabel: 'I understand this reveals my seed as a scannable code, and I will scan it live rather than save it.',
   qrBtnSingle: 'Show single QR (all {t} words)',
-  qrBtnSplit: 'Show 3-part QR (8 + 8 + 8 words)',
+  qrBtnSplit: 'Show 3-part QR ({third} + {third} + {third} words)',
   qrLabelSingle: 'All {t} words \u2014 scan live, do not screenshot',
   qrLabelSplit: 'Words {a}\u2013{b} of {t} \u2014 scan live, do not screenshot',
   qrBtnSeed: 'Show SeedQR (SeedSigner format)',
@@ -55,7 +55,7 @@ en: {
   tabSeedLabel: 'SeedQR',
   tabHint: 'Pick one above. Nothing is revealed until you do \u2014 and only one is ever on screen at a time.',
   seedIntro: 'Use this if the wallet you are restoring into reads SeedSigner-style codes rather than a line of text \u2014 SeedSigner itself, Krux, and others that followed them.',
-  seedWarningHtml: 'These carry exactly what the words carry, in a notation no human reads back \u2014 which cuts both ways. Nothing on the code says what it is, so nothing warns whoever finds it, and a <b>Compact SeedQR is the whole secret in 32 anonymous bytes</b>. Reveal it only on your air-gapped device, scan it live with the importing wallet\u2019s camera, and never let it sit as a saved photo (camera roll, cloud backup, screenshot).',
+  seedWarningHtml: 'These carry exactly what the words carry, in a notation no human reads back \u2014 which cuts both ways. Nothing on the code says what it is, so nothing warns whoever finds it, and a <b>Compact SeedQR is the whole secret in {bytes} anonymous bytes</b>. Reveal it only on your air-gapped device, scan it live with the importing wallet\u2019s camera, and never let it sit as a saved photo (camera roll, cloud backup, screenshot).',
   seedConfirmLabel: 'I understand these codes are the recovered seed in another notation, and I will scan them live rather than save them.',
   clearBtn: 'Clear',
   resultHeading: 'Recovered phrase',
@@ -67,13 +67,13 @@ en: {
   metaShares: 'Shares used',
   errPrefix: 'Could not recover: ',
   errNoShares: 'Paste at least two shares, one per line.',
-  errWrongSize: 'These shares carry {n} bytes. dice39 makes 16-byte seeds (12 words) and 32-byte seeds (24 words), and {n} is neither — recovery stopped rather than guess.',
+  errWrongSize: 'These shares carry {n} bytes. dice39 makes seeds of 16, 20, 24 and 32 bytes (12, 15, 18 and 24 words), and {n} is none of those — recovery stopped rather than guess.',
   footerHtml: 'Free software under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">GNU AGPL v3</a> or later; this page is its complete source. Source, issues and patches: <a href="https://github.com/marcocarnut/dice39" target="_blank" rel="noopener">github.com/marcocarnut/dice39</a>. Implements <a href="https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki" target="_blank" rel="noopener">BIP-93 (codex32)</a>. Bundled: the BIP-39 wordlist (MIT), <a href="https://github.com/cozmo/jsQR" target="_blank" rel="noopener">jsQR</a> for reading QR codes (Apache-2.0) and <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> for writing them (MIT, Kazuhiko Arase).'
 },
 pt: {
   pageTitle: 'codex32 recuperar — dice39',
   h1Title: 'Recombinar partes codex32',
-  subtitle: 'Reconstrói uma frase BIP-39 (de 12 ou 24 palavras) a partir de partes feitas pelo dice39.',
+  subtitle: 'Reconstrói uma frase BIP-39 (de 12, 15, 18 ou 24 palavras) a partir de partes feitas pelo dice39.',
   warnHtml: 'Faça isto na <b>mesma máquina off-line</b> em que vai usar a frase. No instante em que partes suficientes estão no mesmo lugar, o seed existe de novo — esse é o objetivo do exercício e também todo o seu risco. Feche esta página ao terminar, e não deixe as partes num arquivo de texto.',
   inputHeading: 'Cole as suas partes',
   inputHelp: 'Uma por linha. Você precisa de exatamente tantas quanto o limiar com que as partes foram feitas — uma divisão 2 de 3 precisa de 2, nem mais nem menos. Maiúsculas e minúsculas não importam.',
@@ -99,10 +99,10 @@ pt: {
   copyOk: 'Copiado. Cole na sua carteira agora e depois copie outra coisa para sobrescrever.',
   copyFail: 'Este navegador n\u00e3o deu \u00e0 p\u00e1gina acesso \u00e0 \u00e1rea de transfer\u00eancia. Digite as palavras \u00e0 m\u00e3o a partir da lista acima, ou use a exporta\u00e7\u00e3o por QR.',
   qrIntro: 'Use isto se a sua carteira estiver em outro dispositivo \u2014 uma hardware wallet, ou um celular.',
-  qrWarningHtml: 'Um QR code do seu seed é escaneável no instante em que uma câmera o vê. Só revele isto no seu dispositivo isolado da rede, escaneie ao vivo com a câmera da carteira que vai importar, e nunca deixe ficar como foto salva (galeria, backup na nuvem, print de tela). Prefira a divisão em 3 partes abaixo se sua carteira suportar escanear vários códigos \u2014 isso eleva a barreira contra uma foto oportunista única, embora cada parte sozinha ainda revele 8 palavras em texto claro.',
+  qrWarningHtml: 'Um QR code do seu seed é escaneável no instante em que uma câmera o vê. Só revele isto no seu dispositivo isolado da rede, escaneie ao vivo com a câmera da carteira que vai importar, e nunca deixe ficar como foto salva (galeria, backup na nuvem, print de tela). Prefira a divisão em 3 partes abaixo se sua carteira suportar escanear vários códigos \u2014 isso eleva a barreira contra uma foto oportunista única, embora cada parte sozinha ainda revele {third} palavras em texto claro.',
   qrConfirmLabel: 'Entendo que isto revela meu seed como um código escaneável, e vou escaneá-lo ao vivo em vez de salvá-lo.',
   qrBtnSingle: 'Mostrar QR único ({t} palavras)',
-  qrBtnSplit: 'Mostrar QR em 3 partes (8 + 8 + 8 palavras)',
+  qrBtnSplit: 'Mostrar QR em 3 partes ({third} + {third} + {third} palavras)',
   qrLabelSingle: 'Todas as {t} palavras \u2014 escaneie ao vivo, não tire print',
   qrLabelSplit: 'Palavras {a}\u2013{b} de {t} \u2014 escaneie ao vivo, não tire print',
   qrBtnSeed: 'Mostrar SeedQR (formato SeedSigner)',
@@ -115,7 +115,7 @@ pt: {
   tabSeedLabel: 'SeedQR',
   tabHint: 'Escolha uma acima. Nada é revelado antes disso \u2014 e só uma fica na tela por vez.',
   seedIntro: 'Use isto se a carteira em que você vai restaurar lê códigos no estilo SeedSigner em vez de uma linha de texto \u2014 o próprio SeedSigner, o Krux, e outros que vieram depois deles.',
-  seedWarningHtml: 'Estes levam exatamente o que as palavras levam, numa notação que nenhum humano lê de volta \u2014 o que corta dos dois lados. Nada no código diz o que ele é, então nada avisa quem o encontrar, e um <b>Compact SeedQR é o segredo inteiro em 32 bytes anônimos</b>. Só revele no seu dispositivo isolado da rede, escaneie ao vivo com a câmera da carteira que vai importar, e nunca deixe ficar como foto salva (galeria, backup na nuvem, print de tela).',
+  seedWarningHtml: 'Estes levam exatamente o que as palavras levam, numa notação que nenhum humano lê de volta \u2014 o que corta dos dois lados. Nada no código diz o que ele é, então nada avisa quem o encontrar, e um <b>Compact SeedQR é o segredo inteiro em {bytes} bytes anônimos</b>. Só revele no seu dispositivo isolado da rede, escaneie ao vivo com a câmera da carteira que vai importar, e nunca deixe ficar como foto salva (galeria, backup na nuvem, print de tela).',
   seedConfirmLabel: 'Entendo que estes códigos são a semente recuperada em outra notação, e vou escaneá-los ao vivo em vez de salvá-los.',
   clearBtn: 'Limpar',
   resultHeading: 'Frase recuperada',
@@ -127,7 +127,7 @@ pt: {
   metaShares: 'Partes usadas',
   errPrefix: 'Não foi possível recuperar: ',
   errNoShares: 'Cole pelo menos duas partes, uma por linha.',
-  errWrongSize: 'Estas partes carregam {n} bytes. O dice39 gera seeds de 16 bytes (12 palavras) e de 32 bytes (24 palavras), e {n} não é nenhum dos dois — a recuperação parou em vez de adivinhar.',
+  errWrongSize: 'Estas partes carregam {n} bytes. O dice39 gera seeds de 16, 20, 24 e 32 bytes (12, 15, 18 e 24 palavras), e {n} não é nenhum desses — a recuperação parou em vez de adivinhar.',
   footerHtml: 'Software livre sob a <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">GNU AGPL v3</a> ou posterior; esta página é o seu código-fonte completo. Código, problemas e contribuições: <a href="https://github.com/marcocarnut/dice39" target="_blank" rel="noopener">github.com/marcocarnut/dice39</a>. Implementa o <a href="https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki" target="_blank" rel="noopener">BIP-93 (codex32)</a>. Inclui: a lista de palavras BIP-39 (MIT), o <a href="https://github.com/cozmo/jsQR" target="_blank" rel="noopener">jsQR</a> para ler QR codes (Apache-2.0) e o <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> para gerá-los (MIT, Kazuhiko Arase).'
 }
 };
@@ -135,16 +135,23 @@ pt: {
 /* ==================================================================
    entropy -> BIP-39 words (the step a generic BIP-93 tool will not do)
    ================================================================== */
-/* 16 bytes -> 12 words, 32 bytes -> 24. The checksum is entropy/32 bits taken
-   from the TOP of SHA-256(entropy): the whole first byte at 32 bytes, its high
-   nibble at 16. Taking the low nibble instead would produce twelve perfectly
-   valid-looking words for a different wallet, so the shift is written once and
-   derived, never spelled out per length. */
-const RECOVER_SIZES = { 16: { words: 12, checksumBits: 4 }, 32: { words: 24, checksumBits: 8 } };
+/* 16 bytes -> 12 words, 20 -> 15, 24 -> 18, 32 -> 24. The checksum is
+   entropy/32 bits taken from the TOP of SHA-256(entropy): the whole first byte
+   at 32 bytes, its top six bits at 24, top five at 20, high nibble at 16.
+   Taking the low bits instead would produce perfectly valid-looking words for
+   a different wallet, so the shift is written once and derived, never spelled
+   out per length. BIP-93 allows every one of these seed sizes. */
+const RECOVER_SIZES = {
+  16: { words: 12, checksumBits: 4 },
+  20: { words: 15, checksumBits: 5 },
+  24: { words: 18, checksumBits: 6 },
+  32: { words: 24, checksumBits: 8 }
+};
 
 async function wordsFromEntropy(entropy) {
   const spec = RECOVER_SIZES[entropy.length];
-  if (!spec) throw new Error('expected 16 or 32 bytes, got ' + entropy.length);
+  if (!spec) throw new Error('expected ' + Object.keys(RECOVER_SIZES).join(', ') +
+                             ' bytes, got ' + entropy.length);
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', entropy));
   const bits = [];
   for (const b of entropy) for (let i = 7; i >= 0; i--) bits.push((b >> i) & 1);

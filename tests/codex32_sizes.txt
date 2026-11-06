@@ -1,0 +1,40 @@
+# codex32 (apps/codex32): a 15-word phrase (20 bytes of entropy) from two
+# shares of a 2-of-3 split that dice39's own cxSplit made of the BIP-39 test
+# entropy 7f7f...7f (never a real seed). The exports say 5 + 5 + 5 words
+# and 20 bytes. 12 and 24 words, typos and the camera: tests/codex32.txt.
+expect Keyboard attached 60
+expect launcher ready 60
+tile codex32
+expect codex32 ready 10
+expect codex32 selftest: \d+ passed, 0 failed 30
+type ms12zgapa3ksmplhsr5wlqqlw5s6uw229nne4kwupjd3fst07swh96
+key ret
+type ms12zgapc46jfjl9j3lgryn3gf4rslzv0sxsj2gz9zcrddmvkm6j70
+key ret
+expect codex32: recovered a 20-byte seed \(15 words\) from 2 shares 5
+wait 0.5
+shot 01-result-15
+# QR of the words: tick, then the 3-part button (second)
+key ret
+key spc
+key tab
+key tab
+wait 0.5
+shot 02-words-confirm
+key ret
+expect codex32: showing the split QR export 5
+wait 0.5
+shot 03-words-split
+key esc
+# SeedQR and Compact SeedQR: the warning says 20 bytes
+key tab
+key ret
+key spc
+wait 0.5
+shot 04-seed-warning
+key tab
+key tab
+key ret
+expect codex32: showing the compact QR export 5
+wait 0.5
+shot 05-compact

@@ -15,7 +15,7 @@ export const BITS_PER_KEY_TAP = BITS_PER_TAP - BITS_PER_DRAG_POINT;
 
 // Same formula as dice39's ENTROPY_BITS_TARGET(): the most the device can be
 // asked for (entropy minus the fewest words you may roll), rounded up to a
-// whole 32. 128 bits at 24 words, 64 at 12.
+// whole 32. 128 bits at 24 words, 96 at 18 and 15, 64 at 12.
 export function entropyBitsTarget(spec) {
   return Math.ceil((spec.entropyBits - spec.minUser * 11) / 32) * 32;
 }

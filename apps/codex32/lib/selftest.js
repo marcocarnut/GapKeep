@@ -143,6 +143,9 @@ export async function runCodex32SelfTest() {
       "abandon about", "16 zero bytes");
     const f = new Uint8Array(32).fill(0xff);
     eq((await wordsFromEntropy(f)).slice(-2).join(" "), "zoo vote", "32 ff bytes");
+    // 15 and 18 words: the checksum is the top 5 and top 6 bits
+    eq((await wordsFromEntropy(new Uint8Array(20).fill(0x7f))).slice(-2).join(" "), "sausage wise", "20 7f bytes");
+    eq((await wordsFromEntropy(new Uint8Array(24).fill(0x7f))).slice(-2).join(" "), "legal will", "24 7f bytes");
     const v = new Uint8Array([0x9e, 0x88, 0x5d, 0x95, 0x2a, 0xd3, 0x62, 0xca, 0xeb, 0x4e, 0xfe, 0x34,
       0xa8, 0xe9, 0x1b, 0xd2]);
     eq((await wordsFromEntropy(v)).join(" "),

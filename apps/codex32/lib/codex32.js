@@ -17,7 +17,7 @@
 // from 1 at the "m" of "ms1", spaces left out.
 //
 // What the seed is: BIP-93 calls it the BIP-32 master seed. Shares made by
-// dice39 carry BIP-39 entropy instead (16 or 32 bytes, which dice39 turns
+// dice39 carry BIP-39 entropy instead (16, 20, 24 or 32 bytes, which dice39 turns
 // back into words). The bytes are the same either way; which meaning they
 // have is the caller's to decide (see the app's README).
 //

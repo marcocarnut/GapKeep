@@ -1,5 +1,5 @@
 // Extracted from dice39 by tools/extract_dice39.py - do not edit.
-// Source: bip39_generator.html (sha256 9d8f7ba296e81fa3fae05eb1398b94ed00e38148b5014cf350f039f3c8364fe8), wordlist block starting at line 918.
+// Source: bip39_generator.html (sha256 2761011a95e7b961bfe3a6001df7e6ec4d49106134c19453e49e1364c67357dd), wordlist block starting at line 922.
 // dice39 is licensed under the GNU AGPL v3; see apps/dice39/LICENSE-dice39.txt.
 // The code between the prelude and the export line is copied verbatim.
 

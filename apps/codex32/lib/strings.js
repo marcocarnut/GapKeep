@@ -27,9 +27,6 @@ const overrides = {
     "split needs 2, no more and no fewer. Case does not matter, and spaces are ignored. Enter goes on to the " +
     "next box, and recovers from the last one.",
   errNoShares: "Type your shares first, one per box.",
-  // the page says 8 + 8 + 8 at 12 words too
-  qrBtnSplit: page.qrBtnSplit.replace("8 + 8 + 8", "{third} + {third} + {third}"),
-  qrWarningHtml: page.qrWarningHtml.replace("those 8 words", "those {third} words"),
   exportHeading: "Getting the phrase off this device",
   exportCompareHtml: "<p>The shares you just combined were the safe form of this secret — no one of them " +
     "was worth stealing. What is on screen now is the whole of it in one place, and every way out of here " +
