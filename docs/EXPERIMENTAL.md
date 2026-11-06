@@ -34,6 +34,23 @@ codes but cannot draw them.
 - **The Color QR app** (`apps/colorqr`) shows both parts apart: what any QR
   reader sees, and what only the colours hold.
 
+### Showing colour codes to the camera
+
+Measured on the rig's Pi camera with codes on a monitor (2026-11-05, few
+frames, one monitor; soft focus not yet tried):
+
+- **At least 3 camera pixels a module, unresampled.** Version 5 and 10
+  codes read at the first try from 7 down to 2.8 pixels a module (the
+  scanner's log gives the code's side in pixels: divide by the modules,
+  21 + 4 per version above 1). At 1.4 neither the code nor its colours read.
+- **Show codes at 100 % zoom, or a whole multiple.** Resampling matters
+  more than size: at 2.8 pixels a module the same code had 1 symbol in 2,522
+  wrong as displayed, and 11 % wrong when the image viewer had scaled it to
+  50 %, just within what the decoder corrects.
+- **Profiles:** a4.50 at rate 3/4 is the safe default; a8.50 at rate 3/4
+  (about 50 % more data) read as well here, and suits steady, in-focus
+  setups.
+
 ### Why it is experimental
 
 zerogap's premise is that data leaves the device only through what can be
