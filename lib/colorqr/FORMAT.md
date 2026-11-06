@@ -124,7 +124,8 @@ Check `i` of the code is: row `i` XOR parity `i` XOR parity `i-1` (no `i-1` for 
 3. Refine the corners on known function modules, using a blurred gray image of (R+2G+B)/4.
 4. Sample every module, threshold it, read the format bits, and correct the codewords with the QR
    code's Reed-Solomon parity. Rebuild the full module matrix from the corrected codewords.
-5. Refine the corners again against the rebuilt matrix, and sample RGB at each module.
+5. Refine the corners again against the rebuilt matrix, and sample RGB at each module. On large
+   symbols, correct the grid locally first: a real lens is not quite a homography.
 6. Read the header, which gives the profile and the rate.
 7. Compute colour likelihoods within each module's class. Calibrate from function modules and pilots.
 8. Turn them into bit log-likelihood ratios, decode the code, and check the CRC-32. Likelihoods should

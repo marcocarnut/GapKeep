@@ -265,8 +265,8 @@ static int local_field(const score_ctx *c, const homog *H, float *ox, float *oy,
 			int cx = 0, cy = 0;          /* in quarter pixels */
 			double best = -1e30;
 			/* half-pixel steps until it settles, then one round of quarter-pixel steps */
-			for (int round = 0; round < 4; round++) {
-				int step = round < 3 ? 2 : 1, moved = 0, bx = cx, by = cy;
+			for (int round = 0; round < 5; round++) {
+				int step = round < 4 ? 2 : 1, moved = 0, bx = cx, by = cy;
 				for (int dy = -step; dy <= step; dy += step) {
 					for (int dx = -step; dx <= step; dx += step) {
 						int sx = cx + dx, sy = cy + dy;
@@ -292,8 +292,8 @@ static int local_field(const score_ctx *c, const homog *H, float *ox, float *oy,
 				}
 				cx = bx;
 				cy = by;
-				if (!moved && round < 2)
-					round = 2;
+				if (!moved && round < 3)
+					round = 3;
 			}
 			tx[ti * nt + tj] = (float) cx * 0.25f;
 			ty[ti * nt + tj] = (float) cy * 0.25f;

@@ -11,6 +11,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define CQ_VERSION "1.0.0"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
