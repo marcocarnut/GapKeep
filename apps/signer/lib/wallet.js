@@ -12,6 +12,7 @@ import { setCrypto } from "./crypto.js";
 import { ENTROPY_LENGTHS, mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic } from "./bip39.js";
 import { fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub, versionFor } from "./bip32.js";
 import { parsePrivateKey } from "./keys.js";
+import { accountDescriptor } from "./descriptor.js";
 import { planKeys, signKeys, finalize } from "./sign.js";
 import { serializePsbt } from "./psbt/psbt.js";
 import { selfTest as libSelfTest } from "./selftest.js";
@@ -80,16 +81,19 @@ export function wipeKey(key) {
   key.node = null;
 }
 
-// The account's public key, as Electrum takes it ("Use a master key"):
-// -> { text, path, fingerprint (the account key's: what Electrum calls the
-// wallet's, as it can't know the master's) }
+// The account's public key: as Electrum takes it ("Use a master key"), and as
+// a descriptor, for wallets that want the key's origin.
+// -> { text, descriptor, path, fingerprint (the account key's: what Electrum
+// calls the wallet's, as it can't know the master's), master (fingerprint) }
 export function exportKey(key, id, network) {
   const x = EXPORTS.find((e) => e.id === id);
   const path = accountPath(x.purpose, network);
   const account = derive(key.node, path);
   try {
     const pub = neuter(account);
-    return { text: serializeXpub(pub, versionFor(id, network)), path, fingerprint: fingerprintHex(pub) };
+    const xpub = serializeXpub(pub, network === "mainnet" ? "xpub" : "tpub");
+    return { text: serializeXpub(pub, versionFor(id, network)), path, fingerprint: fingerprintHex(pub), master: key.fingerprint,
+      descriptor: accountDescriptor({ script: id, fingerprint: key.fingerprint, network, account: 0, xpub }) };
   } finally {
     wipe(account);
   }

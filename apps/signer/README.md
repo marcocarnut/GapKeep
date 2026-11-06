@@ -41,10 +41,15 @@ back a QR code Electrum loads.
    forget the keys" (Escape does the same), or "Next transaction (keep
    keys)". In Electrum: Tools, Load transaction, From QR code, and broadcast.
 
-**Once: the public key for Electrum.** "Public key for Electrum" needs a
-master key. It shows the account's zpub (BIP-84) or ypub (BIP-49), vpub/upub
-on testnet, as a QR code. In Electrum: File, New/Restore, Standard wallet,
-Use a master key, and scan it. That watch-only wallet makes the transactions.
+**Once: the public key.** "Public key" needs a master key: it shows account 0
+of BIP-84 or BIP-49 as a QR code, with the master fingerprint as text:
+
+- a descriptor, `wpkh([fingerprint/84h/0h/0h]xpub.../<0;1>/*)#checksum`, with
+  the key's origin, for wallets that take one;
+- the zpub (ypub; vpub/upub on testnet), for Electrum: File, New/Restore,
+  Standard wallet, Use a master key, and scan it.
+
+That watch-only wallet makes the transactions.
 
 Electrum's QR codes leave out the previous transactions, so legacy (P2PKH)
 coins can't be signed from them. Electrum has no taproot wallets; the library
@@ -170,6 +175,14 @@ m/purpose'/coin'/account'/change/index, a purpose that doesn't match the
 script (84' for P2WPKH...), a coin type for another network, a branch other
 than 0/1, a hardened or very high index, an account other than the inputs',
 change to another script type than the inputs'.
+
+### `lib/descriptor.js`
+
+`accountDescriptor({ script, fingerprint, network, account, xpub })`: an
+account's BIP-389 descriptor, with its BIP-380 checksum. `fingerprint` is the
+master's; `xpub` the plain xpub or tpub of the account. `script`: `"p2wpkh"`,
+`"p2sh-p2wpkh"`, `"p2pkh"`. `descriptorChecksum(text)`, `checkDescriptor(text)`.
+No imports: `tools/share_libs.py` can copy it anywhere.
 
 ### `lib/keys.js`
 

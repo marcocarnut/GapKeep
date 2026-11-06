@@ -45,6 +45,11 @@ any earlier step.
   skips both inputs saying why.
 - **keys, keyring**: WIF and xprv parsing and refusals, wiping; an account
   xprv and WIF keys signing, byte for byte as the master; several keys.
+- **descriptor**: BIP-380's checksum against Bitcoin Core's own test strings,
+  valid and invalid, and BIP-380's vectors, in `descriptor_vectors.json`, which
+  says where they come from; multipath against an independent Python
+  implementation (`check_descriptor.py`), which also checks what the app
+  shows, from its QR code.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
   way of rerouting it, and the gap's limit).

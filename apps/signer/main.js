@@ -11,8 +11,8 @@
 //      signatures. The keys are forgotten then, unless you keep them for the
 //      next transaction.
 //
-// The account's public key for Electrum is on offer too, once a master key
-// is loaded.
+// The account's public key is on offer too, as a descriptor or Electrum's
+// zpub, once a master key is loaded.
 //
 // Libraries: lib/psbt (the PSBT Viewer's, copied by tools/share_libs.py),
 // lib/codex32.js and vendor/ (the codex32 app's, copied the same way), and
@@ -50,6 +50,7 @@ const MAX_SHARES = 9;
 const MAX_KEYS = 8;
 const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 const NETWORK_ORDER = ["mainnet", "testnet", "regtest"];
+const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub (Electrum)", field: "text" }];
 
 const state = {
   page: null,
@@ -68,6 +69,7 @@ const state = {
   network: null,      // chosen by the person; null: as guessed
   lastNetwork: null,  // of the last transaction shown: for a signed one, which says nothing
   signed: null,       // { psbt bytes, tx bytes | null, count }
+  exportForm: 0,      // index into EXPORT_FORMS
   exportType: 0,      // index into wallet.EXPORTS
   exportNetwork: "mainnet",
   selftest: null,     // { passed, failed: [] }
@@ -136,12 +138,12 @@ function showHome() {
   const buttons = buttonRow(ui.screen);
   const first = new ui.Button(buttons, { text: ui.symbols.image + " Scan a transaction", onClick: () => showScan(false) });
   if (state.loaded) new ui.Button(buttons, { text: ui.symbols.list + " Last transaction", onClick: showReview });
-  new ui.Button(buttons, { text: ui.symbols.upload + " Public key for Electrum", onClick: askExport });
+  new ui.Button(buttons, { text: ui.symbols.upload + " Public key", onClick: askExport });
   if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " Forget the keys", onClick: forgetKeys });
   new ui.Button(buttons, { text: ui.symbols.home + " Leave", onClick: () => sys.exit() });
 
   if (state.keys.length) paragraph(ui.screen, `${plural(state.keys.length, "key")} in memory.`, { color: GREEN });
-  paragraph(ui.screen, "Setting up Electrum (once): show it the public key (\"Public key for Electrum\"), as a new " +
+  paragraph(ui.screen, "Setting up Electrum (once): show it the public key (\"Public key\", its zpub), as a new " +
     "wallet: Standard wallet, Use a master key, then scan the QR code. Electrum then makes transactions that " +
     "this device signs. Each time: in Electrum, make the transaction, then Export (or Share), Show as QR code; " +
     "here, Scan a transaction; after signing, in Electrum: Tools, Load transaction, From QR code.", { color: MUTED });
@@ -584,16 +586,21 @@ function scannedShare(text) {
   say(`Share ${s.index.toUpperCase()} added: ${n} of ${k}. Next one.`, GREEN);
 }
 
-// --- the public key for Electrum ----------------------------------------------
+// --- the public key ------------------------------------------------------------
 
 function showExport() {
   const key = state.keys.find((k) => k.master);
   if (!key) return showHome();
-  newPage("export", ui.symbols.upload + " Public key for Electrum");
+  newPage("export", ui.symbols.upload + " Public key");
   page.key = key;
-  paragraph(ui.screen, "Show this to Electrum once, to make the watch-only wallet whose transactions this device " +
-    "signs: File, New/Restore, Standard wallet, Use a master key, then the camera button.", { color: MUTED });
+  paragraph(ui.screen, "Show this once to the wallet that will make the transactions this device signs: a " +
+    "descriptor for a wallet that takes them; the zpub for Electrum (File, New/Restore, Standard wallet, Use a " +
+    "master key, then the camera button).", { color: MUTED });
   const opts = new ui.Container({ layout: "row-wrap", gap: 8, width: "100%" });
+  new ui.Dropdown(opts, {
+    options: EXPORT_FORMS.map((x) => x.name), selected: state.exportForm,
+    onChange: (ev) => { state.exportForm = ev.value; drawExport(); },
+  });
   new ui.Dropdown(opts, {
     grow: 1,
     options: wallet.EXPORTS.map((x) => x.name), selected: state.exportType,
@@ -612,11 +619,15 @@ function showExport() {
 function drawExport() {
   page.out.clear();
   const x = wallet.exportKey(page.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork);
+  const form = EXPORT_FORMS[state.exportForm];
+  const text = x[form.field];
   const size = Math.min(ui.height - 200, ui.width - 64, 420);
-  new ui.QRCode(page.out, { data: x.text, size, ecc: "M" });
-  new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}`, font: FONT.text });
-  new ui.Label(page.out, { text: x.text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
-  console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork})`);
+  new ui.QRCode(page.out, { data: text, size, ecc: "M" });
+  new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}; master fingerprint ${x.master}`, font: FONT.text,
+    width: "100%", overflow: "wrap", textAlign: "center" });
+  new ui.Label(page.out, { text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
+  console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork}), ` +
+    `${form.id}, ${text.length} characters`);
 }
 
 // --- scanning a transaction -------------------------------------------------------
