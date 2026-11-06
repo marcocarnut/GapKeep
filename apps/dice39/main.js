@@ -40,6 +40,7 @@ const state = {
   account: 0,         // the public key's account number
   passphrase: "",     // the BIP-39 passphrase ("" is none); never logged
   showPassphrase: false,
+  keyForm: 0,         // the key's QR code: 0 descriptor, 1 zpub (KEY_FORMS)
   split: null,        // the last codex32 split: { scheme, id, shares, checked }
 };
 
@@ -552,11 +553,18 @@ function showResults() {
 
 // --- the account's public key ----------------------------------------------
 //
-// BIP-84 account m/84'/0'/N' as a zpub (QR code and text), and the master
-// fingerprint, from the words and the passphrase (lib/pubkey.js). Shown for
-// account 0 and no passphrase at first; Enter in either box derives it
-// again. The output descriptor joins the zpub once the signer's library has
-// it (lib/pubkey.js, "descriptor"; docs/plans/BITCOIN.md, S1b).
+// BIP-84 account m/84'/0'/N' as an output descriptor or a zpub (for
+// Electrum): one QR code and its text, picked with a dropdown (two codes
+// side by side don't fit 640 px), and the master fingerprint, from the words
+// and the passphrase (lib/pubkey.js). Shown for account 0 and no passphrase
+// at first; Enter in either box derives it again.
+
+const KEY_FORMS = [
+  { name: "Descriptor", what: "Output descriptor: Sparrow, Bitcoin Core, and wallets that take one",
+    get: (k) => k.descriptor },
+  { name: "zpub (Electrum)", what: "zpub: Electrum, and wallets that take an extended public key",
+    get: (k) => k.zpub },
+];
 
 let keySeq = 0;
 
@@ -579,6 +587,11 @@ function publicKeySection() {
     text: "Show the passphrase", checked: state.showPassphrase,
     onChange: (ev) => { state.showPassphrase = ev.value; pass.password = !ev.value; },
   });
+  const formRow = new ui.Container(row2, { layout: "row", alignItems: "center", gap: 10 });
+  new ui.Label(formRow, { text: "QR code" });
+  const form = new ui.Dropdown(formRow, {
+    options: KEY_FORMS.map((f) => f.name), selected: state.keyForm, width: 200,
+  });
   const note = paragraph(ui.screen, "", { font: 12 });
   const out = new ui.Container({ layout: "row", gap: 16, width: "100%", alignItems: "start" });
 
@@ -590,6 +603,26 @@ function publicKeySection() {
   };
   account.onChange = stale;
   pass.onChange = stale;
+
+  let shown = null;   // the key on screen (public data only)
+  const show = (k) => {
+    out.clear();
+    const f = KEY_FORMS[state.keyForm];
+    const text = f.get(k);
+    const size = Math.min(260, Math.floor((ui.width - 40) * 0.4));
+    new ui.QRCode(out, { size, data: text, ecc: "M" });
+    const side = new ui.Container(out, { layout: "column", gap: 6, grow: 1 });
+    new ui.Label(side, { text: `Master fingerprint: ${k.fingerprint}`, font: 18, width: "100%" });
+    new ui.Label(side, { text: `Account ${k.path}, native segwit`, font: 14, color: MUTED, width: "100%" });
+    new ui.Label(side, { text: f.what, font: 12, color: MUTED, width: "100%" });
+    new ui.Label(side, { text, font: 14, width: "100%" });
+    // lengths only: the key identifies the wallet
+    console.log(`dice39: key QR: ${state.keyForm === 0 ? "descriptor" : "zpub"} of ${text.length} characters`);
+  };
+  form.onChange = (ev) => {
+    state.keyForm = ev.value;
+    if (shown) show(shown);   // if stale, it stays dimmed
+  };
 
   const derive = async () => {
     const text = account.text.trim();
@@ -604,6 +637,7 @@ function publicKeySection() {
     const seq = ++keySeq;
     out.clear();
     out.opacity = 1;
+    shown = null;
     note.set({ text: "Working: the BIP-39 seed takes 2048 rounds of PBKDF2...", color: MUTED });
     await new Promise((resolve) => setTimeout(resolve, 30));   // draw that first
     if (seq !== keySeq || !out.alive || !state.result) return;
@@ -614,19 +648,15 @@ function publicKeySection() {
       note.set({ text: ui.symbols.close + " " + (e && e.message ? e.message : e), color: RED });
       return;
     }
-    const size = Math.min(260, Math.floor((ui.width - 40) * 0.4));
-    new ui.QRCode(out, { size, data: k.zpub, ecc: "M" });
-    const side = new ui.Container(out, { layout: "column", gap: 6, grow: 1 });
-    new ui.Label(side, { text: `Master fingerprint: ${k.fingerprint}`, font: 18, width: "100%" });
-    new ui.Label(side, { text: `Account ${k.path}, native segwit`, font: 14, color: MUTED, width: "100%" });
-    new ui.Label(side, { text: k.zpub, font: 14, width: "100%" });
-    // (the descriptor goes here, under the zpub, when k.descriptor is there)
+    shown = k;
+    show(k);
     note.set({
       text: state.passphrase ? S.pubkeyPassphrase([...state.passphrase].length) : S.pubkeyNoPassphrase,
       color: state.passphrase ? AMBER : MUTED,
     });
     // lengths only: the key identifies the wallet
     console.log(`dice39: account key shown: zpub of ${k.zpub.length} characters, ` +
+      `descriptor of ${k.descriptor.length}, ` +
       `${state.passphrase ? "with a" : "no"} passphrase`);
   };
   account.onSubmit = derive;
@@ -644,6 +674,7 @@ function wipe() {
   state.account = 0;
   state.passphrase = "";
   state.showPassphrase = false;
+  state.keyForm = 0;
   state.split = null;
   sys.gc();
 }

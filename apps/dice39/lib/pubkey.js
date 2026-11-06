@@ -1,29 +1,28 @@
 // The account's public key, for a watch-only wallet: BIP-84 (native segwit)
-// account m/84'/0'/<account>', on mainnet, as a SLIP-132 zpub (Electrum's
-// form), with the master key's fingerprint.
+// account m/84'/0'/<account>', on mainnet: its output descriptor,
+// wpkh([fingerprint/84h/0h/<account>h]xpub.../<0;1>/*)#checksum
+// (docs/plans/BITCOIN.md, "Public key export"), and the same key as a
+// SLIP-132 zpub (Electrum's form), with the master key's fingerprint.
 //
-// BIP-39 and BIP-32 are the signer's (./bip39.js, ./bip32.js and what they
-// import are copies made by tools/share_libs.py; their home is apps/signer).
+// BIP-39, BIP-32 and descriptors are the signer's (./bip39.js, ./bip32.js,
+// ./descriptor.js and what they import are copies made by
+// tools/share_libs.py; their home is apps/signer).
 // The caller gives them the cryptography first: setCrypto(zg:crypto), or a
 // stand-in under Node.
 //
-// The output descriptor, wpkh([fingerprint/84h/0h/<account>h]xpub.../<0;1>/*)
-// with its checksum (docs/plans/BITCOIN.md, "Public key export"), comes from
-// the signer's library once it has it (milestone S1b): see `descriptor`
-// below.
-//
-// Nothing here logs. The zpub and the fingerprint identify the wallet: the
+// Nothing here logs. The keys and the fingerprint identify the wallet: the
 // caller logs their lengths at most.
 
 import { seedFromMnemonic } from "./bip39.js";
 import { HARDENED, fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub } from "./bip32.js";
+import { accountDescriptor } from "./descriptor.js";
 
 export const MAX_ACCOUNT = HARDENED - 1;
 
 // words: the phrase's words; passphrase: the BIP-39 passphrase ("" is
 // none); account: 0 to MAX_ACCOUNT. About 0.1 s on a Pi Zero (PBKDF2, 2048
 // rounds of HMAC-SHA512), and blocks while it runs.
-// -> { fingerprint (master, 8 hex digits), path, zpub, descriptor (null) }
+// -> { fingerprint (master, 8 hex digits), path, zpub, descriptor }
 export function accountKey(words, passphrase, account) {
   if (!Number.isInteger(account) || account < 0 || account > MAX_ACCOUNT) {
     throw new RangeError(`an account number is 0 to ${MAX_ACCOUNT}`);
@@ -40,21 +39,14 @@ export function accountKey(words, passphrase, account) {
   try {
     node = derive(master, [84 + HARDENED, 0 + HARDENED, account + HARDENED]);
     const pub = neuter(node);
-    return { fingerprint: fingerprintHex(master), path, zpub: serializeXpub(pub, "zpub"),
-      descriptor: descriptor() };
+    const fingerprint = fingerprintHex(master);
+    return { fingerprint, path, zpub: serializeXpub(pub, "zpub"),
+      descriptor: accountDescriptor({ script: "p2wpkh", fingerprint, network: "mainnet", account,
+        xpub: serializeXpub(pub, "xpub") }) };
   } finally {
     wipe(master);
     wipe(node);
   }
-}
-
-// The place for the account's output descriptor: null until the signer's
-// library exports descriptors (S1b). Then: import its function, build
-// wpkh([fingerprint/84h/0h/<account>h]xpub.../<0;1>/*)#checksum from the
-// master fingerprint and the neutered account node, and main.js shows it
-// next to the zpub (showPublicKey, "descriptor").
-function descriptor() {
-  return null;
 }
 
 // BIP-84's test vector: the all-"abandon" phrase, no passphrase, account 0.
@@ -64,4 +56,8 @@ export function pubkeySelfTest() {
   const want = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
   if (k.zpub !== want) throw new Error("BIP-84 vector: wrong zpub");
   if (k.fingerprint !== "73c5da0a") throw new Error("BIP-84 vector: wrong master fingerprint");
+  // the same key as a plain xpub, with BIP-380's checksum (computed by
+  // tests/signer/check_descriptor.py)
+  const descriptor = "wpkh([73c5da0a/84h/0h/0h]xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#qf45pmyh";
+  if (k.descriptor !== descriptor) throw new Error("BIP-84 vector: wrong descriptor");
 }
