@@ -111,10 +111,10 @@ CZgScanner::CZgScanner (void)
 	m_nPreviewWidth (0),
 	m_nPreviewHeight (0),
 	m_nNextDecodeAt (0),
+	m_nMissedSince (0),
 	m_nPending (0),
 	m_pLast (0),
 	m_nLastLength (0),
-	m_nLastSeenAt (0),
 	m_nCornersUntil (0),
 	m_bColourRead (FALSE),
 	m_bColourFailReported (FALSE),
@@ -211,6 +211,7 @@ boolean CZgScanner::Start (void)
 	m_nSideSum = 0;
 	m_nDecodeTicks = m_nMaxDecodeTicks = 0;
 	m_nPending = 0;
+	m_nMissedSince = 0;
 	m_bColourRead = m_bColourFailReported = FALSE;
 	m_nColourTries = 0;
 	m_nColourDecodes = m_nColourOK = 0;
@@ -353,6 +354,10 @@ unsigned CZgScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 	}
 	if (nFound == 0)
 	{
+		if (m_nMissedSince == 0)
+		{
+			m_nMissedSince = nDone;		// out of sight from about now
+		}
 		return 0;
 	}
 
@@ -371,8 +376,11 @@ unsigned CZgScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 
 	boolean bSame =    m_pLast != 0 && m_nLastLength == rCode.nLength
 			&& memcmp (m_pLast, rCode.pData, rCode.nLength) == 0;
-	boolean bReport = !bSame || nDone - m_nLastSeenAt > ForgetTicks;
-	m_nLastSeenAt = nDone;
+	// Again only if it was out of sight long enough: a decode missed it, that
+	// long ago. Not merely long since the last decode, which a slow colour
+	// layer (seconds for a large code) makes long too.
+	boolean bReport = !bSame || (m_nMissedSince != 0 && nDone - m_nMissedSince > ForgetTicks);
+	m_nMissedSince = 0;
 
 	if (!bSame)
 	{

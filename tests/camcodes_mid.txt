@@ -1,0 +1,31 @@
+# Needs a test build, and the rig with a Pi Camera Module v2.1 (docs/RIG.md).
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line (neither QEMU nor the simulator has a Pi Camera).
+# tests/camcodes.txt for large codes: the camera's "mid" mode (the centre
+# 1640x1232 photosites, not binned: 820x616 frames at the default field's
+# detail, docs/camera/IMPLEMENTATION.md), forced over the serial line. The
+# colour layer's result is logged, not checked; raw frames are kept.
+expect Keyboard attached 60
+expect launcher ready 60
+send #experimental on
+expect experimental features on 5
+send #camera pi
+expect picamera: IMX219 found \(model 0219\) 10
+expect camera: pi 5
+send #camera mode mid
+expect pi mode mid 5
+tile hello
+wait 2
+key meta_l
+expect launcher ready: .*colorqr 10
+tile colorqr
+expect colorqr ready
+expect picamera: streaming 1640x1232 RAW8 \(mid\) 10
+# a large code takes seconds to decode: let it try a few times
+wait 15
+serialraw 01-mid
+serialshot 01-mid
+wait 1
+send #camera mode auto
+key meta_l
+expect picamera: stopped: \d+ frames started 10
