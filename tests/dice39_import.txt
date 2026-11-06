@@ -1,0 +1,111 @@
+# dice39: "I already have a seed phrase". All 12 words typed; a bad checksum
+# is refused as a likely typo, never corrected; fixed, the phrase is used
+# as typed. Then the account's public key: BIP-84's test vector (account 0,
+# no passphrase), then account 1 with a passphrase; the zpub QR codes are
+# decoded from the screenshots and checked by tests/dice39/check_zpub.py.
+# Then a codex32 split, and a share's QR code, shown directly.
+# The phrase is BIP-39's all-"abandon" test vector, never a real seed.
+expect Keyboard attached 60
+expect launcher ready 60
+tile dice39
+expect dice39 selftest: \d+ passed, 0 failed 60
+wait 1
+# the length: Shift+Tab from "Enter my dice words" to the dropdown; 12 is last
+key shift-tab
+key down
+key down
+key down
+key down
+key ret
+key tab
+key tab
+key ret
+wait 1
+shot 10-import-start
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+expect dice39: import check: checksum mismatch \(12 words\) 10
+wait 1
+shot 11-import-bad-checksum
+# back to box 12: "about" passes
+key shift-tab
+key backspace backspace backspace backspace backspace backspace backspace
+type about
+key ret
+expect dice39: import check: checksum ok \(12 words\) 10
+wait 0.5
+key ret
+expect dice39: imported a 12-word phrase 10
+expect dice39: verbatim check ok 10
+expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+wait 1
+shot 12a-results
+# Tab and back to "QR codes": the page scrolls down to the key above it
+key tab
+key shift-tab
+wait 1
+shot 12-zpub
+# Shift+Tab to the account box (Show, Update, passphrase, account): account
+# 1, and a passphrase
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key backspace
+type 1
+wait 0.5
+shot 12b-changed
+key tab
+type TREZOR
+key ret
+expect dice39: account key shown: zpub of 111 characters, with a passphrase 10
+key tab
+key tab
+key tab
+wait 1
+shot 13-zpub-account1-pass
+# "Split into shares": scheme focused; Tab, Tab to Split
+key tab
+key ret
+wait 1
+key tab
+key tab
+key ret
+expect dice39: split 2 of 3, self-check 3 subsets 10
+wait 1
+shot 14-split
+# Tab to share 1's QR button: the code is shown at once, no dialog
+key tab
+key tab
+wait 0.5
+shot 14b-split-focus
+key ret
+expect dice39: share QR 29x29 5
+wait 1
+shot 15-share-qr
+# Done: back to the same shares, share 1's button focused
+key ret
+wait 1
+shot 16-split-again

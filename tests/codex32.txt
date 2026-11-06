@@ -91,12 +91,12 @@ key tab tab
 key ret
 expect codex32: cleared 5
 
-# 5. A 512-bit secret is valid BIP-93, but no 12- or 24-word phrase:
+# 5. A 512-bit secret is valid BIP-93, but no 12- to 24-word phrase:
 # refused, as on the page
 type MS100C8VSM32ZXFGUHPCHTLUPZRY9X8GF2TVDW0S3JN54KHCE6MUA7LQPZYGSFJD6AN074RXVCEMLH8WU3TK925ACDEFGHJKLMNPQRSTUVWXY06FHPV80UNDVARHRAK
 key ret
 # (QEMU: each key revalidates the share; 127 of them take it about 30 s)
-expect codex32: recovered 64 bytes, not a 12- or 24-word phrase: refused 60
+expect codex32: recovered 64 bytes, not a 12-, 15-, 18- or 24-word phrase: refused 60
 wait 0.5
 shot 09-wrong-size
 # Tab to Clear (one box: Recover, Scan, Clear)

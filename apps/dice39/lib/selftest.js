@@ -2,7 +2,8 @@
 // dice39 logic. Runs in the app at startup (on zerogap's native SHA-256)
 // and on the development machine under Node (tests/dice39/run_node.mjs).
 //
-// Needs a global `crypto` with subtle.digest and getRandomValues.
+// Needs a global `crypto` with subtle.digest and getRandomValues, and
+// setCrypto() done (./crypto.js) for the public key.
 
 import { BIP39_WORDS } from "../vendor/wordlist.js";
 import { buildMnemonic, importMnemonic, PHRASE_SIZES } from "../vendor/bip39core.js";
@@ -12,6 +13,7 @@ import {
   seedQrDigits, TABLE_WORDS, REROLL_CELLS,
 } from "../vendor/dice.js";
 import { entropyBitsTarget, newPad, addPadSample } from "./entropypad.js";
+import { pubkeySelfTest } from "./pubkey.js";
 
 // Hand the CPU back to the UI between steps. On the Pi Zero the whole test
 // takes about two seconds of QuickJS; run in one go it would hold the app's
@@ -44,6 +46,17 @@ const BIP39_VECTORS = [
    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo vote"],
   ["9e885d952ad362caeb4efe34a8e91bd2",
    "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic"],
+  // 18 words (python-mnemonic's vectors) and 15 (the same pattern)
+  ["000000000000000000000000000000000000000000000000",
+   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon " +
+   "abandon abandon abandon abandon abandon agent"],
+  ["7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth " +
+   "useful legal will"],
+  ["7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "legal winner thank year wave sausage worth useful legal winner thank year wave sausage wise"],
+  ["ffffffffffffffffffffffffffffffffffffffff",
+   "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrist"],
   ["f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
    "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing " +
    "screen patrol group space point ten exist slush involve unfold"],
@@ -102,7 +115,7 @@ export async function runDice39SelfTest() {
   });
 
   await test("buildMnemonic", async () => {
-    for (const total of [12, 24]) {
+    for (const total of [12, 15, 18, 24]) {
       const spec = PHRASE_SIZES[total];
       for (let n = spec.minUser; n <= spec.maxUser; n++) {
         await yieldToUI();
@@ -200,6 +213,8 @@ export async function runDice39SelfTest() {
 
   await test("entropy pad accounting", () => {
     eq(entropyBitsTarget(PHRASE_SIZES[24]), 128, "target at 24 words");
+    eq(entropyBitsTarget(PHRASE_SIZES[18]), 96, "target at 18 words");
+    eq(entropyBitsTarget(PHRASE_SIZES[15]), 96, "target at 15 words");
     eq(entropyBitsTarget(PHRASE_SIZES[12]), 64, "target at 12 words");
     const pad = newPad();
     const at = (x, y, time) => ({ pointer: true, x, y, time });
@@ -214,6 +229,8 @@ export async function runDice39SelfTest() {
     eq(pad.samples.length, 3, "accepted samples");
     eq(pad.samples[2].x, -1, "key press has no position");
   });
+
+  await test("BIP-84 account key (zpub, master fingerprint)", () => pubkeySelfTest());
 
   return { passed, failed };
 }

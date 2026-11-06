@@ -65,6 +65,14 @@ if [ -f "$OUT/dice39/07-words.png" ]; then
 	fi
 fi
 
+if [ -f "$OUT/dice39_import/12-zpub.png" ]; then
+	if python3 tests/dice39/check_zpub.py "$OUT/dice39_import" > "$OUT/dice39_zpub.log" 2>&1; then
+		echo "PASS  sim:dice39_zpub"
+	else
+		echo "FAIL  sim:dice39_zpub   (see $OUT/dice39_zpub.log)"; FAILED=1
+	fi
+fi
+
 # the API description (docs/api/zerogap-api.yaml) against the real runtime
 if python3 tools/check_api.py sim/build/zgsim-test > "$OUT/check_api.log" 2>&1; then
 	echo "PASS  sim:check_api"

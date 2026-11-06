@@ -9,8 +9,10 @@ export const S = {
     "second pair = row. If the cell says REROLL, roll the dice again on this same table; do not re-flip the coin.",
   order: "Read each pair left to right, where the dice land, never smallest first: column 3-5 means first die 3, " +
     "second die 5; 5-3 is a different column.",
-  lenNote: "24 words carry 256 bits of entropy and 8 checksum bits; 12 words carry 128 and 4. Both are far beyond " +
-    "anything brute-forceable. Switching length clears the boxes: the same words mean a different wallet at each length.",
+  lenNote: "24 words carry 256 bits of entropy and 8 checksum bits; 18 words carry 192 and 6, 15 words 160 and 5, " +
+    "and 12 words 128 and 4. All four are far beyond anything brute-forceable, and 12 is what many hardware wallets " +
+    "show by default: pick a shorter one if you want less to write down and check by hand. The same words mean a " +
+    "different wallet at each length.",
   entryHelp: "Type each word, or its dice code instead: a3526 or b3526 (table, then the four dice). " +
     "Just 3526 offers both tables' words to pick from. Enter moves to the next box; Enter on an empty box " +
     "goes on to the entropy pad below.",
@@ -40,6 +42,37 @@ export const S = {
     `5-3 onto 3-5: fifteen of the thirty-six columns become unreachable and the rest stop being equally likely, ` +
     `which costs roughly a bit and a half per word. The phrase is valid, so nothing is broken, but if you sorted ` +
     `the dice, start over and read each pair in the order it fell.`],
+
+  // a phrase you already have (dice39's import mode, a start of its own here)
+  importIntro: (t) => `Type all ${t} words of the seed phrase you already have, in order. This splits an existing ` +
+    "key: nothing is generated and no device entropy is mixed in. The words are checked and used exactly as they " +
+    "are, to make codex32 shares and show the account's public key. (The length is chosen on the start page.)",
+  importNeedAll: (t, n) => `All ${t} boxes are needed here: ${n} filled so far.`,
+  importChecksumOk: (t) => `${t} words, checksum valid: a well-formed BIP-39 phrase.`,
+  importChecksumBad: (cs) => "Checksum does not match: probably a typo, a wrong word, or two words swapped. " +
+    "Nothing is corrected here: check the phrase against your backup. (Roughly 1 wrong phrase in " +
+    `${2 ** cs} passes this test anyway, as this phrase carries ${cs} checksum bits, so a tick is not proof ` +
+    "you typed the right one.)",
+  importPattern: (t) => [
+    `These ${t} words are in wordlist order, or repeat a single word.`,
+    "Phrases shaped like that are published examples, not private ones: every one of them is watched, and " +
+    "anything sent to such an address is taken within seconds. Fine if you are trying this out. If this is a " +
+    "phrase you actually hold funds on, it is not yours alone and no amount of splitting will make it so."],
+  summaryImport: (t, ent) => `All ${t} words are yours, used exactly as typed: ${ent} bits, none of it from this ` +
+    "device. Its checksum was verified, not rewritten.",
+
+  // the account's public key
+  pubkeyHeading: "Public key, for a watch-only wallet",
+  pubkeyBody: "The native segwit account (BIP-84) on Bitcoin's main network, as a zpub: give it to Electrum or " +
+    "another wallet that watches an account, to see its balance and receive addresses. It cannot spend. " +
+    "It depends on the BIP-39 passphrase as much as on the words: each passphrase is a different wallet.",
+  pubkeyNoPassphrase: "No passphrase: this is the key of the words alone. If you use a BIP-39 passphrase with " +
+    "them, type it above and press Enter.",
+  pubkeyPassphrase: (n) => `With the passphrase typed above (${n} character${n === 1 ? "" : "s"}). A typo in it ` +
+    "gives another wallet, with no error: check the master fingerprint where you use it.",
+
+  shareQrWarning: "A share's QR code can be read by any camera that sees this screen. One share alone reveals " +
+    "nothing, but enough of them are your seed: scan it live, and keep no photo of it.",
 
   qrWarning: "This shows your whole seed as a code that any camera pointed at this screen can read. " +
     "Make sure no camera, window or person can see the screen, and only scan it with the wallet you mean to use.",

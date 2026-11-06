@@ -9,7 +9,7 @@ import * as sys from "zg:sys";
 import * as zgcrypto from "zg:crypto";
 import "./lib/cryptoshim.js";
 import { BIP39_WORDS } from "./vendor/wordlist.js";
-import { buildMnemonic, PHRASE_SIZES, concatBytes, sha256 } from "./vendor/bip39core.js";
+import { buildMnemonic, importMnemonic, PHRASE_SIZES, concatBytes, sha256 } from "./vendor/bip39core.js";
 import { CODEX32 } from "./vendor/codex32.js";
 import {
   parseDiceCode, isPartialDiceCode, diceWordFor, sortedPairsSuspected,
@@ -18,17 +18,29 @@ import {
 import { runDice39SelfTest } from "./lib/selftest.js";
 import { entropyBitsTarget, newPad, addPadSample } from "./lib/entropypad.js";
 import { S } from "./lib/strings.js";
+import { setCrypto } from "./lib/crypto.js";
+import { accountKey, MAX_ACCOUNT } from "./lib/pubkey.js";
+
+setCrypto(zgcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
 
 const GREEN = "#66bb6a", AMBER = "#ffb300", RED = "#ef5350", MUTED = "#8a9199";
 const WORDS = new Set(BIP39_WORDS);
 
+// Phrase lengths, in dice39's order
+const SIZES = [24, 18, 15, 12];
+
 const state = {
   total: 24,          // phrase length
+  mode: "dice",       // "dice": dice words plus the device's; "import": a phrase you already have
   fields: [],         // word entry boxes
   samples: [],        // key timings, mixed into the device entropy
   pad: null,          // entropy pad: { samples, bits, last, lastTime }
   result: null,       // buildMnemonic output + extras
   selftest: null,     // { passed, failed }
+  account: 0,         // the public key's account number
+  passphrase: "",     // the BIP-39 passphrase ("" is none); never logged
+  showPassphrase: false,
+  split: null,        // the last codex32 split: { scheme, id, shares, checked }
 };
 
 // --- entropy from key timing (additive; the hardware RNG is the floor) ---
@@ -129,11 +141,11 @@ function showStart() {
   const row = new ui.Container({ layout: "row", alignItems: "center", gap: 12 });
   new ui.Label(row, { text: "Phrase length" });
   const len = new ui.Dropdown(row, {
-    options: ["24 words (recommended)", "12 words"],
-    selected: state.total === 24 ? 0 : 1,
+    options: SIZES.map((t) => (t === 24 ? "24 words (recommended)" : `${t} words`)),
+    selected: SIZES.indexOf(state.total),
     width: 300,
     onChange: (ev) => {
-      state.total = ev.value === 0 ? 24 : 12;
+      state.total = SIZES[ev.value];
     },
   });
   paragraph(ui.screen, S.lenNote, { color: MUTED, font: 12 });
@@ -143,16 +155,17 @@ function showStart() {
     text: ui.symbols.right + "  Enter my dice words",
     onClick: () => showEntry(),
   });
+  const own = new ui.Button(buttons, { text: "I already have a seed phrase", onClick: () => showImport() });
   new ui.Button(buttons, { text: "About", onClick: showAbout });
 
-  // No phrase is made before the self-test has passed: Enter stays disabled
-  // until it has, and the page is redrawn when it finishes.
+  // Nothing is made or split before the self-test has passed: the buttons
+  // stay disabled until it has, and the page is redrawn when it finishes.
   const st = state.selftest;
-  start.disabled = !st || st.failed.length > 0;
+  start.disabled = own.disabled = !st || st.failed.length > 0;
   if (!st) {
     paragraph(ui.screen, "Self-test running...", { color: MUTED, font: 12 });
   } else if (st.failed.length === 0) {
-    paragraph(ui.screen, `${ui.symbols.ok} Self-test passed (${st.passed} checks: BIP-39 and codex32 test vectors, ` +
+    paragraph(ui.screen, `${ui.symbols.ok} Self-test passed (${st.passed} checks: BIP-39, BIP-84 and codex32 test vectors, ` +
       "dice tables, round trips).", { color: GREEN, font: 12 });
   } else {
     paragraph(ui.screen, `${ui.symbols.close} Self-test FAILED. Do not use this device to make a seed.\n` +
@@ -165,6 +178,7 @@ function showStart() {
 
 function showEntry() {
   const spec = PHRASE_SIZES[state.total];
+  state.mode = "dice";
   page(`Words 1 to ${spec.maxUser} of ${state.total}`);
   paragraph(ui.screen, S.entryHelp, { color: MUTED });
 
@@ -178,7 +192,6 @@ function showEntry() {
   state.refresh = null;   // the previous page's, if any: its widgets are gone
   state.pad = newPad();
   const pad = entropyPad(ui.screen, target, () => state.refresh && state.refresh());
-  state.padWidget = pad;
   const buttons = buttonRow(ui.screen);
   const generate = new ui.Button(buttons, {
     text: ui.symbols.ok + "  Generate",
@@ -192,7 +205,7 @@ function showEntry() {
     },
   });
 
-  state.generateButton = generate;
+  state.next = () => (state.padFull() ? generate : pad);
   state.ready = () => {
     const n = countWords();
     return n >= spec.minUser && n <= spec.maxUser;
@@ -214,6 +227,88 @@ function showEntry() {
   state.fields[0].ta.focus();
 }
 
+// --- a phrase you already have -------------------------------------------
+//
+// All the words typed, checked by dice39's importMnemonic: a bad checksum is
+// refused (most likely a typo), never corrected. Nothing is generated and
+// there is no entropy pad: this splits an existing key.
+
+function showImport() {
+  const T = state.total;
+  state.mode = "import";
+  state.refresh = null;   // the previous page's, if any: its widgets are gone
+  page(`Your ${T}-word phrase`);
+  paragraph(ui.screen, S.importIntro(T), { color: MUTED });
+
+  const grid = new ui.Container({ layout: "row-wrap", gap: 10, width: "100%" });
+  const cellWidth = Math.max(180, Math.floor((ui.width - 40 - 20) / 3));
+  state.fields = [];
+  for (let i = 0; i < T; i++) state.fields.push(makeField(grid, i, cellWidth));
+
+  const status = new ui.Label({ width: "100%", font: 14 });
+  const buttons = buttonRow(ui.screen);
+  const use = new ui.Button(buttons, {
+    text: ui.symbols.ok + "  Use the phrase I typed",
+    disabled: true,
+    onClick: () => onUseImport(status),
+  });
+  new ui.Button(buttons, {
+    text: "Back",
+    onClick: async () => {
+      if (countWords() === 0 || (await confirm("Discard the words you entered?", "Discard"))) showStart();
+    },
+  });
+
+  state.next = () => use;
+  state.ready = () => countWords() === T;
+  let seq = 0, logged = null;
+  const log = (what) => {   // once per change: the outcome only, never a word
+    if (what !== logged) console.log(`dice39: import check: ${what} (${T} words)`);
+    logged = what;
+  };
+  state.refresh = () => {
+    use.disabled = true;
+    const n = countWords();
+    const s = ++seq;
+    if (n < T) {
+      logged = null;
+      return status.set({ text: S.importNeedAll(T, n), color: MUTED });
+    }
+    status.set({ text: "Checking...", color: MUTED });
+    importMnemonic(BIP39_WORDS, state.fields.map((f) => f.word)).then((r) => {
+      r.entropyBytes.fill(0);
+      if (s !== seq || !status.alive) return;
+      status.set({ text: ui.symbols.ok + " " + S.importChecksumOk(T), color: GREEN });
+      use.disabled = false;
+      log("checksum ok");
+    }, (e) => {
+      if (s !== seq || !status.alive) return;
+      const typo = e && e.code === "CHECKSUM";
+      status.set({
+        text: ui.symbols.close + " " + (typo ? S.importChecksumBad(PHRASE_SIZES[T].checksumBits) : e.message),
+        color: RED,
+      });
+      log(typo ? "checksum mismatch" : "refused");
+    });
+  };
+  state.refresh();
+  state.fields[0].ta.focus();
+}
+
+async function onUseImport(status) {
+  const words = state.fields.map((f) => f.word);
+  try {
+    const r = await importMnemonic(BIP39_WORDS, words);
+    r.typed = words;
+    r.sorted = null;
+    state.result = r;
+    console.log(`dice39: imported a ${words.length}-word phrase`);
+    showResults();
+  } catch (e) {
+    if (status.alive) status.set({ text: ui.symbols.close + " " + e.message, color: RED });
+  }
+}
+
 function countWords() {
   let n = 0;
   while (n < state.fields.length && state.fields[n].word) n++;
@@ -228,26 +323,24 @@ function makeField(parent, i, width) {
     oneLine: true,
     grow: 1,
     maxLength: 14,
-    accept: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -._,",
+    // dice codes only for words that come off the dice
+    accept: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ " +
+      (state.mode === "dice" ? "0123456789-._," : ""),
   });
   const note = new ui.Container(cell, { layout: "row", gap: 6, width: "100%", minHeight: 20, alignItems: "center" });
   const f = { i, ta, note, word: null, dice: null };
   ta.onChange = () => updateField(f);
   ta.onSubmit = () => {
-    // Enter on an empty box once there are enough words: go on to the
-    // entropy pad, or to Generate once the pad is full
-    if (!normalize(ta.text) && state.ready && state.ready()) return nextAfterWords().focus();
+    // Enter on an empty box once there are enough words: go on to what
+    // follows them (the entropy pad, Generate once the pad is full, or Use)
+    if (!normalize(ta.text) && state.ready && state.ready()) return state.next().focus();
     complete(f);
     const next = state.fields[i + 1];
     if (next) next.ta.focus();
-    else if (state.generateButton) nextAfterWords().focus();
+    else state.next().focus();
   };
   ta.onBlur = () => complete(f);
   return f;
-}
-
-function nextAfterWords() {
-  return state.padFull() ? state.generateButton : state.padWidget;
 }
 
 function setNote(f, text, color) {
@@ -293,6 +386,8 @@ function updateField(f) {
   } else if (WORDS.has(raw)) {
     f.word = raw;
     setNote(f, ui.symbols.ok, GREEN);
+  } else if (state.mode === "import") {
+    completionNote(f, raw);
   } else {
     const code = parseDiceCode(raw);
     if (code && code.parity !== null) {
@@ -309,13 +404,17 @@ function updateField(f) {
     } else if (isPartialDiceCode(raw) && /\d/.test(raw)) {
       setNote(f, "dice code: table letter (optional), then four dice");
     } else {
-      const c = completions(raw);
-      if (c.length === 1) setNote(f, `Enter: ${c[0]}`);
-      else if (c.length > 1) setNote(f, c.length > 3 ? `${c.slice(0, 3).join(", ")}...` : c.join(", "));
-      else setNote(f, ui.symbols.close + " not a BIP-39 word", RED);
+      completionNote(f, raw);
     }
   }
   state.refresh();
+}
+
+function completionNote(f, raw) {
+  const c = completions(raw);
+  if (c.length === 1) setNote(f, `Enter: ${c[0]}`);
+  else if (c.length > 1) setNote(f, c.length > 3 ? `${c.slice(0, 3).join(", ")}...` : c.join(", "));
+  else setNote(f, ui.symbols.close + " not a BIP-39 word", RED);
 }
 
 // Four dice name one cell on each table; the coin decides which. Never
@@ -372,11 +471,15 @@ function showResults() {
   const T = r.finalWords.length;
   const n = r.typed.length;
   const spec = PHRASE_SIZES[T];
-  page(`Your ${T}-word phrase`);
+  const head = page(`Your ${T}-word phrase`);
 
   const legend = new ui.Container({ layout: "row", gap: 16 });
-  new ui.Label(legend, { text: "from you (dice), verbatim", color: GREEN, font: 14 });
-  new ui.Label(legend, { text: "from this device", color: AMBER, font: 14 });
+  if (r.imported) {
+    new ui.Label(legend, { text: "yours, as typed", color: GREEN, font: 14 });
+  } else {
+    new ui.Label(legend, { text: "from you (dice), verbatim", color: GREEN, font: 14 });
+    new ui.Label(legend, { text: "from this device", color: AMBER, font: 14 });
+  }
 
   const cols = ui.width >= 900 ? 4 : 3;
   const tileWidth = Math.floor((ui.width - 40 - (cols - 1) * 8) / cols);
@@ -390,37 +493,44 @@ function showResults() {
     new ui.Label(tile, { text: w, color: r.sourceTags[i] === "user" ? GREEN : AMBER, font: 18 });
   });
 
-  // warnings first: they are why someone might start over
-  if (r.patternSuspected === "identical") warning(ui.screen, S.patternIdentical(n));
-  else if (r.patternSuspected === "ordered")
-    warning(ui.screen, S.patternOrdered(n, r.patternDirection === "up" ? "ascending" : "descending"));
-  if (r.coinSkipSuspected && r.patternSuspected !== "identical")
-    warning(ui.screen, S.coinSkip(n, r.coinSkipTable, group(2 ** (n - 1)), 10 * n, 11 * n));
-  if (r.sorted)
-    warning(ui.screen, S.sortedPairs(n, r.sorted === "up" ? "lowest-first" : "highest-first",
-      group(Math.round((144 / 49) ** n))));
-
-  paragraph(ui.screen,
-    `Words 1 to ${n}: yours, used verbatim, ${r.userBits} bits. ` +
-    `Words ${n + 1} to ${T}: from this device, ${r.deviceBits} bits. ` +
-    `Total ${spec.entropyBits} bits of entropy plus a ${spec.checksumBits}-bit checksum in the last word, ` +
-    `which lets about 1 mistyped phrase in ${2 ** spec.checksumBits} through.`);
-  paragraph(ui.screen, S.deviceEntropy, { color: MUTED, font: 12 });
-
-  // proof that nothing typed was changed
-  const check = new ui.Panel({ width: "100%", layout: "column", gap: 2, padding: 10 });
-  new ui.Label(check, { text: "Your typed words reappear unchanged", font: 14 });
-  let allOk = true;
-  r.typed.forEach((typed, i) => {
-    const ok = r.finalWords[i] === typed;
-    allOk = allOk && ok;
-    new ui.Label(check, {
-      text: `${i + 1}. you typed "${typed}"  ${ui.symbols.right}  output "${r.finalWords[i]}"  ` +
-        (ok ? ui.symbols.ok : ui.symbols.close + " MISMATCH: do not use this, report a bug"),
-      color: ok ? GREEN : RED, font: 12, width: "100%",
+  // Every word typed must come back unchanged, in its place. dice39 shows
+  // the comparison word by word; here only a failure is shown, and loudly.
+  const verbatim = n <= T && r.typed.every((w, i) => r.finalWords[i] === w);
+  console.log("dice39: verbatim check " + (verbatim ? "ok" : "FAILED"));
+  if (!verbatim) {
+    const box = new ui.Panel({ width: "100%", layout: "column", padding: 10, borderColor: RED, borderWidth: 2 });
+    new ui.Label(box, {
+      text: ui.symbols.close + "  The words you typed did not all come back unchanged. Do not use this phrase; " +
+        "this is a bug, please report it.", color: RED, width: "100%",
     });
-  });
-  console.log("dice39: verbatim check " + (allOk ? "ok" : "FAILED"));
+  }
+
+  // warnings first: they are why someone might start over
+  if (r.imported) {
+    if (r.importPatternSuspected) warning(ui.screen, S.importPattern(T));
+  } else {
+    if (r.patternSuspected === "identical") warning(ui.screen, S.patternIdentical(n));
+    else if (r.patternSuspected === "ordered")
+      warning(ui.screen, S.patternOrdered(n, r.patternDirection === "up" ? "ascending" : "descending"));
+    if (r.coinSkipSuspected && r.patternSuspected !== "identical")
+      warning(ui.screen, S.coinSkip(n, r.coinSkipTable, group(2 ** (n - 1)), 10 * n, 11 * n));
+    if (r.sorted)
+      warning(ui.screen, S.sortedPairs(n, r.sorted === "up" ? "lowest-first" : "highest-first",
+        group(Math.round((144 / 49) ** n))));
+  }
+
+  if (r.imported) {
+    paragraph(ui.screen, S.summaryImport(T, spec.entropyBits));
+  } else {
+    paragraph(ui.screen,
+      `Words 1 to ${n}: yours, used verbatim, ${r.userBits} bits. ` +
+      `Words ${n + 1} to ${T}: from this device, ${r.deviceBits} bits. ` +
+      `Total ${spec.entropyBits} bits of entropy plus a ${spec.checksumBits}-bit checksum in the last word, ` +
+      `which lets about 1 mistyped phrase in ${2 ** spec.checksumBits} through.`);
+    paragraph(ui.screen, S.deviceEntropy, { color: MUTED, font: 12 });
+  }
+
+  publicKeySection();
 
   const buttons = buttonRow(ui.screen);
   const first = new ui.Button(buttons, { text: "QR codes", onClick: showQR });
@@ -435,6 +545,94 @@ function showResults() {
     },
   });
   first.focus();
+  // the words first, though the focus is further down (after the focus has
+  // scrolled the page: a page scrolled down before stays so otherwise)
+  setTimeout(() => head.alive && head.scrollIntoView(), 0);
+}
+
+// --- the account's public key ----------------------------------------------
+//
+// BIP-84 account m/84'/0'/N' as a zpub (QR code and text), and the master
+// fingerprint, from the words and the passphrase (lib/pubkey.js). Shown for
+// account 0 and no passphrase at first; Enter in either box derives it
+// again. The output descriptor joins the zpub once the signer's library has
+// it (lib/pubkey.js, "descriptor"; docs/plans/BITCOIN.md, S1b).
+
+let keySeq = 0;
+
+function publicKeySection() {
+  new ui.Label({ text: S.pubkeyHeading, font: 18 });
+  paragraph(ui.screen, S.pubkeyBody, { color: MUTED });
+  const row = new ui.Container({ layout: "row-wrap", alignItems: "center", gap: 10, width: "100%" });
+  new ui.Label(row, { text: "Account" });
+  const account = new ui.TextArea(row, {
+    oneLine: true, width: 130, maxLength: 10, accept: "0123456789", text: String(state.account),
+  });
+  new ui.Label(row, { text: "Passphrase" });
+  const pass = new ui.TextArea(row, {
+    oneLine: true, grow: 1, maxLength: 200, text: state.passphrase, password: !state.showPassphrase,
+    placeholder: "none",
+  });
+  const row2 = new ui.Container({ layout: "row-wrap", alignItems: "center", gap: 16, width: "100%" });
+  const update = new ui.Button(row2, { text: ui.symbols.refresh + "  Update", padding: [6, 14] });
+  new ui.Checkbox(row2, {
+    text: "Show the passphrase", checked: state.showPassphrase,
+    onChange: (ev) => { state.showPassphrase = ev.value; pass.password = !ev.value; },
+  });
+  const note = paragraph(ui.screen, "", { font: 12 });
+  const out = new ui.Container({ layout: "row", gap: 16, width: "100%", alignItems: "start" });
+
+  // what is on screen is for the values it was derived from: say so when
+  // the boxes no longer match
+  const stale = () => {
+    out.opacity = 0.3;
+    note.set({ text: "Changed: press Enter or Update to derive the key for these.", color: AMBER });
+  };
+  account.onChange = stale;
+  pass.onChange = stale;
+
+  const derive = async () => {
+    const text = account.text.trim();
+    const number = text === "" ? NaN : Number(text);
+    if (!Number.isInteger(number) || number > MAX_ACCOUNT) {
+      out.clear();
+      note.set({ text: `${ui.symbols.close} An account number is 0 to ${MAX_ACCOUNT}.`, color: RED });
+      return;
+    }
+    state.account = number;
+    state.passphrase = pass.text;
+    const seq = ++keySeq;
+    out.clear();
+    out.opacity = 1;
+    note.set({ text: "Working: the BIP-39 seed takes 2048 rounds of PBKDF2...", color: MUTED });
+    await new Promise((resolve) => setTimeout(resolve, 30));   // draw that first
+    if (seq !== keySeq || !out.alive || !state.result) return;
+    let k;
+    try {
+      k = accountKey(state.result.finalWords, state.passphrase, number);
+    } catch (e) {
+      note.set({ text: ui.symbols.close + " " + (e && e.message ? e.message : e), color: RED });
+      return;
+    }
+    const size = Math.min(260, Math.floor((ui.width - 40) * 0.4));
+    new ui.QRCode(out, { size, data: k.zpub, ecc: "M" });
+    const side = new ui.Container(out, { layout: "column", gap: 6, grow: 1 });
+    new ui.Label(side, { text: `Master fingerprint: ${k.fingerprint}`, font: 18, width: "100%" });
+    new ui.Label(side, { text: `Account ${k.path}, native segwit`, font: 14, color: MUTED, width: "100%" });
+    new ui.Label(side, { text: k.zpub, font: 14, width: "100%" });
+    // (the descriptor goes here, under the zpub, when k.descriptor is there)
+    note.set({
+      text: state.passphrase ? S.pubkeyPassphrase([...state.passphrase].length) : S.pubkeyNoPassphrase,
+      color: state.passphrase ? AMBER : MUTED,
+    });
+    // lengths only: the key identifies the wallet
+    console.log(`dice39: account key shown: zpub of ${k.zpub.length} characters, ` +
+      `${state.passphrase ? "with a" : "no"} passphrase`);
+  };
+  account.onSubmit = derive;
+  pass.onSubmit = derive;
+  update.onClick = derive;
+  derive();
 }
 
 function wipe() {
@@ -443,6 +641,10 @@ function wipe() {
   state.fields = [];
   state.pad = null;
   state.samples = [];
+  state.account = 0;
+  state.passphrase = "";
+  state.showPassphrase = false;
+  state.split = null;
   sys.gc();
 }
 
@@ -488,37 +690,52 @@ function randomIdentifier() {
   return Array.from(zgcrypto.randomBytes(4), (b) => CODEX32.CX_CHARSET[b & 31]).join("");
 }
 
-function showSplit() {
+// The last split stays (state.split) while the phrase does: coming back
+// from a share's QR code shows the same shares, not a new split.
+function showSplit(focusShare) {
   page("Split into shares");
   warning(ui.screen, ["Shares hold your entropy, not a BIP-32 seed.", S.codex32Warning]);
 
+  const last = state.split;
   const row = new ui.Container({ layout: "row-wrap", gap: 12, alignItems: "center", width: "100%" });
   new ui.Label(row, { text: "Scheme" });
-  const scheme = new ui.Dropdown(row, { options: SCHEMES.map(([k, n]) => `${k} of ${n}`), width: 120 });
+  const scheme = new ui.Dropdown(row, {
+    options: SCHEMES.map(([k, n]) => `${k} of ${n}`), width: 120, selected: last ? last.scheme : 0,
+  });
   new ui.Label(row, { text: "Identifier" });
   const id = new ui.TextArea(row, {
-    oneLine: true, width: 100, maxLength: 4, text: randomIdentifier(),
+    oneLine: true, width: 100, maxLength: 4, text: last ? last.id : randomIdentifier(),
     accept: CODEX32.CX_CHARSET,
   });
   const out = new ui.Container({ layout: "column", gap: 6, width: "100%" });
   const buttons = buttonRow(ui.screen);
+
+  const shareButtons = [];
+  const list = (sp) => {
+    const [k, n] = SCHEMES[sp.scheme];
+    new ui.Label(out, {
+      text: `${k} of ${n} shares. Any ${k} recover the phrase; checked against ${sp.checked} combinations.`,
+      color: GREEN, font: 14, width: "100%",
+    });
+    sp.shares.forEach((share, i) => {
+      const line = new ui.Container(out, { layout: "row", gap: 8, alignItems: "center", width: "100%" });
+      shareButtons.push(new ui.Button(line, { text: "QR", padding: [4, 10], onClick: () => showShareQR(i) }));
+      new ui.Label(line, { text: share.toUpperCase(), font: 12, grow: 1, overflow: "wrap" });
+    });
+  };
+
   new ui.Button(buttons, {
     text: "Split",
     onClick: () => {
       out.clear();
+      shareButtons.length = 0;
+      state.split = null;
       const [k, n] = SCHEMES[scheme.selected];
       try {
         if (id.text.length !== 4) throw new Error("the identifier must be 4 characters");
         const split = CODEX32.cxSplit(state.result.entropyBytes, k, n, id.text);
-        new ui.Label(out, {
-          text: `${k} of ${n} shares. Any ${k} recover the phrase; checked against ${split.checked} combinations.`,
-          color: GREEN, font: 14, width: "100%",
-        });
-        split.shares.forEach((share, i) => {
-          const line = new ui.Container(out, { layout: "row", gap: 8, alignItems: "center", width: "100%" });
-          new ui.Button(line, { text: "QR", padding: [4, 10], onClick: () => showShareQR(share, i, k, n) });
-          new ui.Label(line, { text: share.toUpperCase(), font: 12, grow: 1, overflow: "wrap" });
-        });
+        state.split = { scheme: scheme.selected, id: id.text, shares: split.shares, checked: split.checked };
+        list(state.split);
         console.log(`dice39: split ${k} of ${n}, self-check ${split.checked} subsets`);
       } catch (e) {
         new ui.Label(out, { text: ui.symbols.close + " " + e.message, color: RED, width: "100%" });
@@ -526,22 +743,25 @@ function showSplit() {
     },
   });
   new ui.Button(buttons, { text: "Done", onClick: showResults });
-  scheme.focus();
+  if (last) list(last);
+  if (focusShare !== undefined && shareButtons[focusShare]) shareButtons[focusShare].focus();
+  else scheme.focus();
 }
 
-async function showShareQR(share, i, k, n) {
-  const back = await ui.alert(`Share ${i + 1} of ${n} (any ${k} recover the phrase).`, {
-    title: "Show this share as a QR code?",
-    buttons: ["Cancel", "Show"],
-  });
-  if (back !== 1) return;
-  page(`Share ${i + 1} of ${n}`);
-  const size = Math.min(ui.height - 140, ui.width - 40);
+// Straight to the code: a share alone reveals nothing. The page says what
+// it is, and the one warning.
+function showShareQR(i) {
+  const sp = state.split;
+  const [k, n] = SCHEMES[sp.scheme];
+  const share = sp.shares[i].toUpperCase();
+  page(`Share ${i + 1} of ${n}, any ${k} recover the phrase`);
+  const size = Math.min(ui.height - 200, ui.width - 40);
   // uppercase: canonical for codex32, and fits QR's compact alphanumeric mode
-  const qr = new ui.QRCode({ size, data: share.toUpperCase(), ecc: "M" });
-  new ui.Label({ text: share.toUpperCase(), font: 12, width: "100%" });
+  const qr = new ui.QRCode({ size, data: share, ecc: "M" });
+  new ui.Label({ text: share, font: 12, width: "100%" });
+  paragraph(ui.screen, ui.symbols.warning + " " + S.shareQrWarning, { color: AMBER, font: 12 });
   console.log(`dice39: share QR ${qr.modules}x${qr.modules}`);
-  new ui.Button({ text: "Done", onClick: showSplit }).focus();
+  new ui.Button({ text: "Done", onClick: () => showSplit(i) }).focus();
 }
 
 // --- about ----------------------------------------------------------------
@@ -550,7 +770,9 @@ function showAbout() {
   page("About");
   paragraph(ui.screen,
     "This is dice39 running on zerogap. You supply most of the words with dice and a coin; this device " +
-    "supplies the rest and the checksum, and shows you that every word you typed was kept as it was.");
+    "supplies the rest and the checksum, and checks that every word you typed was kept as it was. Or you " +
+    "type a phrase you already have, to split it into codex32 shares. Either way, it shows the account's " +
+    "public key for a watch-only wallet.");
   paragraph(ui.screen,
     "The algorithm is dice39's own JavaScript, copied byte for byte from bip39_generator.html by " +
     "tools/extract_dice39.py. Each copied file names the source file and its SHA-256, so it can be " +
@@ -558,7 +780,9 @@ function showAbout() {
   paragraph(ui.screen,
     "Different from the web page: there is no printing (print the dice tables from the web page on any " +
     "computer), no clipboard, and no network check, because this device has no network. The entropy pad " +
-    "also takes Space presses, for use without a mouse, and your key timing is mixed in too.", { color: MUTED });
+    "also takes Space presses, for use without a mouse, and your key timing is mixed in too. The public key " +
+    "(BIP-84, a zpub) is zerogap's, from the signer's BIP-39 and BIP-32 code: dice39's page has none.",
+    { color: MUTED });
   paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. zerogap ${sys.version.zerogap}, ` +
     `QuickJS ${sys.version.quickjs}, LVGL ${sys.version.lvgl}.`, { color: MUTED, font: 12 });
   new ui.Button({ text: "Back", onClick: showStart }).focus();

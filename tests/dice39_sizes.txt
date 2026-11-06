@@ -1,0 +1,137 @@
+# dice39: the other phrase lengths, 18, 15 and 12 words, each with the
+# fewest words the rules allow from the dice (9, 8 and 6) and the entropy
+# pad filled from the keyboard (96, 96 and 64 bits); Start over between them.
+# 24 words: tests/dice39.txt. A phrase you already have: tests/dice39_import.txt.
+expect Keyboard attached 60
+expect launcher ready 60
+tile dice39
+expect dice39 selftest: \d+ passed, 0 failed 60
+wait 1
+# 18 words: Shift+Tab to the length, then back to "Enter my dice words"
+key shift-tab
+key down
+key down
+key ret
+key tab
+key ret
+wait 1
+type legal
+key ret
+type winner
+key ret
+type thank
+key ret
+type year
+key ret
+type wave
+key ret
+type sausage
+key ret
+type worth
+key ret
+type useful
+key ret
+type zoo
+key ret
+# Enter on the empty box 10: on to the pad
+wait 0.5
+shot 18-a-entry
+key ret
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+expect dice39: entropy pad full: 32 samples, 96 bits 10
+key tab
+key ret
+expect dice39: generated a 18-word phrase, 99 bits from dice, 93 from the device 30
+expect dice39: verbatim check ok 10
+expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+wait 1
+shot 18-b-results
+# Start over: Tab, Tab from "QR codes", and Erase
+key tab
+key tab
+key ret
+wait 0.5
+key tab
+key ret
+wait 1
+# 15 words: Shift+Tab to the length, then back to "Enter my dice words"
+key shift-tab
+key down
+key down
+key ret
+key tab
+key ret
+wait 1
+type legal
+key ret
+type winner
+key ret
+type thank
+key ret
+type year
+key ret
+type wave
+key ret
+type sausage
+key ret
+type worth
+key ret
+type useful
+key ret
+# Enter on the empty box 9: on to the pad
+wait 0.5
+shot 15-a-entry
+key ret
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+expect dice39: entropy pad full: 32 samples, 96 bits 10
+key tab
+key ret
+expect dice39: generated a 15-word phrase, 88 bits from dice, 72 from the device 30
+expect dice39: verbatim check ok 10
+expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+wait 1
+shot 15-b-results
+# Start over: Tab, Tab from "QR codes", and Erase
+key tab
+key tab
+key ret
+wait 0.5
+key tab
+key ret
+wait 1
+# 12 words: Shift+Tab to the length, then back to "Enter my dice words"
+key shift-tab
+key down
+key down
+key ret
+key tab
+key ret
+wait 1
+type legal
+key ret
+type winner
+key ret
+type thank
+key ret
+type year
+key ret
+type wave
+key ret
+type sausage
+key ret
+# Enter on the empty box 7: on to the pad
+wait 0.5
+shot 12-a-entry
+key ret
+key spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc spc
+key spc spc spc spc spc spc
+expect dice39: entropy pad full: 22 samples, 66 bits 10
+key tab
+key ret
+expect dice39: generated a 12-word phrase, 66 bits from dice, 62 from the device 30
+expect dice39: verbatim check ok 10
+expect dice39: account key shown: zpub of 111 characters, no passphrase 10
+wait 1
+shot 12-b-results
