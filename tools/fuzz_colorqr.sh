@@ -3,7 +3,8 @@
 # Fuzzes the colour QR decoder (lib/colorqr) as the scanner's "qr-color"
 # detector calls it, after the real QR decoder (zxing-cpp, through
 # src/runtime/qrdecode.cpp), with AddressSanitizer and UBSan:
-# tests/fuzz/fuzz_colorqr.cpp, on the colour codes in tests/colorqr.
+# tests/fuzz/fuzz_colorqr.cpp, on the colour codes in tests/colorqr and
+# tests/fuzz/colorqr.
 #
 #   tools/fuzz_colorqr.sh [rounds] [seed]      (default 2000 rounds, seed 1)
 #
@@ -45,7 +46,9 @@ done
 $CXX $INC -I "$ROOT/lib/colorqr/include" -o "$OUT/fuzz_colorqr" "$ROOT/tests/fuzz/fuzz_colorqr.cpp" \
 	"$ROOT/src/runtime/qrdecode.cpp" $OBJS -lm
 FRAMES=
-for p in "$ROOT"/tests/colorqr/*.png; do
+# the test codes (versions 5 and 10), and a large one (version 30, 820x616:
+# colorqr's local grid correction starts at version 20)
+for p in "$ROOT"/tests/colorqr/*.png "$ROOT"/tests/fuzz/colorqr/*.png; do
 	f=$OUT/$(basename "$p" .png).ppm
 	python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).convert('RGB').save(sys.argv[2])" "$p" "$f"
 	FRAMES="$FRAMES $f"

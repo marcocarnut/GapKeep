@@ -62,6 +62,16 @@ specification: soft focus is untested.
   suits steady, in-focus setups with codes well above the limit.
 - Scaling the code on the screen (an image viewer at 67 % or 50 %) made no
   difference to the colours; whole-number zoom is tidy, not needed.
+- **Large codes** need the camera's whole height at full detail: its "mid"
+  mode (820x616 frames, not binned; test builds force it with `#camera mode
+  mid`, `tests/camcodes_mid.txt`). In it, a4.50 at rate 3/4 read at the
+  first try at about 3.3 pixels a module: version 20 (1,509 bytes in the
+  colours), 25 (2,218), 30 (3,060), 36 (4,257), and version 40 (5,204
+  bytes) at about 3.1, the code filling most of the frame. A large code
+  must be framed with care: one cut off at an edge isn't found. Decoding
+  takes about 0.9 s at version 20, 2.3 s at 36 and 3 s at 40 on a Pi Zero.
+  From version 20 the decoder corrects the grid locally (the lens bends it
+  by up to half a module at the corners).
 - A colour layer that can't be read costs more than one that can: about
   0.36 s a try on a Pi Zero for version 10, against 0.2-0.3 s.
 

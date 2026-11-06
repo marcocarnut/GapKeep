@@ -6,7 +6,7 @@ Used only by the scanner's experimental `"qr-color"` detector
 (`src/runtime/scanner.cpp`), which needs `experimental = yes` in the card's
 `zerogap.txt` (docs/EXPERIMENTAL.md).
 
-- From the colorqr research project (not published), commit `2da77df` (branch ra-early-stop):
+- From the colorqr research project (not published), commit `925f2d1` (branch local-grid):
   `c/include` and `c/src`, unchanged, and `FORMAT.md`. MIT (LICENSE).
 - Update: copy those again from the new commit, change the commit here, run
   `tools/fuzz_colorqr.sh` and `tools/run_sim_tests.sh`.

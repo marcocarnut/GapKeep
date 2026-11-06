@@ -29,6 +29,8 @@ typedef enum {
 #define CQ_FLAG_LINEAR 1u
 /* Always run the full decode, even if the symbol looks plain. For testing. */
 #define CQ_FLAG_NO_FAST_PATH 2u
+/* Skip the local grid correction of large symbols. For testing. */
+#define CQ_FLAG_NO_LOCAL_GRID 4u
 
 typedef struct {
 	uint8_t *payload;      /* in: caller's buffer. Out: the payload */

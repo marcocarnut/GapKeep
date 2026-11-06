@@ -230,7 +230,97 @@ static inline int32_t to_fixed(float v)
 	return (int32_t) (v * 65536.0f);
 }
 
+#define LOCAL_FROM 97            /* symbol side from which the local correction runs: version 20 */
+#define LOCAL_TILE 24            /* modules */
+#define LOCAL_MAX 8              /* largest shift, in quarter pixels */
 #define SPAN 4                 /* modules between exact projections: 8 lost codes */
+
+/* Large symbols: a lens is not quite a homography, and the shift reaches a good part of a module at
+ * the corners. Each tile of about LOCAL_TILE modules finds its own small shift against the known
+ * symbol, and shifts are interpolated between tile centres. */
+static int local_field(const score_ctx *c, const homog *H, float *ox, float *oy, cq_arena *a)
+{
+	unsigned n = c->n, nt = n / LOCAL_TILE, ts = n / nt;
+	int32_t *px = cq_alloc(a, (size_t) n * n, sizeof *px), *py = cq_alloc(a, (size_t) n * n, sizeof *py);
+	float *tx = cq_alloc(a, (size_t) nt * nt, sizeof *tx), *ty = cq_alloc(a, (size_t) nt * nt, sizeof *ty);
+	if (!px || !py || !tx || !ty)
+		return CQ_ERR_NOMEM;
+	for (unsigned y = 0; y < n; y++) {
+		for (unsigned x = 0; x < n; x++) {
+			float fx, fy;
+			project(H, (float) x + 0.5f, (float) y + 0.5f, &fx, &fy);
+			px[y * n + x] = to_fixed(fx);
+			py[y * n + x] = to_fixed(fy);
+		}
+	}
+	for (unsigned ti = 0; ti < nt; ti++) {
+		for (unsigned tj = 0; tj < nt; tj++) {
+			unsigned y0 = ti * ts, x0 = tj * ts;
+			unsigned y1 = ti + 1 == nt ? n : y0 + ts, x1 = tj + 1 == nt ? n : x0 + ts;
+			int64_t wsum = 0;
+			for (unsigned y = y0; y < y1; y++)
+				for (unsigned x = x0; x < x1; x++)
+					wsum += c->sign[y * n + x];
+			uint32_t count = (y1 - y0) * (x1 - x0);
+			int cx = 0, cy = 0;          /* in quarter pixels */
+			double best = -1e30;
+			/* half-pixel steps until it settles, then one round of quarter-pixel steps */
+			for (int round = 0; round < 4; round++) {
+				int step = round < 3 ? 2 : 1, moved = 0, bx = cx, by = cy;
+				for (int dy = -step; dy <= step; dy += step) {
+					for (int dx = -step; dx <= step; dx += step) {
+						int sx = cx + dx, sy = cy + dy;
+						if (sx < -LOCAL_MAX || sx > LOCAL_MAX || sy < -LOCAL_MAX || sy > LOCAL_MAX)
+							continue;
+						int64_t total = 0, dot = 0;
+						int32_t ax = sx * (1 << 14), ay = sy * (1 << 14);
+						for (unsigned y = y0; y < y1; y++) {
+							for (unsigned x = x0; x < x1; x++) {
+								int32_t v = (int32_t) sample_fixed(c, px[y * n + x] + ax, py[y * n + x] + ay);
+								total += v;
+								dot += v * c->sign[y * n + x];
+							}
+						}
+						double v = (double) dot - (double) total / count * (double) wsum;
+						if (v > best) {
+							best = v;
+							bx = sx;
+							by = sy;
+							moved = 1;
+						}
+					}
+				}
+				cx = bx;
+				cy = by;
+				if (!moved && round < 2)
+					round = 2;
+			}
+			tx[ti * nt + tj] = (float) cx * 0.25f;
+			ty[ti * nt + tj] = (float) cy * 0.25f;
+		}
+	}
+	/* bilinear between tile centres, flat beyond the outermost ones */
+	float scale = 1.0f / (float) ts;
+	for (unsigned y = 0; y < n; y++) {
+		float gy = ((float) y + 0.5f) * scale - 0.5f;
+		gy = gy < 0 ? 0 : (gy > (float) (nt - 1) ? (float) (nt - 1) : gy);
+		unsigned i0 = (unsigned) gy, i1 = i0 + 1 < nt ? i0 + 1 : i0;
+		float ry = gy - (float) i0;
+		for (unsigned x = 0; x < n; x++) {
+			float gx = ((float) x + 0.5f) * scale - 0.5f;
+			gx = gx < 0 ? 0 : (gx > (float) (nt - 1) ? (float) (nt - 1) : gx);
+			unsigned j0 = (unsigned) gx, j1 = j0 + 1 < nt ? j0 + 1 : j0;
+			float rx = gx - (float) j0;
+			float a0 = tx[i0 * nt + j0] * (1 - rx) + tx[i0 * nt + j1] * rx;
+			float a1 = tx[i1 * nt + j0] * (1 - rx) + tx[i1 * nt + j1] * rx;
+			float b0 = ty[i0 * nt + j0] * (1 - rx) + ty[i0 * nt + j1] * rx;
+			float b1 = ty[i1 * nt + j0] * (1 - rx) + ty[i1 * nt + j1] * rx;
+			ox[y * n + x] = a0 * (1 - ry) + a1 * ry;
+			oy[y * n + x] = b0 * (1 - ry) + b1 * ry;
+		}
+	}
+	return 0;
+}
 
 static double score(const score_ctx *c, const float corners[4][2])
 {
@@ -341,7 +431,7 @@ static inline void rgb_at(const uint8_t *p, unsigned stride, const float *lut, u
 
 /* Same, from the 8-bit input through the lookup table. p points at the crop's first pixel. */
 static void sample_rgb(const uint8_t *p, unsigned stride, const float *lut, unsigned w, unsigned h,
-                       const homog *H, unsigned n, float *out)
+                       const homog *H, unsigned n, const float *ox, const float *oy, float *out)
 {
 	for (unsigned y = 0; y < n; y++) {
 		for (unsigned x = 0; x < n; x++) {
@@ -349,6 +439,10 @@ static void sample_rgb(const uint8_t *p, unsigned stride, const float *lut, unsi
 			for (int t = 0; t < 5; t++) {
 				float px, py;
 				project(H, (float) x + 0.5f + tap_x[t], (float) y + 0.5f + tap_y[t], &px, &py);
+				if (ox) {
+					px += ox[y * n + x];
+					py += oy[y * n + x];
+				}
 				rgb_at(p, stride, lut, w, h, px, py, acc);
 			}
 			for (int c = 0; c < 3; c++)
@@ -955,7 +1049,21 @@ static cq_status decode(const uint8_t *rgb, unsigned width, unsigned height, uns
 		status = CQ_ERR_BASE;
 		goto done;
 	}
-	sample_rgb(crop, stride, lut, cw, ch, &H, n, s);
+	float *ox = NULL, *oy = NULL;
+	if (n >= LOCAL_FROM && !(flags & CQ_FLAG_NO_LOCAL_GRID)) {
+		ox = cq_alloc(a, (size_t) n * n, sizeof *ox);
+		oy = cq_alloc(a, (size_t) n * n, sizeof *oy);
+		if (!ox || !oy)
+			goto done;
+		size_t mark = a->used;
+		e = local_field(&sc, &H, ox, oy, a);
+		a->used = mark;
+		if (e) {
+			status = (cq_status) e;
+			goto done;
+		}
+	}
+	sample_rgb(crop, stride, lut, cw, ch, &H, n, ox, oy, s);
 	STAGE(6);
 
 	/* header: majority over its repeats of (R - B), normalised by black and white */
@@ -1107,5 +1215,5 @@ size_t cq_work_size(unsigned width, unsigned height, unsigned max_version)
 	size_t n = cq_qr_size(max_version);
 	size_t side = width > height ? width : height;
 	/* per pixel: gray, soft. Per module, at 3 bits: symbol, demodulator and code tables. */
-	return (size_t) width * height * 8 + side * 4 + n * n * 460 + (64u << 10);
+	return (size_t) width * height * 8 + side * 4 + n * n * 480 + (64u << 10);
 }
