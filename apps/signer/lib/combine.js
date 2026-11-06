@@ -1,19 +1,26 @@
 // BIP-174's Combiner: copies of one transaction, each with what its signer
 // added, into one PSBT.
 //
-//   combine(a, b) -> { psbt (a new, re-parsed PSBT), added (entries new to a) }
+//   combine(a, b) -> { psbt (a new, re-parsed PSBT), added (entries new to a),
+//                      notes: [{ level, text }] }
 //
 // `a` and `b` come from parsePsbt(). Different transactions are never
 // combined, and neither are copies that disagree: a key that holds two
-// values anywhere is refused, signatures included (two valid signatures of
-// one input by one key are possible, but nothing here needs them).
-// CombineError has the reason, for people.
+// values anywhere is refused. CombineError has the reason, for people.
+//
+// One exception: two different signatures by one key of one input. They can
+// both be valid (a signer that doesn't use RFC 6979, or grinds, or signed
+// twice), so each is verified, once all else is merged: both good, `a`'s
+// stays, with a note; only one good, it stays and the other goes, with a red
+// note; neither good, `a`'s stays (sign.js reports it). When it can't tell,
+// as for a key of a multisig coin, the copies are refused as they disagree.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { equal } from "./psbt/bytes.js";
 import { parsePsbt, serializePsbt, IN } from "./psbt/psbt.js";
 import { txid } from "./psbt/tx.js";
+import { partialSigGood } from "./sign.js";
 
 export class CombineError extends Error {
   constructor(message) {
@@ -30,7 +37,7 @@ const idOf = (psbt) => {
 const NAMES = { [IN.PARTIAL_SIG]: "a signature", [IN.NON_WITNESS_UTXO]: "the previous transaction",
   [IN.WITNESS_UTXO]: "the coin spent", [IN.SIGHASH_TYPE]: "the sighash type" };
 
-function mergeMap(into, from, where, isInput) {
+function mergeMap(into, from, where, isInput, later) {
   let added = 0;
   for (const e of from.entries) {
     const mine = into.entries.find((x) => equal(x.fullKey, e.fullKey));
@@ -38,6 +45,10 @@ function mergeMap(into, from, where, isInput) {
       into.entries.push(e);
       added++;
     } else if (!equal(mine.value, e.value)) {
+      if (isInput && e.type === IN.PARTIAL_SIG) {
+        later.push(e);
+        continue;
+      }
       const what = (isInput && NAMES[e.type]) || `field ${e.type}`;
       throw new CombineError(`The two copies disagree about ${what} in ${where}: not merged.`);
     }
@@ -52,7 +63,28 @@ export function combine(a, b) {
   // lengths come from the transaction: they are equal here)
   const out = parsePsbt(serializePsbt(a)); // the caller's PSBT is left as it was
   let added = mergeMap(out.global, b.global, "the global fields", false);
-  b.inputs.forEach((m, i) => (added += mergeMap(out.inputs[i], m, `input ${i + 1}`, true)));
+  const twoSigs = [];
+  b.inputs.forEach((m, i) => {
+    const later = [];
+    added += mergeMap(out.inputs[i], m, `input ${i + 1}`, true, later);
+    for (const e of later) twoSigs.push({ i, e });
+  });
   b.outputs.forEach((m, i) => (added += mergeMap(out.outputs[i], m, `output ${i + 1}`, false)));
-  return { psbt: parsePsbt(serializePsbt(out)), added };
+  const merged = parsePsbt(serializePsbt(out));
+  const notes = [];
+  for (const { i, e } of twoSigs) {
+    const where = `Input ${i + 1}`;
+    const map = merged.inputs[i], mine = map.entries.find((x) => equal(x.fullKey, e.fullKey));
+    const goodA = partialSigGood(merged, i, e.key, mine.value), goodB = partialSigGood(merged, i, e.key, e.value);
+    if (goodA === null || goodB === null) {
+      throw new CombineError(`The two copies disagree about a signature in input ${i + 1}: not merged.`);
+    }
+    if (goodA && goodB) {
+      notes.push({ level: "info", text: `${where}: two valid signatures from the same key; kept one.` });
+    } else if (goodA || goodB) {
+      if (goodB) mine.value = e.value;
+      notes.push({ level: "danger", text: `${where}: one copy's signature is not valid for this transaction: dropped it.` });
+    }
+  }
+  return { psbt: parsePsbt(serializePsbt(merged)), added, notes };
 }

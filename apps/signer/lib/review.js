@@ -5,7 +5,10 @@
 //   applyPlan(a, plan)  plan from planKeys(): changes `a`, adding warnings:
 //     an output is the wallet's only if a key proved it;
 //     a claim a key refuted is a red warning (it pays someone else);
-//     a claim no loaded key can check is amber, and counts as sent.
+//     a claim no loaded key can check is amber, and counts as sent;
+//     an output of ours at a path the wallet may never scan (`stray`, see
+//     sign.js) is amber with the path, and counts as sent.
+//   flagSignatures(a, plan)  red warnings for bad signatures in the PSBT.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -17,6 +20,13 @@ export function applyPlan(a, plan) {
     o.unchecked = false;
     o.unverified = false;
     o.checkedPath = p.path;
+    if (p.ours && p.stray) {
+      o.mine = false;
+      o.stray = p.path;
+      a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} is yours, but ${p.path ? `at ${p.path}` : "in another key"}: ` +
+        `the wallet may not see it (${p.stray}). It is counted as sent.` });
+      continue;
+    }
     if (p.ours) {
       o.role = p.role || "mine";
     } else if (p.problem) {
@@ -33,6 +43,13 @@ export function applyPlan(a, plan) {
   a.sent = a.totalOut === null ? null : a.totalOut - a.toSelf;
   for (const i of plan.inputs) {
     for (const odd of i.oddities || []) a.warnings.push({ level: "warn", text: `Input ${i.index + 1}: ${odd}` });
+  }
+  return flagSignatures(a, plan);
+}
+
+// Signatures that came with the PSBT and don't hold: true with or without keys.
+export function flagSignatures(a, plan) {
+  for (const i of plan.inputs) {
     if (i.badSignature) {
       a.warnings.unshift({ level: "danger", text: `Input ${i.index + 1}: the signature in this PSBT is not valid for this ` +
         "transaction (or isn't SIGHASH_ALL): it doesn't count." });

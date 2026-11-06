@@ -125,6 +125,9 @@ export function showAnalysis(list, rows, a, source, options = {}) {
       const path = o.checkedPath !== undefined ? o.checkedPath : o.derivations[0].path;
       new ui.Label(r, { text: `${ui.symbols.ok} ${roleText(o)}${path ? ": " + path : ""}` +
         (o.unchecked ? " (key not checked against the script)" : ""), color: GREEN, font: FONT.small });
+    } else if (o.stray !== undefined) {
+      new ui.Label(r, { text: `${ui.symbols.warning} Yours${o.stray ? `, but at ${o.stray}` : ""}: the wallet may not see it`,
+        color: AMBER, font: FONT.small, width: "100%", overflow: "wrap" });
     } else if (o.unverified) {
       new ui.Label(r, { text: `${ui.symbols.warning} Claims to be change: no key loaded can check it`, color: AMBER, font: FONT.small });
     }

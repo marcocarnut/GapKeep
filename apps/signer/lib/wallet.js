@@ -75,7 +75,9 @@ export function loadPrivate(text) {
 }
 
 export function wipeKey(key) {
-  if (key && key.node) wipe(key.node);
+  if (!key || !key.node) return;
+  wipe(key.node);
+  key.node = null;
 }
 
 // The account's public key, as Electrum takes it ("Use a master key"):

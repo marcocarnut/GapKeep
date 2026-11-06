@@ -1,10 +1,12 @@
 # Needs a test build (make TEST=1) or the simulator: the synthetic camera.
-# The Signer (apps/signer): load a key from codex32 shares, export the
-# account's public key, sign Electrum's PSBTs, give the signed transaction.
+# Made from tests/signer/signer.txt.in by tests/signer/make_scenario.py.
+# The Signer (apps/signer): the transaction first, then the keys. Each PSBT
+# is seen with its change only claimed, then checked once the keys are in.
 # The key is the BIP-39 test phrase "abandon ... about" (entropy: 16 zero
-# bytes; public, no real funds), split 2-of-3 with identifier ZGSQ. The PSBTs
-# are Electrum 4.8.3's own QR codes (tests/signer/electrum.json): the signed
-# transactions must hash as Electrum's own (SHA-256 shown, first 8 bytes).
+# bytes; public, no real funds), split 2-of-3 with identifier ZGSQ. Electrum's
+# PSBTs are Electrum 4.8.3's own QR codes (tests/signer/electrum.json): the
+# signed transactions must hash as Electrum's own (SHA-256 shown, first 8
+# bytes). The others come from tests/signer/run_node.mjs --made-out.
 # The log holds no share, word or key: only counts, sizes and hashes.
 expect Keyboard attached 60
 expect launcher ready 60
@@ -14,77 +16,378 @@ expect signer selftest: 4 passed, 0 failed 30
 wait 0.5
 shot 01-home
 
-# 1. The key: share A, then share C, grouped as on paper
+# 1. A watch-only wallet's PSBT (Electrum knows only the account's
+# fingerprint): Scan, Review (claimed), Keys, Review (checked), Sign
+mark
 key ret
 wait 0.3
+mark
+camera qr 24D1-88RR-Z.WXKTJI46L4B:3/95:7CP3QT$3E:3SN+G4E2JB9V2EQ2*-OT-6WI5GK-8XX-I42$8JDY*ER.$/FP35IB+KFKUEY/UR79LODWR1ZOC2NF0MEQCW5X4*+6XXCWGZXXROIYX569TB9NT-QJED3ZFU9N+6YA*UCL2IQGJP8X.*AG25JNGSYA:SG.JYXUJ8+/B8K6*ZM-EV9.ICB1JEWLHYI-PX9I-2SLCTRM$6DQ-8D6M$HI*JO998OW0QV7R1VPSDJM0POA5UX2CM8WV0LTHS:5VGJVXFUHL8Y94S$QI-H:ZV.-J/A-UUV$SWCUTAIO0OS0GYWAPQSLT8D8ZA3F.3T3D31QZF/LGC2L2872O:3UK+3HDMFZCI+M/JKKWW$C-FU261X-MH8Y$9MW5K5TL+8NB/W9C$U68X65JFKJ2*63ZVZYF06O-$-P9KAGCFCE35B4VU6.-.V7ZZX++LWLNIJ/UC-19N/2S7:$BRBSK-61TER08H:T0E:O757V1UKS7N$CX0K::89P35ND63ZP+M70AE*:K:H45X.Z0SL0E7FDEJISIHCZGZ4G$OL/M2.5$GWIUZMSPYUIC.QKBHI-0-LOO
+expect signer: read a PSBT \(base43, 608 characters 15
+expect signer: review: 2 inputs, 0 to sign, 3 outputs 5
+expect signer: change: 1 claimed, 0 checked, 0 stray, 0 unverified, 0 refuted 5
+camera scene
+wait 0.5
+shot 02-review-claimed
+key ret
+wait 0.3
+shot 03-keys-empty
+key ret
+wait 0.3
+# share A, then share C, grouped as on paper
 type ms12zgsqa40sgqvwltnun3f8drxxujvljm648z42my97v2h0
 key ret
 type MS12 ZGSQ CADP 5Q7M V8JL JHZE GN00 LY7V YXSZ CJRW FVJA X6ZD
 key ret
 wait 0.3
-shot 02-shares
+shot 04-shares
 # Enter in the empty passphrase: load
+mark
 key ret
 expect signer: key loaded \(bip39, 2 shares\) 30
 wait 0.5
-shot 03-loaded
-
-# 2. The public key for Electrum (zpub of m/84'/0'/0', fingerprint fd13aac9)
-key tab
+shot 05-keys-loaded
+mark
 key ret
-expect signer: showing the p2wpkh public key \(mainnet\) 10
-wait 0.5
-shot 04-export
-key esc
-
-# 3. A watch-only wallet's PSBT (Electrum knows only the account's fingerprint)
-key ret
-wait 0.3
-camera qr 24D1-88RR-Z.WXKTJI46L4B:3/95:7CP3QT$3E:3SN+G4E2JB9V2EQ2*-OT-6WI5GK-8XX-I42$8JDY*ER.$/FP35IB+KFKUEY/UR79LODWR1ZOC2NF0MEQCW5X4*+6XXCWGZXXROIYX569TB9NT-QJED3ZFU9N+6YA*UCL2IQGJP8X.*AG25JNGSYA:SG.JYXUJ8+/B8K6*ZM-EV9.ICB1JEWLHYI-PX9I-2SLCTRM$6DQ-8D6M$HI*JO998OW0QV7R1VPSDJM0POA5UX2CM8WV0LTHS:5VGJVXFUHL8Y94S$QI-H:ZV.-J/A-UUV$SWCUTAIO0OS0GYWAPQSLT8D8ZA3F.3T3D31QZF/LGC2L2872O:3UK+3HDMFZCI+M/JKKWW$C-FU261X-MH8Y$9MW5K5TL+8NB/W9C$U68X65JFKJ2*63ZVZYF06O-$-P9KAGCFCE35B4VU6.-.V7ZZX++LWLNIJ/UC-19N/2S7:$BRBSK-61TER08H:T0E:O757V1UKS7N$CX0K::89P35ND63ZP+M70AE*:K:H45X.Z0SL0E7FDEJISIHCZGZ4G$OL/M2.5$GWIUZMSPYUIC.QKBHI-0-LOO
-expect signer: read a PSBT \(base43, 608 characters 15
 expect signer: review: 2 inputs, 2 to sign, 3 outputs 5
-camera scene
+expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted 5
 wait 0.5
-shot 05-review
+shot 06-review-checked
+mark
 key ret
 expect signer: signed 2 inputs, transaction complete \(SHA-256 dd31fe69d7368962\) 30
 wait 0.5
-shot 06-signed
+shot 07-signed
+# Done, Next transaction, Show as PSBT
 key tab
+key tab
+mark
 key ret
 expect signer: showing the signed psbt 10
 wait 0.5
-shot 07-signed-psbt
-key esc
+shot 08-signed-psbt
 
-# 4. A seed wallet's PSBT on testnet (master fingerprint 73c5da0a, full paths)
+# 2. Next transaction (keep keys): a seed wallet's PSBT on testnet
+# (master fingerprint 73c5da0a, full paths)
+key tab
+mark
 key ret
 wait 0.3
+mark
 camera qr AD6H+D4K-EL8*EM/J3/DX4+WW1MLYZ8*03*TE2W:F3F:NWVCXXFHDJKI4-I-OV**X5-BGZYO*2WIB3LEP-U$0YJ*RP1N1E:3YO0O2J/.U.:JL95S:JZ-CUD6JW-DF6OWO-TTO33CQO2X4XFZ36SX.*1PUVPQAYJH:X*T5U6BW6815:5ZK0P+RE.7:/Z:.0EYHC/3GBT+YFA9PQOZWD$U5QX55-OPO9EHWFF9G2F3+B$8B3YJVP9B:BI*24M$/7$D4I8WHY2$84SL-U4T7D-9FICVP0:T:.G2MUI4MR51EJWDLXW0.RDAACGF22C+Q8UMR0CSX8VU4/9N.-/MYN0ERGBCPALDCOCZZ707X*4DJ62*DWS*-L08*J.EX+$B41*Y25L8CZI00$U/*T-HY:*F6*.AV4/8J0Y1/QHAT/SHH+T5+UJ-N1VX418V0X+D26DA1$PYHT9GYTKTY4UMWKZ6DZ3SGLN34C1F7C+B//43FZN:GFL8GCQ7BCKF2S4*ZQ3KF8.I+ZGN02QQA2ISJWNWGJU*N1CGX:IGHJLYM3FAAT0MOZ2$A8K-/W:3-+T-O3EU$ABD:7K812V$M7AQN20K8L9FB*ZH$121U195
 expect signer: read a PSBT \(base43, 612 characters 15
 expect signer: review: 2 inputs, 2 to sign 5
 camera scene
+mark
 key ret
 expect signer: signed 2 inputs, transaction complete \(SHA-256 0baf3b76d1d92827\) 30
-key esc
-
-# 5. P2PKH from a QR code: Electrum leaves out the previous transaction, so
-# nothing can be signed
+wait 0.3
+key tab
 key ret
 wait 0.3
+
+# 3. P2PKH from a QR code: Electrum leaves out the previous transaction, so
+# nothing can be signed
+mark
 camera qr $/RGYI/KR5/BT8*G/3RZHQ1/2YTO7$AC0-$8G9UHZ/YCQRF:SJRE2+DGJ0QXS.NKTM6VU7*6YQQNC$6$LOH9USBMAJ8JDFAH6Z1X6APKM8VK/2NUB.69D.H$UB/LD*QQIW4DWSCPSWI4YP+H$VMEJY0JZ4H:ESRM41VPJJ7RF2$:M6EFJU.3MDO1XKI*S6UO0AYN146V-Q5J76SJ-RDFQ11OS.281LQD9ZOOM/HFKK:1CFW-GJQ1ROWMQ4+PEJI.P7:SG/GJNC16S1/VE$P0L:Y$YMQPZH.E0+*6QRY89GZ*7/ZSAE1Y9$L+KJD09O6:-VYX1$SX8L69:U3:SFHD5Z::FRAS+ENS3X*RVVZ*NZJ6E.M-YI6*6SVZAE1-IM:KSDQEMQBR.5:B54R/OPN/AK1AWA+8PSV.1LUX
 expect signer: read a PSBT \(base43, 420 characters 15
 expect signer: review: 1 input, 0 to sign 5
 camera scene
 wait 0.5
-shot 08-p2pkh-refused
+shot 09-p2pkh-refused
 key esc
+wait 0.3
 
-# 6. Forget the key (Scan, Public key, Last transaction, Forget)
+# 4. Change that is ours, at a path the wallet never scans: amber, counted as sent
+mark
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:372I*PZFEUFM4-99AIKHA7/YF$+-6Z+ZUOJOR*6WSWTPZQHI*TBA+JAQ2:K272$XIKGOIPQ0QH6TTQE1IW.YOXOLHH4A-30SL3VR78UXTP..8FZKLA*F/UWJJ+E7QH.:Q+:FR+9Y64YW:189WWEVOXTHXP4SPJ:BWDT6J:QFJF92F5MC/FSQNG+95OY*2X+/7IJYCCHKM4JR*HRMNU46H.ANCIO*4O-C5LSPIE/K54QSO/R20+1A7E4LC:+S8M2F20/GU6LGMK:4CMKT50RF-FJVU1K*/K+AL$0KS:O9ML8WS3GK6FHWO./*DVB0E:XV-*6A/BT9/W82M8UV94V2AQQW-4*BDH6Y7PGAS0L:S3GO0-TL94Q0ITQBU1G-BL6QLIOW-:-WIZB8UXSBL7NGCFBK9AN
+expect signer: review: 2 inputs, 2 to sign 15
+expect signer: change: 0 claimed, 0 checked, 1 stray, 0 unverified, 0 refuted 5
+camera scene
+wait 0.5
+shot 10-stray
+key esc
+wait 0.3
+
+# 5. Change the PSBT claims, paying an attacker's key: red, and signing asks
+mark
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:370AM$9QB2*QVI0WOV$4CGL+..H7NRPEQ+9IAU9E40B-3.9FTVVI$+0CYE$.$:L2P957.BDXIO5C9/+IV8JVUQXMHI-H-/HWF.LZGCGDWYXKDRH49AHBPS$4XJEV0TO:FL1XWLD5-4S99BROB59+YM3N-2BD*PE5K*M3YA$5Y*8GSBLDCDF.VIOWKXVZD8-$G584QMC1BVCSESR1ZZ88NLY20$WNFUOVE$G$-$WRPC5PIOA2CYZQC419W--8Z9LN430Z6ICGJP0VKZ8-8RJ/BB.-78/MLRD.3+KM0.OTNK+6U1NW00$R9HG$R-UQ1QXIUJ4:ENFA.R:JXV9:AL861XF30LMLZD8V+5Y0*8CS9NXE/Z97UL$M*2WKS8E2AUJ8816C7SZ*YRN$J5578XZQ3*QSMG$
+expect signer: review: 2 inputs, 2 to sign 15
+expect signer: change: 0 claimed, 0 checked, 0 stray, 0 unverified, 1 refuted 5
+camera scene
+wait 0.5
+shot 11-refuted
+key ret
+wait 0.5
+shot 12-sign-anyway
+# "Don't sign" has the focus
+key ret
+wait 0.3
+key esc
+wait 0.3
+
+# 6. Forget the keys (Scan, Last transaction, Public key, Forget)
+key tab
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.5
+shot 13-forgotten
+
+# 7. The same PSBT seen first, claimed; then with a key that can't check it
+mark
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:370AM$9QB2*QVI0WOV$4CGL+..H7NRPEQ+9IAU9E40B-3.9FTVVI$+0CYE$.$:L2P957.BDXIO5C9/+IV8JVUQXMHI-H-/HWF.LZGCGDWYXKDRH49AHBPS$4XJEV0TO:FL1XWLD5-4S99BROB59+YM3N-2BD*PE5K*M3YA$5Y*8GSBLDCDF.VIOWKXVZD8-$G584QMC1BVCSESR1ZZ88NLY20$WNFUOVE$G$-$WRPC5PIOA2CYZQC419W--8Z9LN430Z6ICGJP0VKZ8-8RJ/BB.-78/MLRD.3+KM0.OTNK+6U1NW00$R9HG$R-UQ1QXIUJ4:ENFA.R:JXV9:AL861XF30LMLZD8V+5Y0*8CS9NXE/Z97UL$M*2WKS8E2AUJ8816C7SZ*YRN$J5578XZQ3*QSMG$
+expect signer: change: 1 claimed, 0 checked, 0 stray, 0 unverified, 0 refuted 15
+camera scene
+wait 0.3
+# Load the keys, xprv or WIF: a single key
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+type notakey
+mark
+key ret
+expect signer: private key refused 5
+wait 0.3
+shot 14-key-refused
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type cTGhosGriPpuGA586jemcuH9pE9spwUmneMBmYYzrQEbY92DJrbo
+mark
+key ret
+expect signer: key loaded \(wif\) 10
+wait 0.5
+shot 15-keys-wif
+mark
+key ret
+expect signer: review: 2 inputs, 1 to sign 5
+expect signer: change: 0 claimed, 0 checked, 0 stray, 1 unverified, 0 refuted 5
+wait 0.5
+shot 16-unverified
+# 8. Partly signed: one key of two, then done, and the keys go
+mark
+key ret
+wait 0.5
+expect signer: signed 1 input 15
+expect signer: showing the signed psbt 10
+wait 0.3
+shot 17-partly-signed
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+
+# 9. Merge two half-signed copies: complete with no key loaded
+mark
+key ret
+wait 0.3
+mark
+camera qr 41*6:XTCFRID/J34FTRVS+M*SGM6STXT:UG-X4GTBPH+MLU77EYZFFUUWKV7+6/2J*TZ5H8LUAPG58X0P5AMLVK0*M:GI$UA+HHW656*V6-A0KIOA5:F3J/SIIK-EG$7+VH/DS75M0$YYDYXGENXN31V/7ZUXXNBI/8FQOVOOLYQYGRP$NMGEB726H$/KCFWNH6VQS7239UMXBBHMDOYV*+B*16NM5XUWRWOE66ROM3FSAVUV5+$+VV6CRRH-TT7$K7:7EUPSWR+1.3AOGJF5U*31GY+6T$W3D..NLEH4NZMSHHBYMZ4TVZ:GQK*..FL7BD/2MUJXN/L6JFDAQZZ.T-T+TQVEPKQ4TB+16VS3MN.+T.-.Y:NV7F8R6444CID+.QUZXG$2Q6ID5M18/7PUB+J$0URVPVD1Q4JRXZC5Y-AWRX6-1G0P/9*RD0D*4.+0L24BQ:JB8.:O:071VV4OEB3X$:F9J96V+R4DS:JDM27V:0-SF0D8IS5RZIM986Q:NI2XP9+CZRISEDNN7ZHZ4F:RXMWKC0K+UXQOFF+6:9OKDTG.0XC1JPLR0Q97VWA417ENNALM:1:*10MFHIUK1GUD9U.1X:GP8MU7R6ME8O+-7A6BPE+164BWVP0KW/$3ER.SHNBZQ:EKK+WK:HH5JDG3LB:Q-W$V6SRXJE-XA2IA3/VQHRHPL+-614G2LV.CY3O4M/JZAMWMV.BNQZDYUC.7-WCYQE:O-/-+TDSHTMFF:NTAKY2PY$USU7NZ4E*HB
+expect signer: review: 2 inputs, 0 to sign 15
+camera scene
+wait 0.3
+# Load the keys, Merge a copy
+key tab
+mark
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:3726M:I*++$U8.AA:5+KZBF0W06PODHGAHI/*1KU89AYD67G583X+1I0PG-$PA9HYCNCI3X4MF4:F-AA-YIRS.UYISB+/RX506DA1P4S-Q$8Z$R91SLA+BX-6-G25QE/+6K1P$9+5.9U3$/RDJZQFXV*KQQAOXSRY*LM-42JOFI:UPB7QDNLCLL7K/85:ZXR3UZ/JF/M6FASQSE-Y9*+H1$6B6T/EF4ZIX9G+4SKBDX+2JE.HSFG:B$K2PR3-JG:123M3KD85RF5/-U$NGLGN0Z8FUKW3NBP7A0/G7H:83OGGFPK4*.5D/9RR-FZPS5P8SB+/C-/P0-4Q/CU1-QGX0PX-N2HYZ4-12RQ14JBABHEG5/8M9WG*A/V9Q3.RQ2CD2A/I$1ZHSDV.MNWYF.$KY6O:8T
+expect signer: refused a code: That is a different transaction 15
+mark
+camera qr 41*6:XTCFRID/J34FTRVS+M*SGM6STXT:UG-X4GTBPH+MLU77EYZFFUUWKV7+6/2J*TZ5H8LUAPG58X0P5AMLVK0*M:GI$UA+HHW656*V6-A0KIOA5:F3J/SIIK-EG$7+VH/DS75M0$YYDYXGENXN31V/7ZUXXNBI/8FQOVOOLYQYGRP$NMGEB726H$/KCFWNH6VQS7239UMXBBHMDOYV*+B*16NM5XUWRWOE66ROM3FSAVUV5+$+VV6CRRH-TT7$K7:7EUPSWR+1.3AOGJF5U*31GY+6T$W3D..NLEH4NZMSHHBYMZ4TVZ:GQK*..FL7BD/2MUJXN/L6JFDAQZZ.T-T+TQVEPKQ4TB+16VS3MN.+T.-.Y:NV7F8R642D3OMDY.DS.*$EJMBJFZG$O84MP7SZY73*EZA57RNY7U/56NMFTKX*CCEQ-I:S-G+.YEFS./:NT.6O.L48RTQRFLX4B4P7DOK/GISJVFLH$FI8XI21-:XEFN1WE*$H2QREHC$YX1IG4IK/-ZVEQ/A/-48VOZB9QI$OEZKR+SI0/BD/XH2$43IZUA4.$TM3*5V5K:4VRM:8$GL30WM:ZC.O9RLBF-YFDB9.BVP4B6X3K0ERVTN4*UTR1OV$1CXDKQ0Y4D-E*.BC1KXXY5QZ6UGO/R*7.SO60/+H$B*:VR$UG3:PW.ZMQ7OHF.61YS9-WSGJJTK3545HBVP4ZSTNBEBW9BQU:JD159XFTQ+$K2W.FSLNPEZI:*-ZC1TDB7QP/BN4KEERN
+expect signer: merged a copy \(base43, 1 new field\) 15
+expect signer: review: 2 inputs, 0 to sign 5
+camera scene
+wait 0.5
+shot 18-merged
+mark
+key ret
+expect signer: signed 0 inputs, transaction complete 10
+expect signer: showing the signed tx 10
+wait 0.3
+shot 19-merged-signed
+key ret
+wait 0.3
+
+# 10. A finished transaction is only shown
+mark
+key ret
+wait 0.3
+mark
+camera qr 26.JD61K5:4MP-9589VKU.6Q.A9E2D2UGUBA.VEOV0+FS*P7DD9FI36B-K+55RC24FIT8QPMK-6B4IZJO-I7Z*5CSWSMEZ8-C3GSHG6U$7FS43PR16DWOMWQV:DSI4QNZEC$1XP67QZ8C$D5VV4BD9HF55/+B+:KY75:4./UASBVBTXWPZZLFMEP7R-7$HS7OZ$4ZJUDLH+WYD1WSDXHMDLAOIS.-MK92J$Y4E336QY2+F5SYGAV:J2BXN7TG-$UT4ZK55U5GZ.RL$5C1:5:ANTDP*H13E5N1-I:S/S7D$KWNOHUI:RRK/25OD.*7+*5IYFJBUB5.N1X17F0YN9COSF1S+B7+HAB$ZX1HPC8*H4GHE.K*Z1VA.DE.ABKWURBAVZOCHG$7Z1T.G18EQ6FLEP3-+PCMJTMN-/1J*9PV3WNS1K5+ZQU1$9ZU6QVVP+XD+GU54DT*.+7RMJA*Z/Z5AC7XOD36B8+6QC2K43B62S30BC-X:5AV9/S11JXS1ZCJVWIS5H/JNXPM4IFHMWL6CR8.0MLGE9:4
+expect signer: read a finished transaction 15
+expect signer: finished transaction: 2 inputs, 2 outputs 5
+camera scene
+wait 0.5
+shot 20-finished
+key esc
+wait 0.3
+
+# 11. Seed words, a word wrong then right, signing with the account's tprv too
+mark
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:36:/BYA94YVLNN47OJU3N7ZZ*C:O$OQDNQ2470/TNM0-D69XX1NU+*U0D8.VLKL8ESX-TI.75::$P5EK5LOK4G0.J:/$:EYEBAW1DTUHMMLC:5-2$9NO4$YQ++*I-LXQT4PPT$Y46M8-MWPV*Z$N8WI3RH8M:M6ZLZ$WYCHF+.2RM94F+LC0U5YCJ74*/Q-6/N3..2PEZUX1A1EZYDXRHL5MDY8F-+TX1P6YPY2I1.J6S7CLCHP7EY*I6AL1IIC00X*D6A5JHVJ.2ME/R+J8SX/SUOO4KK2ANZ1MFG8ADIL1.HLR5*PTXIXQLTLH6SXDG24C7M6HC0-N5$-KO$VGKA/B**-60XB8IY336FJ9R$D4A94BC064O5U.NOJKVE+BH70QB$UZEFHYU-IM:DNYPUO0MKG
+expect signer: change: 1 claimed 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key ret
+wait 0.3
+type abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abouz
+wait 0.3
+# Tab to the passphrase; Enter there loads
+key tab
+mark
+key ret
+expect signer: words refused 5
+wait 0.3
+shot 21-words-refused
+key shift-tab
+key backspace
+type t
+key tab
+mark
+key ret
+expect signer: key loaded \(seed words\) 15
+wait 0.5
 key tab
 key tab
 key tab
 key ret
-expect signer: key forgotten 5
+wait 0.3
+type tprv8fSjiqEQ8YG7Ro7gw2ScwcvweYuuWi1ZzGUtrPz918HvDtBzL5s2voFTrN4y3yUwj5cYD54pLhxk6NKCzHUjcka3zbKjbTEcsuAnkzbjhkL
+mark
+key ret
+expect signer: key loaded \(xprv\) 10
 wait 0.5
-shot 09-forgotten
+shot 22-two-keys
+mark
+key ret
+expect signer: review: 2 inputs, 2 to sign 5
+expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted 5
+mark
+key ret
+expect signer: signed 2 inputs, transaction complete 15
+wait 0.3
+# Escape is Done: the keys go
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+
+# 12. The public key for Electrum needs a master key (Scan, Public key)
+key tab
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+type xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu
+mark
+key ret
+expect signer: key loaded \(xprv\) 10
+expect signer: showing the p2wpkh public key \(mainnet\) 10
+wait 0.5
+shot 23-export
+key esc
+wait 0.3
+
+# 13. Scanning keeps what was typed: one share typed, the other scanned, then
+# forgotten; the passphrase field goes with them. Back on the keys' page (Home:
+# Scan, Public key, Forget)
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key tab
+key ret
+wait 0.3
+key ret
+wait 0.3
+type ms12zgsqa40sgqvwltnun3f8drxxujvljm648z42my97v2h0
+wait 0.3
+# share, second share, dropdown, passphrase, show, Load, Scan shares
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+mark
+camera qr MS12ZGSQCADP5Q7MV8JLJHZEGN00LY7VYXSZCJRWFVJAX6ZD
+expect signer: scanned share 2 of 2 15
+camera scene
+wait 0.5
+shot 24-share-scanned
+mark
+key ret
+expect signer: key loaded \(bip39, 2 shares\) 30
+expect signer: showing the p2wpkh public key 10
+wait 0.5
+key esc
+wait 0.3
+
+# 14. A key scanned, into the xprv page; forget (Scan, Public key, Forget)
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:36:/BYA94YVLNN47OJU3N7ZZ*C:O$OQDNQ2470/TNM0-D69XX1NU+*U0D8.VLKL8ESX-TI.75::$P5EK5LOK4G0.J:/$:EYEBAW1DTUHMMLC:5-2$9NO4$YQ++*I-LXQT4PPT$Y46M8-MWPV*Z$N8WI3RH8M:M6ZLZ$WYCHF+.2RM94F+LC0U5YCJ74*/Q-6/N3..2PEZUX1A1EZYDXRHL5MDY8F-+TX1P6YPY2I1.J6S7CLCHP7EY*I6AL1IIC00X*D6A5JHVJ.2ME/R+J8SX/SUOO4KK2ANZ1MFG8ADIL1.HLR5*PTXIXQLTLH6SXDG24C7M6HC0-N5$-KO$VGKA/B**-60XB8IY336FJ9R$D4A94BC064O5U.NOJKVE+BH70QB$UZEFHYU-IM:DNYPUO0MKG
+expect signer: change: 1 claimed 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+# key, show, Load, Scan
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+mark
+camera qr tprv8fSjiqEQ8YG7Ro7gw2ScwcvweYuuWi1ZzGUtrPz918HvDtBzL5s2voFTrN4y3yUwj5cYD54pLhxk6NKCzHUjcka3zbKjbTEcsuAnkzbjhkL
+expect signer: scanned a key 15
+camera scene
+wait 0.5
+shot 25-key-scanned
+mark
+key ret
+expect signer: key loaded \(xprv\) 10

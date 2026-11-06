@@ -18,6 +18,8 @@
 //                  reason (for people, when not signing) | null, oddities: [string] }
 //   OutputPlan = { index, ours, type, path | null, role: "change" | "receive" | null,
 //                  problem: string | null, oddities: [string] }
+//     planKeys adds `claimed`, and `stray`: why an output that is ours may
+//     still be lost in practice (below), or null.
 //
 // `psbt` from parsePsbt() (./psbt/psbt.js). `key` is one of:
 //   - a private BIP-32 node (./bip32.js) at depth 0: a master key;
@@ -64,6 +66,18 @@
 // is the output's script. Fingerprints alone prove nothing: anyone can
 // write ours into a PSBT.
 //
+// An output can be truly ours and still be a way to lose the money: at a path
+// the wallet never scans, it is held to ransom by whoever knows the path. So
+// a verified output is only at home (planKeys; `stray` null) when, compared
+// with the inputs the keys loaded sign or have signed:
+//   - it is in the same account (the path but its last two steps: same
+//     purpose, coin type and account);
+//   - its chain is 1, or 0 (`role` says which);
+//   - its index is at most CHANGE_GAP past the highest index of those
+//     inputs, and not hardened.
+// A single key has no path: its output is at home when that key spends too.
+// With no such input to compare with, only the chain and index are checked.
+//
 // Nothing here logs; reasons and errors name paths and positions, never keys.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -88,6 +102,7 @@ export const STANDARD_ACCOUNTS = ["m/84'/0'/0'", "m/49'/0'/0'", "m/86'/0'/0'", "
 
 export const MAX_INDEX = 1000000;
 const MAX_DEPTH = 16;
+export const CHANGE_GAP = 1000;
 
 // BIP-44/49/84/86: the purpose each script type's accounts use.
 const PURPOSE = { p2pkh: 44, "p2sh-p2wpkh": 49, p2wpkh: 84, p2tr: 86 };
@@ -227,13 +242,25 @@ function heldSignature(psbt, i, ct, coin, prevouts) {
   }
   const held = f.partialSigs.filter((s) => s.pubkey.length === 33 && equal(hash160(s.pubkey), ct.hash));
   if (!held.length) return "none";
+  return held.some((s) => ecdsaGood(tx, i, ct, coin, s.pubkey, s.signature)) ? "good" : "bad";
+}
+
+function ecdsaGood(tx, i, ct, coin, pubkey, signature) {
+  if (signature.length < 9 || signature[signature.length - 1] !== SIGHASH.ALL) return false;
   const hash = ct.type === "p2pkh" ? legacySighash(tx, i, coin.script, SIGHASH.ALL)
     : segwitV0Sighash(tx, i, p2wpkhScriptCode(ct.hash), coin.value, SIGHASH.ALL);
-  for (const s of held) {
-    if (s.signature.length < 9 || s.signature[s.signature.length - 1] !== SIGHASH.ALL) continue;
-    if (cr().ecdsaVerify(s.signature.subarray(0, s.signature.length - 1), hash, s.pubkey)) return "good";
-  }
-  return "bad";
+  return cr().ecdsaVerify(signature.subarray(0, signature.length - 1), hash, pubkey);
+}
+
+// Is this signature of input i, by this key, one the signer would accept?
+// null: it can't tell (the input is not a single-key coin of that key, or
+// its coin is not described).
+export function partialSigGood(psbt, i, pubkey, signature) {
+  const coin = spentOutput(psbt, i);
+  if (coin.error) return null;
+  const ct = coinType(coin.script, psbt.inputs[i].fields);
+  if (ct.error || ct.type === "p2tr" || pubkey.length !== 33 || !equal(hash160(pubkey), ct.hash)) return null;
+  return ecdsaGood(psbt.tx, i, ct, coin, pubkey, signature);
 }
 
 // What each input holds when no key is loaded: "final", or as heldSignature.
@@ -278,12 +305,24 @@ function pathOddities(path, type, network, maxIndex) {
 
 const accountOf = (path) => formatPath(path.length >= 3 ? path.slice(0, path.length - 2) : path.slice(0, 1));
 
+// Where a key sits: its account, chain and index. An account's own xprv
+// doesn't know the path above it: `key` + its fingerprint stands for that.
+function homeOf(loc, keys) {
+  const p = loc.full || loc.rel;
+  if (p.length < 2) return { account: null, chain: null, index: null };
+  const above = p.slice(0, p.length - 2);
+  return { account: loc.full ? formatPath(above) : `${toHex(keys.fp)}/${formatPath(above)}`,
+    chain: p[p.length - 2], index: p[p.length - 1] };
+}
+
 function planInput(psbt, i, keys, prevouts) {
   const f = psbt.inputs[i].fields;
   const r = { index: i, sign: false, final: false, signed: false, badSignature: false, mine: false, type: null, path: null,
     pubkey: null, sighash: null, reason: null, oddities: [] };
+  let held = "none";
   const no = (reason) => {
-    r.reason = reason;
+    r.signed = held === "good";
+    r.reason = r.signed ? "it is signed already" : reason;
     return r;
   };
   if (f.finalScriptSig !== undefined || f.finalScriptWitness !== undefined) {
@@ -311,12 +350,13 @@ function planInput(psbt, i, keys, prevouts) {
     if (missing >= 0) return no(`input ${missing + 1}'s coin is not known, and a taproot signature covers every input's amount`);
   }
 
-  const held = heldSignature(psbt, i, ct, coin, prevouts);
-  if (held === "good") {
-    r.signed = true;
-    return no("it is signed already");
-  }
+  held = heldSignature(psbt, i, ct, coin, prevouts);
   r.badSignature = held === "bad";
+  const ours = () => {
+    r.mine = true;
+    r.sign = held !== "good";
+    return r.sign ? r : no(null);
+  };
 
   if (keys.single) {
     const node = keys.root;
@@ -324,11 +364,11 @@ function planInput(psbt, i, keys, prevouts) {
     if (!(taproot ? equal(p2trOutputKey(xonly), ct.program) : equal(hash160(node.publicKey), ct.hash))) {
       return no("this key doesn't control it");
     }
-    r.sign = r.mine = true;
     r.keyPath = [];
     r.fullPath = null;
+    r.home = { single: toHex(keys.fp) };
     r.pubkey = toHex(taproot ? xonly : node.publicKey);
-    return r;
+    return ours();
   }
 
   const derivations = taproot ? f.tapBip32.filter((d) => d.leafHashes.length === 0) : f.bip32;
@@ -354,12 +394,12 @@ function planInput(psbt, i, keys, prevouts) {
       firstProblem = firstProblem || problem;
       continue;
     }
-    r.sign = r.mine = true;
     r.path = where;
     r.keyPath = loc.rel;
     r.fullPath = loc.full;
+    r.home = homeOf(loc, keys);
     r.pubkey = toHex(taproot ? node.publicKey.subarray(1) : node.publicKey);
-    return r;
+    return ours();
   }
   if (!anyOurs) {
     const fps = [...new Set(derivations.map((d) => toHex(d.fingerprint)))].join(", ");
@@ -390,6 +430,7 @@ function planOutput(psbt, i, keys) {
       o.ours = true;
       o.type = type;
       o.fullPath = null;
+      o.home = { single: toHex(keys.fp) };
     } else {
       o.type = classify(script).type;
     }
@@ -437,6 +478,7 @@ function planOutput(psbt, i, keys) {
     o.type = type;
     o.path = where;
     o.fullPath = loc.full;
+    o.home = homeOf(loc, keys);
     const branch = loc.rel.length >= 2 ? loc.rel[loc.rel.length - 2] : -1;
     o.role = branch === 1 ? "change" : branch === 0 ? "receive" : null;
     break;
@@ -504,7 +546,7 @@ export const verifyChange = (psbt, key, options = {}) => plan(psbt, key, options
 export function planKeys(psbt, list, options = {}) {
   const plans = list.map((k) => plan(psbt, k, options));
   const held = plans.length ? null : heldByNobody(psbt);
-  const rank = (r) => (r.sign ? 3 : r.final || r.signed ? 2 : r.mine ? 1 : 0);
+  const rank = (r) => (r.sign ? 4 : r.signed && r.home ? 3 : r.final || r.signed ? 2 : r.mine ? 1 : 0);
   const inputs = psbt.inputs.map((_, i) => {
     let best = null;
     for (const p of plans) if (!best || rank(p.inputs[i]) > rank(best)) best = p.inputs[i];
@@ -521,9 +563,28 @@ export function planKeys(psbt, list, options = {}) {
     return { ...(best || { index: i, ours: false, type: null, path: null, role: null, problem: null, oddities: [] }),
       claimed: m.fields.bip32.length + m.fields.tapBip32.length > 0 };
   });
+  const homes = inputs.filter((r) => r.home).map((r) => r.home);
+  for (const o of outputs) o.stray = o.ours ? strayReason(o.home, homes) : null;
   return { inputs, outputs, signable: inputs.filter((r) => r.sign).length,
     complete: inputs.every((r) => r.sign || r.final || r.signed),
     keys: plans.map((p) => ({ fingerprint: p.fingerprint, signs: p.signable })) };
+}
+
+// Why an output of ours may never be seen by the wallet (the rule at the top
+// of this file), or null.
+function strayReason(home, inputs) {
+  if (home.single) {
+    return !inputs.length || inputs.some((h) => h.single === home.single) ? null : "that key spends nothing here";
+  }
+  if (home.account === null) return "its path has no account, chain and index";
+  if (home.chain !== 0 && home.chain !== 1) return `chain ${home.chain >= HARDENED ? "hardened" : home.chain} is neither change (1) nor receive (0)`;
+  if (home.index >= HARDENED) return "its index is hardened";
+  const same = inputs.filter((h) => h.account === home.account);
+  if (inputs.length && !same.length) return "it is another account than the inputs'";
+  const top = Math.max(0, ...same.map((h) => (h.index < HARDENED ? h.index : 0)));
+  const limit = top + CHANGE_GAP;
+  if (home.index > limit) return `its index is over ${limit}, ${CHANGE_GAP} past the inputs'`;
+  return null;
 }
 
 // Each key signs what it can, on top of the signatures before it.

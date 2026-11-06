@@ -1,23 +1,28 @@
-// Signer: signs transactions made in Electrum (PSBTs, from its QR code) with
-// a key recombined from codex32 shares, and shows the signed transaction as
-// a QR code for Electrum to read back.
+// Signer: shows what a Bitcoin transaction does, then signs it. It takes the
+// transaction first, so you see it before any secret is in memory:
 //
-//   1. Load the key: the codex32 shares (typed or scanned), what they hold
-//      (BIP-39 entropy as dice39 makes them, or a BIP-32 master seed as
-//      BIP-93 says), and the BIP-39 passphrase if any.
-//   2. Export the account's public key once, for Electrum's watch-only wallet.
-//   3. For each payment: scan Electrum's QR code, check what it does, sign,
-//      and show the result to Electrum's camera.
+//   1. Read the PSBT from a QR code (Electrum's Base43, for now), merge other
+//      copies of it (BIP-174's Combiner). A finished transaction is only
+//      shown. Change is a claim here: the PSBT's word.
+//   2. Load the keys: codex32 shares, BIP-39 words, an xprv, a WIF. For each,
+//      the app says what it can sign, and derives the change itself: the
+//      summary comes again, with change checked or flagged.
+//   3. Sign, and show a finished transaction, or a PSBT that needs more
+//      signatures. The keys are forgotten then, unless you keep them for the
+//      next transaction.
+//
+// The account's public key for Electrum is on offer too, once a master key
+// is loaded.
 //
 // Libraries: lib/psbt (the PSBT Viewer's, copied by tools/share_libs.py),
 // lib/codex32.js and vendor/ (the codex32 app's, copied the same way), and
-// the signing library (lib/bip39.js, lib/bip32.js, lib/sign.js; tested
-// under Node by tests/signer/run_node.mjs).
+// the signing library (lib/bip39.js, bip32.js, keys.js, sign.js, combine.js,
+// review.js; tested under Node by tests/signer/run_node.mjs).
 //
-// Never logged: shares, words, the passphrase, the seed, keys. The log goes
-// to the serial port in test builds; it gets counts and sizes only. The key
-// lives in this app's memory until "Forget the key" or the app ends; never
-// in zg:session or on the card.
+// Never logged: shares, words, the passphrase, the seed, keys, public keys.
+// The log goes to the serial port in test builds; it gets counts and sizes
+// only. Keys live in this app's memory until they are forgotten or the app
+// ends; never in zg:session or on the card.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -27,46 +32,78 @@ import * as crypto from "zg:crypto";
 import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { readPayload, electrumQrText } from "./lib/psbt/transport.js";
-import { parsePsbt, serializePsbt } from "./lib/psbt/psbt.js";
-import { analyze } from "./lib/psbt/analyze.js";
+import { parsePsbt } from "./lib/psbt/psbt.js";
+import { parseTx } from "./lib/psbt/tx.js";
+import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
 import { NETWORKS } from "./lib/psbt/script.js";
 import { Rows, showAnalysis, MUTED, RED, GREEN, AMBER, wide, FONT, plural } from "./lib/psbt/view.js";
 import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32.js";
+import { Bip39Error } from "./lib/bip39.js";
+import { KeyError } from "./lib/keys.js";
+import { combine, CombineError } from "./lib/combine.js";
+import { applyPlan, flagSignatures } from "./lib/review.js";
 import * as wallet from "./lib/wallet.js";
 
 setHashes({ sha256: crypto.sha256, ripemd160: crypto.ripemd160 });
 
 const MAX_SHARES = 9;
+const MAX_KEYS = 8;
 const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 const NETWORK_ORDER = ["mainnet", "testnet", "regtest"];
 
 const state = {
   page: null,
-  // the shares being entered (kept here only, never in zg:session)
-  texts: [""],
+  // what is being typed (kept here only, never in zg:session)
+  texts: [""],        // the shares
   meaning: "bip39",   // what the shares hold: "bip39" (dice39) or "bip32" (BIP-93)
+  words: "",
+  privateText: "",
   passphrase: "",
   error: null,
-  key: null,          // wallet.loadKey()'s result
-  loaded: null,       // { encoding, chars, size, psbt }
+  keyNote: null,      // said once on the keys' page
+  keys: [],           // wallet.load...()'s results
+  after: "review",    // what the keys are being loaded for: "review", "export"
+  loaded: null,       // { kind, encoding, chars, size, copies, notes (from merging), psbt | tx }
+  merging: false,     // the scanner is reading another copy
   network: null,      // chosen by the person; null: as guessed
+  lastNetwork: null,  // of the last transaction shown: for a signed one, which says nothing
   signed: null,       // { psbt bytes, tx bytes | null, count }
   exportType: 0,      // index into wallet.EXPORTS
   exportNetwork: "mainnet",
   selftest: null,     // { passed, failed: [] }
 };
 let page = {};
+let busy = false;
 
 // --- helpers ------------------------------------------------------------------
 
+// A field that shows a secret: emptied before its page goes. (Both heaps
+// wipe what they free; this keeps the text from lasting until then.)
+function secret(field) {
+  page.secrets = page.secrets || [];
+  page.secrets.push(field);
+  return field;
+}
+
+function emptySecrets() {
+  for (const f of page.secrets || []) {
+    if (!f.alive) continue;
+    f.onChange = null; // what state holds may be wanted back (a scanner's page and return)
+    f.onBlur = null;
+    f.text = "";
+  }
+  page.secrets = [];
+}
+
 function newPage(name, title) {
+  emptySecrets();
   state.page = name;
   ui.screen.clear();
   ui.screen.set({ layout: "column", padding: wide ? [20, 32] : [10, 12], gap: wide ? 12 : 6, scrollable: true });
   page = { name, rows: new Rows() };
   const head = new ui.Container({ layout: "row", alignItems: "end", gap: 12, width: "100%" });
   new ui.Label(head, { text: title, font: FONT.title, grow: 1 });
-  if (state.key) new ui.Label(head, { text: `${ui.symbols.ok} key ${state.key.fingerprint}`, font: FONT.small, color: GREEN });
+  if (state.keys.length) new ui.Label(head, { text: `${ui.symbols.ok} ${plural(state.keys.length, "key")}`, font: FONT.small, color: GREEN });
   return head;
 }
 
@@ -83,31 +120,27 @@ function warning(parent, text, color = AMBER) {
 
 const selftestOk = () => state.selftest && !state.selftest.failed.length;
 
+// No key goes in until the self-test has passed.
+function gate(button) {
+  button.disabled = !selftestOk();
+  if (!selftestOk()) paragraph(ui.screen, state.selftest ? "The self-test failed: no key can be loaded."
+    : "Waiting for the self-test.", { color: RED });
+}
+
 // --- home -----------------------------------------------------------------------
 
 function showHome() {
   newPage("home", ui.symbols.ok + " Signer");
-  paragraph(ui.screen, "Signs transactions made in Electrum, with a key recombined from codex32 shares. " +
-    "Electrum shows the transaction as a QR code; this shows the signed one back as a QR code.");
+  paragraph(ui.screen, "Shows what a Bitcoin transaction does, then signs it. First show it the transaction, " +
+    "as a QR code: you see what it does before any key is in memory. Then load the keys.");
   const buttons = buttonRow(ui.screen);
-  let first;
-  if (!state.key) {
-    first = new ui.Button(buttons, { text: ui.symbols.plus + " Load the key", onClick: () => showShares(0) });
-  } else {
-    first = new ui.Button(buttons, { text: ui.symbols.image + " Scan a transaction", onClick: showScan });
-    new ui.Button(buttons, { text: ui.symbols.upload + " Public key for Electrum", onClick: showExport });
-  }
+  const first = new ui.Button(buttons, { text: ui.symbols.image + " Scan a transaction", onClick: () => showScan(false) });
   if (state.loaded) new ui.Button(buttons, { text: ui.symbols.list + " Last transaction", onClick: showReview });
-  if (state.key) new ui.Button(buttons, { text: ui.symbols.trash + " Forget the key", onClick: forgetKey });
+  new ui.Button(buttons, { text: ui.symbols.upload + " Public key for Electrum", onClick: askExport });
+  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " Forget the keys", onClick: forgetKeys });
   new ui.Button(buttons, { text: ui.symbols.home + " Leave", onClick: () => sys.exit() });
 
-  if (state.key) {
-    const k = state.key;
-    paragraph(ui.screen, `Key loaded: master fingerprint ${k.fingerprint}, from ${k.description}.`, { color: GREEN });
-  } else {
-    paragraph(ui.screen, "First load the key: type or scan the codex32 shares. The key stays in this app's " +
-      "memory only, until you forget it or leave the app.", { color: MUTED });
-  }
+  if (state.keys.length) paragraph(ui.screen, `${plural(state.keys.length, "key")} in memory.`, { color: GREEN });
   paragraph(ui.screen, "Setting up Electrum (once): show it the public key (\"Public key for Electrum\"), as a new " +
     "wallet: Standard wallet, Use a master key, then scan the QR code. Electrum then makes transactions that " +
     "this device signs. Each time: in Electrum, make the transaction, then Export (or Share), Show as QR code; " +
@@ -130,14 +163,224 @@ function showSelftest() {
   }
 }
 
-function forgetKey() {
-  if (state.key) wallet.wipeKey(state.key);
-  state.key = null;
+function forgetKeys() {
+  for (const k of state.keys) wallet.wipeKey(k);
+  state.keys = [];
   state.signed = null;
-  state.passphrase = "";
-  sys.gc();
-  console.log("signer: key forgotten");
+  wipeEntries();
+  console.log("signer: keys forgotten");
   showHome();
+}
+
+function wipeEntries() {
+  state.texts = [""];
+  state.words = "";
+  state.privateText = "";
+  state.passphrase = "";
+  state.error = null;
+  sys.gc();
+}
+
+// --- the keys ------------------------------------------------------------------
+
+function addKey(key, how) {
+  state.keyNote = null;
+  if (state.keys.some((k) => k.fingerprint === key.fingerprint)) {
+    wallet.wipeKey(key);
+    state.keyNote = "That key is loaded already.";
+    console.log("signer: that key is loaded already");
+  } else if (state.keys.length >= MAX_KEYS) {
+    wallet.wipeKey(key);
+    console.log("signer: too many keys");
+    return showError(`At most ${MAX_KEYS} keys at a time.`);
+  } else {
+    state.keys.push(key);
+    console.log(`signer: key loaded (${how})`);
+  }
+  state.signed = null;
+  wipeEntries();
+  if (state.after === "export" && state.keys.some((k) => k.master)) showExport();
+  else showKeys();
+}
+
+// Which key page, for a key that is needed.
+function askKeys(after) {
+  state.after = after;
+  showKeys();
+}
+
+function askExport() {
+  if (state.keys.some((k) => k.master)) showExport();
+  else askKeys("export");
+}
+
+function coverage() {
+  const l = state.loaded;
+  if (!l || l.kind !== "psbt" || !state.keys.length) return null;
+  const plan = wallet.plan(l.psbt, state.keys, { network: state.network ?? state.lastNetwork });
+  return { plan, total: l.psbt.inputs.length };
+}
+
+function showKeys() {
+  wipeEntries();
+  newPage("keys", ui.symbols.plus + " Keys");
+  const c = coverage();
+  if (state.keyNote) paragraph(ui.screen, state.keyNote, { color: AMBER });
+  state.keyNote = null;
+  if (!state.keys.length) {
+    paragraph(ui.screen, state.after === "export"
+      ? "The public key comes from a master key: codex32 shares, seed words or a master xprv."
+      : "Load the keys that sign this transaction. They stay in this app's memory only, and are forgotten " +
+        "after signing, unless you keep them for the next one.", { color: MUTED });
+  }
+  state.keys.forEach((k, i) => {
+    const signs = c ? `: signs ${c.plan.keys[i].signs} of ${plural(c.total, "input")}` : "";
+    paragraph(ui.screen, `${ui.symbols.ok} Key ${k.fingerprint}${signs}.`, { font: FONT.big, color: GREEN });
+    paragraph(ui.screen, `From ${k.description}.`);
+    if (k.master) {
+      const acct = wallet.exportKey(k, "p2wpkh", "mainnet");
+      paragraph(ui.screen, `Native segwit account ${acct.path}: fingerprint ${acct.fingerprint}.`);
+    }
+  });
+  if (state.keys.length) {
+    paragraph(ui.screen, "Check a fingerprint against what you know of this wallet: a wallet made from the seed " +
+      "phrase shows the master fingerprint; Electrum's watch-only wallet, made from the public key this device " +
+      "exports, shows the account's (Wallet, Information). A different one means another passphrase, " +
+      "other shares, or the other choice of what the shares hold.", { color: MUTED });
+  }
+  const buttons = buttonRow(ui.screen);
+  let first = null;
+  if (state.keys.length && state.loaded) {
+    first = new ui.Button(buttons, { text: ui.symbols.list + " Back to the transaction", onClick: showReview });
+  }
+  const shares = new ui.Button(buttons, { text: ui.symbols.plus + " Codex32 shares", onClick: () => showShares(0) });
+  new ui.Button(buttons, { text: ui.symbols.plus + " Seed words", onClick: showWords });
+  new ui.Button(buttons, { text: ui.symbols.plus + " xprv or WIF", onClick: showPrivate });
+  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " Forget the keys", onClick: forgetKeys });
+  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) });
+  (first || shares).focus();
+}
+
+// The BIP-39 passphrase, for the shares' page and the words' page.
+function passphraseRow(submit) {
+  const row = new ui.Container({ layout: "column", gap: 4, width: "100%" });
+  paragraph(row, "BIP-39 passphrase (leave empty if none). A different passphrase is a different wallet: " +
+    "check the fingerprint shown next.", { color: MUTED });
+  const pass = page.pass = secret(new ui.TextArea(row, { oneLine: true, password: true, width: "100%", text: state.passphrase,
+    maxLength: 256, placeholder: "no passphrase", font: FONT.text }));
+  pass.onChange = (ev) => (state.passphrase = ev.value);
+  pass.onSubmit = submit;
+  new ui.Checkbox(row, { text: "Show the passphrase", onChange: (ev) => (pass.password = !ev.value) });
+  return row;
+}
+
+function showError(msg) {
+  state.error = msg;
+  if (page.error) page.error.set({ text: msg || "", hidden: !msg });
+}
+
+// --- seed words -----------------------------------------------------------------
+
+const countWords = (text) => (text.trim() ? text.trim().split(/\s+/).length : 0);
+
+function showWords() {
+  newPage("words", ui.symbols.plus + " Seed words");
+  paragraph(ui.screen, "Type the BIP-39 words, separated by spaces, or scan them as text.", { color: MUTED });
+  const area = secret(new ui.TextArea({ width: "100%", height: wide ? 130 : 90, maxLength: 400, text: state.words, font: FONT.text,
+    accept: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n", placeholder: "abandon ability able ..." }));
+  page.count = paragraph(ui.screen, plural(countWords(state.words), "word"), { font: FONT.small, color: MUTED });
+  area.onChange = (ev) => {
+    state.words = ev.value;
+    page.count.text = plural(countWords(ev.value), "word");
+    showError(null);
+  };
+  page.error = paragraph(ui.screen, "", { color: RED, hidden: true });
+  passphraseRow(loadWords);
+  const buttons = buttonRow(ui.screen);
+  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadWords });
+  new ui.Button(buttons, { text: ui.symbols.image + " Scan", onClick: () => showKeyScan("words") });
+  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showKeys });
+  gate(page.load);
+  showError(state.error);
+  area.focus();
+}
+
+function loadWords() {
+  if (busy || state.page !== "words" || !selftestOk()) return;
+  busy = true;
+  let key;
+  try {
+    key = wallet.loadWords(state.words, state.passphrase);
+  } catch (e) {
+    if (!(e instanceof Bip39Error)) throw e;
+    console.log("signer: words refused");
+    return showError(e.message);
+  } finally {
+    busy = false;
+  }
+  addKey(key, "seed words");
+}
+
+// --- xprv or WIF ----------------------------------------------------------------
+
+function showPrivate() {
+  newPage("private", ui.symbols.plus + " xprv or WIF");
+  paragraph(ui.screen, "Type or scan a private key: an extended one (xprv, or its zprv and yprv forms), or a " +
+    "single key (WIF). A master key signs anything of its wallet, an account's key what is below it, and a " +
+    "single key its own coins.", { color: MUTED });
+  const field = secret(new ui.TextArea({ oneLine: true, password: true, width: "100%", maxLength: 160, text: state.privateText,
+    font: FONT.text, accept: ACCEPT, placeholder: "xprv... or a WIF key" }));
+  field.onChange = (ev) => {
+    state.privateText = ev.value;
+    showError(null);
+  };
+  field.onSubmit = loadPrivate;
+  new ui.Checkbox({ text: "Show the key", onChange: (ev) => (field.password = !ev.value) });
+  page.error = paragraph(ui.screen, "", { color: RED, hidden: true });
+  const buttons = buttonRow(ui.screen);
+  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadPrivate });
+  new ui.Button(buttons, { text: ui.symbols.image + " Scan", onClick: () => showKeyScan("private") });
+  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showKeys });
+  gate(page.load);
+  showError(state.error);
+  field.focus();
+}
+
+function loadPrivate() {
+  if (busy || state.page !== "private" || !selftestOk()) return;
+  let key;
+  try {
+    key = wallet.loadPrivate(state.privateText);
+  } catch (e) {
+    if (!(e instanceof KeyError)) throw e;
+    console.log("signer: private key refused");
+    return showError(e.message);
+  }
+  addKey(key, key.kind);
+}
+
+// A key as a QR code of plain text, into the page that asked.
+function showKeyScan(what) {
+  const back = () => (what === "words" ? showWords() : showPrivate());
+  newPage("keyscan", ui.symbols.image + " Scan the key");
+  page.back = back;
+  const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 8, width: "100%" });
+  page.scanner = new ui.Scanner(body, {
+    detect: ["qr"], width: wide ? 480 : 280, height: wide ? 360 : 210,
+    onDetect: ({ text }) => {
+      if (state.page !== "keyscan") return;
+      if (text === null) return say("That code doesn't hold text.", RED);
+      console.log("signer: scanned a key");
+      page.scanner.stop();
+      if (what === "words") state.words = text;
+      else state.privateText = text.trim();
+      back();
+    },
+    onError: ({ reason }) => say(`The camera stopped: ${reason}.`, RED),
+  });
+  const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
+  page.status = paragraph(side, "Show the QR code.", { color: MUTED });
+  new ui.Button(side, { text: ui.symbols.left + " Back", onClick: back }).focus();
 }
 
 // --- the shares -----------------------------------------------------------------
@@ -156,7 +399,7 @@ function boxCount() {
 }
 
 function showShares(focus) {
-  newPage("shares", ui.symbols.plus + " Load the key");
+  newPage("shares", ui.symbols.plus + " Codex32 shares");
   paragraph(ui.screen, "Type the codex32 shares (spaces don't matter), or scan them. As many as the threshold: " +
     "the third character of each share.", { color: MUTED });
   page.boxes = new ui.Container({ layout: "column", gap: 4, width: "100%" });
@@ -175,23 +418,15 @@ function showShares(focus) {
       page.passRow.hidden = state.meaning !== "bip39";
     },
   });
-  page.passRow = new ui.Container({ layout: "column", gap: 4, width: "100%", hidden: state.meaning !== "bip39" });
-  paragraph(page.passRow, "BIP-39 passphrase (leave empty if none). A different passphrase is a different wallet: " +
-    "check the fingerprint shown next.", { color: MUTED });
-  const pass = page.pass = new ui.TextArea(page.passRow, { oneLine: true, password: true, width: "100%", text: state.passphrase,
-    maxLength: 256, placeholder: "no passphrase", font: FONT.text });
-  pass.onChange = (ev) => (state.passphrase = ev.value);
-  pass.onSubmit = () => loadKey();
-  new ui.Checkbox(page.passRow, { text: "Show the passphrase", onChange: (ev) => (pass.password = !ev.value) });
+  page.passRow = passphraseRow(() => loadShares());
+  page.passRow.hidden = state.meaning !== "bip39";
 
   const buttons = buttonRow(ui.screen);
-  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadKey });
+  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadShares });
   new ui.Button(buttons, { text: ui.symbols.image + " Scan shares", onClick: showShareScan });
   new ui.Button(buttons, { text: ui.symbols.trash + " Clear", onClick: clearShares });
-  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showHome });
-  page.load.disabled = !selftestOk();
-  if (!selftestOk()) paragraph(ui.screen, state.selftest ? "The self-test failed: no key can be loaded."
-    : "Waiting for the self-test.", { color: RED });
+  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showKeys });
+  gate(page.load);
 
   syncBoxes();
   showError(state.error);
@@ -212,8 +447,8 @@ function makeBox(i) {
   const row = new ui.Container(page.boxes, { layout: "column", gap: 2, width: "100%" });
   const line = new ui.Container(row, { layout: "row", alignItems: "center", gap: 8, width: "100%" });
   new ui.Label(line, { text: `${i + 1}.`, width: 24, textAlign: "right", color: MUTED });
-  const ta = new ui.TextArea(line, { oneLine: true, grow: 1, maxLength: 160, accept: ACCEPT, text: state.texts[i] || "",
-    placeholder: i === 0 ? "ms1..." : "", font: wide ? 20 : 16 });
+  const ta = secret(new ui.TextArea(line, { oneLine: true, grow: 1, maxLength: 160, accept: ACCEPT, text: state.texts[i] || "",
+    placeholder: i === 0 ? "ms1..." : "", font: wide ? 20 : 16 }));
   const note = new ui.Label(row, { text: "", font: FONT.small, width: "100%", padding: [0, 0, 0, 32], hidden: true });
   const f = { row, ta, note, committed: false };
   ta.onChange = (ev) => {
@@ -234,7 +469,7 @@ function makeBox(i) {
     const next = page.fields.findIndex((g, j) => j > i && !normalizeShare(state.texts[j]));
     if (next >= 0) page.fields[next].ta.focus();
     else if (state.meaning === "bip39") page.pass.focus();
-    else loadKey();
+    else loadShares();
   };
   return f;
 }
@@ -260,11 +495,6 @@ function updateNote(i) {
   f.note.set({ text: ui.symbols.close + " " + e.message, color: RED, hidden: false });
 }
 
-function showError(msg) {
-  state.error = msg;
-  if (state.page === "shares" && page.error) page.error.set({ text: msg || "", hidden: !msg });
-}
-
 function clearShares() {
   state.texts = [""];
   state.passphrase = "";
@@ -274,17 +504,9 @@ function clearShares() {
   showShares(0);
 }
 
-function wipeShares() {
-  state.texts = [""];
-  state.passphrase = "";
-  sys.gc();
-}
-
-let busy = false;
-
 // Recombines the shares, then derives the master key (PBKDF2 for a seed
 // phrase: about 0.1 s on a Pi Zero).
-function loadKey() {
+function loadShares() {
   if (busy || state.page !== "shares" || !selftestOk()) return;
   const texts = state.texts.filter((t) => normalizeShare(t));
   if (!texts.length) return showError("Type or scan the shares first.");
@@ -308,30 +530,7 @@ function loadKey() {
     res.seed.fill(0);
     busy = false;
   }
-  if (state.key) wallet.wipeKey(state.key);
-  state.key = key;
-  state.signed = null;
-  wipeShares();
-  console.log(`signer: key loaded (${state.meaning}, ${texts.length} share${texts.length === 1 ? "" : "s"})`);
-  showKeyLoaded();
-}
-
-function showKeyLoaded() {
-  const k = state.key;
-  newPage("loaded", ui.symbols.ok + " Key loaded");
-  new ui.Label({ text: `Master fingerprint: ${k.fingerprint}`, font: FONT.big });
-  paragraph(ui.screen, `From ${k.description}.`);
-  const acct = wallet.exportKey(k, "p2wpkh", "mainnet");
-  paragraph(ui.screen, `Native segwit account ${acct.path}: fingerprint ${acct.fingerprint}.`);
-  paragraph(ui.screen, "Check one of them against what you know of this wallet: a wallet made from the seed " +
-    "phrase shows the master fingerprint; Electrum's watch-only wallet, made from the public key this device " +
-    "exports, shows the account's (Wallet, Information). A different one means another passphrase, " +
-    "other shares, or the other choice of what the shares hold.", { color: MUTED });
-  const buttons = buttonRow(ui.screen);
-  const scan = new ui.Button(buttons, { text: ui.symbols.image + " Scan a transaction", onClick: showScan });
-  new ui.Button(buttons, { text: ui.symbols.upload + " Public key for Electrum", onClick: showExport });
-  new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
-  scan.focus();
+  addKey(key, `${state.meaning}, ${plural(texts.length, "share")}`);
 }
 
 // --- scanning shares ------------------------------------------------------------
@@ -388,8 +587,10 @@ function scannedShare(text) {
 // --- the public key for Electrum ----------------------------------------------
 
 function showExport() {
-  if (!state.key) return showHome();
+  const key = state.keys.find((k) => k.master);
+  if (!key) return showHome();
   newPage("export", ui.symbols.upload + " Public key for Electrum");
+  page.key = key;
   paragraph(ui.screen, "Show this to Electrum once, to make the watch-only wallet whose transactions this device " +
     "signs: File, New/Restore, Standard wallet, Use a master key, then the camera button.", { color: MUTED });
   const opts = new ui.Container({ layout: "row-wrap", gap: 8, width: "100%" });
@@ -410,7 +611,7 @@ function showExport() {
 
 function drawExport() {
   page.out.clear();
-  const x = wallet.exportKey(state.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork);
+  const x = wallet.exportKey(page.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork);
   const size = Math.min(ui.height - 200, ui.width - 64, 420);
   new ui.QRCode(page.out, { data: x.text, size, ecc: "M" });
   new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}`, font: FONT.text });
@@ -420,8 +621,9 @@ function drawExport() {
 
 // --- scanning a transaction -------------------------------------------------------
 
-function showScan() {
-  newPage("scan", ui.symbols.image + " Scan a transaction");
+function showScan(merging) {
+  state.merging = merging;
+  newPage("scan", ui.symbols.image + (merging ? " Scan another copy" : " Scan a transaction"));
   const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 6, width: "100%" });
   page.scanner = new ui.Scanner(body, {
     detect: ["qr"], width: wide ? 560 : 280, height: wide ? 420 : 210,
@@ -429,103 +631,164 @@ function showScan() {
     onError: ({ reason }) => say(`The camera stopped: ${reason}.`, RED),
   });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
-  page.status = paragraph(side, "Show Electrum's QR code of the transaction (Export, Show as QR code). " +
-    "Large ones need a steady hand and good light.");
+  page.status = paragraph(side, merging
+    ? "Show a copy of the same transaction, with other signatures: it is merged into this one."
+    : "Show the transaction's QR code (Electrum: Export, Show as QR code). Large ones need a steady hand and good light.");
   new ui.Button(side, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
+}
+
+function refuse(text) {
+  console.log(`signer: refused a code: ${text}`);
+  say(ui.symbols.warning + " " + text, RED);
 }
 
 function scannedTx(text, bytes) {
   if (state.page !== "scan") return;
-  let loaded;
+  let r, loaded;
   try {
-    const r = readPayload(text, bytes);
-    if (r.kind !== "psbt") {
-      return say("This is a signed transaction already: nothing to sign. (The PSBT Viewer shows what it does.)", AMBER);
-    }
-    loaded = { encoding: r.encoding, chars: text === null ? bytes.length : text.length, size: r.bytes.length,
-      psbt: parsePsbt(r.bytes) };
+    r = readPayload(text, bytes);
+    loaded = { kind: r.kind, encoding: r.encoding, chars: text === null ? bytes.length : text.length, size: r.bytes.length, copies: 1, notes: [] };
+    if (r.kind === "psbt") loaded.psbt = parsePsbt(r.bytes);
+    else loaded.tx = parseTx(r.bytes);
   } catch (e) {
     if (!(e instanceof DecodeError)) throw e;
     const why = e.message.endsWith(".") ? e.message : e.message + ".";
-    console.log(`signer: refused a code: ${why}`);
-    return say(ui.symbols.warning + " " + (/^(This|The code)/.test(why) ? why : "Not a transaction Electrum would load: " + why), RED);
+    return refuse(/^(This|The code)/.test(why) ? why : "Not a transaction Electrum would load: " + why);
   }
-  console.log(`signer: read a PSBT (${loaded.encoding}, ${loaded.chars} characters, ${loaded.size} bytes)`);
+  if (state.merging) {
+    if (r.kind !== "psbt") return refuse("That is a finished transaction: there is nothing to merge.");
+    let m;
+    try {
+      m = combine(state.loaded.psbt, loaded.psbt);
+    } catch (e) {
+      if (!(e instanceof CombineError)) throw e;
+      return refuse(e.message);
+    }
+    state.loaded.psbt = m.psbt;
+    state.loaded.copies++;
+    state.loaded.notes.push(...m.notes);
+    state.signed = null;
+    console.log(`signer: merged a copy (${r.encoding}, ${plural(m.added, "new field")})`);
+  } else {
+    console.log(`signer: read a ${r.kind === "psbt" ? "PSBT" : "finished transaction"} (${loaded.encoding}, ` +
+      `${loaded.chars} characters, ${loaded.size} bytes)`);
+    state.loaded = loaded;
+    state.network = null;
+    state.signed = null;
+  }
   page.scanner.stop();
-  state.loaded = loaded;
-  state.network = null;
-  state.signed = null;
   showReview();
 }
 
 // --- review and sign ------------------------------------------------------------------
 
-function showReview() {
-  const l = state.loaded;
-  const a = analyze(l.psbt, { network: state.network });
-  const plan = state.key ? wallet.plan(l.psbt, state.key, { network: a.network }) : null;
-  // change only where deriving the key proves it (the analysis trusts the
-  // fingerprint, which anyone can write)
-  if (plan) {
-    for (const o of a.outputs) {
-      const p = plan.outputs[o.index];
-      if (o.mine && !p.ours) {
-        a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but its key ` +
-          `doesn't derive from this wallet${p.problem ? ` (${p.problem})` : ""}: it pays someone else.` });
-      }
-      o.mine = p.ours;
-      o.unchecked = false;
-      if (p.ours) {
-        o.role = p.role || "mine";
-        o.derivations = [{ ...o.derivations[0], path: p.path }];
-      }
-      for (const odd of p.oddities || []) a.warnings.push({ level: "warn", text: `Output ${o.index + 1}: ${odd}` });
-    }
-    a.toSelf = a.outputs.filter((o) => o.mine).reduce((s, o) => s + o.amount, 0);
-    a.sent = a.totalOut === null ? null : a.totalOut - a.toSelf;
-    for (const i of plan.inputs) {
-      for (const odd of i.oddities || []) a.warnings.push({ level: "warn", text: `Input ${i.index + 1}: ${odd}` });
-    }
-  }
-
-  newPage("review", "Transaction to sign");
-  const buttons = buttonRow(ui.screen);
-  const count = plan ? plan.inputs.filter((i) => i.sign).length : 0;
-  let first;
-  if (!state.key) {
-    first = new ui.Button(buttons, { text: ui.symbols.plus + " Load the key to sign", onClick: () => showShares(0) });
-  } else {
-    first = new ui.Button(buttons, { text: ui.symbols.edit + ` Sign ${plural(count, "input")}`, onClick: () => sign(a) });
-    first.disabled = count === 0 || !selftestOk();
-  }
-  new ui.Button(buttons, { text: ui.symbols.image + " Scan another", onClick: showScan });
-  new ui.Button(buttons, {
+function networkButton(parent, a) {
+  new ui.Button(parent, {
     text: "Network: " + NETWORKS[a.network].name,
     onClick: () => {
       state.network = NETWORK_ORDER[(NETWORK_ORDER.indexOf(a.network) + 1) % NETWORK_ORDER.length];
       showReview();
     },
   });
-  new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
-  if (plan && count === 0) paragraph(ui.screen, "Nothing here can be signed with this key: see each input.", { color: RED });
+}
 
-  const list = new ui.Container({ layout: "column", gap: wide ? 8 : 5, width: "100%", grow: 1, scrollable: true });
-  showAnalysis(list, page.rows, a, l, {
+function reviewList() {
+  return new ui.Container({ layout: "column", gap: wide ? 8 : 5, width: "100%", grow: 1, scrollable: true });
+}
+
+function showFinished() {
+  const l = state.loaded;
+  const inherited = !state.network && state.lastNetwork !== null;
+  const a = analyzeTx(l.tx, { network: state.network ?? state.lastNetwork });
+  state.lastNetwork = a.network;
+  newPage("review", "Finished transaction");
+  const buttons = buttonRow(ui.screen);
+  const first = new ui.Button(buttons, { text: ui.symbols.image + " Scan another", onClick: () => showScan(false) });
+  networkButton(buttons, a);
+  new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
+  paragraph(ui.screen, "It is signed already: there is nothing to sign here.", { color: MUTED });
+  showAnalysis(reviewList(), page.rows, a, l, {
+    networkNote: state.network ? "chosen" : inherited ? "as the transaction before: a signed one doesn't say" : null,
+  });
+  first.focus();
+  console.log(`signer: finished transaction: ${plural(a.inputs.length, "input")}, ${plural(a.outputs.length, "output")}, ` +
+    `${a.network}, ${plural(a.warnings.length, "warning")}`);
+}
+
+// A key for another network than the transaction's is worth a word: its
+// coins and addresses are not the ones shown.
+function keyNetworkWarnings(a) {
+  const test = a.network !== "mainnet";
+  for (const k of state.keys) {
+    if (k.network && (k.network === "test") !== test) {
+      a.warnings.push({ level: "warn", text: `Key ${k.fingerprint} is a ${k.network === "test" ? "test network" : "mainnet"} key, ` +
+        `and this transaction looks like ${NETWORKS[a.network].name}.` });
+    }
+  }
+}
+
+function showReview() {
+  const l = state.loaded;
+  if (!l) return showHome();
+  if (l.kind === "tx") return showFinished();
+  const a = analyze(l.psbt, { network: state.network });
+  state.lastNetwork = a.network;
+  const haveKeys = state.keys.length > 0;
+  const plan = wallet.plan(l.psbt, state.keys, { network: a.network });
+  if (haveKeys) applyPlan(a, plan);
+  else flagSignatures(a, plan);
+  keyNetworkWarnings(a);
+  a.warnings.unshift(...l.notes);
+
+  newPage("review", "Transaction to sign");
+  const buttons = buttonRow(ui.screen);
+  const count = plan.signable;
+  let first;
+  if (plan.complete && count === 0) {
+    first = new ui.Button(buttons, { text: ui.symbols.ok + " Finish the transaction", onClick: () => sign(a) });
+  } else if (!haveKeys) {
+    first = new ui.Button(buttons, { text: ui.symbols.plus + " Load the keys to sign", onClick: () => askKeys("review") });
+  } else {
+    first = new ui.Button(buttons, { text: ui.symbols.edit + ` Sign ${plural(count, "input")}`, onClick: () => sign(a) });
+    first.disabled = count === 0;
+  }
+  if (haveKeys && !first.disabled) first.disabled = !selftestOk();
+  if (haveKeys) new ui.Button(buttons, { text: ui.symbols.plus + " Keys", onClick: () => askKeys("review") });
+  new ui.Button(buttons, { text: ui.symbols.copy + " Merge a copy", onClick: () => showScan(true) });
+  new ui.Button(buttons, { text: ui.symbols.image + " Scan another", onClick: () => showScan(false) });
+  networkButton(buttons, a);
+  new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
+
+  if (l.copies > 1) paragraph(ui.screen, `Merged from ${l.copies} copies.`, { color: MUTED });
+  if (haveKeys) {
+    const each = state.keys.map((k, i) => `key ${k.fingerprint} signs ${plan.keys[i].signs}`).join(", ");
+    paragraph(ui.screen, `${plural(a.inputs.length, "input")}: ${each}.`, { color: plan.signable ? GREEN : RED });
+    if (!plan.complete) paragraph(ui.screen, "Not every input can be signed here: the result is a PSBT that needs more signatures.", { color: AMBER });
+  } else if (!plan.complete) {
+    paragraph(ui.screen, "Check it. Change is only the transaction's claim until the keys are in.", { color: MUTED });
+  }
+
+  showAnalysis(reviewList(), page.rows, a, l, {
     networkNote: state.network ? "chosen" : null,
+    changeClaimed: !haveKeys,
     inputNote: (i) => {
-      if (!plan) return null;
       const p = plan.inputs[i.index];
-      return p.sign ? { text: `${ui.symbols.edit} Will be signed (${p.path})`, color: GREEN }
-        : { text: `${ui.symbols.close} Not signed: ${p.reason}`, color: AMBER };
+      if (p.sign) return { text: `${ui.symbols.edit} Will be signed${p.path ? ` (${p.path})` : ""}`, color: GREEN };
+      if (p.signed || p.final) return { text: `${ui.symbols.ok} Signed already`, color: GREEN };
+      return haveKeys ? { text: `${ui.symbols.close} Not signed: ${p.reason}`, color: AMBER } : null;
     },
   });
   first.focus();
   console.log(`signer: review: ${plural(a.inputs.length, "input")}, ${count} to sign, ${plural(a.outputs.length, "output")}, ` +
     `fee ${a.fee ?? "?"} sat, ${a.network}, ${plural(a.warnings.length, "warning")}`);
+  const of = (test) => a.outputs.filter(test).length;
+  console.log(`signer: change: ${haveKeys ? 0 : of((o) => o.mine)} claimed, ${haveKeys ? of((o) => o.mine) : 0} checked, ` +
+    `${of((o) => o.stray !== undefined)} stray, ${of((o) => o.unverified)} unverified, ` +
+    `${haveKeys ? plan.outputs.filter((o) => o.problem).length : 0} refuted`);
 }
 
 async function sign(a) {
-  if (busy || !state.key || !selftestOk()) return;
+  if (busy || !selftestOk()) return;
   if (a.warnings.some((w) => w.level === "danger")) {
     const answer = await ui.alert("There are serious warnings (in red) about this transaction. Sign it anyway?",
       { title: "Sign?", buttons: ["Don't sign", "Sign anyway"] });
@@ -534,7 +797,7 @@ async function sign(a) {
   busy = true;
   let r;
   try {
-    r = wallet.sign(state.loaded.psbt, state.key, { network: a.network });
+    r = wallet.sign(state.loaded.psbt, state.keys, { network: a.network });
   } finally {
     busy = false;
   }
@@ -547,17 +810,28 @@ async function sign(a) {
 
 // --- the signed transaction -----------------------------------------------------------
 
+// The end of a transaction: keys are forgotten unless asked otherwise.
+function finish(keep) {
+  state.loaded = null;
+  state.signed = null;
+  state.network = null;
+  if (keep) return showScan(false);
+  if (state.keys.length) return forgetKeys();
+  showHome();
+}
+
 function showSigned(form) {
   const s = state.signed;
-  newPage("signed", ui.symbols.ok + " Signed");
+  newPage("signed", ui.symbols.ok + (s.tx ? " Signed" : " Partly signed"));
   const bytes = form === "tx" ? s.tx : s.psbt;
   const text = electrumQrText(bytes);
   paragraph(ui.screen, (form === "tx"
     ? "The complete, signed transaction. "
-    : "The PSBT with this device's signatures. ") +
+    : s.tx ? "The PSBT with its signatures. " : "The PSBT with the signatures so far: it needs more before it can be sent. ") +
     "In Electrum: Tools, Load transaction, From QR code; check it there, then Broadcast.", { color: MUTED });
   const buttons = buttonRow(ui.screen);
-  const done = new ui.Button(buttons, { text: ui.symbols.ok + " Done", onClick: showHome });
+  const done = new ui.Button(buttons, { text: ui.symbols.ok + (state.keys.length ? " Done, forget the keys" : " Done"), onClick: () => finish(false) });
+  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.right + " Next transaction (keep keys)", onClick: () => finish(true) });
   if (s.tx) {
     new ui.Button(buttons, { text: form === "tx" ? "Show as PSBT" : "Show the transaction",
       onClick: () => showSigned(form === "tx" ? "psbt" : "tx") });
@@ -583,9 +857,13 @@ function showSigned(form) {
 
 ui.onKey((ev) => {
   if (ev.key === "Escape") {
-    if (state.page === "sharescan") showShares(firstEmpty());
-    else if (state.page === "scan") state.loaded ? showReview() : showHome();
-    else if (["shares", "export", "loaded", "review", "signed"].includes(state.page)) showHome();
+    const p = state.page;
+    if (p === "sharescan") showShares(firstEmpty());
+    else if (p === "keyscan") page.back();
+    else if (p === "scan" || p === "keys") state.loaded ? showReview() : showHome();
+    else if (p === "shares" || p === "words" || p === "private") showKeys();
+    else if (p === "signed") finish(false);
+    else if (p === "export" || p === "review") showHome();
     else return false;
     return true;
   }

@@ -11,7 +11,10 @@ serve as an automated test.
 Scenario file: one command per line, '#' starts a comment.
 
     wait <seconds>              sleep
-    expect <regex> [timeout]    wait until the serial log matches (default 30 s)
+    expect <regex> [timeout]    wait until the serial log matches (default 30 s);
+                                it searches from the start, or from the last
+                                "mark", so a repeated line matches at once
+    mark                        "expect" looks at the log from here on
     type <text>                 type text (rest of line, verbatim)
     key <qemu-key> [...]        press keys, e.g. "key tab", "key ret", "key ctrl-a";
                                 "key spc@1500" holds the key 1.5 s (auto-repeat)
@@ -503,7 +506,9 @@ def run_scenario(m, path, outdir):
                 continue
             cmd, _, rest = line.strip().partition(' ')
             where = '%s:%d' % (os.path.basename(path), lineno)
-            if cmd == 'wait':
+            if cmd == 'mark':
+                m.mark = len(m.serial())
+            elif cmd == 'wait':
                 time.sleep(float(rest))
             elif cmd == 'type':
                 m.type(line.strip()[len('type '):])

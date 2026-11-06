@@ -239,10 +239,11 @@ function derInt(x) {
   return cat([2, b.length], b);
 }
 
-export function ecdsaSign(hash, k) {
+// `grind`, test-only: start from that counter, for another valid signature
+export function ecdsaSign(hash, k, grind = 0) {
   const msg = need(binary(hash, "hash"), 32, "hash"), key = binary(k, "private key");
   const d = scalar(key), z = toBig(msg) % N;
-  for (let counter = 0; ; counter++) {
+  for (let counter = grind; ; counter++) {
     let extra = null;
     if (counter) {
       extra = new Uint8Array(32);

@@ -40,6 +40,8 @@ const BIP340 = readFileSync(new URL("../native/bip340-vectors.csv", import.meta.
 const verbose = process.argv.includes("-v");
 const outIdx = process.argv.indexOf("--electrum-out");
 const electrumOut = outIdx > 0 ? process.argv[outIdx + 1] : null;
+const madeIdx = process.argv.indexOf("--made-out");
+const madeOut = madeIdx > 0 ? process.argv[madeIdx + 1] : null;
 const counts = {};
 const failures = [];
 
@@ -773,6 +775,15 @@ check("keys", "an xpub can't sign", () => {
   return has(throws(() => parsePrivateKey("xprv" + text.slice(4)), KeyError).message, "mistyped");
 });
 
+check("keys", "wipe leaves nothing of a WIF key or an xprv", () => {
+  const w = parseWif(wifOf(derive(abandon, "m/84'/1'/0'/0/0"))).key, pk = w.privateKey;
+  wipe(w);
+  const x = parsePrivateKey(privBase58(derive(abandon, ACCOUNT), XPRV)).key, xk = x.privateKey, cc = x.chainCode;
+  wipe(x);
+  eq([w.privateKey, x.privateKey, pk.every((b) => b === 0), xk.every((b) => b === 0), cc.every((b) => b === 0)],
+    [null, null, true, true, true]);
+});
+
 check("keyring", "an account xprv signs what the master signs, byte for byte (full paths)", () => {
   const p = build(TWO);
   const acct = derive(abandon, ACCOUNT);
@@ -877,13 +888,62 @@ check("combine", "a different version is refused", () => {
   q.version = 2;
   return has(throws(() => combine(p, q), CombineError).message, "versions");
 });
-check("combine", "disagreeing signatures are refused", () => {
-  const p = build(TWO), a = halfSigned(p, "m/84'/1'/0'/0/0"), b = parsePsbt(serializePsbt(a));
-  const sig = b.inputs[0].fields.partialSigs[0];
-  const bad = sig.signature.slice();
-  bad[10] ^= 1;
-  setEntry(b.inputs[0], IN.PARTIAL_SIG, sig.pubkey, bad);
-  return has(throws(() => combine(a, parsePsbt(serializePsbt(b))), CombineError).message, "input 1");
+const flipped = (sig) => {
+  const bad = sig.slice();
+  bad[12] ^= 1;
+  return bad;
+};
+const sigOf = (psbt) => psbt.inputs[0].fields.partialSigs[0];
+const replaced = (psbt, value) => {
+  const q = parsePsbt(serializePsbt(psbt));
+  setEntry(q.inputs[0], IN.PARTIAL_SIG, sigOf(psbt).pubkey, value);
+  return parsePsbt(serializePsbt(q));
+};
+const P0 = "m/84'/1'/0'/0/0";
+// the same key's signature with another nonce: valid too
+const otherNonce = (p) => {
+  const s = halfSigned(p, P0), node = derive(abandon, P0);
+  const h = segwitV0Sighash(s.tx, 0, p2wpkhScriptCode(hash160(node.publicKey)), p.inputs[0].fields.witnessUtxo.value, 1);
+  const der = ref.ecdsaSign(h, node.privateKey, 3);
+  return replaced(s, concat([der, [1]]));
+};
+check("combine", "two valid signatures by one key: the first stays, with a note", () => {
+  const p = build(TWO), a = halfSigned(p, P0), b = otherNonce(p);
+  if (equal(sigOf(a).signature, sigOf(b).signature)) throw new Error("the test needs two different signatures");
+  const r = combine(a, b);
+  eq([toHex(sigOf(r.psbt).signature), r.notes], [toHex(sigOf(a).signature),
+    [{ level: "info", text: "Input 1: two valid signatures from the same key; kept one." }]]);
+  return plan(r.psbt, abandon, ZERO_AUX).inputs[0].signed;
+});
+check("combine", "a bad signature in the second copy is dropped, in red", () => {
+  const p = build(TWO), a = halfSigned(p, P0);
+  const r = combine(a, replaced(a, flipped(sigOf(a).signature)));
+  eq([toHex(sigOf(r.psbt).signature), r.notes.map((n) => n.level)], [toHex(sigOf(a).signature), ["danger"]]);
+});
+check("combine", "a bad signature in the first copy is replaced by the good one", () => {
+  const p = build(TWO), good = halfSigned(p, P0), bad = replaced(good, flipped(sigOf(good).signature));
+  const r = combine(bad, good);
+  eq([toHex(sigOf(r.psbt).signature), r.notes.map((n) => n.level)], [toHex(sigOf(good).signature), ["danger"]]);
+});
+check("combine", "a signature that isn't SIGHASH_ALL counts as bad", () => {
+  const p = build(TWO), a = halfSigned(p, P0), v = sigOf(a).signature.slice();
+  v[v.length - 1] = 0x83;
+  eq(combine(a, replaced(a, v)).notes.map((n) => n.level), ["danger"]);
+});
+check("combine", "both bad: the first stays, and the plan reports it", () => {
+  const p = build(TWO), a = halfSigned(p, P0), v = sigOf(a).signature;
+  const x = flipped(v), y = v.slice();
+  y[14] ^= 1;
+  const r = combine(replaced(a, x), replaced(a, y));
+  eq([r.notes, toHex(sigOf(r.psbt).signature)], [[], toHex(x)]);
+  return plan(r.psbt, single("m/84'/1'/0'/0/1"), ZERO_AUX).inputs[0].badSignature;
+});
+check("combine", "a signature it can't judge makes the copies disagree", () => {
+  const p = build(TWO), a = halfSigned(p, P0);
+  const b = parsePsbt(serializePsbt(a)), c = parsePsbt(serializePsbt(a));
+  for (const q of [b, c]) q.inputs[0].entries = q.inputs[0].entries.filter((e) => e.type !== IN.WITNESS_UTXO);
+  const nocoin = parsePsbt(serializePsbt(b));
+  return has(throws(() => combine(nocoin, replaced(nocoin, flipped(sigOf(nocoin).signature))), CombineError).message, "input 1");
 });
 check("combine", "disagreeing coins are refused", () => {
   const p = build(TWO), b = parsePsbt(serializePsbt(p));
@@ -941,10 +1001,80 @@ check("review", "a claim no key can check is amber and counts as sent", () => {
   eq(a.warnings.filter(notFee), []);
   return has(a.warnings[0].text, "can check");
 });
+const output = (o, inputs = TWO.inputs) => ({ inputs, outputs: [EXTERNAL, { kind: "p2wpkh", amount: 40000, ...o }] });
+const stray = (o, inputs) => planKeys(build(output(o, inputs)), [abandon], ZERO_AUX).outputs[1];
+check("review", "change at home: same account, chain 1, near the inputs", () => {
+  const o = stray({ path: "m/84'/1'/0'/1/1001" });
+  eq([o.ours, o.stray, o.role], [true, null, "change"]);
+});
+check("review", "the receive chain is at home, and said to be", () => {
+  const o = stray({ path: "m/84'/1'/0'/0/7" });
+  eq([o.stray, o.role], [null, "receive"]);
+});
+check("review", "ransom: another account", () => has(stray({ path: "m/84'/1'/7'/1/0" }).stray, "another account"));
+check("review", "ransom: another purpose", () => has(stray({ kind: "p2wpkh", path: "m/49'/1'/0'/1/0" }).stray, "another account"));
+check("review", "ransom: another coin type", () => has(stray({ path: "m/84'/0'/0'/1/0" }).stray, "another account"));
+check("review", "ransom: a chain other than 0 or 1", () => has(stray({ path: "m/84'/1'/0'/2/0" }).stray, "chain 2"));
+check("review", "ransom: past the gap", () => has(stray({ path: "m/84'/1'/0'/1/1002" }).stray, "over 1001"));
+check("review", "the gap counts from the highest input", () => {
+  const inputs = [{ kind: "p2wpkh", path: "m/84'/1'/0'/0/5000", amount: 100000 }];
+  eq(stray({ path: "m/84'/1'/0'/1/6000" }, inputs).stray, null);
+  has(stray({ path: "m/84'/1'/0'/1/6001" }, inputs).stray, "over 6000");
+});
+check("review", "ransom: a hardened index", () => has(stray({ path: "m/84'/1'/0'/1/5'" }).stray, "hardened"));
+check("review", "ransom: a short path", () => has(stray({ path: "m/84'" }).stray, "no account"));
+check("review", "a stray output is amber with its path, and counts as sent", () => {
+  const a = reviewed(build(output({ path: "m/84'/1'/7'/1/500000" })), [abandon]);
+  eq([a.outputs[1].mine, a.outputs[1].stray, a.toSelf, a.sent], [false, "m/84'/1'/7'/1/500000", 0, 90000]);
+  eq(a.warnings.filter(notFee), []);
+  return has(a.warnings[0].text, "yours, but at m/84'/1'/7'/1/500000: the wallet may not see it");
+});
+check("review", "an account xprv: at home below its own fingerprint and not at another account", () => {
+  const acct = derive(abandon, ACCOUNT);
+  eq(planKeys(build(TWO), [acct], ZERO_AUX).outputs[1].stray, null);
+  const c = E.cases.find((x) => x.name === "mainnet-p2wpkh-watch-only");
+  const q = parsePsbt(readPayload(c.qr).bytes);
+  eq(planKeys(q, [derive(abandon, c.account)], {}).outputs.filter((o) => o.ours).map((o) => o.stray), [null]);
+});
+check("review", "a single key: at home if it spends, else not", () => {
+  const change = { kind: "p2wpkh", path: "m/84'/1'/0'/0/0", amount: 40000 };
+  const p = build({ ...TWO, outputs: [EXTERNAL, change] });
+  eq(planKeys(p, [single("m/84'/1'/0'/0/0")], ZERO_AUX).outputs[1].stray, null);
+  const q = build({ inputs: [{ kind: "p2wpkh", path: "m/84'/1'/0'/0/1", amount: 100000 }], outputs: [EXTERNAL, change] });
+  has(planKeys(q, [single("m/84'/1'/0'/0/1"), single("m/84'/1'/0'/0/0")], ZERO_AUX).outputs[1].stray, "spends nothing");
+});
+check("review", "merged and signed inputs still anchor the account", () => {
+  const p = build(output({ path: "m/84'/1'/7'/1/0" }));
+  const s = signPsbt(p, abandon, ZERO_AUX).psbt;
+  has(planKeys(s, [abandon], ZERO_AUX).outputs[1].stray, "another account");
+});
 check("review", "a bad signature held is red", () => {
   const q = withSig(signPsbt(build(TWO), abandon, ZERO_AUX).psbt, 1, (b) => { b[12] ^= 1; return b; });
   return has(reviewed(q, [single("m/84'/1'/0'/0/0")]).warnings[0].text, "Input 2");
 });
+
+// The codes tests/signer.txt shows the camera (tests/signer/make_scenario.py)
+if (madeOut) {
+  const qr = (p) => electrumQrText(serializePsbt(p));
+  const FEE_OK = (o) => ({ inputs: [{ kind: "p2wpkh", amount: 100000 }, { kind: "p2wpkh", amount: 20000 }],
+    outputs: [{ ...EXTERNAL, amount: 80000 }, { kind: "p2wpkh", amount: 39000, ...o }] });
+  const attacker = derive(fromSeed(new Uint8Array(32).fill(9)), "m/84'/1'/0'/1/0").publicKey;
+  const plain = build(FEE_OK({ path: "m/84'/1'/0'/1/0" }));
+  writeFileSync(madeOut, JSON.stringify({
+    plain: qr(plain),
+    stray: qr(build(FEE_OK({ path: "m/84'/1'/7'/1/500000" }))),
+    refuted: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/0", pubkey: attacker, script: p2wpkhScript(hash160(attacker)) }))),
+    half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
+    half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),
+    other: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/1" }))),
+    finished: electrumQrText(finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).tx),
+    xprv: privBase58(abandon, XPRV),
+    accountTprv: privBase58(derive(abandon, ACCOUNT), TPRV),
+    wif0: wifOf(derive(abandon, "m/84'/1'/0'/0/0"), 0xef),
+    wif1: wifOf(derive(abandon, "m/84'/1'/0'/0/1"), 0xef),
+  }, null, 1) + "\n");
+  console.log("wrote", madeOut);
+}
 
 if (electrumOut) {
   writeFileSync(electrumOut, JSON.stringify(signedForElectrum, null, 1) + "\n");
