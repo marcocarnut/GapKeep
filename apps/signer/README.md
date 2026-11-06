@@ -41,15 +41,20 @@ back a QR code Electrum loads.
    forget the keys" (Escape does the same), or "Next transaction (keep
    keys)". In Electrum: Tools, Load transaction, From QR code, and broadcast.
 
-**Once: the public key.** "Public key" needs a master key: it shows account 0
-of BIP-84 or BIP-49 as a QR code, with the master fingerprint as text:
+**Once: the public key.** "Public key" needs a master key: it shows an account
+of BIP-84 or BIP-49 (account 0, or the number you give) as a QR code, with the
+master fingerprint as text:
 
 - a descriptor, `wpkh([fingerprint/84h/0h/0h]xpub.../<0;1>/*)#checksum`, with
   the key's origin, for wallets that take one;
 - the zpub (ypub; vpub/upub on testnet), for Electrum: File, New/Restore,
   Standard wallet, Use a master key, and scan it.
 
-That watch-only wallet makes the transactions.
+That watch-only wallet makes the transactions. Electrum's PSBTs from it name
+the account's own fingerprint, not the master's, and only account 0 and the
+number on this page are recognised: for another account, set it there before
+signing, each time the app starts. PSBTs with the master fingerprint and the
+full path need nothing of the kind.
 
 Electrum's QR codes leave out the previous transactions, so legacy (P2PKH)
 coins can't be signed from them. Electrum has no taproot wallets; the library

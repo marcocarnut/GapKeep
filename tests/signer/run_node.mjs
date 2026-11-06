@@ -723,6 +723,12 @@ check("electrum", "watch-only PSBTs need the account in `accounts`", () => {
   has(pl.inputs[0].reason, "another wallet");
   return plan(psbt, abandon, { accounts: [c.account] }).signable === psbt.inputs.length;
 });
+check("electrum", "an exported account's own fingerprint needs that account listed", () => {
+  const a = derive(abandon, "m/84'/1'/1'");
+  const p = build({ inputs: [{ kind: "p2wpkh", path: "m/84'/1'/1'/0/0", amount: 1000, fp: fingerprint(a).slice(), claimPath: "m/0/0" }], outputs: [EXTERNAL] });
+  eq(plan(p, abandon, {}).signable, 0);
+  eq(plan(p, abandon, { accounts: ["m/84'/1'/1'"] }).inputs[0].path, "m/84'/1'/1'/0/0");
+});
 check("electrum", "a hostile watch-only PSBT: right account fingerprint, wrong key", () => {
   const c = E.cases.find((x) => x.name === "mainnet-p2wpkh-watch-only");
   const psbt = parsePsbt(readPayload(c.qr).bytes);
@@ -1135,6 +1141,8 @@ if (madeOut) {
     finished: electrumQrText(finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).tx),
     xprv: privBase58(abandon, XPRV),
     accountTprv: privBase58(derive(abandon, ACCOUNT), TPRV),
+    account1: qr(build({ inputs: [{ kind: "p2wpkh", path: "m/84'/1'/1'/0/0", amount: 100000, fp: fingerprint(derive(abandon, "m/84'/1'/1'")).slice(), claimPath: "m/0/0" }],
+      outputs: [{ ...EXTERNAL, amount: 99000 }] })),
     wif0: wifOf(derive(abandon, "m/84'/1'/0'/0/0"), 0xef),
     wif1: wifOf(derive(abandon, "m/84'/1'/0'/0/1"), 0xef),
   }, null, 1) + "\n");

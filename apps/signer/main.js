@@ -49,7 +49,7 @@ const MAX_SHARES = 9;
 const MAX_KEYS = 8;
 const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 const NETWORK_ORDER = ["mainnet", "testnet", "regtest"];
-const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub (Electrum)", field: "text" }];
+const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub", field: "text" }];
 
 const state = {
   page: null,
@@ -71,6 +71,7 @@ const state = {
   exportForm: 0,      // index into EXPORT_FORMS
   exportType: 0,      // index into wallet.EXPORTS
   exportNetwork: "mainnet",
+  account: 0,         // the account number exported; its PSBTs are signed too
   selftest: null,     // { passed, failed: [] }
 };
 let page = {};
@@ -215,10 +216,12 @@ function askExport() {
   else askKeys("export");
 }
 
+const signOptions = (network) => ({ network, accounts: wallet.accountsFor(state.account) });
+
 function coverage() {
   const l = state.loaded;
   if (!l || l.kind !== "psbt" || !state.keys.length) return null;
-  const plan = wallet.plan(l.psbt, state.keys, { network: state.network ?? state.lastNetwork });
+  const plan = wallet.plan(l.psbt, state.keys, signOptions(state.network ?? state.lastNetwork));
   return { plan, total: l.psbt.inputs.length };
 }
 
@@ -609,6 +612,17 @@ function showExport() {
     options: NETWORK_ORDER.map((n) => NETWORKS[n].name), selected: NETWORK_ORDER.indexOf(state.exportNetwork),
     onChange: (ev) => { state.exportNetwork = NETWORK_ORDER[ev.value]; drawExport(); },
   });
+  const row = new ui.Container({ layout: "row", alignItems: "center", gap: 8, width: "100%" });
+  new ui.Label(row, { text: "Account", font: FONT.text });
+  const account = new ui.TextArea(row, { oneLine: true, width: 140, maxLength: 10, accept: "0123456789", text: String(state.account), font: FONT.text });
+  account.onChange = (ev) => {
+    const n = ev.value === "" ? null : Number(ev.value);
+    page.account = n !== null && n <= wallet.MAX_ACCOUNT ? n : null;
+    if (page.account !== null) state.account = page.account;
+    drawExport();
+  };
+  new ui.Label(row, { text: "This device signs for the account shown here.", font: FONT.small, color: MUTED, grow: 1, overflow: "wrap" });
+  page.account = state.account;
   page.out = new ui.Container({ layout: "column", gap: 6, width: "100%", alignItems: "center" });
   const back = new ui.Button({ text: ui.symbols.left + " Back", onClick: showHome });
   drawExport();
@@ -617,7 +631,11 @@ function showExport() {
 
 function drawExport() {
   page.out.clear();
-  const x = wallet.exportKey(page.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork);
+  if (page.account === null) {
+    new ui.Label(page.out, { text: `An account number is 0 to ${wallet.MAX_ACCOUNT}.`, font: FONT.text, color: RED });
+    return;
+  }
+  const x = wallet.exportKey(page.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork, page.account);
   const form = EXPORT_FORMS[state.exportForm];
   const text = x[form.field];
   const size = Math.min(ui.height - 200, ui.width - 64, 420);
@@ -626,7 +644,7 @@ function drawExport() {
     width: "100%", overflow: "wrap", textAlign: "center" });
   new ui.Label(page.out, { text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
   console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork}), ` +
-    `${form.id}, ${text.length} characters`);
+    `account ${page.account}, ${form.id}, ${text.length} characters`);
 }
 
 // --- scanning a transaction -------------------------------------------------------
@@ -753,7 +771,7 @@ function showReview() {
   const a = analyze(l.psbt, { network: state.network });
   state.lastNetwork = a.network;
   const haveKeys = state.keys.length > 0;
-  const plan = wallet.plan(l.psbt, state.keys, { network: a.network });
+  const plan = wallet.plan(l.psbt, state.keys, signOptions(a.network));
   if (haveKeys) applyPlan(a, plan);
   else flagSignatures(a, plan);
   keyNetworkWarnings(a);
@@ -817,7 +835,7 @@ async function sign(a) {
   busy = true;
   let r;
   try {
-    r = wallet.sign(state.loaded.psbt, state.keys, { network: a.network });
+    r = wallet.sign(state.loaded.psbt, state.keys, signOptions(a.network));
   } finally {
     busy = false;
   }

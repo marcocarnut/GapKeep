@@ -311,7 +311,7 @@ type xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg
 mark
 key ret
 expect signer: key loaded \(xprv\) 10
-expect signer: showing the p2wpkh public key \(mainnet\), descriptor, 1\d\d characters 10
+expect signer: showing the p2wpkh public key \(mainnet\), account 0, descriptor, 1\d\d characters 10
 wait 0.5
 shot 23-descriptor
 # the form's dropdown: Electrum's zpub
@@ -320,7 +320,7 @@ key tab
 key ret
 key down
 key ret
-expect signer: showing the p2wpkh public key \(mainnet\), extended key, 111 characters 10
+expect signer: showing the p2wpkh public key \(mainnet\), account 0, extended key, 111 characters 10
 wait 0.5
 shot 23-zpub
 key esc
@@ -400,3 +400,57 @@ shot 25-key-scanned
 mark
 key ret
 expect signer: key loaded \(xprv\) 10
+wait 0.3
+
+# 15. Another account: exported, its Electrum PSBT (the account's own
+# fingerprint, m/0/0) signs, and a bad number shows no key. Forget first
+# (keys' page, Back to the transaction: Home button is last)
+key esc
+wait 0.3
+key esc
+wait 0.3
+key tab
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1kuHnLisriDvSnRRuL2Qrg5ggqHKNVpxR86QEC8w35uxmGoggxtQTPvfUu
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+# form, kind, network, account
+key tab
+key tab
+key tab
+key tab
+mark
+key backspace
+wait 0.3
+shot 26-no-account
+type 1
+expect signer: showing the p2wpkh public key \(mainnet\), account 1, extended key 10
+wait 0.5
+shot 26-account1
+mark
+key esc
+wait 0.3
+key ret
+wait 0.3
+camera qr J8RPFXAJ.XF:6KAJS29$/I-AK606J+T+BEZY:*79VQ4NB0XY*2EB2+SI/NZ0.+P7LCKSVASTV1Z0UV52U9GOKOF.$9DMD*SGPYFF$19W:UJUVSL7A+C*BSL*D4FM31GMYA48.RGR3L6DURKM1NB*C.SY/LYF/T2P$H3C614/7/FKYZ999-5A*4SHM.9/Y+KKZTCIVYT56MK0L$PVUZ*YKDNWK5$A3JSKHI40I3WUB4JFJ:SXOGDDI3SPK*GKLA3P5-
+expect signer: review: 1 input, 1 to sign 15
+camera scene
+wait 0.3
+mark
+key ret
+expect signer: signed 1 input, transaction complete 15
