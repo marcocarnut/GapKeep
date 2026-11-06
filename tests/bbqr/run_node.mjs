@@ -13,6 +13,7 @@
 import { deflateRawSync, inflateRawSync, constants } from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   split, Joiner, parsePart, isBBQr, BBQrError, partCapacity, deflateRaw, inflateRaw,
   toBase32, fromBase32, WINDOW, MAX_PARTS,
@@ -303,6 +304,24 @@ check("parts fit their version, are even, and alphanumeric", shapeOk);
   check("a small file is one part, B$HP0100", r.parts.length === 1 && r.parts[0].startsWith("B$HP0100"));
   const j = new Joiner();
   check("one part is done at once", j.add(r.parts[0]).done && eq(j.result().bytes, data));
+}
+
+// a real series from the BBQr project (README.md): another encoder's zlib
+{
+  const lines = readFileSync(new URL("./real-scan.txt", import.meta.url), "utf8").split("\n").filter((l) => l.trim());
+  const j = new Joiner();
+  let last;
+  for (const l of lines) last = j.add(l.trim());
+  const r = j.result(), text = Buffer.from(r.bytes).toString("utf8");
+  check("the real scan: 8 parts, type U, encoding Z, done", last.done && last.total === 8 && r.type === "U" && r.encoding === "Z");
+  check("the real scan: the text BBQr's own tests look for", text.includes("Zlib compressed") && text.includes("PSBT"));
+  const parts = [...new Set(lines.map((l) => l.trim()))].reverse();
+  const k = new Joiner();
+  for (const p of parts) k.add(p);
+  check("the real scan backwards: the same bytes", eq(k.result().bytes, r.bytes));
+  const ours = new Joiner();
+  for (const p of split(r.bytes, "U").parts) ours.add(p);
+  check("the real scan's text through our own split and join", eq(ours.result().bytes, r.bytes));
 }
 
 for (const f of failed) console.log("FAIL", f);
