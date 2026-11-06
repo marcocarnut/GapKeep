@@ -137,7 +137,7 @@ $(OBJDIR)/apps_bundle.c: FORCE
 	@python3 $(ROOT)/tools/bundle_apps.py $@ $(BUNDLE)
 
 $(OBJDIR)/apps_bundle.c.o: $(OBJDIR)/apps_bundle.c
-	@$(CC) $(CFLAGS) -I $(ROOT)/src/generated -c -o $@ $<
+	@$(CC) $(CFLAGS) -I $(ROOT)/src/runtime -c -o $@ $<
 
 # QuickJS asks the C library for the time: in the simulator too, that is
 # zerogap's clock (src/runtime/clock.cpp), not the host's (platform.cpp).
