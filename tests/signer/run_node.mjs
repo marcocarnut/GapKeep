@@ -22,6 +22,7 @@ import { combine, CombineError } from "../../apps/signer/lib/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
 import { analyze } from "../../apps/signer/lib/psbt/analyze.js";
 import { base58CheckEncode } from "../../apps/signer/lib/psbt/basen.js";
+import { accountDescriptor, descriptorChecksum, checkDescriptor } from "../../apps/signer/lib/descriptor.js";
 import { selfTest } from "../../apps/signer/lib/selftest.js";
 import { fromHex, toHex, equal, concat, Writer, fromBase64 } from "../../apps/signer/lib/psbt/bytes.js";
 import { parseTx, serializeTx, txid as txidOf } from "../../apps/signer/lib/psbt/tx.js";
@@ -1036,6 +1037,28 @@ check("review", "an account xprv: at home below its own fingerprint and not at a
   const q = parsePsbt(readPayload(c.qr).bytes);
   eq(planKeys(q, [derive(abandon, c.account)], {}).outputs.filter((o) => o.ours).map((o) => o.stray), [null]);
 });
+check("review", "one account, named by its xprv's fingerprint in one place and the master's in another", () => {
+  const acct = derive(abandon, ACCOUNT), own = fingerprint(acct).slice();
+  const byOwn = { kind: "p2wpkh", path: "m/84'/1'/0'/0/0", amount: 100000, fp: own, claimPath: "m/0/0" };
+  const byMaster = { kind: "p2wpkh", path: "m/84'/1'/0'/0/0", amount: 100000 };
+  const changeOwn = { ...CHANGE, fp: own, claimPath: "m/1/0" };
+  for (const [input, change] of [[byOwn, CHANGE], [byMaster, changeOwn]]) {
+    const p = build({ inputs: [input], outputs: [EXTERNAL, change] });
+    for (const keys of [[acct], [abandon, acct], [acct, abandon]]) {
+      const o = planKeys(p, keys, ZERO_AUX).outputs[1];
+      eq([o.ours, o.stray], [true, null]);
+    }
+  }
+  // and another account still isn't that account
+  const other = derive(abandon, "m/84'/1'/7'");
+  const q = build({ inputs: [{ ...byOwn, fp: fingerprint(other).slice(), path: "m/84'/1'/7'/0/0" }], outputs: [EXTERNAL, CHANGE] });
+  has(planKeys(q, [other, acct], ZERO_AUX).outputs[1].stray, "another account");
+});
+check("review", "an xprv on the chain level still names the account", () => {
+  const chain = derive(abandon, ACCOUNT + "/1");
+  const p = build({ inputs: [{ kind: "p2wpkh", path: "m/84'/1'/0'/1/3", amount: 100000 }], outputs: [EXTERNAL, CHANGE] });
+  eq(planKeys(p, [chain, abandon], ZERO_AUX).outputs[1].stray, null);
+});
 check("review", "a single key: at home if it spends, else not", () => {
   const change = { kind: "p2wpkh", path: "m/84'/1'/0'/0/0", amount: 40000 };
   const p = build({ ...TWO, outputs: [EXTERNAL, change] });
@@ -1051,6 +1074,48 @@ check("review", "merged and signed inputs still anchor the account", () => {
 check("review", "a bad signature held is red", () => {
   const q = withSig(signPsbt(build(TWO), abandon, ZERO_AUX).psbt, 1, (b) => { b[12] ^= 1; return b; });
   return has(reviewed(q, [single("m/84'/1'/0'/0/0")]).warnings[0].text, "Input 2");
+});
+
+// --- descriptors -----------------------------------------------------------------
+
+const D = JSON.parse(readFileSync(new URL("./descriptor_vectors.json", import.meta.url), "utf8"));
+const bodyOf = (s) => s.slice(0, s.length - 9);
+check("descriptor", "Bitcoin Core's valid checksums", () => {
+  if (D.core_valid.length < 5) throw new Error("the vectors are missing");
+  for (const s of D.core_valid) eq(`${bodyOf(s)}#${descriptorChecksum(bodyOf(s))}`, s);
+  return D.core_valid.every(checkDescriptor);
+});
+check("descriptor", "Bitcoin Core's invalid checksums", () => D.core_invalid.length >= 5 && !D.core_invalid.some(checkDescriptor));
+check("descriptor", "BIP-380's valid checksum", () => D.bip380_valid.every(checkDescriptor));
+for (const s of D.bip380_invalid) check("descriptor", `BIP-380 refuses ${JSON.stringify(s)}`, () => !checkDescriptor(s));
+check("descriptor", "multipath, against an independent BIP-380 in Python", () => {
+  for (const s of D.multipath) eq(descriptorChecksum(bodyOf(s)), s.slice(-8));
+  return D.multipath.length === 3;
+});
+check("descriptor", "BIP-84's account, in the plan's form", () => {
+  const acct = neuter(derive(abandon, "m/84'/0'/0'"));
+  const d = accountDescriptor({ script: "p2wpkh", fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub: serializeXpub(acct, "xpub") });
+  eq(d, D.multipath[0]);
+});
+check("descriptor", "BIP-49 on a test network, nested", () => {
+  const acct = neuter(derive(abandon, "m/49'/1'/0'"));
+  const d = accountDescriptor({ script: "p2sh-p2wpkh", fingerprint: ABANDON_FP, network: "testnet", account: 0, xpub: serializeXpub(acct, "tpub") });
+  return d.startsWith(`sh(wpkh([${ABANDON_FP}/49h/1h/0h]tpub`) && d.includes("/<0;1>/*))#") && checkDescriptor(d);
+});
+check("descriptor", "the account number goes in the path", () => {
+  const xpub = serializeXpub(neuter(derive(abandon, "m/44'/0'/7'")), "xpub");
+  return accountDescriptor({ script: "p2pkh", fingerprint: ABANDON_FP, network: "mainnet", account: 7, xpub }).startsWith(`pkh([${ABANDON_FP}/44h/0h/7h]`);
+});
+check("descriptor", "refuses what would make a wrong one", () => {
+  const xpub = serializeXpub(neuter(abandon), "xpub"), good = { script: "p2wpkh", fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub };
+  throws(() => accountDescriptor({ ...good, script: "p2tr" }), RangeError);
+  throws(() => accountDescriptor({ ...good, fingerprint: "73C5DA0A" }), RangeError);
+  throws(() => accountDescriptor({ ...good, fingerprint: null }), RangeError);
+  throws(() => accountDescriptor({ ...good, account: -1 }), RangeError);
+  throws(() => accountDescriptor({ ...good, account: 2 ** 31 }), RangeError);
+  throws(() => accountDescriptor({ ...good, network: "testnet" }), RangeError);
+  throws(() => accountDescriptor({ ...good, xpub: serializeXpub(neuter(abandon), "zpub") }), RangeError);
+  return true;
 });
 
 // The codes tests/signer.txt shows the camera (tests/signer/make_scenario.py)

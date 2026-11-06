@@ -65,6 +65,14 @@ if [ -f "$OUT/dice39/07-words.png" ]; then
 	fi
 fi
 
+if [ -f "$OUT/signer/23-descriptor.png" ]; then
+	if python3 tests/signer/check_descriptor.py "$OUT/signer" > "$OUT/signer_descriptor.log" 2>&1; then
+		echo "PASS  sim:signer_descriptor"
+	else
+		echo "FAIL  sim:signer_descriptor   (see $OUT/signer_descriptor.log)"; FAILED=1
+	fi
+fi
+
 if [ -f "$OUT/dice39_import/12-zpub.png" ]; then
 	if python3 tests/dice39/check_zpub.py "$OUT/dice39_import" > "$OUT/dice39_zpub.log" 2>&1; then
 		echo "PASS  sim:dice39_zpub"

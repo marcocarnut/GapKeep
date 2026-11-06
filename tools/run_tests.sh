@@ -83,6 +83,11 @@ for t in tests/*.txt; do
 	! needs_test_build "$t" || run "$t" "$OUT/sd-test.img"
 done
 
+# the public keys the Signer shows, decoded from the screenshots
+if [ -f "$OUT/signer/23-descriptor.png" ]; then
+	check signer_descriptor python3 tests/signer/check_descriptor.py "$OUT/signer"
+fi
+
 tools/build.sh qemu >/dev/null	# back to the production app set
 
 echo "screenshots and logs: $OUT"

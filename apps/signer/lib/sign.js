@@ -305,14 +305,18 @@ function pathOddities(path, type, network, maxIndex) {
 
 const accountOf = (path) => formatPath(path.length >= 3 ? path.slice(0, path.length - 2) : path.slice(0, 1));
 
-// Where a key sits: its account, chain and index. An account's own xprv
-// doesn't know the path above it: `key` + its fingerprint stands for that.
+// Where a key sits: its account, chain and index. The account is named by
+// its key's fingerprint, not its path: a master key and that account's own
+// xprv see the same account, and only one of them knows the path. (An
+// xprv one step below the account gets it from its parent fingerprint; one
+// deeper can't tell, and goes by the path.)
 function homeOf(loc, keys) {
   const p = loc.full || loc.rel;
   if (p.length < 2) return { account: null, chain: null, index: null };
-  const above = p.slice(0, p.length - 2);
-  return { account: loc.full ? formatPath(above) : `${toHex(keys.fp)}/${formatPath(above)}`,
-    chain: p[p.length - 2], index: p[p.length - 1] };
+  const rel = loc.rel;
+  const account = rel.length >= 2 ? toHex(fingerprint(keys.node(rel.slice(0, rel.length - 2))))
+    : rel.length === 1 ? toHex(keys.root.parentFingerprint) : formatPath(p.slice(0, p.length - 2));
+  return { account, chain: p[p.length - 2], index: p[p.length - 1] };
 }
 
 function planInput(psbt, i, keys, prevouts) {

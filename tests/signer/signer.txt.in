@@ -305,9 +305,18 @@ type @xprv@
 mark
 key ret
 expect signer: key loaded \(xprv\) 10
-expect signer: showing the p2wpkh public key \(mainnet\) 10
+expect signer: showing the p2wpkh public key \(mainnet\), descriptor, 1\d\d characters 10
 wait 0.5
-shot 23-export
+shot 23-descriptor
+# the form's dropdown: Electrum's zpub
+mark
+key tab
+key ret
+key down
+key ret
+expect signer: showing the p2wpkh public key \(mainnet\), extended key, 111 characters 10
+wait 0.5
+shot 23-zpub
 key esc
 wait 0.3
 
