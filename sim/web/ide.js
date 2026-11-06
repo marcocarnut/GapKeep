@@ -570,6 +570,8 @@ async function run (appId, { focus = true } = {}) {
     if (BUILTIN.has (appOf (path))) builtin[path.slice (5)] = data;
     else card[path] = data;
   }
+  // the card's zerogap.txt: only the experimental switch (docs/EXPERIMENTAL.md)
+  if (localStorage.getItem ("zgide.experimental") === "yes") card["zerogap.txt"] = "experimental = yes\n";
   if (Object.keys (card).length) zg.writeCard (card);
   if (Object.keys (builtin).length) zg.writeBuiltin (builtin);
   const canvas = $("screen");
@@ -643,6 +645,12 @@ function setupScreen () {
   sel.onchange = () => {
     size = SIZES[sel.value];
     localStorage.setItem ("zgide.size", sizeName (size));
+    run (machine ? lastApp : null);
+  };
+  const experimental = $("experimental");
+  experimental.checked = localStorage.getItem ("zgide.experimental") === "yes";
+  experimental.onchange = () => {
+    localStorage.setItem ("zgide.experimental", experimental.checked ? "yes" : "no");
     run (machine ? lastApp : null);
   };
 

@@ -2,3 +2,4 @@
 clock_trim_ppm = -12.5
 utc_offset = +05:30
 no_such_key = 1
+experimental = yes

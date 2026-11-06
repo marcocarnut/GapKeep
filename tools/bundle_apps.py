@@ -172,7 +172,8 @@ def load_app(appdir, app_id):
     if not isinstance(m, dict):
         fail('%s: must be a JSON object' % where)
 
-    known = {'id', 'name', 'version', 'description', 'icon', 'entry', 'permissions', 'hidden'}
+    known = {'id', 'name', 'version', 'description', 'icon', 'entry', 'permissions', 'hidden',
+             'experimental'}
     for k in m:
         if k not in known:
             fail('%s: unknown key %r' % (where, k))
@@ -187,8 +188,9 @@ def load_app(appdir, app_id):
         v = m.get(k)
         if not isinstance(v, str) or not v or len(v.encode()) > limit or '\0' in v:
             fail('%s: %r must be a non-empty string of at most %d bytes' % (where, k, limit))
-    if 'hidden' in m and not isinstance(m['hidden'], bool):
-        fail('%s: "hidden" must be true or false' % where)
+    for k in ('hidden', 'experimental'):
+        if k in m and not isinstance(m[k], bool):
+            fail('%s: "%s" must be true or false' % (where, k))
     if m['id'] != app_id:
         fail('%s: id %r must match the directory name %r' % (where, m['id'], app_id))
     if not ID_RE.match(app_id):
@@ -212,6 +214,7 @@ def load_app(appdir, app_id):
         'entry': entry,
         'permissions': ' | '.join(PERMISSIONS[p] for p in perms) or '0',
         'hidden': 1 if m.get('hidden') else 0,
+        'experimental': 1 if m.get('experimental') else 0,
         'files': files,
         'hash': app_hash(files),
     }
@@ -267,11 +270,11 @@ def main():
     lines.append('const zg_app_t zg_builtin_apps[] = {')
     for n, a in enumerate(apps):
         w, h, _ = a['picture'] or (0, 0, None)
-        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, app%d_files, %d,\n\t  "%s", ZG_APP_BUILTIN, %s, %d, %d },' % (
+        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", ZG_APP_BUILTIN, %s, %d, %d },' % (
             c_string(a['id'].encode()), c_string(a['name'].encode()),
             c_string(a['version'].encode()), c_string(a['description'].encode()),
             c_string(a['icon']), c_string(a['entry'].encode()),
-            a['permissions'], a['hidden'], n, len(a['files']), a['hash'],
+            a['permissions'], a['hidden'], a['experimental'], n, len(a['files']), a['hash'],
             'app%d_icon' % n if a['picture'] else '0', w, h))
     lines.append('};')
     lines.append('const unsigned zg_builtin_app_count = %d;' % len(apps))

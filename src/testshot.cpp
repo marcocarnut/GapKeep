@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "testshot.h"
+#include "testpictures.h"
+#include "runtime/settings.h"
 #include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
@@ -14,13 +16,19 @@ CTestShot::CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial, CZgPiCamer
 :	m_pScreen (pScreen),
 	m_pSerial (pSerial),
 	m_pPiCamera (pPiCamera),
-	m_nLine (0)
+	m_nLine (0),
+	m_bRawPending (FALSE)
 {
 	CZgCamera::Set (&m_Camera);
 }
 
 void CTestShot::Update (void)
 {
+	if (m_bRawPending)
+	{
+		SendRaw ();
+	}
+
 	char Buf[16];
 	int n;
 	while ((n = m_pSerial->Read (Buf, sizeof Buf)) > 0)
@@ -38,6 +46,10 @@ void CTestShot::Update (void)
 				else if (strncmp (m_Line, "#crash ", 7) == 0)
 				{
 					ZgTestCrash (m_Line + 7);
+				}
+				else if (strcmp (m_Line, "#experimental on") == 0)
+				{
+					CZgSettings::SetExperimental (TRUE, "serial line, test build");
 				}
 				else if (strncmp (m_Line, "#camera ", 8) == 0)
 				{
@@ -110,22 +122,44 @@ void CTestShot::Send (void)
 		nLen += nBytes;
 	}
 
+	CString Header;
+	Header.Format ("\nZGSHOT1 %u %u %u %u %08x\n", nWidth, nHeight, nBytes * 8, nLen, Crc32 (0, pOut, nLen));
+	SendBinary (Header, pOut, nLen);
+
+	delete [] pOut;
+}
+
+void CTestShot::SendBinary (const CString &rHeader, const u8 *pData, unsigned nLength)
+{
 	// binary data: no NL -> CR NL translation while sending
 	unsigned nOptions = m_pSerial->GetOptions ();
 	m_pSerial->SetOptions (nOptions & ~SERIAL_OPTION_ONLCR);
 
-	CString Header;
-	Header.Format ("\nZGSHOT1 %u %u %u %u %08x\n", nWidth, nHeight, nBytes * 8, nLen, Crc32 (0, pOut, nLen));
-	m_pSerial->Write ((const char *) Header, Header.GetLength ());
-	for (unsigned i = 0; i < nLen; i += 1024)
+	m_pSerial->Write ((const char *) rHeader, rHeader.GetLength ());
+	for (unsigned i = 0; i < nLength; i += 1024)
 	{
-		m_pSerial->Write (pOut + i, nLen - i < 1024 ? nLen - i : 1024);
+		m_pSerial->Write (pData + i, nLength - i < 1024 ? nLength - i : 1024);
 	}
 	m_pSerial->Write ("\nZGEND\n", 7);
 
 	m_pSerial->SetOptions (nOptions);
+}
 
-	delete [] pOut;
+// once the camera has copied a frame (it needs to be streaming)
+void CTestShot::SendRaw (void)
+{
+	unsigned nWidth, nHeight, nStride, nExposure, nAnalogue, nDigital;
+	const u8 *pRaw = m_pPiCamera->GetRaw (&nWidth, &nHeight, &nStride, &nExposure, &nAnalogue, &nDigital);
+	if (pRaw == 0)
+	{
+		return;
+	}
+	m_bRawPending = FALSE;
+	unsigned nLength = nStride * nHeight;
+	CString Header;
+	Header.Format ("\nZGRAW1 %u %u %u %u %u %u %u %08x\n", nWidth, nHeight, nStride,
+		       nExposure, nAnalogue, nDigital, nLength, Crc32 (0, pRaw, nLength));
+	SendBinary (Header, pRaw, nLength);
 }
 
 // (Logs what the camera shows, never the text: tests may use secrets.)
@@ -161,6 +195,54 @@ void CTestShot::Camera (const char *pArgs)
 		}
 		m_pPiCamera->SetMode (pMode);
 		pLogger->Write ("camera", LogNotice, "pi mode %s (from the next start)", pMode->pName);
+		return;
+	}
+	if (strncmp (pArgs, "picture ", 8) == 0)
+	{
+		// a test picture (testpictures.h), unpacked
+		const TZgTestPicture *p = zg_test_pictures;
+		while (p->pName != 0 && strcmp (p->pName, pArgs + 8) != 0)
+		{
+			p++;
+		}
+		if (p->pName == 0)
+		{
+			pLogger->Write ("camera", LogWarning, "#camera picture: no test picture \"%s\"", pArgs + 8);
+			return;
+		}
+		unsigned nSize = p->nWidth * p->nHeight * 3;
+		u8 *pRGB = new u8[nSize];
+		unsigned nOut = 0;
+		for (unsigned i = 0; i + 4 <= p->nLength && nOut < nSize; i += 4)
+		{
+			for (unsigned n = p->pRuns[i]; n > 0 && nOut + 3 <= nSize; n--)
+			{
+				memcpy (pRGB + nOut, p->pRuns + i + 1, 3);
+				nOut += 3;
+			}
+		}
+		if (nOut == nSize && m_Camera.SetPictureRGB (pRGB, p->nWidth, p->nHeight))
+		{
+			CZgCamera::Set (&m_Camera);
+			pLogger->Write ("camera", LogNotice, "a colour picture, %ux%u", p->nWidth, p->nHeight);
+		}
+		else
+		{
+			pLogger->Write ("camera", LogWarning, "#camera picture %s: damaged", p->pName);
+		}
+		delete [] pRGB;
+		return;
+	}
+	if (strcmp (pArgs, "raw") == 0)
+	{
+		if (m_pPiCamera == 0)
+		{
+			pLogger->Write ("camera", LogWarning, "#camera raw: no Pi Camera");
+			return;
+		}
+		m_pPiCamera->RequestRaw ();
+		m_bRawPending = TRUE;
+		pLogger->Write ("camera", LogNotice, "raw frame requested");
 		return;
 	}
 	if (strncmp (pArgs, "pattern ", 8) == 0)
@@ -207,7 +289,7 @@ void CTestShot::Camera (const char *pArgs)
 	else
 	{
 		pLogger->Write ("camera", LogWarning,
-				"#camera qr <text> | scene | none | synth | pi | pattern <n> | mode <name>");
+				"#camera qr <text> | picture <name> | scene | none | synth | pi | raw | pattern <n> | mode <name>");
 		return;
 	}
 	CZgCamera::Set (&m_Camera);

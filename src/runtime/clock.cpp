@@ -7,9 +7,6 @@
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
-#ifndef ZG_SEALED
-#include <ff.h>
-#endif
 #include <stdlib.h>
 
 static const char From[] = "clock";
@@ -162,91 +159,32 @@ static boolean ParseDecimal (const char *p, double *pValue)
 	return TRUE;
 }
 
-void CZgClock::LoadConfig (void)
+// A clock setting from zerogap.txt (settings.cpp): FALSE if the key is not
+// the clock's. Logs what it refuses.
+boolean CZgClock::Configure (const char *pKey, const char *pValue, unsigned nLine)
 {
-#ifndef ZG_SEALED
-	FIL File;
-	if (f_open (&File, "SD:/zerogap.txt", FA_READ) != FR_OK)
+	double fTrim;
+	int nOffset;
+	if (strcmp (pKey, "clock_trim_ppm") == 0)
 	{
-		return;
+		if (!ParseDecimal (pValue, &fTrim) || !SetTrim (fTrim))
+		{
+			CLogger::Get ()->Write (From, LogWarning,
+				"zerogap.txt:%u: clock_trim_ppm: a number from -%d to %d expected",
+				nLine, MaxTrim, MaxTrim);
+		}
+		return TRUE;
 	}
-
-	static char Text[4096];
-	UINT nRead = 0;
-	FRESULT Result = f_read (&File, Text, sizeof Text - 1, &nRead);
-	char Extra;
-	UINT nExtra = 0;
-	boolean bWhole = Result == FR_OK && f_read (&File, &Extra, 1, &nExtra) == FR_OK && nExtra == 0;
-	f_close (&File);
-	if (Result != FR_OK || !bWhole)
+	if (strcmp (pKey, "utc_offset") == 0)
 	{
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt: unreadable or larger than %u bytes",
-					(unsigned) sizeof Text - 1);
-		return;
+		if (!ParseOffset (pValue, &nOffset) || !SetUtcOffset (nOffset))
+		{
+			CLogger::Get ()->Write (From, LogWarning,
+				"zerogap.txt:%u: utc_offset: -12:00 to +14:00 expected", nLine);
+		}
+		return TRUE;
 	}
-	Text[nRead] = '\0';
-
-	unsigned nLine = 0;
-	for (char *pLine = Text; pLine != 0 && *pLine != '\0'; )
-	{
-		nLine++;
-		char *pNext = strchr (pLine, '\n');
-		if (pNext != 0)
-		{
-			*pNext++ = '\0';
-		}
-
-		// strip spaces, CR and a comment
-		char Clean[128];
-		unsigned n = 0;
-		for (char *p = pLine; *p != '\0' && *p != '#'; p++)
-		{
-			if (*p != ' ' && *p != '\t' && *p != '\r' && n < sizeof Clean - 1)
-			{
-				Clean[n++] = *p;
-			}
-		}
-		Clean[n] = '\0';
-		pLine = pNext;
-		if (n == 0)
-		{
-			continue;
-		}
-
-		char *pValue = strchr (Clean, '=');
-		if (pValue == 0)
-		{
-			CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: \"key = value\" expected", nLine);
-			continue;
-		}
-		*pValue++ = '\0';
-
-		double fTrim;
-		int nOffset;
-		if (strcmp (Clean, "clock_trim_ppm") == 0)
-		{
-			if (!ParseDecimal (pValue, &fTrim) || !SetTrim (fTrim))
-			{
-				CLogger::Get ()->Write (From, LogWarning,
-					"zerogap.txt:%u: clock_trim_ppm: a number from -%d to %d expected",
-					nLine, MaxTrim, MaxTrim);
-			}
-		}
-		else if (strcmp (Clean, "utc_offset") == 0)
-		{
-			if (!ParseOffset (pValue, &nOffset) || !SetUtcOffset (nOffset))
-			{
-				CLogger::Get ()->Write (From, LogWarning,
-					"zerogap.txt:%u: utc_offset: -12:00 to +14:00 expected", nLine);
-			}
-		}
-		else
-		{
-			CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: unknown key \"%s\"",
-						nLine, Clean);
-		}
-	}
-#endif
+	return FALSE;
 }
 
 // --- for the C library ----------------------------------------------------------

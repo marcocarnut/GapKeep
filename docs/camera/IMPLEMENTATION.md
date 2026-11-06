@@ -177,9 +177,17 @@ No camera driver code of any project was opened or searched (Linux, rsta2/libcam
 
 Open questions:
 
-- **Orientation** (0x0172 = 0x03, both flips, as specified): unconfirmed.
-  On the rig the camera looks at the ceiling (a lamp and a curtain rail),
-  and which way the module lies is unknown.
+- **Orientation** (0x0172 = 0x03, both flips, as specified): the picture
+  is upright for the module's usual mounting, but which way the rig's
+  module lies is not checked.
+- **Bayer order** (answered 2026-11-05, for colour frames: the
+  experimental `"qr-color"` detector, [EXPERIMENTAL.md](../EXPERIMENTAL.md)):
+  with both flips and windows starting on even pixels, a tile in the
+  buffer is **BGGR** (blue top left, red bottom right). Checked with red
+  tape beside the rig's code in raw frames (`#camera raw`,
+  `tests/camraw.txt`): BGGR shows it red, RGGB blue. The sensor's colour
+  bars (test pattern 2) come out RGGB instead: the sensor makes them after
+  the flips, so they can't check the order.
 - **Power domain off:** after the domain was turned off and on again (about
   1.4 s apart), Unicam read ANA 0x778 and CLK 0xC0000005, its state from
   before. Either the firmware does not really power the block down, or not

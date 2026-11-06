@@ -57,7 +57,8 @@ utc_offset = -03:00
 ```
 
 zerogap reads it at boot (the log shows each setting, and a warning for
-anything it doesn't understand). The time itself can't be kept this way:
+anything it doesn't understand). The same file can turn on experimental
+features: [EXPERIMENTAL.md](EXPERIMENTAL.md). The time itself can't be kept this way:
 set it after each boot. Sealed builds have no SD card code and don't read
 it.
 

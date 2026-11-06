@@ -1,0 +1,9 @@
+{
+  "id": "colorqr",
+  "name": "Color QR",
+  "version": "0.1.0",
+  "description": "Experimental: reads the extra data a colour QR code carries in its colours.",
+  "icon": "eye-open",
+  "permissions": ["camera"],
+  "experimental": true
+}

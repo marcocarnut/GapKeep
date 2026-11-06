@@ -43,8 +43,9 @@ if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
 	cp src/kernel.img $OUT/
 	# kernel.img holds zxing-cpp (the QR decoder), whose licence goes with it
 	[ ! -f third_party/zxing-cpp/LICENSE ] || cp third_party/zxing-cpp/LICENSE $OUT/LICENCE.zxing-cpp
-	# and libsecp256k1 (MIT: its notice goes with copies)
+	# and libsecp256k1 and colorqr (MIT: their notices go with copies)
 	cp third_party/secp256k1/COPYING $OUT/LICENCE.secp256k1
+	cp lib/colorqr/LICENSE $OUT/LICENCE.colorqr
 	if [ $OUT = sdcard-standalone ]; then
 		mkdir $OUT/apps
 		for a in apps/*/; do

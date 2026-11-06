@@ -2163,6 +2163,15 @@ static JSValue Utf8OrNull (JSContext *ctx, const u8 *p, unsigned n)
 	return JS_NewStringLen (ctx, (const char *) p, n);
 }
 
+static JSValue NewBytes (JSContext *ctx, const u8 *pData, unsigned nLength)
+{
+	JSValue Buffer = JS_NewArrayBufferCopy (ctx, pData, nLength);
+	JSValue Args[3] = {Buffer, JS_NewInt32 (ctx, 0), JS_NewInt32 (ctx, (int32_t) nLength)};
+	JSValue Bytes = JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8);
+	JS_FreeValue (ctx, Buffer);
+	return Bytes;
+}
+
 static void ScanTimerCallback (lv_timer_t *pTimer)
 {
 	TZgNode *pNode = (TZgNode *) lv_timer_get_user_data (pTimer);
@@ -2187,19 +2196,27 @@ static void ScanTimerCallback (lv_timer_t *pTimer)
 	{
 		lv_obj_invalidate (pNode->pObj);
 	}
-	if (nPoll & CZgScanner::PollDetect)
+	// one event per detection: a QR code, and (experimental) its colour
+	// layer; a handler may stop or delete the scanner
+	unsigned nKind;
+	unsigned nLength;
+	const u8 *pData;
+	while (   (nPoll & CZgScanner::PollDetect) && pNode->pObj != 0 && pNode->pScan == pScan
+	       && (nKind = pScan->pScanner->GetDetection (&pData, &nLength)) != 0)
 	{
-		unsigned nLength;
-		const u8 *pData;
-		unsigned nKind = pScan->pScanner->GetDetection (&pData, &nLength);
-		assert (nKind == ZG_DETECT_QR);
 		JSValue Ev = JS_NewObject (ctx);
-		JS_SetPropertyStr (ctx, Ev, "kind", JS_NewString (ctx, "qr"));
-		JSValue Buffer = JS_NewArrayBufferCopy (ctx, pData, nLength);
-		JSValue Args[3] = {Buffer, JS_NewInt32 (ctx, 0), JS_NewInt32 (ctx, (int32_t) nLength)};
-		JS_SetPropertyStr (ctx, Ev, "bytes", JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8));
-		JS_FreeValue (ctx, Buffer);
+		JS_SetPropertyStr (ctx, Ev, "kind", JS_NewString (ctx, nKind == ZG_DETECT_QR ? "qr" : "qr-color"));
+		JS_SetPropertyStr (ctx, Ev, "bytes", NewBytes (ctx, pData, nLength));
 		JS_SetPropertyStr (ctx, Ev, "text", Utf8OrNull (ctx, pData, nLength));
+		if (nKind == ZG_DETECT_QR_COLOR)
+		{
+			const u8 *pColour;
+			unsigned nColour;
+			TZgColourStatus Status = pScan->pScanner->GetColour (&pColour, &nColour);
+			JS_SetPropertyStr (ctx, Ev, "status", JS_NewString (ctx,
+				Status == ZgColourOK ? "ok" : Status == ZgColourPlain ? "plain" : "unreadable"));
+			JS_SetPropertyStr (ctx, Ev, "colour", pColour != 0 ? NewBytes (ctx, pColour, nColour) : JS_NULL);
+		}
 		FireEvent (pNode, EvDetect, Ev);
 	}
 	if ((nPoll & CZgScanner::PollError) && pNode->pScan != 0)

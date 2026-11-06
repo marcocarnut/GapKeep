@@ -6,6 +6,7 @@
 #include "appstore.h"
 #include "apphost.h"
 #include "clock.h"
+#include "settings.h"
 #include "../crypto/sha256.h"
 #include <circle/logger.h>
 #include <circle/util.h>
@@ -56,6 +57,11 @@ unsigned CAppStore::GetCount (void)
 const zg_app_t *CAppStore::Get (unsigned nIndex)
 {
 	return nIndex < s_nApps ? s_ppApps[nIndex] : 0;
+}
+
+boolean CAppStore::IsAvailable (const zg_app_t *pApp)
+{
+	return !pApp->experimental || CZgSettings::IsExperimental ();
 }
 
 const zg_app_t *CAppStore::Find (const char *pID)
@@ -604,7 +610,7 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 			      zg_app_t *pApp, CString *pError)
 {
 	static const char *Known[] = {"id", "name", "version", "description", "icon", "entry",
-				      "permissions", "hidden"};
+				      "permissions", "hidden", "experimental"};
 
 	JSRuntime *rt = CAppHost::NewRuntime ();
 	JSContext *ctx = JS_NewContext (rt);
@@ -751,6 +757,16 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 		if (!bHiddenOK)
 		{
 			*pError = "manifest.json: \"hidden\" must be true or false";
+			break;
+		}
+
+		JSValue Experimental = JS_GetPropertyStr (ctx, Obj, "experimental");
+		boolean bExperimentalOK = JS_IsUndefined (Experimental) || JS_IsBool (Experimental);
+		pApp->experimental = JS_IsBool (Experimental) && JS_ToBool (ctx, Experimental);
+		JS_FreeValue (ctx, Experimental);
+		if (!bExperimentalOK)
+		{
+			*pError = "manifest.json: \"experimental\" must be true or false";
 			break;
 		}
 
@@ -911,7 +927,7 @@ static void LoadCard (void)
 		return;
 	}
 
-	CZgClock::LoadConfig ();		// zerogap.txt, while the card is mounted
+	CZgSettings::Load ();		// zerogap.txt, while the card is mounted
 
 	DIR Dir;
 	if (f_opendir (&Dir, "SD:/apps") != FR_OK)

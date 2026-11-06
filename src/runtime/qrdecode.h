@@ -25,7 +25,25 @@ struct TZgQRCode
 	unsigned nLength;
 	int Corners[4][2];		// x, y in the image: top left, top right,
 					// bottom right, bottom left of the symbol
+
+	// The symbol, for a reader of what else it carries (the colour layer,
+	// scanner.cpp): its version (1-40), error correction level (0 L, 1 M,
+	// 2 Q, 3 H), mask (0-7), whether it was read mirrored, and its data
+	// codewords after error correction, block after block, without parity
+	// (valid until the next ZgDecodeQR call). nDataCodewords is 0 if they
+	// are not known.
+	unsigned nVersion;
+	int nECLevel;
+	int nMask;
+	boolean bMirrored;
+	const u8 *pDataCodewords;
+	unsigned nDataCodewords;
 };
+
+// a version 40 code's data codewords, at level L
+#define ZG_QR_MAX_DATA_CODEWORDS	2956
+// what a colour QR code's colours hold at most (version 40, lib/colorqr)
+#define ZG_QR_MAX_COLOUR		9893
 
 // The number of codes decoded (at most nMax), 0 if none; -1 if this build
 // has no decoder. Codes found but not readable are left out.

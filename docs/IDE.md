@@ -48,6 +48,14 @@ current browsers should work.
   that open the file at that line. `console.log` in an app shows up as
   `app:<id>: ...`.
 
+## Experimental features
+
+The **Experimental** box in the screen's toolbar puts `experimental = yes`
+in the simulated card's `zerogap.txt` and reboots: experimental apps (Color
+QR) are listed, and the `"qr-color"` detector exists
+([EXPERIMENTAL.md](EXPERIMENTAL.md)). The camera bar's pictures and webcam
+frames reach the simulator in colour.
+
 ## Keyboard
 
 - **Ctrl+S** (Cmd+S on a Mac) saves the open file; **Ctrl+Enter** runs.

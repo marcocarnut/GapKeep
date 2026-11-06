@@ -86,6 +86,7 @@ handlers and timers.
 | `entry` | no | Entry module (default `"main.js"`). |
 | `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
+| `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `zerogap.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 
 zerogap checks every manifest, and refuses an app with unknown keys, a bad
 id, an unknown or malformed icon, an unknown permission, or a missing entry

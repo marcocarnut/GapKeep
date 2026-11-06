@@ -457,3 +457,18 @@ int zg_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height)
 {
 	return s_pCamera != 0 && s_pCamera->PushFrame (grey, width, height) ? 0 : -1;
 }
+
+int zg_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned height)
+{
+	if (s_pCamera == 0 || !s_pCamera->SetPictureRGB (rgb, width, height))
+	{
+		return -1;
+	}
+	CLogger::Get ()->Write ("camera", LogNotice, "a colour picture, %ux%u", width, height);
+	return 0;
+}
+
+int zg_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height)
+{
+	return s_pCamera != 0 && s_pCamera->PushFrameRGB (rgb, width, height) ? 0 : -1;
+}

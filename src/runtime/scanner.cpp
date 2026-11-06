@@ -5,9 +5,12 @@
 //
 #include "scanner.h"
 #include "camera.h"
+#include "settings.h"
+#include <colorqr.h>
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
+#include <circle/string.h>
 #include <math.h>
 #include <assert.h>
 
@@ -18,17 +21,59 @@ CZgScanner *CZgScanner::s_pActive = 0;
 static const unsigned long long ForgetTicks = 2 * CLOCKHZ;
 // the outline of a code read stays on the preview this long
 static const unsigned long long OutlineTicks = CLOCKHZ / 2;
+// a code's colour layer not read for this long is reported as not read (and
+// still tried: a success follows if it comes)
+static const unsigned long long ColourPatienceTicks = CLOCKHZ;
 
-static const struct { const char *pName; unsigned nBit; } Detectors[] =
+static const struct { const char *pName; unsigned nBit; boolean bExperimental; } Detectors[] =
 {
-	{"qr", ZG_DETECT_QR},
+	{"qr",		ZG_DETECT_QR,		FALSE},
+	{"qr-color",	ZG_DETECT_QR_COLOR,	TRUE},
 };
+
+// colorqr's stages, timed (lib/colorqr/colorqr.mk builds it with CQ_PROFILE):
+// 0 start, 1 grey, 2 blur, 3 refine known, 4 sample and rebuild, 5 refine
+// all, 6 sample RGB, 7 layout, 8 demodulate, 9 LLRs, 10 decode; each ends at
+// its stamp. Stages not reached keep 0.
+static const unsigned ColourStages = 11;
+static unsigned long long s_ColourStamps[ColourStages];
+
+extern "C" void cq_stage (int nStage)
+{
+	if (nStage >= 0 && (unsigned) nStage < ColourStages)
+	{
+		s_ColourStamps[nStage] = CTimer::GetClockTicks64 ();
+	}
+}
+
+// "stages 12 3 40 ...": each reached stage's time in ms since the one before
+static void LogStages (const char *pWhat)
+{
+	if (s_ColourStamps[1] == 0)
+	{
+		return;			// settled before the first stage (a plain code)
+	}
+	CString Text;
+	for (unsigned i = 1; i < ColourStages && s_ColourStamps[i] != 0; i++)
+	{
+		CString Part;
+		Part.Format (" %u", (unsigned) ((s_ColourStamps[i] - s_ColourStamps[i - 1]) / (CLOCKHZ / 1000)));
+		Text.Append (Part);
+	}
+	CLogger::Get ()->Write ("scanner", LogNotice, "colour layer %s: stages (ms)%s", pWhat, (const char *) Text);
+}
+
+// the detectors this system has: experimental ones only if zerogap.txt says so
+static boolean Available (unsigned i)
+{
+	return !Detectors[i].bExperimental || CZgSettings::IsExperimental ();
+}
 
 unsigned CZgScanner::GetDetector (const char *pName)
 {
 	for (unsigned i = 0; i < sizeof Detectors / sizeof Detectors[0]; i++)
 	{
-		if (strcmp (pName, Detectors[i].pName) == 0)
+		if (strcmp (pName, Detectors[i].pName) == 0 && Available (i))
 		{
 			return Detectors[i].nBit;
 		}
@@ -38,15 +83,22 @@ unsigned CZgScanner::GetDetector (const char *pName)
 
 const char *CZgScanner::GetDetectorName (unsigned nIndex, unsigned *pBit)
 {
-	if (nIndex >= sizeof Detectors / sizeof Detectors[0])
+	for (unsigned i = 0; i < sizeof Detectors / sizeof Detectors[0]; i++)
 	{
-		return 0;
+		if (!Available (i))
+		{
+			continue;
+		}
+		if (nIndex-- == 0)
+		{
+			if (pBit != 0)
+			{
+				*pBit = Detectors[i].nBit;
+			}
+			return Detectors[i].pName;
+		}
 	}
-	if (pBit != 0)
-	{
-		*pBit = Detectors[nIndex].nBit;
-	}
-	return Detectors[nIndex].pName;
+	return 0;
 }
 
 CZgScanner::CZgScanner (void)
@@ -59,10 +111,25 @@ CZgScanner::CZgScanner (void)
 	m_nPreviewWidth (0),
 	m_nPreviewHeight (0),
 	m_nNextDecodeAt (0),
+	m_nPending (0),
 	m_pLast (0),
 	m_nLastLength (0),
 	m_nLastSeenAt (0),
 	m_nCornersUntil (0),
+	m_bColourRead (FALSE),
+	m_bColourFailReported (FALSE),
+	m_nColourTries (0),
+	m_nColourSince (0),
+	m_ColourStatus (ZgColourUnreadable),
+	m_pColour (0),
+	m_nColourLength (0),
+	m_pWork (0),
+	m_nWorkSize (0),
+	m_nColourDecodes (0),
+	m_nColourOK (0),
+	m_nColourTicks (0),
+	m_nMaxColourTicks (0),
+	m_nLastColourMs (0),
 	m_nFrames (0),
 	m_nDecodes (0),
 	m_nFound (0),
@@ -77,6 +144,26 @@ CZgScanner::~CZgScanner (void)
 	Stop ();
 	delete [] m_pPreviewFrame;
 	delete [] m_pLast;
+	FreeColour ();
+}
+
+// What a colour code held may be a secret: zeroed before it goes.
+void CZgScanner::FreeColour (void)
+{
+	if (m_pWork != 0)
+	{
+		memset (m_pWork, 0, m_nWorkSize);
+		delete [] m_pWork;
+		m_pWork = 0;
+		m_nWorkSize = 0;
+	}
+	if (m_pColour != 0)
+	{
+		memset (m_pColour, 0, ZG_QR_MAX_COLOUR);
+		delete [] m_pColour;
+		m_pColour = 0;
+	}
+	m_nColourLength = 0;
 }
 
 boolean CZgScanner::Start (void)
@@ -99,6 +186,7 @@ boolean CZgScanner::Start (void)
 		return FALSE;
 	}
 	pCamera->SetField (m_Field);
+	pCamera->SetColour ((m_nDetectors & ZG_DETECT_QR_COLOR) != 0);
 	if (!pCamera->Start ())
 	{
 		m_pError = pCamera->GetError ();
@@ -122,6 +210,11 @@ boolean CZgScanner::Start (void)
 	m_nFrames = m_nDecodes = m_nFound = 0;
 	m_nSideSum = 0;
 	m_nDecodeTicks = m_nMaxDecodeTicks = 0;
+	m_nPending = 0;
+	m_bColourRead = m_bColourFailReported = FALSE;
+	m_nColourTries = 0;
+	m_nColourDecodes = m_nColourOK = 0;
+	m_nColourTicks = m_nMaxColourTicks = 0;
 
 	return TRUE;
 }
@@ -135,6 +228,7 @@ void CZgScanner::Stop (void)
 
 	m_pCamera->Stop ();
 	m_pCamera = 0;
+	m_nPending = 0;		// stopped from a "detect" handler: no more events
 
 	if (m_nDecodes > 0)
 	{
@@ -149,15 +243,40 @@ void CZgScanner::Stop (void)
 			m_nFound, m_nFound > 0 ? (unsigned) (m_nSideSum / m_nFound) : 0,
 			m_nPreviewWidth, m_nPreviewHeight);
 	}
+	if (m_nColourDecodes > 0)
+	{
+		CLogger::Get ()->Write ("scanner", LogNotice,
+			"colour layer: %u tries, %u read, %u ms each on average, %u ms at most",
+			m_nColourDecodes, m_nColourOK,
+			(unsigned) (m_nColourTicks / m_nColourDecodes / (CLOCKHZ / 1000)),
+			(unsigned) (m_nMaxColourTicks / (CLOCKHZ / 1000)));
+	}
+	FreeColour ();
 	assert (s_pActive == this);
 	s_pActive = 0;
 }
 
-unsigned CZgScanner::GetDetection (const u8 **ppData, unsigned *pLength) const
+unsigned CZgScanner::GetDetection (const u8 **ppData, unsigned *pLength)
 {
 	*ppData = m_pLast;
 	*pLength = m_nLastLength;
-	return ZG_DETECT_QR;		// the only detector so far
+	for (unsigned nBit = ZG_DETECT_QR; nBit <= ZG_DETECT_QR_COLOR; nBit <<= 1)
+	{
+		if (m_nPending & nBit)
+		{
+			m_nPending &= ~nBit;
+			return nBit;
+		}
+	}
+	return 0;
+}
+
+TZgColourStatus CZgScanner::GetColour (const u8 **ppColour, unsigned *pLength) const
+{
+	boolean bOK = m_ColourStatus == ZgColourOK;
+	*ppColour = bOK ? m_pColour : 0;
+	*pLength = bOK ? m_nColourLength : 0;
+	return m_ColourStatus;
 }
 
 unsigned CZgScanner::Poll (void)
@@ -192,8 +311,9 @@ unsigned CZgScanner::Poll (void)
 	m_nPreviewHeight = nHeight;
 	unsigned nResult = PollFrame;
 	m_nFrames++;
+	m_nPending = 0;
 
-	if (m_nDetectors & ZG_DETECT_QR)
+	if (m_nDetectors & (ZG_DETECT_QR | ZG_DETECT_QR_COLOR))
 	{
 		nResult |= PollQR (pFrame, nWidth, nHeight);
 		if (m_pCamera == 0)
@@ -253,10 +373,6 @@ unsigned CZgScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 			&& memcmp (m_pLast, rCode.pData, rCode.nLength) == 0;
 	boolean bReport = !bSame || nDone - m_nLastSeenAt > ForgetTicks;
 	m_nLastSeenAt = nDone;
-	if (!bReport)
-	{
-		return 0;
-	}
 
 	if (!bSame)
 	{
@@ -266,7 +382,140 @@ unsigned CZgScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 		m_nLastLength = rCode.nLength;
 	}
 
-	return PollDetect;
+	unsigned nResult = 0;
+	if (bReport && (m_nDetectors & ZG_DETECT_QR))
+	{
+		m_nPending |= ZG_DETECT_QR;
+		nResult = PollDetect;
+	}
+	if (m_nDetectors & ZG_DETECT_QR_COLOR)
+	{
+		nResult |= PollColour (rCode, nWidth, nHeight, bReport, nNow);
+		// the colour decoder's time counts too: decoding stays at most
+		// half the time
+		unsigned long long nEnd = CTimer::GetClockTicks64 ();
+		m_nNextDecodeAt = nEnd + (nEnd - nNow);
+	}
+	return nResult;
+}
+
+// The colour layer of the code just read, from the same frame in colour:
+// tried on every decode of an appearance until it is read. Reported once
+// read, or as not read (plain or unreadable) after ColourPatienceTicks; a
+// success after that is reported too.
+unsigned CZgScanner::PollColour (const TZgQRCode &rCode, unsigned nWidth, unsigned nHeight,
+				 boolean bNewAppearance, unsigned long long nNow)
+{
+	if (bNewAppearance)
+	{
+		m_bColourRead = m_bColourFailReported = FALSE;
+		m_nColourTries = 0;
+		m_nColourSince = nNow;
+	}
+	if (m_bColourRead)
+	{
+		return 0;
+	}
+
+	TZgColourStatus Status = ZgColourUnreadable;
+	const u8 *pRGB = m_pCamera->GetColourFrame ();
+	if (pRGB != 0 && rCode.nVersion >= 1 && rCode.nVersion <= 40)
+	{
+		size_t nNeeded = cq_work_size (nWidth, nHeight, rCode.nVersion);
+		if (nNeeded > m_nWorkSize)
+		{
+			if (m_pWork != 0)
+			{
+				memset (m_pWork, 0, m_nWorkSize);
+				delete [] m_pWork;
+			}
+			m_pWork = new u64[(nNeeded + 7) / 8];	// 8-byte aligned, as colorqr needs
+			m_nWorkSize = (unsigned) nNeeded;
+		}
+		if (m_pColour == 0)
+		{
+			m_pColour = new u8[ZG_QR_MAX_COLOUR];
+		}
+
+		float Corners[4][2];
+		for (unsigned k = 0; k < 4; k++)
+		{
+			Corners[k][0] = (float) rCode.Corners[k][0];
+			Corners[k][1] = (float) rCode.Corners[k][1];
+		}
+		cq_result Result;
+		memset (&Result, 0, sizeof Result);
+		Result.payload = m_pColour;
+		Result.payload_cap = ZG_QR_MAX_COLOUR;
+		unsigned nFlags = m_pCamera->IsLinear () ? CQ_FLAG_LINEAR : 0;
+
+		memset (s_ColourStamps, 0, sizeof s_ColourStamps);
+		unsigned long long nStart = CTimer::GetClockTicks64 ();
+		cq_status Code;
+		if (   rCode.nDataCodewords > 0 && !rCode.bMirrored
+		    && rCode.nECLevel >= 0 && rCode.nMask >= 0)
+		{
+			// the codewords zxing-cpp corrected: no second reading
+			cq_base Base = {rCode.pDataCodewords, rCode.nDataCodewords,
+					rCode.nECLevel, rCode.nMask};
+			Code = cq_decode_base (pRGB, nWidth, nHeight, nWidth * 3, Corners, rCode.nVersion,
+					       &Base, nFlags, m_pWork, m_nWorkSize, &Result);
+		}
+		else
+		{
+			Code = cq_decode (pRGB, nWidth, nHeight, nWidth * 3, Corners, rCode.nVersion,
+					  nFlags, m_pWork, m_nWorkSize, &Result);
+		}
+		unsigned long long nTicks = CTimer::GetClockTicks64 () - nStart;
+		m_nLastColourMs = (unsigned) (nTicks / (CLOCKHZ / 1000));
+		LogStages (Code == CQ_OK ? "read" : Code == CQ_ERR_NO_COLOUR ? "plain" : "not read");
+		m_nColourDecodes++;
+		m_nColourTicks += nTicks;
+		if (nTicks > m_nMaxColourTicks)
+		{
+			m_nMaxColourTicks = nTicks;
+		}
+
+		if (Code == CQ_OK && Result.payload_len <= ZG_QR_MAX_COLOUR)
+		{
+			Status = ZgColourOK;
+			m_nColourLength = (unsigned) Result.payload_len;
+			m_nColourOK++;
+		}
+		else if (Code == CQ_ERR_NO_COLOUR)
+		{
+			Status = ZgColourPlain;
+		}
+		else if (Code == CQ_ERR_TOO_BIG || Code == CQ_ERR_NOMEM)
+		{
+			// sized for any version (cq_work_size, ZG_QR_MAX_COLOUR)
+			CLogger::Get ()->Write ("scanner", LogWarning, "colour layer: %s",
+						Code == CQ_ERR_TOO_BIG ? "payload larger than expected"
+								       : "work buffer too small");
+		}
+	}
+	m_nColourTries++;
+
+	if (Status == ZgColourOK)
+	{
+		m_bColourRead = TRUE;
+		m_ColourStatus = Status;
+		m_nPending |= ZG_DETECT_QR_COLOR;
+		CLogger::Get ()->Write ("scanner", LogNotice, "colour layer read: %u bytes, version %u, try %u, %u ms",
+					m_nColourLength, rCode.nVersion, m_nColourTries, m_nLastColourMs);
+		return PollDetect;
+	}
+	if (!m_bColourFailReported && CTimer::GetClockTicks64 () - m_nColourSince >= ColourPatienceTicks)
+	{
+		m_bColourFailReported = TRUE;
+		m_ColourStatus = Status;
+		m_nPending |= ZG_DETECT_QR_COLOR;
+		CLogger::Get ()->Write ("scanner", LogNotice, "colour layer not read: %s, version %u, %u tries,"
+					" %u ms the last", Status == ZgColourPlain ? "plain QR code" : "unreadable",
+					rCode.nVersion, m_nColourTries, m_nLastColourMs);
+		return PollDetect;
+	}
+	return 0;
 }
 
 static inline u16 Grey565 (unsigned v)

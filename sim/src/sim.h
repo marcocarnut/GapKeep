@@ -58,6 +58,9 @@ int zg_sim_camera (const char *mode);
 int zg_sim_camera_qr (const uint8_t *data, unsigned length, int quiet);	/* quiet: not logged */
 int zg_sim_camera_picture (const uint8_t *grey, unsigned width, unsigned height);
 int zg_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height);
+// the same in colour: R, G, B interleaved (pictures up to 2048 a side)
+int zg_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned height);
+int zg_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height);
 
 /* The mouse: absolute position in screen pixels, left button state. */
 void zg_sim_pointer (int x, int y, int pressed);

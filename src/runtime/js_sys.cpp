@@ -341,6 +341,7 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 	JS_SetPropertyStr (ctx, Obj, "source",
 			   JS_NewString (ctx, pApp->source == ZG_APP_SDCARD ? "sdcard" : "builtin"));
 	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, pApp->hash));
+	JS_SetPropertyStr (ctx, Obj, "experimental", JS_NewBool (ctx, pApp->experimental != 0));
 
 	// the picture icon, ready for ui.Image's src (RGBA, like canvas ImageData)
 	JSValue Image = JS_NULL;
@@ -428,7 +429,7 @@ static JSValue js_apps_list (JSContext *ctx, JSValueConst this_val, int argc, JS
 	for (unsigned i = 0; i < CAppStore::GetCount (); i++)
 	{
 		const zg_app_t *pApp = CAppStore::Get (i);
-		if (!pApp->hidden)
+		if (!pApp->hidden && CAppStore::IsAvailable (pApp))
 		{
 			JS_SetPropertyUint32 (ctx, Array, n++, AppInfo (ctx, pApp));
 		}

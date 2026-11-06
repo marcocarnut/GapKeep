@@ -16,7 +16,8 @@ Pi). Licensed under the GPLv3. The QR decoder,
 License 2.0 (`third_party/zxing-cpp/LICENSE`, and `LICENCE.zxing-cpp` on
 the cards `tools/make_sdcard.sh` makes); Bitcoin Core's
 [libsecp256k1](https://github.com/bitcoin-core/secp256k1), under the MIT
-licence (`LICENCE.secp256k1` on the cards).
+licence (`LICENCE.secp256k1` on the cards), as is the experimental colour QR
+decoder, `lib/colorqr` (`LICENCE.colorqr` on the cards).
 
 ```js
 import * as ui from "zg:ui";
@@ -134,15 +135,16 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Native SHA-1, SHA-512 and HMAC (`zg:crypto`); a per-app session store in RAM (`zg:session`)
 - [x] Bitcoin's primitives in `zg:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
 - [x] The PSBT Viewer (`apps/psbtview`: BIP-174/370 PSBTs from Electrum's QR codes, explained)
-- [ ] The Signer (`apps/signer`): signs Electrum's PSBTs with a key from codex32 shares
+- [x] The Signer (`apps/signer`): signs Electrum's PSBTs with a key from codex32 shares
+- [ ] Experimental: colour QR codes (`"qr-color"`, `apps/colorqr`, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)): read on the simulator, QEMU and a Pi Zero's synthetic camera; the real camera next
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `psbtview` (what an Electrum transaction does, from its QR code), `signer` (signs it, with a key from codex32 shares). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
+| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `psbtview` (what an Electrum transaction does, from its QR code), `signer` (signs it, with a key from codex32 shares), `colorqr` (experimental: colour QR codes, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
-| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs. |
+| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs; `lib/colorqr`, the colour QR decoder, vendored (not a submodule: its project is not published). |
 | `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
 | `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
 | `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |

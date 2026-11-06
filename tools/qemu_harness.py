@@ -25,6 +25,9 @@ Scenario file: one command per line, '#' starts a comment.
     shot <name>                 save a screenshot as <outdir>/<name>.png
     serialshot <name>           same, but fetched over the serial line from a
                                 test build (as on real hardware)
+    serialraw <name>            rig only: the Pi Camera's next raw frame
+                                (RAW8 Bayer) as <outdir>/<name>.raw, with
+                                its size and exposure in <name>.raw.json
     send <text>                 send a line on the serial port (test builds
                                 take commands: #shot, #crash <kind>)
     tile <id>                   open that app from the launcher: moves the
@@ -39,6 +42,9 @@ Scenario file: one command per line, '#' starts a comment.
                                 docs/CAMERA.md): a QR code of <text>, nothing,
                                 or no camera at all. The simulator also takes
                                 "camera qrhex <hex>", "camera picture <file>"
+                                (PGM, PPM or PNG, colour kept; relative to the
+                                scenario's folder); test builds take the
+                                colour codes of tests/colorqr by name
     reset                       reset the machine (on the rig: and upload
                                 the kernel again); "expect" only looks at
                                 what was logged after the reset
@@ -475,6 +481,19 @@ def screen_coord(m, value, axis):
     return int(int(found.group(axis + 1)) * float(value[:-1]) / 100)
 
 
+def picture_file(name, scenario, outdir):
+    """A picture for "camera picture": relative to the scenario's folder;
+    a PNG becomes a PPM (what the simulator reads) in outdir."""
+    full = os.path.join(os.path.dirname(os.path.abspath(scenario)), name)
+    if not full.lower().endswith('.png'):
+        return full
+    from PIL import Image
+    os.makedirs(outdir, exist_ok=True)
+    ppm = os.path.join(os.path.abspath(outdir), os.path.basename(full)[:-4] + '.ppm')
+    Image.open(full).convert('RGB').save(ppm)
+    return ppm
+
+
 def run_scenario(m, path, outdir):
     failures = 0
     with open(path) as f:
@@ -524,16 +543,28 @@ def run_scenario(m, path, outdir):
             elif cmd == 'serialshot':
                 p = m.serialshot(os.path.join(outdir, rest.strip() + '.png'))
                 print('[%s] serial screenshot %s' % (where, p))
+            elif cmd == 'serialraw':
+                if not hasattr(m, 'serialraw'):
+                    raise SystemExit('%s: serialraw works on the rig only (the real Pi Camera)' % where)
+                p = m.serialraw(os.path.join(outdir, rest.strip() + '.raw'))
+                print('[%s] raw camera frame %s' % (where, p))
             elif cmd == 'shot':
                 p = m.shot(os.path.join(outdir, rest.strip() + '.png'))
                 print('[%s] screenshot %s' % (where, p))
             elif cmd == 'send':
                 m.send(rest)
             elif cmd == 'camera':
-                # the simulator takes it on stdin, test builds on the serial line
+                # the simulator takes it on stdin, test builds on the serial
+                # line; a picture is a file for the simulator, and one of the
+                # test pictures built into test kernels by its name
+                # (src/testpictures.h: tests/colorqr/<name>.png)
                 if hasattr(m, 'camera'):
+                    if rest.startswith('picture '):
+                        rest = 'picture ' + picture_file(rest[8:].strip(), path, outdir)
                     m.camera(rest)
                 else:
+                    if rest.startswith('picture '):
+                        rest = 'picture ' + os.path.splitext(os.path.basename(rest[8:].strip()))[0]
                     m.send('#camera ' + rest)
             elif cmd == 'reset':
                 m.reset()
