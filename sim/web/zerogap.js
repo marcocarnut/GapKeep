@@ -229,8 +229,20 @@ export class Zerogap {
   // RGBA goes in colour (the experimental "qr-color" detector sees the
   // colours; the grey is (R + 2G + B) / 4), up to 2048 a side for a
   // picture; larger ones, and grey, go as grey.
+  // An older simulator (sim/build/web, from before colour) has no RGB entry
+  // points: such a page sends grey and says once that it needs a rebuild.
+  hasColour () {
+    if (typeof this.m._zg_sim_camera_push_rgb === "function") return true;
+    if (!this.warnedColour) {
+      this.warnedColour = true;
+      console.warn ("zerogap: the simulator (zgsim.wasm) is older than this page: the camera sends grey;"
+                    + " rebuild it (make -C sim web, or restart tools/zgide.sh) and reload");
+    }
+    return false;
+  }
+
   cameraPicture (pixels, width, height) {
-    if (pixels.length === width * height * 4 && width <= 2048 && height <= 2048) {
+    if (pixels.length === width * height * 4 && width <= 2048 && height <= 2048 && this.hasColour ()) {
       const rgb = toRGB (pixels);
       return this.withBytes (rgb, (p) => this.m._zg_sim_camera_picture_rgb (p, width, height) === 0);
     }
@@ -239,7 +251,7 @@ export class Zerogap {
   }
 
   cameraPush (pixels, width, height) {
-    if (pixels.length === width * height * 4) {
+    if (pixels.length === width * height * 4 && this.hasColour ()) {
       const rgb = toRGB (pixels);
       return this.withBytes (rgb, (p) => this.m._zg_sim_camera_push_rgb (p, width, height) === 0);
     }

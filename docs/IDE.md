@@ -18,6 +18,12 @@ the IDE to load, and serves `sim/` on 127.0.0.1. Open the URL it prints,
 <http://127.0.0.1:8039/web/index.html>. It is tested in Chrome; other
 current browsers should work.
 
+The simulator and the examples are built and copied when it starts, not
+while it runs: after pulling changes, stop it and start it again (or run
+`make -C sim web`), then reload the page and click **Examples** for new
+example apps. A page newer than its simulator says so in the browser's
+console (and its camera sends grey).
+
 ## The panes
 
 - **SD card** (left): the apps on the simulated card, `apps/<id>/...`.
