@@ -36,19 +36,17 @@ codes but cannot draw them.
 
 ### Showing colour codes to the camera
 
-Measured on the rig's Pi camera on 2026-11-05, with one version 10 code
-(profile a8.50, rate 3/4) on one monitor at one distance, shown at several
-sizes; colorqr scored each raw frame against the known payload. A guide, not
-a specification: a4.50 is untested at small sizes, and so is soft focus.
+Measured on the rig's Pi camera on 2026-11-05: version 10 codes at rate 3/4
+in both profiles, on one monitor at one distance, shown at several sizes;
+colorqr scored each raw frame against the known payload. A guide, not a
+specification: soft focus is untested.
 
-| Field | Camera pixels a module | Result |
+| Profile | Field | Camera pixels a module: symbols wrong |
 | --- | --- | --- |
-| `"center"` (the default) | 5.5, 3.7 | read at once, under 0.1 % of symbols wrong |
-| | 2.8 | read, about 11 % wrong: near the limit |
-| | 2.3 | fails: the code is rarely found, and its colours are gone |
-| `"full"` | 2.8 | read at once, 0.04 % wrong |
-| | 1.9 | colours read (about 9 % wrong), but the code is found only now and then |
-| | 1.4 | fails |
+| a4.50 (default) | `"center"` | 2.8: 0.08 %; 2.4: 2.6 %; 1.9: fails (code found in 6 of 34 decodes) |
+| | `"full"` | 1.4: fails |
+| a8.50 | `"center"` | 5.5: 0 %; 3.7: 0.08 %; 2.8: about 11 % (near the limit); 2.3: fails |
+| | `"full"` | 2.8: 0.04 %; 1.9: about 9 %, but the code found in 2 of 50 decodes; 1.4: fails |
 
 - **Prefer the default field for small or distant codes**: the same code
   covers twice the pixels there. The `"full"` field is for a wider view;
@@ -57,11 +55,15 @@ a specification: a4.50 is untested at small sizes, and so is soft focus.
 - **Aim for at least 4 camera pixels a module in the default field, 3 in
   `"full"`**, for margin. The scanner's log gives the code's side in pixels
   (divide by the modules: 17 + 4 per version).
+- **Profiles:** a4.50 at rate 3/4, the default to recommend, has much more
+  margin near the limit, for its colours and for finding the code (likely
+  because its colours keep dark and light further apart in grey, which the
+  QR decoder works on). a8.50 at rate 3/4 carries about 50 % more data and
+  suits steady, in-focus setups with codes well above the limit.
 - Scaling the code on the screen (an image viewer at 67 % or 50 %) made no
   difference to the colours; whole-number zoom is tidy, not needed.
-- **Profiles:** a4.50 at rate 3/4 is the default to recommend; a8.50 at
-  rate 3/4 (about 50 % more data) read as well at these sizes, and suits
-  steady, in-focus setups.
+- A colour layer that can't be read costs more than one that can: about
+  0.6 s a try on a Pi Zero for version 10, against 0.2-0.3 s.
 
 ### Why it is experimental
 
