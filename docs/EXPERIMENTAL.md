@@ -33,6 +33,9 @@ codes but cannot draw them.
   a second of trying, `"plain"` (no colour layer) or `"unreadable"`.
 - **The Color QR app** (`apps/colorqr`) shows both parts apart: what any QR
   reader sees, and what only the colours hold.
+- **Profiles** (FORMAT.md): a4.50 and a8.50 for screens, q4.33 (colorqr
+  1.1) for paper. The code's header names its profile: the reader needs no
+  setting.
 
 ### Showing colour codes to the camera
 

@@ -18,11 +18,16 @@ camera picture colorqr/v5_a450_3_4.png
 expect colorqr: code 2, \d+ bytes 20
 expect colorqr: colour layer of code 2, 169 bytes, sha256 f4061b328f706749 30
 shot 02-v5
+# q4.33, the paper profile (colorqr 1.1), from colorqr's zero sheet
+camera picture colorqr/v5_q433_3_4.png
+expect colorqr: code 3, \d+ bytes 20
+expect colorqr: colour layer of code 3, 169 bytes, sha256 fcc2b07d0e41cf16 30
+shot 03-v5-paper
 # an ordinary QR code: "plain", after a second of trying
 camera qr just a plain QR code
-expect colorqr: code 3, 20 bytes 20
-expect colorqr: colour layer of code 3: plain 10
-shot 03-plain
+expect colorqr: code 4, 20 bytes 20
+expect colorqr: colour layer of code 4: plain 10
+shot 04-plain
 key meta_l
 expect scanner: colour layer: \d+ tries, \d+ read, \d+ ms each on average 10
 expect launcher ready

@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CQ_VERSION "1.0.0"
+#define CQ_VERSION "1.1.0"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +38,7 @@ typedef struct {
 	uint8_t *payload;      /* in: caller's buffer. Out: the payload */
 	size_t payload_cap;    /* in: its size */
 	size_t payload_len;    /* out */
-	int profile;           /* out: 0 a4.50, 1 a8.50 */
+	int profile;           /* out: 0 a4.50, 1 a8.50, 2 q4.33 */
 	int rate_num, rate_den;/* out: code rate */
 	size_t work_used;      /* out: peak bytes of the work buffer */
 	unsigned iterations;   /* out: decoder iterations */
