@@ -178,6 +178,12 @@ boolean CAppHost::RequestLaunch (const char *pID)
 	{
 		return FALSE;
 	}
+	if (!CAppStore::IsAvailable (pApp))
+	{
+		CLogger::Get ()->Write (FromHost, LogWarning, "%s is experimental:"
+					" it needs \"experimental = yes\" in zerogap.txt", pApp->id);
+		return FALSE;
+	}
 
 	m_pPendingLaunch = pApp;
 

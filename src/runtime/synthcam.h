@@ -6,7 +6,7 @@
 //
 //  - an empty scene (a grey gradient),
 //  - a QR code drawn from bytes, slightly rotated, on that scene,
-//  - a picture (8-bit grey, any size up to 4096 a side),
+//  - a picture (8-bit grey, any size up to 4096 a side, or RGB up to 2048),
 //  - frames pushed by the host as they come (the browser's webcam),
 //
 // with a little noise on every frame (but the webcam's), so the scanner
@@ -43,6 +43,12 @@ public:
 	boolean SetPicture (const u8 *pGrey, unsigned nWidth, unsigned nHeight);
 	// a live frame (any size up to MaxPushSide), shown as it is until the next
 	boolean PushFrame (const u8 *pGrey, unsigned nWidth, unsigned nHeight);
+	// the same in colour (R, G, B interleaved, gamma-encoded as pictures
+	// are): the grey frames are (R + 2G + B) / 4, and colour frames
+	// (camera.h) show the colours; up to MaxColourSide a side
+	boolean SetPictureRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight);
+	boolean PushFrameRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight);
+	static const unsigned MaxColourSide = 2048;
 
 	const char *GetMode (void) const;			// "none", "scene", "qr", ...
 
@@ -53,12 +59,18 @@ public:
 	const u8 *GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight);
 	const char *GetError (void);
 
+	// colour frames (camera.h): of a colour picture or frame, its colours;
+	// of anything else, its grey
+	void SetColour (boolean bColour)		{ m_bColour = bColour; }
+	const u8 *GetColourFrame (void);
+
 private:
 	void DrawScene (void);
 	void MakeFrame (void);
-	boolean SetSource (const u8 *pGrey, unsigned nWidth, unsigned nHeight, unsigned nMaxSide);
+	boolean SetSource (const u8 *pPixels, unsigned nChannels, unsigned nWidth, unsigned nHeight,
+			   unsigned nMaxSide);
 	void Derive (void);		// the source -> m_pPicture, as the field asks
-
+	void Greys (void);		// m_pPictureRGB -> m_pPicture
 private:
 	enum TMode { ModeNone, ModeScene, ModeQR, ModePicture, ModeLive } m_Mode;
 	boolean m_bStreaming;
@@ -67,6 +79,11 @@ private:
 	u8 *m_pFrame;		// the current frame (the picture plus noise)
 	TZgCameraField m_Field;
 	u8 *m_pSource;		// the picture or the last pushed frame, as given
+	unsigned m_nSourceChannels;	// 1 grey, 3 RGB
+	u8 *m_pPictureRGB;	// in colour, if the source is (m_bPictureRGB)
+	boolean m_bPictureRGB;
+	boolean m_bColour;	// colour frames asked for
+	u8 *m_pFrameRGB;	// the current frame in colour, if m_bColour
 	unsigned m_nSourceSize;	// allocated
 	unsigned m_nSourceWidth, m_nSourceHeight;
 	unsigned m_nSerial;

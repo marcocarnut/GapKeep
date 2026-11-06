@@ -44,6 +44,9 @@ public:
 	static unsigned GetCount (void);
 	static const zg_app_t *Get (unsigned nIndex);
 	static const zg_app_t *Find (const char *pID);
+	// FALSE for an experimental app without "experimental = yes" (settings.h):
+	// not listed, not launched
+	static boolean IsAvailable (const zg_app_t *pApp);
 
 	static TZgCardStatus GetCardStatus (void);
 	static const char *GetCardStatusName (void);	// "none", "ok", ...

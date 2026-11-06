@@ -31,7 +31,7 @@ function throws(fn, pattern, what) {
 }
 
 check("detect is required", () => throws(() => new ui.Scanner({}), /"detect" is required/, "no detect"));
-check("unknown detector", () => throws(() => new ui.Scanner({ detect: ["qr", "aruco"] }), /unknown detector "aruco" \(this system has "qr"\)/, "aruco"));
+check("unknown detector", () => throws(() => new ui.Scanner({ detect: ["qr", "aruco"] }), /unknown detector "aruco" \(this system has "qr"(, "qr-color")?\)/, "aruco"));
 check("detect must be a list", () => throws(() => new ui.Scanner({ detect: "qr" }), /list of detectors/, "string"));
 check("no code events on other widgets", () => throws(() => new ui.Label({ onDetect: () => {} }), /no property/, "Label"));
 

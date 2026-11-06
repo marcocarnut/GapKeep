@@ -57,10 +57,10 @@ public:
 	// Bumped by every change (time, trim, offset): alarms reschedule.
 	static unsigned GetSerial (void)		{ return s_nSerial; }
 
-	// Reads zerogap.txt from the mounted SD card (appstore.cpp mounts it):
-	// "clock_trim_ppm = <ppm>" and "utc_offset = [+-]HH:MM". Logs what it
-	// takes and what it refuses.
-	static void LoadConfig (void);
+	// A setting from the card's zerogap.txt (settings.h): "clock_trim_ppm =
+	// <ppm>" or "utc_offset = [+-]HH:MM". FALSE: not a clock setting. Logs
+	// what it takes and what it refuses.
+	static boolean Configure (const char *pKey, const char *pValue, unsigned nLine);
 
 private:
 	static void Rebase (void);

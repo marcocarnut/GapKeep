@@ -51,6 +51,17 @@ async function buildDate (url) {
   }
 }
 
+// RGBA (an ImageData's data) -> RGB
+function toRGB (rgba) {
+  const rgb = new Uint8Array (rgba.length / 4 * 3);
+  for (let i = 0, o = 0; i < rgba.length; i += 4, o += 3) {
+    rgb[o] = rgba[i];
+    rgb[o + 1] = rgba[i + 1];
+    rgb[o + 2] = rgba[i + 2];
+  }
+  return rgb;
+}
+
 export class Zerogap {
   // options: { onLog(line), onHalt(), moduleUrl } - moduleUrl: zgsim.js
   // (default: next to this file, as "make web" puts it in sim/build/web)
@@ -215,12 +226,23 @@ export class Zerogap {
     return this.withBytes (bytes, (p) => this.m._zg_sim_camera_qr (p, bytes.length, quiet ? 1 : 0) === 0);
   }
 
+  // RGBA goes in colour (the experimental "qr-color" detector sees the
+  // colours; the grey is (R + 2G + B) / 4), up to 2048 a side for a
+  // picture; larger ones, and grey, go as grey.
   cameraPicture (pixels, width, height) {
+    if (pixels.length === width * height * 4 && width <= 2048 && height <= 2048) {
+      const rgb = toRGB (pixels);
+      return this.withBytes (rgb, (p) => this.m._zg_sim_camera_picture_rgb (p, width, height) === 0);
+    }
     const grey = toGrey (pixels, width, height);
     return this.withBytes (grey, (p) => this.m._zg_sim_camera_picture (p, width, height) === 0);
   }
 
   cameraPush (pixels, width, height) {
+    if (pixels.length === width * height * 4) {
+      const rgb = toRGB (pixels);
+      return this.withBytes (rgb, (p) => this.m._zg_sim_camera_push_rgb (p, width, height) === 0);
+    }
     const grey = toGrey (pixels, width, height);
     return this.withBytes (grey, (p) => this.m._zg_sim_camera_push (p, width, height) === 0);
   }

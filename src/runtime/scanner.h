@@ -10,7 +10,11 @@
 //
 // Detectors, by the name apps use (manifest-free: "detect" in the widget):
 //
-//   "qr"      QR codes, decoded with zxing-cpp (qrdecode.h)
+//   "qr"        QR codes, decoded with zxing-cpp (qrdecode.h)
+//   "qr-color"  experimental, only with "experimental = yes" in zerogap.txt
+//               (settings.h): the data a colour QR code carries in its
+//               colours (lib/colorqr), with the code's own. Reported apart
+//               from "qr", never merged into it (docs/EXPERIMENTAL.md).
 //
 // To add one (say "aruco", for dice): a ZG_DETECT_* bit and its name in
 // scanner.cpp, a decoder like qrdecode.*, a case in CZgScanner::Poll, and
@@ -30,7 +34,16 @@
 #include "qrdecode.h"
 #include "camera.h"
 
-#define ZG_DETECT_QR	(1u << 0)
+#define ZG_DETECT_QR		(1u << 0)
+#define ZG_DETECT_QR_COLOR	(1u << 1)
+
+// What a "qr-color" detection found (GetColour)
+enum TZgColourStatus
+{
+	ZgColourOK,		// the colour layer was read
+	ZgColourPlain,		// a plain QR code: no colour layer
+	ZgColourUnreadable	// a colour layer, or a code, it could not read
+};
 
 class CZgCamera;
 
@@ -65,9 +78,13 @@ public:
 	static const unsigned PollError = 4;
 	unsigned Poll (void);
 
-	// What was found: the ZG_DETECT_* bit, and its data (a QR code's bytes).
-	// Valid until the next Poll.
-	unsigned GetDetection (const u8 **ppData, unsigned *pLength) const;
+	// What was found, one detection at a time (a poll can find a QR code
+	// and its colour layer): the ZG_DETECT_* bit and its data (the QR
+	// code's bytes), 0 when there are no more. Valid until the next Poll.
+	unsigned GetDetection (const u8 **ppData, unsigned *pLength);
+	// For a ZG_DETECT_QR_COLOR detection: what the colours held (0 unless
+	// the status is ZgColourOK)
+	TZgColourStatus GetColour (const u8 **ppColour, unsigned *pLength) const;
 	const char *GetError (void) const		{ return m_pError; }
 
 	// The last frame scaled to fit (letterboxed) into nWidth x nHeight
@@ -77,6 +94,9 @@ public:
 
 private:
 	unsigned PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight);
+	unsigned PollColour (const TZgQRCode &rCode, unsigned nWidth, unsigned nHeight,
+			     boolean bNewAppearance, unsigned long long nNow);
+	void FreeColour (void);
 
 private:
 	unsigned m_nDetectors;			// ZG_DETECT_* bits
@@ -88,11 +108,27 @@ private:
 	unsigned m_nPreviewWidth, m_nPreviewHeight;
 	unsigned long long m_nNextDecodeAt;	// clock ticks
 
+	unsigned m_nPending;			// ZG_DETECT_* bits GetDetection hands out
+
 	u8 *m_pLast;				// the last QR code reported
 	unsigned m_nLastLength;
 	unsigned long long m_nLastSeenAt;
 	int m_Corners[4][2];			// of the last thing found, in frame pixels
 	unsigned long long m_nCornersUntil;
+
+	// the colour layer of the code in view ("qr-color")
+	boolean m_bColourRead;			// reported for this appearance
+	boolean m_bColourFailReported;
+	unsigned m_nColourTries;
+	unsigned long long m_nColourSince;	// the first try, this appearance
+	TZgColourStatus m_ColourStatus;
+	u8 *m_pColour;				// its payload, ZG_QR_MAX_COLOUR bytes
+	unsigned m_nColourLength;
+	u64 *m_pWork;				// colorqr's scratch memory, m_nWorkSize bytes
+	unsigned m_nWorkSize;
+	unsigned m_nColourDecodes, m_nColourOK;
+	unsigned long long m_nColourTicks, m_nMaxColourTicks;
+	unsigned m_nLastColourMs;		// the last try, for the log
 
 	// for the log, when scanning stops: how long decoding takes here
 	unsigned m_nFrames, m_nDecodes;

@@ -63,6 +63,45 @@ def decode(width, height, bpp, payload):
     return Image.frombytes('RGB', (width, height), bytes(pixels))
 
 
+RAW_HEADER = re.compile(rb'\nZGRAW1 (\d+) (\d+) (\d+) (\d+) (\d+) (\d+) (\d+) ([0-9a-f]{8})\n')
+
+
+def parse_raw(buf):
+    """Finds a complete raw camera frame ("#camera raw", src/testshot.h) in
+    buf. Returns (info, payload) or None if more data is needed."""
+    m = RAW_HEADER.search(buf)
+    if not m:
+        return None
+    width, height, stride, exposure, analogue, digital, length = (int(m.group(i)) for i in range(1, 8))
+    start = m.end()
+    if len(buf) < start + length + len(TRAILER):
+        return None
+    payload = buf[start:start + length]
+    if buf[start + length:start + length + len(TRAILER)] != TRAILER:
+        raise ShotError('missing trailer (data lost on the line?)')
+    if zlib.crc32(payload) != int(m.group(8), 16):
+        raise ShotError('CRC mismatch (data corrupted on the line?)')
+    info = {'format': 'RAW8 Bayer, 1 byte a pixel, rows of stride bytes',
+            'width': width, 'height': height, 'stride': stride,
+            'exposure_lines': exposure, 'analogue_gain_code': analogue, 'digital_gain_4.8': digital}
+    return info, payload
+
+
+def capture_raw(read, write, timeout=120.0):
+    """Asks for the next raw frame of the running Pi Camera. Returns (info,
+    payload)."""
+    write(b'\n#camera raw\n')
+    buf = b''
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        buf += read()
+        r = parse_raw(buf)
+        if r:
+            return r
+        time.sleep(0.05)
+    raise ShotError('no raw frame within %d s' % timeout)
+
+
 def capture(read, write, timeout=120.0):
     """Generic capture: write(bytes) sends, read() returns new bytes (possibly
     empty). Returns a PIL.Image."""

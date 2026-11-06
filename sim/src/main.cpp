@@ -15,7 +15,7 @@
 //                           launcher would
 //   camera qr <text>        the camera films a QR code of <text> (UTF-8)
 //   camera qrhex <hex>      ... of these bytes
-//   camera picture <file>   ... a picture: binary PGM (P5) or PPM (P6)
+//   camera picture <file>   ... a picture: binary PGM (P5) or PPM (P6, in colour)
 //   camera scene            ... nothing in particular (the default)
 //   camera none             there is no camera
 //   quit                    exit
@@ -57,8 +57,10 @@ static const unsigned KeyHoldTicks = 60000;	// "key": 60 ms, as the harness hold
 static unsigned s_nReleaseAt;
 static int s_bReleasePending;
 
-// A binary PGM (P5) or PPM (P6) file, 8 bits, as grey. 0 if it isn't one.
-static uint8_t *ReadPicture (const char *pPath, unsigned *pWidth, unsigned *pHeight)
+// A binary PGM (P5) or PPM (P6) file, 8 bits: its pixels, *pChannels
+// bytes each (1 grey, 3 RGB). 0 if it isn't one.
+static uint8_t *ReadPicture (const char *pPath, unsigned *pWidth, unsigned *pHeight,
+			     unsigned *pChannels)
 {
 	FILE *f = fopen (pPath, "rb");
 	if (f == 0)
@@ -67,28 +69,23 @@ static uint8_t *ReadPicture (const char *pPath, unsigned *pWidth, unsigned *pHei
 	}
 	char Magic[3] = {0};
 	unsigned w = 0, h = 0, nMax = 0;
-	uint8_t *pGrey = 0;
+	uint8_t *pPixels = 0;
 	if (   fscanf (f, "%2s %u %u %u", Magic, &w, &h, &nMax) == 4 && nMax == 255
 	    && (strcmp (Magic, "P5") == 0 || strcmp (Magic, "P6") == 0)
 	    && w > 0 && h > 0 && w <= 8192 && h <= 8192 && fgetc (f) != EOF)
 	{
-		unsigned nChannels = Magic[1] == '6' ? 3 : 1;
-		uint8_t *pRaw = (uint8_t *) malloc ((size_t) w * h * nChannels);
-		if (fread (pRaw, nChannels, (size_t) w * h, f) == (size_t) w * h)
+		*pChannels = Magic[1] == '6' ? 3 : 1;
+		pPixels = (uint8_t *) malloc ((size_t) w * h * *pChannels);
+		if (fread (pPixels, *pChannels, (size_t) w * h, f) != (size_t) w * h)
 		{
-			pGrey = (uint8_t *) malloc ((size_t) w * h);
-			for (size_t i = 0; i < (size_t) w * h; i++)
-			{
-				const uint8_t *p = pRaw + i * nChannels;
-				pGrey[i] = nChannels == 1 ? p[0] : (uint8_t) ((p[0] * 77 + p[1] * 150 + p[2] * 29) >> 8);
-			}
+			free (pPixels);
+			pPixels = 0;
 		}
-		free (pRaw);
 	}
 	fclose (f);
 	*pWidth = w;
 	*pHeight = h;
-	return pGrey;
+	return pPixels;
 }
 
 static void CameraCommand (char *pArgs)
@@ -132,13 +129,16 @@ static void CameraCommand (char *pArgs)
 	}
 	else if (strcmp (pArgs, "picture") == 0)
 	{
-		unsigned w, h;
-		uint8_t *pGrey = ReadPicture (pRest, &w, &h);
-		if (pGrey == 0 || zg_sim_camera_picture (pGrey, w, h) != 0)
+		unsigned w, h, nChannels;
+		uint8_t *pPixels = ReadPicture (pRest, &w, &h, &nChannels);
+		if (   pPixels == 0
+		    || (nChannels == 3 ? zg_sim_camera_picture_rgb (pPixels, w, h)
+				       : zg_sim_camera_picture (pPixels, w, h)) != 0)
 		{
-			printf ("#error camera picture %s: not a binary PGM or PPM file (8 bits)\n", pRest);
+			printf ("#error camera picture %s: not a binary PGM or PPM file (8 bits),"
+				" or too large\n", pRest);
 		}
-		free (pGrey);
+		free (pPixels);
 	}
 	else if (zg_sim_camera (pArgs) != 0)
 	{

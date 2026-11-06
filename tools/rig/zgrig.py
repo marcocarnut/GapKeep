@@ -249,6 +249,25 @@ class RigMachine:
 
     shot = serialshot	# no other way to see the screen on the rig
 
+    def serialraw(self, path):
+        """The running Pi Camera's next raw frame: path (.raw) and path.json."""
+        import json
+        with self.lock:
+            pos = len(self.rx)
+
+        def read():
+            nonlocal pos
+            with self.lock:
+                data = bytes(self.rx[pos:])
+                pos = len(self.rx)
+            return data
+        info, payload = serialshot.capture_raw(read, self.port.write, timeout=60)
+        with open(path, 'wb') as f:
+            f.write(payload)
+        with open(path + '.json', 'w') as f:
+            json.dump(info, f, indent=1)
+        return path
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

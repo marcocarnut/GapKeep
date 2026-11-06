@@ -50,8 +50,8 @@ ui:
       ts: number | string
       md: 'A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`.'
     - name: Detector
-      ts: '"qr"'
-      md: 'A **detector** is something a `Scanner` can recognise: `"qr"` for QR codes.'
+      ts: '"qr" | "qr-color"'
+      md: 'A **detector** is something a `Scanner` can recognise: `"qr"` for QR codes; `"qr-color"`, experimental, for the data a colour QR code carries in its colours ([EXPERIMENTAL.md](EXPERIMENTAL.md)).'
     - name: ImageSource
       ts: '{ width: number; height: number; data: Uint8Array | ArrayBuffer }'
       md: |
@@ -383,7 +383,7 @@ ui:
           ts: 'Detector[]'
           readable: true
           value: 'list of detector names'
-          md: '*Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
+          md: '*Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code''s colour layer, only with `experimental = yes` in the card''s `zerogap.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
         - name: field
           ts: '"center" | "full"'
           readable: true
@@ -395,8 +395,8 @@ ui:
       events:
         - name: detect
           prop: onDetect
-          ev_ts: '{ type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null }'
-          md: 'Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code''s content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once.'
+          ev_ts: '{ type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null } | { type: "detect"; target: Scanner; kind: "qr-color"; bytes: Uint8Array; text: string | null; status: "ok" | "plain" | "unreadable"; colour: Uint8Array | null }'
+          md: 'Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code''s content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code''s colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours'' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one.'
         - name: error
           prop: onError
           ev_ts: '{ type: "error"; target: Scanner; reason: string }'
@@ -497,7 +497,7 @@ modules:
         md: 'The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel''s code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros).'
       - name: app
         ts: AppInfo
-        md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash }`. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)).'
+        md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)).'
       - name: version
         ts: '{ readonly zerogap: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
         md: '`{ zerogap, quickjs, lvgl, circle }` version strings.'
@@ -655,8 +655,8 @@ modules:
       Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
       throws a `ReferenceError`. Used by the launcher.
     exports:
-      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash }` (as `sys.app`) for every app not marked `hidden`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
-      - {name: launch, signature: launch(id), ts: '(id: string) => void', md: 'Stop the current app and start `id` (after the current handler returns). Throws if there is no such app.'}
+      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) for every app not marked `hidden`, and not marked `experimental` unless the card''s `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
+      - {name: launch, signature: launch(id), ts: '(id: string) => void', md: 'Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off.'}
       - name: card
         signature: card()
         ts: '() => { status: "ok" | "none" | "unreadable" | "no-apps" | "disabled"; problems: { folder: string; error: string }[] }'
@@ -693,6 +693,8 @@ shared_ts:
       readonly source: "builtin" | "sdcard";
       /** SHA-256 of the app's files (docs/APPS.md, "App hashes") */
       readonly hash: string;
+      /** the manifest says "experimental" (docs/EXPERIMENTAL.md) */
+      readonly experimental: boolean;
     }
 
 globals:

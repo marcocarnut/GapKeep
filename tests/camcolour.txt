@@ -1,0 +1,42 @@
+# Needs a test build, and the rig with a Pi Camera Module v2.1 (docs/RIG.md).
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line (neither QEMU nor the simulator has a Pi Camera).
+# Raw frames as the colour QR decoder sees the scene: through the Color QR
+# app (experimental), so the camera makes colour frames and its automatic
+# exposure keeps green from clipping (lib/colorqr wants the colours). For
+# tuning the decoder against what the camera looks at (a colour chart, codes
+# on a screen): the scanner's two modes, with screenshots for framing.
+expect Keyboard attached 60
+expect launcher ready 60
+send #experimental on
+expect experimental features on 5
+send #camera pi
+expect picamera: IMX219 found \(model 0219\) 10
+expect camera: pi 5
+tile hello
+wait 2
+key meta_l
+expect launcher ready: .*colorqr 10
+tile colorqr
+expect colorqr ready
+expect picamera: streaming 1280x960 10
+# exposure settles (each step waits two frames)
+wait 5
+serialraw 01-detail
+serialshot 01-detail
+wait 1
+# Color QR's buttons: Stop, Clear, Back; no field button: switch by mode
+key meta_l
+expect launcher ready
+send #camera mode full
+expect pi mode full 5
+tile colorqr
+expect colorqr ready
+expect picamera: streaming 1640x1232 RAW8 \(full\) 10
+wait 5
+serialraw 02-full
+serialshot 02-full
+wait 1
+send #camera mode auto
+key meta_l
+expect picamera: stopped: \d+ frames started 10

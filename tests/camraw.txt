@@ -1,0 +1,36 @@
+# Needs a test build, and the rig with a Pi Camera Module v2.1 (docs/RIG.md).
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line (neither QEMU nor the simulator has a Pi Camera).
+# Raw frames for checking the sensor's colours (Bayer order, white balance)
+# and for tuning the colour QR decoder (lib/colorqr): the colour bars, then
+# the scene, in the scanner's two modes, with screenshots of the preview
+# (for framing). Nothing is checked but that they arrive.
+expect Keyboard attached 60
+expect launcher ready 60
+send #camera pi
+expect picamera: IMX219 found \(model 0219\) 10
+expect camera: pi 5
+send #camera pattern 2
+expect test pattern 2 5
+tile qrscan
+expect qrscan ready
+expect picamera: streaming 1280x960 10
+wait 1
+serialraw 01-bars-detail
+serialshot 01-bars
+send #camera pattern 0
+expect test pattern 0 5
+# whatever the camera looks at (a code is not needed): exposure settles
+wait 4
+serialraw 02-scene-detail
+serialshot 02-scene
+key tab
+key tab
+key ret
+expect qrscan: field full 5
+expect picamera: streaming 1640x1232 RAW8 \(full\) 10
+wait 3
+serialraw 03-scene-full
+serialshot 03-scene-full
+key meta_l
+expect picamera: stopped: \d+ frames started 10

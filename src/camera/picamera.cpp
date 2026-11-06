@@ -49,6 +49,18 @@ CZgPiCamera::CZgPiCamera (void)
 	m_nWidth (0),
 	m_nHeight (0),
 	m_pGrey (0),
+	m_bColour (FALSE),
+	m_pRGB (0),
+	m_nRGBSize (0),
+	m_nColourTicks (0),
+	m_nMaxColourTicks (0),
+	m_pRaw (0),
+	m_bRawWanted (FALSE),
+	m_bRawReady (FALSE),
+	m_nRawWait (0),
+	m_nRawWidth (0),
+	m_nRawHeight (0),
+	m_nRawStride (0),
 	m_nSerial (0),
 	m_nExposure (StartExposure),
 	m_nAnalogue (0),
@@ -81,12 +93,22 @@ CZgPiCamera::CZgPiCamera (void)
 		nValue = nValue * 255 / (4 * (255 - BlackLevel));
 		m_Curve[nSum] = nValue > 255 ? 255 : (u8) nValue;
 	}
+	for (unsigned v = 0; v < sizeof m_Linear; v++)
+	{
+		m_Linear[v] = (u8) (v > BlackLevel ? v - BlackLevel : 0);
+	}
+	for (unsigned v = 0; v < sizeof m_LinearPair; v++)
+	{
+		m_LinearPair[v] = (u8) (v > 2 * BlackLevel ? (v - 2 * BlackLevel) / 2 : 0);
+	}
 }
 
 CZgPiCamera::~CZgPiCamera (void)
 {
 	Stop ();
 	delete [] m_pGrey;
+	delete [] m_pRaw;
+	delete [] m_pRGB;
 }
 
 boolean CZgPiCamera::PowerUp (void)
@@ -263,6 +285,15 @@ boolean CZgPiCamera::StartStreaming (void)
 		m_pGrey = new u8[m_nWidth * m_nHeight];
 	}
 
+	if (m_bColour && (m_pRGB == 0 || m_nRGBSize != m_nWidth * m_nHeight * 3))
+	{
+		delete [] m_pRGB;
+		m_nRGBSize = m_nWidth * m_nHeight * 3;
+		m_pRGB = new u8[m_nRGBSize];
+	}
+	m_nColourTicks = 0;
+	m_nMaxColourTicks = 0;
+
 	if (!m_Unicam.Start (m_pMode->nWidth, m_pMode->nHeight, m_nStride))
 	{
 		Fail ("not enough memory for the camera");
@@ -320,6 +351,12 @@ void CZgPiCamera::Stop (void)
 		m_Unicam.GetFramesNotTaken (), m_Unicam.GetFramesIncomplete (),
 		m_nFramesShown > 0 ? (unsigned) (m_nGreyTicks * 1000000 / CLOCKHZ / m_nFramesShown) : 0,
 		(unsigned) (m_nMaxGreyTicks * 1000000ULL / CLOCKHZ));
+	if (m_bColour && m_nFramesShown > 0)
+	{
+		CLogger::Get ()->Write (FromCamera, LogNotice, "colour in %u us each on average, %u us at most",
+			(unsigned) (m_nColourTicks * 1000000 / CLOCKHZ / m_nFramesShown),
+			(unsigned) (m_nMaxColourTicks * 1000000ULL / CLOCKHZ));
+	}
 }
 
 const char *CZgPiCamera::GetError (void)
@@ -355,10 +392,33 @@ const u8 *CZgPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *
 		unsigned long long nStart = CTimer::GetClockTicks64 ();
 		ToGrey (pRaw);
 		unsigned nTicks = (unsigned) (CTimer::GetClockTicks64 () - nStart);
+		// two frames after the request: any change it follows shows by then
+		if (m_bRawWanted && m_nRawWait-- == 0)
+		{
+			delete [] m_pRaw;
+			m_nRawWidth = m_pMode->nWidth;
+			m_nRawHeight = m_pMode->nHeight;
+			m_nRawStride = m_nStride;
+			m_pRaw = new u8[m_nRawStride * m_nRawHeight];
+			memcpy (m_pRaw, pRaw, m_nRawStride * m_nRawHeight);
+			m_bRawWanted = FALSE;
+			m_bRawReady = TRUE;
+		}
 		m_nGreyTicks += nTicks;
 		if (nTicks > m_nMaxGreyTicks)
 		{
 			m_nMaxGreyTicks = nTicks;
+		}
+		if (m_bColour && m_pRGB != 0)
+		{
+			nStart = CTimer::GetClockTicks64 ();
+			ToColour (pRaw);
+			nTicks = (unsigned) (CTimer::GetClockTicks64 () - nStart);
+			m_nColourTicks += nTicks;
+			if (nTicks > m_nMaxColourTicks)
+			{
+				m_nMaxColourTicks = nTicks;
+			}
 		}
 		m_Unicam.ReleaseFrame ();
 		m_nSerial++;
@@ -396,6 +456,34 @@ void CZgPiCamera::ToGrey (const u8 *pRaw)
 				    + (nBottom & 0x00FF00FF) + ((nBottom >> 8) & 0x00FF00FF);
 			*pOut++ = m_Curve[nSums & 0xFFFF];
 			*pOut++ = m_Curve[nSums >> 16];
+		}
+	}
+}
+
+// Each 2x2 Bayer tile -> one RGB pixel, linear, without white balance. The
+// order is BGGR in the buffer (blue at the tile's top left, red at its
+// bottom right), with both flips on (imx219.cpp): checked against a red
+// object, not the sensor's colour bars, which come out RGGB because the
+// sensor makes them after the flips (docs/camera/IMPLEMENTATION.md).
+// Four pixels of each line are loaded at once (two tiles), as in ToGrey:
+// the frame buffer is slow to read byte by byte.
+void CZgPiCamera::ToColour (const u8 *pRaw)
+{
+	u8 *pOut = m_pRGB;
+	for (unsigned y = 0; y < m_nHeight; y++)
+	{
+		const u32 *pTop = (const u32 *) (pRaw + 2 * y * m_nStride);		// B G B G
+		const u32 *pBottom = (const u32 *) (pRaw + (2 * y + 1) * m_nStride);	// G R G R
+		for (unsigned x = 0; x < m_nWidth / 2; x++)
+		{
+			u32 t = pTop[x], b = pBottom[x];	// little-endian: the first pixel low
+			pOut[0] = m_Linear[(b >> 8) & 0xFF];
+			pOut[1] = m_LinearPair[((t >> 8) & 0xFF) + (b & 0xFF)];
+			pOut[2] = m_Linear[t & 0xFF];
+			pOut[3] = m_Linear[b >> 24];
+			pOut[4] = m_LinearPair[(t >> 24) + ((b >> 16) & 0xFF)];
+			pOut[5] = m_Linear[(t >> 16) & 0xFF];
+			pOut += 6;
 		}
 	}
 }
@@ -442,6 +530,34 @@ void CZgPiCamera::AutoExposure (void)
 		// mean": a lamp in view would then leave the rest black.
 		unsigned nTarget = nClipped * 50 > nCount ? TargetMean / 2 : TargetMean;
 		fRatio = (double) nTarget / nMean;
+	}
+
+	// Colour frames (the "qr-color" detector): green, the strongest channel
+	// without white balance, must not clip on a bright screen, or light
+	// colours lose their colour (dim ones only get noisier). Over 1 % of
+	// green near its top: darker; over 1 % in its top fifth: no brighter.
+	if (m_bColour && m_pRGB != 0)
+	{
+		unsigned nHigh = 0, nTop = 0;
+		for (unsigned y = m_nHeight / 8; y < m_nHeight * 7 / 8; y += nStep)
+		{
+			const u8 *pRow = m_pRGB + y * m_nWidth * 3;
+			for (unsigned x = m_nWidth / 8; x < m_nWidth * 7 / 8; x += nStep)
+			{
+				unsigned g = pRow[3 * x + 1];
+				nTop += g >= 230;
+				nHigh += g >= 190;
+			}
+		}
+		unsigned nGreenCount = ((m_nHeight * 3 / 4 + nStep - 1) / nStep) * ((m_nWidth * 3 / 4 + nStep - 1) / nStep);
+		if (nTop * 100 > nGreenCount)
+		{
+			fRatio = fRatio < 0.7 ? fRatio : 0.7;
+		}
+		else if (nHigh * 100 > nGreenCount && fRatio > 1.0)
+		{
+			fRatio = 1.0;
+		}
 	}
 	if (fRatio > 2.0)	fRatio = 2.0;
 	if (fRatio < 0.5)	fRatio = 0.5;
@@ -572,4 +688,27 @@ void CZgPiCamera::Watch (void)
 		m_nErrorsSeen = 0;
 		m_nNextErrorLog = nNow + LogEveryTicks;
 	}
+}
+
+void CZgPiCamera::RequestRaw (void)
+{
+	m_bRawReady = FALSE;
+	m_nRawWait = 2;
+	m_bRawWanted = TRUE;
+}
+
+const u8 *CZgPiCamera::GetRaw (unsigned *pWidth, unsigned *pHeight, unsigned *pStride,
+			       unsigned *pExposure, unsigned *pAnalogue, unsigned *pDigital) const
+{
+	if (!m_bRawReady)
+	{
+		return 0;
+	}
+	*pWidth = m_nRawWidth;
+	*pHeight = m_nRawHeight;
+	*pStride = m_nRawStride;
+	*pExposure = m_nExposure;
+	*pAnalogue = m_nAnalogue;
+	*pDigital = m_nDigital;
+	return m_pRaw;
 }

@@ -20,6 +20,11 @@ CZgSynthCamera::CZgSynthCamera (void)
 	m_pFrame (new u8[FrameWidth * FrameHeight]),
 	m_Field (ZgFieldCenter),
 	m_pSource (0),
+	m_nSourceChannels (1),
+	m_pPictureRGB (0),
+	m_bPictureRGB (FALSE),
+	m_bColour (FALSE),
+	m_pFrameRGB (0),
 	m_nSourceSize (0),
 	m_nSourceWidth (0),
 	m_nSourceHeight (0),
@@ -37,6 +42,8 @@ CZgSynthCamera::~CZgSynthCamera (void)
 	delete [] m_pPicture;
 	delete [] m_pFrame;
 	delete [] m_pSource;
+	delete [] m_pPictureRGB;
+	delete [] m_pFrameRGB;
 }
 
 const char *CZgSynthCamera::GetMode (void) const
@@ -55,6 +62,7 @@ const char *CZgSynthCamera::GetMode (void) const
 // A soft diagonal gradient, the "room" the camera looks at.
 void CZgSynthCamera::DrawScene (void)
 {
+	m_bPictureRGB = FALSE;
 	m_nPictureWidth = FrameWidth;
 	m_nPictureHeight = FrameHeight;
 	for (unsigned y = 0; y < FrameHeight; y++)
@@ -98,7 +106,7 @@ boolean CZgSynthCamera::SetQR (const u8 *pData, unsigned nLength)
 		return FALSE;
 	}
 
-	DrawScene ();
+	DrawScene ();		// grey: no colour picture any more
 
 	// The symbol and its quiet zone (4 modules), as large as fits in 400 px,
 	// turned by 3 degrees unless the modules are small. Each pixel is the
@@ -165,29 +173,48 @@ boolean CZgSynthCamera::SetQR (const u8 *pData, unsigned nLength)
 // A picture or a live frame keeps its own resolution; each frame is made
 // from it as the field asks, as a real camera's would be: the middle at
 // full detail, or all of it, averaged down (less detail per degree).
-boolean CZgSynthCamera::SetSource (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
-				   unsigned nMaxSide)
+boolean CZgSynthCamera::SetSource (const u8 *pPixels, unsigned nChannels, unsigned nWidth,
+				   unsigned nHeight, unsigned nMaxSide)
 {
 	if (nWidth == 0 || nHeight == 0 || nWidth > nMaxSide || nHeight > nMaxSide)
 	{
 		return FALSE;
 	}
 
-	if (m_pSource == 0 || nWidth * nHeight > m_nSourceSize)
+	unsigned nSize = nWidth * nHeight * nChannels;
+	if (m_pSource == 0 || nSize > m_nSourceSize)
 	{
 		delete [] m_pSource;
-		m_pSource = new u8[nWidth * nHeight];
-		m_nSourceSize = nWidth * nHeight;
+		m_pSource = new u8[nSize];
+		m_nSourceSize = nSize;
 	}
-	memcpy (m_pSource, pGrey, nWidth * nHeight);
+	memcpy (m_pSource, pPixels, nSize);
 	m_nSourceWidth = nWidth;
 	m_nSourceHeight = nHeight;
+	m_nSourceChannels = nChannels;
 	return TRUE;
+}
+
+// the colour picture's grey, as the Pi camera's: (R + 2G + B) / 4
+void CZgSynthCamera::Greys (void)
+{
+	const u8 *p = m_pPictureRGB;
+	for (unsigned i = 0; i < m_nPictureWidth * m_nPictureHeight; i++, p += 3)
+	{
+		m_pPicture[i] = (u8) ((p[0] + 2 * p[1] + p[2]) / 4);
+	}
 }
 
 void CZgSynthCamera::Derive (void)
 {
-	unsigned W = m_nSourceWidth, H = m_nSourceHeight;
+	unsigned W = m_nSourceWidth, H = m_nSourceHeight, C = m_nSourceChannels;
+	m_bPictureRGB = C == 3;
+	if (m_bPictureRGB && m_pPictureRGB == 0)
+	{
+		m_pPictureRGB = new u8[FrameWidth * FrameHeight * 3];
+	}
+	u8 *pOut = m_bPictureRGB ? m_pPictureRGB : m_pPicture;
+
 	if (m_Field == ZgFieldCenter || (W <= FrameWidth && H <= FrameHeight))
 	{
 		// the middle, pixel for pixel
@@ -196,10 +223,14 @@ void CZgSynthCamera::Derive (void)
 		unsigned x0 = (W - w) / 2, y0 = (H - h) / 2;
 		for (unsigned y = 0; y < h; y++)
 		{
-			memcpy (m_pPicture + y * w, m_pSource + (y0 + y) * W + x0, w);
+			memcpy (pOut + y * w * C, m_pSource + ((y0 + y) * W + x0) * C, w * C);
 		}
 		m_nPictureWidth = w;
 		m_nPictureHeight = h;
+		if (m_bPictureRGB)
+		{
+			Greys ();
+		}
 		return;
 	}
 
@@ -218,20 +249,27 @@ void CZgSynthCamera::Derive (void)
 		for (unsigned x = 0; x < w; x++)
 		{
 			unsigned sx0 = x * W / w, sx1 = (x + 1) * W / w;
-			unsigned nSum = 0;
-			for (unsigned sy = sy0; sy < sy1; sy++)
+			for (unsigned c = 0; c < C; c++)
 			{
-				const u8 *pRow = m_pSource + sy * W;
-				for (unsigned sx = sx0; sx < sx1; sx++)
+				unsigned nSum = 0;
+				for (unsigned sy = sy0; sy < sy1; sy++)
 				{
-					nSum += pRow[sx];
+					const u8 *pRow = m_pSource + sy * W * C + c;
+					for (unsigned sx = sx0; sx < sx1; sx++)
+					{
+						nSum += pRow[sx * C];
+					}
 				}
+				pOut[(y * w + x) * C + c] = (u8) (nSum / ((sy1 - sy0) * (sx1 - sx0)));
 			}
-			m_pPicture[y * w + x] = (u8) (nSum / ((sy1 - sy0) * (sx1 - sx0)));
 		}
 	}
 	m_nPictureWidth = w;
 	m_nPictureHeight = h;
+	if (m_bPictureRGB)
+	{
+		Greys ();
+	}
 }
 
 void CZgSynthCamera::SetField (TZgCameraField Field)
@@ -249,7 +287,18 @@ void CZgSynthCamera::SetField (TZgCameraField Field)
 
 boolean CZgSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
 {
-	if (!SetSource (pGrey, nWidth, nHeight, MaxPictureSide))
+	if (!SetSource (pGrey, 1, nWidth, nHeight, MaxPictureSide))
+	{
+		return FALSE;
+	}
+	Derive ();
+	m_Mode = ModePicture;
+	return TRUE;
+}
+
+boolean CZgSynthCamera::SetPictureRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight)
+{
+	if (!SetSource (pRGB, 3, nWidth, nHeight, MaxColourSide))
 	{
 		return FALSE;
 	}
@@ -260,7 +309,18 @@ boolean CZgSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned n
 
 boolean CZgSynthCamera::PushFrame (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
 {
-	if (!SetSource (pGrey, nWidth, nHeight, MaxPushSide))
+	if (!SetSource (pGrey, 1, nWidth, nHeight, MaxPushSide))
+	{
+		return FALSE;
+	}
+	m_nLiveSerial++;
+	m_Mode = ModeLive;
+	return TRUE;
+}
+
+boolean CZgSynthCamera::PushFrameRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight)
+{
+	if (!SetSource (pRGB, 3, nWidth, nHeight, MaxPushSide))
 	{
 		return FALSE;
 	}
@@ -276,6 +336,10 @@ boolean CZgSynthCamera::Start (void)
 		return FALSE;
 	}
 
+	if (m_bColour && m_pFrameRGB == 0)
+	{
+		m_pFrameRGB = new u8[FrameWidth * FrameHeight * 3];
+	}
 	m_bStreaming = TRUE;
 	m_nNextFrameAt = 0;
 	return TRUE;
@@ -291,19 +355,55 @@ const char *CZgSynthCamera::GetError (void)
 	return m_Mode == ModeNone ? "no camera" : 0;
 }
 
+static inline u8 Clamp (int v)
+{
+	return (u8) (v < 0 ? 0 : v > 255 ? 255 : v);
+}
+
 void CZgSynthCamera::MakeFrame (void)
 {
-	// the picture plus noise of +-4 levels (xorshift32)
+	// the picture plus noise of +-4 levels (xorshift32); in colour, the
+	// same noise on each channel, so the grey frame stays its grey
+	boolean bColour = m_bColour && m_pFrameRGB != 0;
 	u32 n = m_nNoise;
 	for (unsigned i = 0; i < m_nPictureWidth * m_nPictureHeight; i++)
 	{
 		n ^= n << 13;
 		n ^= n >> 17;
 		n ^= n << 5;
-		int v = m_pPicture[i] + (int) (n & 7) - 4;
-		m_pFrame[i] = (u8) (v < 0 ? 0 : v > 255 ? 255 : v);
+		int d = (int) (n & 7) - 4;
+		m_pFrame[i] = Clamp (m_pPicture[i] + d);
+		if (bColour)
+		{
+			const u8 *pIn = m_bPictureRGB ? m_pPictureRGB + 3 * i : 0;
+			for (unsigned c = 0; c < 3; c++)
+			{
+				m_pFrameRGB[3 * i + c] = Clamp ((pIn ? pIn[c] : m_pPicture[i]) + d);
+			}
+		}
 	}
 	m_nNoise = n;
+}
+
+const u8 *CZgSynthCamera::GetColourFrame (void)
+{
+	if (!m_bColour || m_pFrameRGB == 0)
+	{
+		return 0;
+	}
+	if (m_Mode == ModeLive)
+	{
+		// as pushed, without noise: the picture itself
+		if (m_bPictureRGB)
+		{
+			return m_pPictureRGB;
+		}
+		for (unsigned i = 0; i < m_nPictureWidth * m_nPictureHeight; i++)
+		{
+			m_pFrameRGB[3 * i] = m_pFrameRGB[3 * i + 1] = m_pFrameRGB[3 * i + 2] = m_pPicture[i];
+		}
+	}
+	return m_pFrameRGB;
 }
 
 const u8 *CZgSynthCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight)

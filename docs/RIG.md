@@ -101,6 +101,21 @@ percentage of the screen size, because the Zero's screen size depends on the
 monitor (1824x984 on a 1080p monitor with the firmware's default overscan,
 640x480 in QEMU).
 
+Rig-only scenario commands and serial commands (test builds, `src/testshot.h`):
+
+- `serialraw <name>`: the Pi camera's next raw frame (RAW8 Bayer, 13 s at
+  921600 baud) as `<name>.raw`, with its size, exposure and gains in
+  `<name>.raw.json`; `tests/camraw.txt` takes the colour bars and the scene
+  in both of the scanner's modes.
+- `send #experimental on`: experimental features on, as `experimental = yes`
+  in `zerogap.txt` would (the rig's card never changes); the launcher lists
+  the experimental apps from its next start (`tests/colorqr_hw.txt`).
+- `camera picture <name>`: one of the colour codes of `tests/colorqr`, built
+  into test kernels, for the synthetic camera.
+
+After a `serialshot`, wait a second before the next `send`: the Zero reads
+no commands while it sends the screenshot.
+
 ## How it works
 
 - **Reset:** `pinctrl set 17 op dl`, 100 ms, then `pinctrl set 17 ip pn`

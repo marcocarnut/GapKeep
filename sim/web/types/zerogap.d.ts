@@ -29,6 +29,8 @@ type AppInfo = {
   readonly source: "builtin" | "sdcard";
   /** SHA-256 of the app's files (docs/APPS.md, "App hashes") */
   readonly hash: string;
+  /** the manifest says "experimental" (docs/EXPERIMENTAL.md) */
+  readonly experimental: boolean;
 };
 
 declare module "zg:ui" {
@@ -39,8 +41,8 @@ declare module "zg:ui" {
   export type Size = number | string;
   /** A **color** is `0xRRGGBB`, `"#RRGGBB"` or `"#RGB"`. */
   export type Color = number | string;
-  /** A **detector** is something a `Scanner` can recognise: `"qr"` for QR codes. */
-  export type Detector = "qr";
+  /** A **detector** is something a `Scanner` can recognise: `"qr"` for QR codes; `"qr-color"`, experimental, for the data a colour QR code carries in its colours ([EXPERIMENTAL.md](EXPERIMENTAL.md)). */
+  export type Detector = "qr" | "qr-color";
   /**
    * An **image source** is `{ width, height, data }`: `data` holds
    * `width * height * 4` bytes of RGBA (straight alpha, rows top to bottom),
@@ -227,12 +229,12 @@ declare module "zg:ui" {
     src?: ImageSource;
   }
   export interface ScannerProps extends CommonProps {
-    /** *Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. */
+    /** *Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code's colour layer, only with `experimental = yes` in the card's `zerogap.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. */
     detect?: Detector[];
     /** *Readable*. What part of the camera's view the scanner sees. `"center"` (the default): the middle, at full detail: about a 26° view on the Pi camera, best for a code at 30-60 cm or a phone at arm's length. `"full"`: all of the camera's view, with less detail per degree, so codes must be larger in the picture. Changing it restarts a running scanner. */
     field?: "center" | "full";
-    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. */
-    onDetect?: (this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null }) => void;
+    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. */
+    onDetect?: (this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null } | { type: "detect"; target: Scanner; kind: "qr-color"; bytes: Uint8Array; text: string | null; status: "ok" | "plain" | "unreadable"; colour: Uint8Array | null }) => void;
     /** Handler for `"error"`: The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. */
     onError?: (this: Scanner, ev: { type: "error"; target: Scanner; reason: string }) => void;
   }
@@ -492,7 +494,7 @@ declare module "zg:ui" {
     constructor(props?: ScannerProps);
     constructor(parent: Widget, props?: ScannerProps);
     set(props: ScannerProps): this;
-    /** *Readable*. Required. What to look for: `"qr"` (QR codes). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. */
+    /** *Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code's colour layer, only with `experimental = yes` in the card's `zerogap.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning. */
     detect: Detector[];
     /** *Readable*. What part of the camera's view the scanner sees. `"center"` (the default): the middle, at full detail: about a 26° view on the Pi camera, best for a code at 30-60 cm or a phone at arm's length. `"full"`: all of the camera's view, with less detail per degree, so codes must be larger in the picture. Changing it restarts a running scanner. */
     field: "center" | "full";
@@ -502,8 +504,8 @@ declare module "zg:ui" {
     start(): void;
     /** Turns the camera off. Deleting the widget, or the app ending, does too. */
     stop(): void;
-    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. */
-    onDetect: ((this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null }) => void) | null;
+    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. */
+    onDetect: ((this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null } | { type: "detect"; target: Scanner; kind: "qr-color"; bytes: Uint8Array; text: string | null; status: "ok" | "plain" | "unreadable"; colour: Uint8Array | null }) => void) | null;
     /** Handler for `"error"`: The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. */
     onError: ((this: Scanner, ev: { type: "error"; target: Scanner; reason: string }) => void) | null;
   }
@@ -538,7 +540,7 @@ declare module "zg:ui" {
 declare module "zg:sys" {
   /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
   export const kernel: { readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" };
-  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash }`. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)). */
+  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)). */
   export const app: AppInfo;
   /** `{ zerogap, quickjs, lvgl, circle }` version strings. */
   export const version: { readonly zerogap: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string };
@@ -636,9 +638,9 @@ declare module "zg:session" {
 }
 
 declare module "zg:apps" {
-  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash }` (as `sys.app`) for every app not marked `hidden`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
+  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) for every app not marked `hidden`, and not marked `experimental` unless the card's `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
   export function list(): AppInfo[];
-  /** Stop the current app and start `id` (after the current handler returns). Throws if there is no such app. */
+  /** Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. */
   export function launch(id: string): void;
   /** The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16. */
   export function card(): { status: "ok" | "none" | "unreadable" | "no-apps" | "disabled"; problems: { folder: string; error: string }[] };

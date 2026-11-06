@@ -22,6 +22,7 @@ static const unsigned MaxCodes = 4;
 static const unsigned MaxSide = 4096;
 
 static u8 s_Payload[MaxCodes][ZG_QR_MAX_PAYLOAD];
+static u8 s_DataCodewords[MaxCodes][ZG_QR_MAX_DATA_CODEWORDS];
 
 // The reader's settings, chosen by measurement (docs/CAMERA.md, "The QR
 // decoder") for the Pi camera's 320x240 frames on a 1 GHz ARM1176 without
@@ -46,6 +47,63 @@ static ZXing::ReaderOptions Options (unsigned nMax)
 	Options.setMaxNumberOfSymbols ((uint8_t) nMax);
 	Options.setReturnErrors (false);
 	return Options;
+}
+
+// A small number from an extra (zxing-cpp keeps them as text): -1 if it is
+// missing or not a number from 0 to nMax.
+static int SmallNumber (const std::string &rText, int nMax)
+{
+	if (rText.empty () || rText.size () > 3)
+	{
+		return -1;
+	}
+	int n = 0;
+	for (char c : rText)
+	{
+		if (c < '0' || c > '9')
+		{
+			return -1;
+		}
+		n = n * 10 + (c - '0');
+	}
+	return n <= nMax ? n : -1;
+}
+
+static int HexDigit (char c)
+{
+	return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+}
+
+// The symbol's version, level, mask and corrected data codewords (patches/
+// zxing-cpp/0005 keeps those as the extra "DataCodewords"), checked: what
+// is missing or malformed is reported as unknown.
+static void Describe (const ZXing::Barcode &rResult, TZgQRCode *pCode, u8 *pBuffer)
+{
+	int nVersion = SmallNumber (rResult.extra (ZXing::BarcodeExtra::Version), 40);
+	pCode->nVersion = nVersion > 0 ? (unsigned) nVersion : 0;
+	pCode->nMask = SmallNumber (rResult.extra (ZXing::BarcodeExtra::DataMask), 7);
+	std::string Level = rResult.extra (ZXing::BarcodeExtra::ECLevel);
+	const char *pLevel = Level.size () == 1 ? strchr ("LMQH", Level[0]) : 0;
+	pCode->nECLevel = pLevel != 0 && *pLevel != '\0' ? (int) (pLevel - "LMQH") : -1;
+	pCode->bMirrored = rResult.isMirrored ();
+
+	pCode->pDataCodewords = pBuffer;
+	pCode->nDataCodewords = 0;
+	std::string Hex = rResult.extra ("DataCodewords");
+	if (Hex.size () % 2 != 0 || Hex.size () / 2 > ZG_QR_MAX_DATA_CODEWORDS)
+	{
+		return;
+	}
+	for (size_t i = 0; i < Hex.size (); i += 2)
+	{
+		int nHigh = HexDigit (Hex[i]), nLow = HexDigit (Hex[i + 1]);
+		if (nHigh < 0 || nLow < 0)
+		{
+			return;
+		}
+		pBuffer[i / 2] = (u8) (nHigh << 4 | nLow);
+	}
+	pCode->nDataCodewords = (unsigned) (Hex.size () / 2);
 }
 
 int ZgDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
@@ -93,6 +151,7 @@ int ZgDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 			pCodes[nFound].Corners[k][0] = rCorners[k].x;
 			pCodes[nFound].Corners[k][1] = rCorners[k].y;
 		}
+		Describe (rResult, &pCodes[nFound], s_DataCodewords[nFound]);
 		nFound++;
 	}
 

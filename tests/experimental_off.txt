@@ -1,0 +1,6 @@
+# The normal card has no zerogap.txt, so experimental features are off: the
+# experimental Color QR app (apps/colorqr, on the card) is not listed, and
+# can't be started (docs/EXPERIMENTAL.md). The simulator only ("launch").
+expect launcher ready 60
+launch colorqr
+expect colorqr is experimental: it needs "experimental = yes" in zerogap.txt 5

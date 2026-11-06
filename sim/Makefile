@@ -58,7 +58,7 @@ ZERO_WORK_PER_SECOND := 36
 DEFS     := -DZG_SIM $(MODEDEF) -DZG_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<zg_lv_conf.h>" \
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
-INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -idirafter $(ROOT)/circle/addon
+INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -I $(ROOT)/lib/colorqr/include -idirafter $(ROOT)/circle/addon
 ifneq ($(HAVEZX),)
 $(shell $(ROOT)/tools/apply_patches.sh zxing-cpp >&2)
 include $(ROOT)/lib/zxing/zxing.mk
@@ -78,7 +78,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \
 	    $(ROOT)/src/runtime/cursor_install.c \
 	    $(ROOT)/src/runtime/scanner.cpp $(ROOT)/src/runtime/qrdecode.cpp \
-	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp \
+	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp $(ROOT)/src/runtime/settings.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
 	    $(ROOT)/src/runtime/js_session.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
@@ -89,6 +89,9 @@ SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
 # libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
 include $(ROOT)/lib/secp256k1/secp256k1.mk
 SECPSRC  := $(addprefix $(SECP_DIR)/,$(SECP_SOURCES))
+# colorqr, the experimental colour QR layer (lib/colorqr/colorqr.mk)
+include $(ROOT)/lib/colorqr/colorqr.mk
+CQSRC    := $(addprefix $(CQ_DIR)/,$(CQ_SOURCES))
 QJSSRC   := $(QJS)/quickjs.c $(QJS)/dtoa.c $(QJS)/libregexp.c $(QJS)/libunicode.c $(QJS)/cutils.c
 LVGLSRC  := $(shell find $(LVGL)/src -name '*.c')
 
@@ -101,11 +104,13 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC)) $(OBJDIR)/apps_bundle.c.o
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC)) $(OBJDIR)/apps_bundle.c.o
 ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
 $(SECPOBJS): CFLAGS += $(SECP_DEFINES) $(SECP_INCLUDE) -I $(SECP_DIR) -Wno-unused-function
+CQOBJS   := $(call obj,$(CQSRC))
+$(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 
 .PHONY: all web clean FORCE
 all: build/zgsim$(if $(filter test,$(MODE)),-test)
@@ -119,7 +124,7 @@ web: build/web/zgsim$(if $(filter test,$(MODE)),-test).js
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
 	    -sMODULARIZE=1 -sEXPORT_NAME=createZerogap -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
 	    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAPU16,UTF8ToString,stringToNewUTF8 \
-	    -sEXPORTED_FUNCTIONS=_malloc,_free,_zg_sim_boot,_zg_sim_set_builtin_dir,_zg_sim_key_down_qemu,_zg_sim_key_down_dom,_zg_sim_key_up,_zg_sim_pointer,_zg_sim_launch,_zg_sim_frame_serial,_zg_sim_camera,_zg_sim_camera_qr,_zg_sim_camera_picture,_zg_sim_camera_push,_zg_web_run,_zg_web_frame,_zg_web_width,_zg_web_height \
+	    -sEXPORTED_FUNCTIONS=_malloc,_free,_zg_sim_boot,_zg_sim_set_builtin_dir,_zg_sim_key_down_qemu,_zg_sim_key_down_dom,_zg_sim_key_up,_zg_sim_pointer,_zg_sim_launch,_zg_sim_frame_serial,_zg_sim_camera,_zg_sim_camera_qr,_zg_sim_camera_picture,_zg_sim_camera_push,_zg_sim_camera_picture_rgb,_zg_sim_camera_push_rgb,_zg_web_run,_zg_web_frame,_zg_web_width,_zg_web_height \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
 build/web/zgsim.js build/web/zgsim-test.js: $(OBJS)

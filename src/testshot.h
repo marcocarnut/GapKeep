@@ -35,6 +35,23 @@
 // applies from the next scanner start: a running scanner keeps the camera
 // it started with.
 //
+// "#camera picture <name>": a test picture (testpictures.h: the colour QR
+// codes of tests/colorqr, by their PNG's name without ".png") for the
+// synthetic camera, as the simulator's "camera picture <file>".
+//
+// "#experimental on": experimental features on (runtime/settings.h), as
+// "experimental = yes" in zerogap.txt would, for the rig, whose card never
+// changes. The launcher lists the experimental apps from its next start.
+//
+// "#camera raw": the next raw frame of the running Pi Camera (RAW8 Bayer,
+// as the sensor sends it: for checking colours), answered with
+//
+//   \nZGRAW1 <width> <height> <stride> <exposure> <analogue> <digital>
+//   <payload-bytes> <crc32-hex>\n<payload>\nZGEND\n
+//
+// (one header line; the payload is stride * height bytes, uncompressed:
+// about 13 s at 921600 baud). tools/serialshot.py reads it.
+//
 // Production builds never read from the serial port.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -57,6 +74,8 @@ public:
 
 private:
 	void Send (void);
+	void SendRaw (void);
+	void SendBinary (const CString &rHeader, const u8 *pData, unsigned nLength);
 	void Camera (const char *pArgs);
 
 private:
@@ -66,6 +85,7 @@ private:
 	CZgPiCamera *m_pPiCamera;
 	char m_Line[1024];
 	unsigned m_nLine;
+	boolean m_bRawPending;
 };
 
 #endif

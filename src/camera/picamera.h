@@ -57,6 +57,19 @@ public:
 	const u8 *GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight);
 	const char *GetError (void);
 
+	// Test builds: a copy of the next raw frame (RAW8 Bayer, as the sensor
+	// sends it), for looking at the colours (testshot.h, "#camera raw").
+	// GetRaw returns it once it is there, 0 before; it stays until the
+	// next RequestRaw.
+	void RequestRaw (void);
+
+	// colour (camera.h): linear, black level removed, no white balance
+	void SetColour (boolean bColour)		{ m_bColour = bColour; }
+	const u8 *GetColourFrame (void)			{ return m_bColour ? m_pRGB : 0; }
+	boolean IsLinear (void) const			{ return TRUE; }
+	const u8 *GetRaw (unsigned *pWidth, unsigned *pHeight, unsigned *pStride,
+			  unsigned *pExposure, unsigned *pAnalogue, unsigned *pDigital) const;
+
 private:
 	boolean PowerUp (void);
 	void PowerDown (void);
@@ -64,6 +77,7 @@ private:
 	void Fail (const char *pError);
 
 	void ToGrey (const u8 *pRaw);
+	void ToColour (const u8 *pRaw);
 	void AutoExposure (void);
 	void SetProduct (double fProduct);
 	void Watch (void);			// errors, frame rate, stalls
@@ -87,6 +101,17 @@ private:
 	unsigned m_nWidth;		// of the grey frames: half the sensor's
 	unsigned m_nHeight;
 	u8 *m_pGrey;			// m_nWidth x m_nHeight
+	boolean m_bColour;		// make colour frames too (SetColour)
+	u8 *m_pRGB;			// m_nWidth x m_nHeight x 3, if m_bColour
+	unsigned m_nRGBSize;		// allocated
+	u8 m_Linear[256];		// a RAW8 value -> black level removed
+	u8 m_LinearPair[511];		// the sum of two -> their average, the same
+	unsigned long long m_nColourTicks;	// time spent in ToColour, and the most
+	unsigned m_nMaxColourTicks;
+	u8 *m_pRaw;			// RequestRaw's copy, or 0
+	boolean m_bRawWanted, m_bRawReady;
+	unsigned m_nRawWait;		// frames until the copy
+	unsigned m_nRawWidth, m_nRawHeight, m_nRawStride;
 	unsigned m_nSerial;
 	u8 m_Curve[4 * 255 + 1];	// sum of a 2x2 tile -> grey, black level removed
 

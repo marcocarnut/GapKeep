@@ -33,14 +33,14 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
-	  runtime/scanner.o runtime/clock.o runtime/js_clock.o \
+	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
 	  runtime/session.o runtime/js_session.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 
 ifeq ($(strip $(TEST)),1)
 BUNDLE	= ../apps ../tests/apps
-OBJS	+= testshot.o testcrash.o runtime/synthcam.o
+OBJS	+= testshot.o testcrash.o runtime/synthcam.o generated/testpictures.o
 DEFINE	+= -DZG_TEST
 BUILDMODE = test
 else ifeq ($(strip $(SEALED)),1)
@@ -73,7 +73,7 @@ else
 OBJS	+= runtime/qrdecode.o
 endif
 
-LIBS	+= ../lib/secp256k1/libsecp256k1.a \
+LIBS	+= ../lib/secp256k1/libsecp256k1.a ../lib/colorqr/libcolorqr.a \
 	  ../lib/lvgl/liblvgl.a \
 	  ../lib/quickjs/libquickjs.a \
 	  $(CIRCLEHOME)/lib/usb/libusb.a \
@@ -84,7 +84,8 @@ LIBS	+= ../lib/secp256k1/libsecp256k1.a \
 # every file including LVGL headers must see the same configuration
 DEFINE += -DLV_CONF_PATH="<zg_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
-EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src -I ../third_party/secp256k1/include
+EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src -I ../third_party/secp256k1/include \
+	       -I ../lib/colorqr/include
 
 include $(CIRCLEHOME)/Rules.mk
 
@@ -95,6 +96,10 @@ ifeq ($(strip $(TEST)),1)
 	@python3 ../tools/make_qjstests.py $(QJSDIR) ../tests/apps/qjstests/suites.js
 endif
 	@python3 ../tools/bundle_apps.py $@ $(BUNDLE)
+
+# the synthetic camera's test pictures (test builds)
+generated/testpictures.c: FORCE
+	@python3 ../tools/make_test_pictures.py $@ $(wildcard ../tests/colorqr/*.png)
 
 FORCE:
 

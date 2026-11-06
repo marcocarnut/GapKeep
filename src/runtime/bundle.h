@@ -39,6 +39,7 @@ typedef struct
 	const char *entry;		/* path of the entry module */
 	unsigned permissions;		/* ZG_PERM_* */
 	int hidden;			/* not listed in the launcher */
+	int experimental;		/* only with "experimental = yes" (settings.h) */
 	const zg_file_t *files;		/* sorted by path */
 	unsigned file_count;
 	const char *hash;		/* SHA-256 of the files, 64 hex digits (docs/APPS.md) */
