@@ -18,13 +18,9 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PSBT_LIB = ["analyze.js", "basen.js", "bech32.js", "bytes.js", "hashes.js",
-            "psbt.js", "script.js", "transport.js", "tx.js", "view.js"]
-
 # (home, copy), relative to the repository
 COPIES = (
-    [("apps/psbtview/lib/" + f, "apps/signer/lib/psbt/" + f) for f in PSBT_LIB]
-    + [("apps/codex32/lib/codex32.js", "apps/signer/lib/codex32.js"),
+    [("apps/codex32/lib/codex32.js", "apps/signer/lib/codex32.js"),
        ("apps/codex32/vendor/codex32.js", "apps/signer/vendor/codex32.js"),
        ("apps/codex32/vendor/recover.js", "apps/signer/vendor/recover.js"),
        ("apps/codex32/vendor/wordlist.js", "apps/signer/vendor/wordlist.js"),
@@ -32,7 +28,7 @@ COPIES = (
     # dice39 shows the account's public key with the signer's BIP-39, BIP-32
     # and descriptors, and what they import
     + [("apps/signer/lib/" + f, "apps/dice39/lib/" + f) for f in ("bip39.js", "bip32.js", "crypto.js", "descriptor.js")]
-    + [("apps/psbtview/lib/" + f, "apps/dice39/lib/psbt/" + f) for f in ("bytes.js", "basen.js", "hashes.js")]
+    + [("apps/signer/lib/psbt/" + f, "apps/dice39/lib/psbt/" + f) for f in ("bytes.js", "basen.js", "hashes.js")]
 )
 
 

@@ -1,11 +1,11 @@
-# Tests for the PSBT modules (apps/psbtview/lib)
+# Tests for the PSBT modules (apps/signer/lib/psbt)
 
     node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
 
 runs every module against `vectors.json`, with Node's SHA-256 and
 RIPEMD-160 in place of `zg:crypto`'s (and once more without RIPEMD-160).
 `tools/run_tests.sh` runs it as `psbt_node`. The simulator scenario is
-`tests/psbtview.txt`.
+`tests/signer_read.txt`.
 
 ## Where the vectors come from
 
@@ -47,7 +47,7 @@ Electrum's own tests; nothing touches a network.
         https://codeload.github.com/spesmilo/electrum/tar.gz/9242c50530473e3faf027d48fdd74e5101349dcd
     /tmp/el/bin/python tests/psbt/make_electrum_psbts.py
     /tmp/el/bin/python tests/psbt/extract_vectors.py BIPS_DIR ELECTRUM_TESTS_DIR --electrum
-    python3 tests/psbt/make_scenario.py      # tests/psbtview.txt from psbtview.txt.in
+    python3 tests/psbt/make_scenario.py      # tests/signer_read.txt from signer_read.txt.in
 
 (`BIPS_DIR`: the four .mediawiki files; `ELECTRUM_TESTS_DIR`: the four test
 files, from the commits above.)

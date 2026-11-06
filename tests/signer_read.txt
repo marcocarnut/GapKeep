@@ -1,21 +1,22 @@
-# PSBT Viewer (apps/psbtview): Electrum's QR codes of transactions, read
-# with the simulated camera. The codes are Electrum's own to_qr_data() output
+# What the Signer (apps/signer) reads and shows before any key is loaded:
+# Electrum's QR codes of transactions, through the simulated camera. The codes are Electrum's own to_qr_data() output
 # (tests/psbt/electrum_made.json, made by tests/psbt/make_electrum_psbts.py
 # from the BIP-39 test mnemonic "abandon ... about": test coins only).
 # Warning counts vary: without zg:crypto's ripemd160 (older systems) the
 # summary adds a note that some keys were not checked.
-# Made from tests/psbt/psbtview.txt.in by tests/psbt/make_scenario.py.
+# Made from tests/psbt/signer_read.txt.in by tests/psbt/make_scenario.py.
 expect launcher ready 60
-launch psbtview
-expect psbtview ready 10
+launch signer
+expect signer ready 10
 wait 0.5
 shot 01-home
 
 # 1. A testnet P2WPKH payment with change (Electrum: 600000 sat out, 1500 fee)
 key ret
+mark
 camera qr 1N0HGUN:R2Q*R86JDWENF-+PT.RQP5474W0WQNX4WEK+OT73TUT3RQLCV*1WSDCHCXX:S*T/.S6MEVEHT1/6BF1NXGE38SL9+*YE4WEX7CUU*BC*1L2DL.V8DP2I+E58+H9DL2/JN/E00WEG+Z0MVEH56FIO-X*FP+N-P04SQ7S:X/ZOG/IG7T4$MTSX-LABB$ZZ0CO4:O.6MR+/HNM4HDSTPFD6M:H-G$UZ+OZN.WZPPZ*6*$M3OS7*ML0IEX+ETP9$9EX7RK0G9B*K.T5.DF+2U2HH/HDKCOOKSP90.TUMC97G00$PXQ40U5N890FO5.7N3H-3K748TJ-NTF3THKGJ:C10NTTYZ5/77U2G:/DP2W5ZTBR*RXFURQW/IU*A8/ZS$W:F+BBQYD-VOSTWU00LMYJA
-expect psbtview: read a PSBT \(base43, 412 characters, \d+ bytes\) 20
-expect psbtview: 1 input, 2 outputs, sent 600000 sat, change 398500 sat, fee 1500 sat, 141 vB, testnet, \d+ warnings? 10
+expect signer: read a PSBT \(base43, 412 characters, \d+ bytes\) 20
+expect signer: totals: sent 600000 sat, change 398500 sat, fee 1500 sat, 141 vB, testnet 10
 camera scene
 wait 0.5
 shot 02-summary
@@ -25,52 +26,63 @@ key ret
 wait 0.5
 shot 03-output-details
 key esc
-# the network button: up to the first row, Shift+Tab twice to it; Enter
-# cycles mainnet, testnet, regtest
+# the network button: up to the first row, Shift+Tab twice to it (Home,
+# Network); Enter cycles mainnet, testnet, regtest
 key up up up up up up
 key shift-tab shift-tab
 key ret
-expect psbtview: network regtest 5
-expect psbtview: .*, regtest, \d+ warnings? 5
+expect signer: review: .*, regtest, \d+ warnings? 5
 wait 0.5
 shot 04-regtest
 
 # 2. Not a transaction, and a payment request: refused, the scanner goes on
 key esc
 key ret
+mark
 camera qr hello, air gap
-expect psbtview: refused a code: This code is not a transaction 20
+expect signer: refused a code: This code is not a transaction 20
+mark
 camera qr bitcoin:tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx?amount=0.001
-expect psbtview: refused a code: This is a payment request 20
+expect signer: refused a code: This is a payment request 20
 wait 0.5
 shot 05-refused
 
 # 3. A P2PKH wallet: the QR code leaves out the previous transaction
+mark
 camera qr $/RGYI/KR5/BT8*G/3RE8K37D393GOL6FA:E35BYLB2.D3U2XC9E1M8*G29C4+35HB.H3-707*/$44F$M*2B4IF9MLGUMQ1QJ0+G2:ZX0Y8B6E9SEP+UL51EVNN8WF1HVW.2KNGVRL-.1LJFJ1A4*9H/CY5YZXISNQAM$CU0K807LYI.-RLAX51YU86MU8B9URGEDVG:C6L$J*+1F5SIBH26KJ0QR6NZ+K2V+$WTY3+UIXR-$1VU*CP9L4ZNZ+8IQ$5T+P+FHODZGYU:5*R5YRH*/UE$4-T-WJKL*W6RNVY*XG:LDZHUX664O2+5OEYWB35A29O6FLDH$IJJBZNTP:HHMD07UG$H5/KPHX67JQS-JM5XADQYRF2Q1PH6APVU.+NM$8*V$1+UV78P**WLLQ-Q/QRYEHN+ROJ+
-expect psbtview: 1 input, 2 outputs, sent 100000 sat, change 197700 sat, fee 2300 sat, 223 vB, testnet, \d+ warnings? 20
-expect psbtview: warn: Input 1: only the spent output is given 5
+expect signer: totals: sent 100000 sat, change 197700 sat, fee 2300 sat, 223 vB, testnet 20
+expect signer: warn: Input 1: only the spent output is given 5
 camera scene
 wait 0.5
 shot 06-p2pkh-warning
 
 # 4. 2-of-3 multisig, then mainnet with two payments
+key esc
+wait 0.3
 key ret
+mark
 camera qr 1*J1B-C0VJ0TXX2GR8WXKTS/L$U.Q*:K7:.DE1ISXW7ULB-94J+VRK:HW85A8FX7-5F5OAV6AY1JV9-A5T1N/PNJUH68.LI$W7RW3MBHSZ1T-*F-7M74WAH682XL.K6INK5HRDXV7$2WP5*RY75HUF:TVH/:ZS3LE:FV$EEC3XO7TQ67/9XRYWQ-.JS+NB/H*6/Z2LG4N.HK2N*5W7Y/4WWTV1VX:E9V9$C4+6*AFF+F/YXB$A80CIANFSOZG-9MQ$01$18H4/9O37FBCJ+QD2WE8.3NI$9LF3VF1H0TEB/W6ZV5KU/:H.PHYQ5ZJ0NVE2ATU1F3/5.5GC.DB1H41YE:YOQ//C6/*7V13$VVPF/PHMCM$1KI8FG8OQ$-66MP-8$LQ869ZN:NRL$7FG53HDK*Q+JVKVP1PQ8D1GP+PI7S.THP/JW:T41G+UI+V0857LTR5:8ACU:/KW6DXBF1BX7UN9F0U4KCI$PI523T-0X$*ONC:--*B2MAS+3EHC91TCYY0VSKYQR73BRG2IM:VBQ:GKVSKDX:DG9AZ:PVIXSPBY1D$VV/1-A/5.T+AL4SWXCZNCM5$.DNH00Z:$HLPS$US-N*RC916P29OA8QIWN+10H.-JUL2$9UY8CK$/4-E*LUK0U:GCNJ9IKS4:7+T8PQG23N-J7-AN$471E8-V0DSWOT427RN+.IF8/LLMD/L8Q67DUPPSH*C.0SN-:*D+RM$QH4/QF0P.F+Q.ATX*G15PC7O:S8*9ZWIFWM4JL-F+5I28KDV6.O-R:DUZUYV+Y/FB50$E:XCBLV3*02CW$FRU95+ZJP8WH-3HZG4A6-5IW8D8T$2O7Z9/:LBU8T/*Y-5AMK-1.D2*CY2T:8:D4UH-98RN15-KJFS8BCN5.BSC40B$J$I1F9FMY1HQJU:IU.QL1IC/63U2WFW-T6:*$FQ-GW59E+3C0H:G+:690.DGL6800H*XM339/*4P-7++SV+4+NI138:/HS$9XMZP4IK8X75F..1JGF1P9YHUCA3HX196QYV:V:UUKZKC37+NKG-P:1GV0D5$BGZ1EMZYT*LS5F*5-I2T+::LEUS*T6LRK-9I$.9-2I2OD9O+S7CHUFP6BN*VY$8ORRL+6Y7U1*GOTPJJ7NL8BIBY3P422XV2-
-expect psbtview: 1 input, 2 outputs, sent 300000 sat, change 498000 sat, fee 2000 sat, 189 vB, testnet 20
+expect signer: totals: sent 300000 sat, change 498000 sat, fee 2000 sat, 189 vB, testnet 20
 camera scene
+key esc
+wait 0.3
 key ret
+mark
 camera qr H$IL72E4P0H*Q5R3X.B-QJJPA:WKIIPXY7U:O9B75JQTX3EC*NRW8NZ74GV2AFB.5SJP2$94K78CWW:XIMPY3YI3589ICETNMW64H*2VUYMZC3BCQS+Y4+DOAQU5O9KHW64.07U3IN5I.8IVS2X./27VAWQO29RZW$HA2BB43KL77-48ZFDTC1F2CPV$7VB:FG*8JY0*N9B3OU9N0CZ+.O07X7O-KV6Y31+CZEKQ0.$-CWO2MHB5DCUX.N22JEDEKT6*:TE3I9MWR1UT/-/N8/KQ28MF618B$KO:FN4K6EH4Q/44F5DCFHLS8J3.T8KT3I+.REBL/J9WUQ9KZI:LGKVJHSVE*.IV.06SRKUE2WC6+RV/PWCYA+PLTB-TX:FESZE4C9UTA95.W6+NATX87*JZO2Q4N32UD.P+CPGZ+FVW-1337V*H8DCY/JNC.RM4$QE---PR4HRE
-expect psbtview: 1 input, 3 outputs, sent 1434567 sat, change 3562613 sat, fee 2820 sat, 173 vB, mainnet 20
+expect signer: totals: sent 1434567 sat, change 3562613 sat, fee 2820 sat, 173 vB, mainnet 20
 camera scene
 wait 0.5
 shot 07-mainnet
 
 # 5. The first one, signed by Electrum: a complete transaction. It says
 # nothing of its network: the last one chosen or guessed is kept
+key esc
+wait 0.3
 key ret
+mark
 camera qr 115.K0:PQOMFZA8PM:G7/*ZL8/SIJ9S5Q6W2S$4J-NHB21DR:F60H.NGMTD9/4:NBT8SX7NAKN9IA+X1G6WS+.L4SC$2YHQ+2+D0CKALKKKS$7/YOIYJXWO2:WWEWS-$F5Q:8N35:TH26I+ATI.ZC/M1RSKGCY-UBLUG40P*3QKUKK+-.HT5TYE2G5XG/+WP.WSYFISEZK$SGDR2DA61ELK:3BE7V.O9N:OTG-0$NUBUZDR*GX7R.KARRQPRU3-RO5YY8Y28SJ5/YASR9NU5V.I9N8OA.YDPCCBFR.YSZ8:C*MIK4C*9RN4ZZ9KREFEN8HS:KZA
-expect psbtview: read a signed transaction \(base43, 327 characters 20
-expect psbtview: 1 input, 2 outputs, sent 998500 sat, change 0 sat, fee \? sat, 141 vB, mainnet 5
+expect signer: read a finished transaction \(base43, 327 characters 20
+expect signer: totals: sent 998500 sat, change 0 sat, fee \? sat, 141 vB, mainnet 5
 camera scene
 wait 0.5
 shot 08-signed
@@ -78,14 +90,15 @@ shot 08-signed
 # 6. A large one: 13 inputs, 2821 characters (the simulated camera makes
 # byte-mode codes, 2953 characters at most; Electrum's alphanumeric codes
 # hold up to 4296)
+key esc
+wait 0.3
 key ret
+mark
 camera qr 1T683HC9PIJV4H8TUCH41/A-WSY6KSCJ/ON*R0U3I3EFR-8:K22JJEGSR:FP8CGDWPHVQ63I/5+BQ.61W3QJS0H9/J4H6HT9G.72LVCAWPCZ.V..L.$R:0PNHFPYVHT/PH+8/**ZR756MM.29KX.7DC3KG5:7WZCH5-2P*017BE3Z+2HX--JEFX9P7CR7X+*MCQVWG445*$YS3Q*+NCKD$61SN4TFFJFW*J6CN3SA6GRMC0JK+7-+ZL0SHB9R:FBY3OZVHUH6-Q/PJ531OXJFO$0U6TKVM*/WTWQ4GS1X956VPYIKM+5X141-JUD1Z85S5BUXAWB27:GTK1STMVZUY4ZHDBNHN.T1DTUQNXN:UQ.UEA/0B17GDJDWKEQE-7IZG-EDRWHC$WL5M7-G*6:H-3WTLM5TM52.WLSZB:5.B488+05E4P0LW1IX99CT9W534.WLDPMMJ-5I3TBD:JSY2SDZM2X316:5QSB+FS-FX22C+AFT*HI3-W9D6P/HR/-KO21J19IFJVE1Z06W$B4U*S0/ZAB-RYSEFX20DZZ./BCN7YL75*UQE-+TEYHZORW9L4LKN4MG4DYB*XW8$6QKQ./Y463D5JSBHUSTR0C:/CI.-BW$M+J$8I5.5ULGPB/G:XEKJG7QSAVSHG4Q0*MEYYPTCND9U/$DX2+L86FA0*J7KFIEG3JMT09M.4P119I6.3$H5N4CWNXNRV+0K7GAESQ+K4PN6Y-F9B/6WDHA060O/NWS*E0OKE50EDQZRALEJ-X0P3..:VC8F*CA+H2C*6TNXZ14Z2HHAFP4-KYXJ4GG8LL/JVOW021ELS.B$/0E7FDV9ROJDCA$UIN7D$R.MFW1JEN7SZ2U-A/34JGD29R/10D.8BZS*CDOFMDAQN1+S21OW7DH8L12$JY81+BWQL1CVO.RXUD$O-BVO1UA9HG7ET0FP6:TV*4/ZEH4$ZP.B3/5HHWQV140-E/GH3FFMH3$P1FLK9O++GMC7LRG0LIA-M-5WB/-YJ64905A$5O0*R8NIMR9QGGH$0Z:U:SH*NMU30Z9LJ5W/DWR64N.4ETFG38BJSTQ7LGH*EP5OFYJ+B4DX+/YH.GMUB-BZQ/881AUN7OBWIX:.0OCZ$P7KJNJ*M2QKY8O-IDYKBFZ$OTWCFMA4-V5/XSBV60VQ6YNJPG3-44R6JORBI/JM0UJ7*VBPDE98XP44O$JE1K+P1:5+XRWWCRRPIWYH5OKC7CX9L09GV*W9PNG/A3O*UR+YY5-AVWK2HDIYK*4G.C:0GIQ-M57$XMDHHDRKAT7+*SNLLAU.8AXZPLDF.UWCDBM75QIBN6.+PHJK866JFOM64*SC-FL.7S35JG5W$5F6D-902XX9P-ZSTGM7IZBOX.5REF:*I+JM4O71.UFAVRW.GVMT.9+HDRKJ716+.:6AF8LU7$0NL0+6GABWF0PHC79AVF..BFP/A:7AWCBRQB0IJO1IFZE$ZYPJFJ4MT:.S7IAFG9EUJ7SF15:UX.TFPRNPEU8X:ZE$244994FF*J6NLJRC9/N4DNL5YG1N-F3105:BG$T98H8I*VNEQHP041ZH70:GP:AM8RFEK2AAJ2Y230HS8B7HOJIS:HYJ:XNX14BVF1SVWU8NVQ9Q*G1*IBIRWY/-+8LJKBBE+CM+U*YFIZ70WKMN:9+VUP-YEJ804*3RYMYPU5N*8$2Z39B-$3LS1ERYIAQ-KW5TBRARP-GWPHPFVDU8GBW4P485O0T57TS199WQZNN$PV*-EG83DJUP70SUH4$O7QH.L8Z6*9PILP823/V531:V:1++ETVMCNBWJ:$SH440M0/Y.NVN1HSIOZ/WK99MS1./1N+UVA*7OTYUOXXN6YSINUA2REE8FKMVQUFPWT5V9Z7CAKMQNC92Y9K6J0JZTU//IAH249/7DO8.W9VGQ-PO.C4RXBZO/+.9DP5TN62LEGX.3+J4OP8C+BPDIOU5*Q8X$-JA1I6TNVSFY-K:+ER0I:T2NQD9FIUP6QS1:F:82DT$HY$-*/$1S5*O-XEFFO1CY/4FKUH8*CTBGK5K.0OS8T57:ZDTEA60HNXQ5.B:XQMV4BDEO6UKUB$:46WA94L75XPVT*CFRZ9QMRA15U9HR$+LNV*AC-W7C7WLTA$+2PM.L.X/7+KJ2-:/O0Z8YIKC7Z*RL2$-48U/+28LBQKEV-TL.PED:0960RBN5H*I-/FUW8BEGG6L9CV+O-PHJHO.BB74K3XRV0GB6PIEY$MOER1D5+X/Q-8QHESFDSEX5V$QBLHU3B+CIM8-LN92J0Y4TIK:J+O/322$O1:Y65*7M0AZGZN9KWU+-EIH*KI8$NZZS0AVGNS7:ZXWY.+DGX7KO6OTWU00LMI/:LOBO:49:D$.FJPMJMEZIM2BQUE+2N$0C67N0Q53XGYHNLC9ADQ9CEQMRY3O/HGSFL/9*WRX6$YC0WX934:J2-+H3FQ/CLC0X$T7JNIBUD4B8/L9+CQJZBVUJW0GBV0VWT0CBD-UQ/IF7$N730*CPRU+HT2F2ZZ-ZQKC/KQ5ATA/.:KS-OW12X5S52B8X5LTW1O:PH*CNFPT4RU3+61:XPUOK2WRVQHBVBWWE90/6K43VM.DKMQ$Z*B/F*5:/Z9-S.E7888O245V:*9P2V9WB3QFQ/HN6/+5-+$B-XPU3O4Y/KUOQ0MF214.HKD36-Y8EI65DFY1ACA+RH*QO3LKGCE+AN./D-SC3IF:U2A6.G+3-2BGH8DN9/GS4YXFKDQWVXX-MAWD6Y8Z70XN:DD6MYS4CI+JAJZ91XL1ZRAZC6C:CVVLQ77OH.H-UY12$M:5XDG
-expect psbtview: read a PSBT \(base43, 2821 characters, \d+ bytes\) in \d+ ms 30
-expect psbtview: 13 inputs, 2 outputs, sent 120000 sat, change 7000 sat, fee 3078 sat, 957 vB, testnet, \d+ warnings? 10
+expect signer: read a PSBT \(base43, 2821 characters, \d+ bytes\) 30
+expect signer: totals: sent 120000 sat, change 7000 sat, fee 3078 sat, 957 vB, testnet 10
 camera scene
 wait 0.5
 shot 09-many-inputs
-key esc
-expect psbtview ready 1
 key meta_l
 expect launcher ready
