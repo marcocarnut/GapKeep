@@ -63,6 +63,12 @@ Each profile lists colours by label, in 8-bit sRGB. A profile with `n` colours i
 |---|---|---|---|---|
 | 0 | a4.50 | 2 | (89,13,89) (191,0,0) (0,0,191) (0,64,0) | (166,242,166) (64,255,255) (255,255,64) (255,191,255) |
 | 1 | a8.50 | 3 | (64,0,127) (0,0,191) (0,0,64) (0,64,127) (101,0,0) (191,0,0) (71,60,60) (4,64,0) | (191,255,128) (255,255,64) (255,255,191) (255,191,128) (154,255,255) (64,255,255) (184,195,195) (251,191,255) |
+| 2 | q4.33 | 2 | (17,17,17) (102,0,153) (0,64,127) (153,0,51) | (255,191,255) (255,255,0) (204,255,255) (255,255,153) |
+
+Profile 2 is for paper, and writes its header with colours that print on the right side of the gray
+threshold: dark (153,0,51) for 1 and (0,64,127) for 0, light (255,255,0) for 1 and (204,255,255) for 0.
+A decoder only reads the sign of R - B, so it needs no change to read them. A decoder that does not
+know a profile rejects the header, and the plain QR still reads.
 
 Profile 1 needs version 2 or higher: a version 1 symbol has too few modules to calibrate 8 colours.
 

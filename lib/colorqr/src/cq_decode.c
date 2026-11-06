@@ -66,7 +66,7 @@ int cq_parse_header(unsigned word, int *profile, int *rate_index)
 	if ((top >> 8) != MAGIC || cq_crc4(top) != (word & 0xF))
 		return -1;
 	unsigned p = (top >> 4) & 0xF, r = top & 0xF;
-	if (p > 1 || r > 7)
+	if (p > 2 || r > 7)
 		return -1;
 	*profile = (int) p;
 	*rate_index = (int) r;
@@ -205,7 +205,8 @@ typedef struct {
 	const float *mx, *my;     /* its centre, in modules */
 	const int8_t *sign;       /* per module of n*n: +1 light, -1 dark, for the full set */
 	int64_t wsum;             /* sum of the signs in use */
-	int full;                 /* every module, in row order */
+	int full;                 /* every module of every row_step-th row */
+	unsigned row_step;
 } score_ctx;
 
 static inline uint32_t sample_fixed(const score_ctx *c, int32_t x, int32_t y)
@@ -230,6 +231,7 @@ static inline int32_t to_fixed(float v)
 	return (int32_t) (v * 65536.0f);
 }
 
+#define POLISH_ROWS 25           /* rows for the final refinement of a large symbol. Measured: no codes lost */
 #define LOCAL_FROM 97            /* symbol side from which the local correction runs: version 20 */
 #define LOCAL_TILE 24            /* modules */
 #define LOCAL_MAX 8              /* largest shift, in quarter pixels */
@@ -332,7 +334,7 @@ static double score(const score_ctx *c, const float corners[4][2])
 	if (c->full) {
 		/* along a row a homography is nearly linear: exact every SPAN modules, stepped in between */
 		const int8_t *sign = c->sign;
-		for (unsigned y = 0; y < n; y++) {
+		for (unsigned y = 0; y < n; y += c->row_step) {
 			float yc = (float) y + 0.5f, px, py;
 			project(&H, 0.5f, yc, &px, &py);
 			int32_t x0 = to_fixed(px), y0 = to_fixed(py);
@@ -491,8 +493,8 @@ static float header_chroma(const uint8_t *p, unsigned stride, const float *lut, 
 
 /* ---- small linear algebra, in double because normal equations are ill conditioned ---- */
 
-/* Solves A X = B for symmetric positive definite A (size NF), B has 3 columns, in place. */
-static int cholesky_solve(double A[NF][NF], double B[NF][3])
+/* Cholesky factor of a symmetric positive definite A (size NF), in place, lower triangle. */
+static int cholesky_factor(double A[NF][NF])
 {
 	for (int i = 0; i < NF; i++) {
 		for (int j = 0; j <= i; j++) {
@@ -512,21 +514,26 @@ static int cholesky_solve(double A[NF][NF], double B[NF][3])
 			}
 		}
 	}
+	return 0;
+}
+
+/* Solves L L^T X = B, with B of 3 columns, in place. */
+static void cholesky_solve(double L[NF][NF], double B[NF][3])
+{
 	for (int c = 0; c < 3; c++) {
 		for (int i = 0; i < NF; i++) {
 			double s = B[i][c];
 			for (int k = 0; k < i; k++)
-				s -= A[i][k] * B[k][c];
-			B[i][c] = s / A[i][i];
+				s -= L[i][k] * B[k][c];
+			B[i][c] = s / L[i][i];
 		}
 		for (int i = NF - 1; i >= 0; i--) {
 			double s = B[i][c];
 			for (int k = i + 1; k < NF; k++)
-				s -= A[k][i] * B[k][c];
-			B[i][c] = s / A[i][i];
+				s -= L[k][i] * B[k][c];
+			B[i][c] = s / L[i][i];
 		}
 	}
-	return 0;
 }
 
 static inline void features(const float *c, const float *nb, float x, float y, float *f)
@@ -538,15 +545,23 @@ static inline void features(const float *c, const float *nb, float x, float y, f
 	f[12] = y * c[0]; f[13] = y * c[1]; f[14] = y * c[2];
 }
 
-static inline void accumulate(double A[NF][NF], double B[NF][3], const float *f, const float *t)
+static inline void accumulate_a(double A[NF][NF], const float *f)
 {
-	double v[NF], u[3] = {t[0], t[1], t[2]};
+	double v[NF];
 	for (int i = 0; i < NF; i++)
 		v[i] = f[i];
 	for (int i = 0; i < NF; i++) {
 		double vi = v[i], *row = A[i];
 		for (int j = 0; j <= i; j++)
 			row[j] += vi * v[j];
+	}
+}
+
+static inline void accumulate_b(double B[NF][3], const float *f, const float *t)
+{
+	double u[3] = {t[0], t[1], t[2]};
+	for (int i = 0; i < NF; i++) {
+		double vi = f[i];
 		B[i][0] += vi * u[0];
 		B[i][1] += vi * u[1];
 		B[i][2] += vi * u[2];
@@ -565,21 +580,40 @@ typedef struct {
 	const uint8_t *pal[2];    /* [0] light, [1] dark: colours*3 */
 } demod_ctx;
 
-/* Log-likelihood of each colour for each module, `count` * `colours` floats. */
+/* A module, packed. The work below walks these in raster order, one class at a time: the modules
+ * come shuffled, and following that order misses the cache on nearly every one. */
+typedef struct {
+	float c[3], nb[3], x, y;
+} packed;
+
+static inline void packed_features(const packed *m, float *f)
+{
+	features(m->c, m->nb, m->x, m->y, f);
+}
+
+/* Log-likelihood of each colour for each module, `count` * `colours` floats.
+ *
+ * The fit is iterated with new targets, but after the first pass every module trains and the matrix
+ * stays the same, so it is factored once. Its right side then only changes where a label does. */
 static int demodulate(const demod_ctx *d, const uint8_t *anchors, float *ll, cq_arena *a)
 {
 	unsigned K = d->count, n = d->colours, N = d->n;
 	uint8_t *labels = cq_alloc(a, K, 1);
+	uint8_t *trained = cq_alloc(a, K, 1);
 	float *o = cq_alloc(a, (size_t) K * 3, sizeof *o);
-	float *dist = cq_alloc(a, (size_t) K * n, sizeof *dist);
+	float *sl = cq_alloc(a, (size_t) K * n, sizeof *sl);
+	packed *mods = cq_alloc(a, K, sizeof *mods);
+	uint32_t *module = cq_alloc(a, K, sizeof *module);      /* slot to position in the module list */
+	uint32_t *pslot = cq_alloc(a, d->npilot + 1u, sizeof *pslot);
 	double (*Aa)[NF][NF] = cq_alloc(a, 2, sizeof *Aa);
 	double (*Ba)[NF][3] = cq_alloc(a, 2, sizeof *Ba);
 	double (*A)[NF] = cq_alloc(a, NF, sizeof *A);
 	double (*B)[3] = cq_alloc(a, NF, sizeof *B);
 	float (*pal)[8][3] = cq_alloc(a, 2, sizeof *pal);
 	uint8_t *pilot = cq_alloc(a, d->npilot + 1u, 1);
-	uint32_t *list = cq_alloc(a, K, sizeof *list);
-	if (!list || !labels || !o || !dist || !Aa || !Ba || !A || !B || !pal || !pilot)
+	size_t mark = a->used;
+	uint32_t *at = cq_alloc(a, (size_t) N * N, sizeof *at);  /* raster position to module list */
+	if (!at || !labels || !trained || !o || !sl || !mods || !module || !pslot || !Aa || !Ba || !A || !B || !pal || !pilot)
 		return CQ_ERR_NOMEM;
 
 	for (int k = 0; k < 2; k++)
@@ -587,13 +621,41 @@ static int demodulate(const demod_ctx *d, const uint8_t *anchors, float *ll, cq_
 			for (int v = 0; v < 3; v++)
 				pal[k][c][v] = (float) d->pal[k][c * 3 + v] / 255.0f;
 
+	/* slots: the light modules in raster order, then the dark ones */
+	memset(at, 0xFF, (size_t) N * N * sizeof *at);
+	for (unsigned i = 0; i < K; i++)
+		at[d->order[i * 2] * N + d->order[i * 2 + 1]] = i;
+	unsigned first[3] = {0, 0, K};
+	for (int cls = 0, slot = 0; cls < 2; cls++) {
+		first[cls] = (unsigned) slot;
+		for (unsigned y = 0; y < N; y++) {
+			for (unsigned x = 0; x < N; x++) {
+				uint32_t i = at[y * N + x];
+				if (i == 0xFFFFFFFFu || (d->dark[y * N + x] != 0) != cls)
+					continue;
+				packed *m = mods + slot;
+				for (int v = 0; v < 3; v++) {
+					m->c[v] = d->samples[(size_t) (y * N + x) * 3 + v];
+					m->nb[v] = d->nb[(size_t) (y * N + x) * 3 + v];
+				}
+				m->x = (float) x / (float) N - 0.5f;
+				m->y = (float) y / (float) N - 0.5f;
+				module[slot] = i;
+				if (i < d->npilot)
+					pslot[i] = (uint32_t) slot;
+				slot++;
+			}
+		}
+	}
+	a->used = mark;
+
+	memset(labels, 0, K);
 	unsigned counter[2] = {0, 0};
 	for (unsigned i = 0; i < d->npilot; i++) {
 		int cls = d->dark[d->order[i * 2] * N + d->order[i * 2 + 1]] != 0;
 		pilot[i] = (uint8_t) (counter[cls]++ % n);
-		labels[i] = pilot[i];
+		labels[pslot[i]] = pilot[i];
 	}
-	memset(labels + d->npilot, 0, K - d->npilot);
 
 	/* Black and white function modules anchor the fit; they never change, so sum them once. */
 	memset(Aa, 0, 2 * sizeof *Aa);
@@ -606,58 +668,94 @@ static int demodulate(const demod_ctx *d, const uint8_t *anchors, float *ll, cq_
 			float f[NF], t[3] = {cls ? 0.0f : 1.0f, cls ? 0.0f : 1.0f, cls ? 0.0f : 1.0f};
 			features(d->samples + (size_t) (y * N + x) * 3, d->nb + (size_t) (y * N + x) * 3,
 			         (float) x / (float) N - 0.5f, (float) y / (float) N - 0.5f, f);
-			accumulate(Aa[cls], Ba[cls], f, t);
+			accumulate_a(Aa[cls], f);
+			accumulate_b(Ba[cls], f, t);
 		}
 	}
 
 	for (int it = 0; it < DEMOD_ITERS; it++) {
 		for (int cls = 0; cls < 2; cls++) {
-			memcpy(A, Aa[cls], NF * sizeof *A);
-			memcpy(B, Ba[cls], NF * sizeof *B);
-			unsigned train = it == 0 ? d->npilot : K;
-			for (unsigned i = 0; i < train; i++) {
-				unsigned y = d->order[i * 2], x = d->order[i * 2 + 1];
-				if ((d->dark[y * N + x] != 0) != cls)
-					continue;
-				float f[NF];
-				features(d->samples + (size_t) (y * N + x) * 3, d->nb + (size_t) (y * N + x) * 3,
-				         (float) x / (float) N - 0.5f, (float) y / (float) N - 0.5f, f);
-				accumulate(A, B, f, pal[cls][labels[i]]);
+			unsigned lo = first[cls], hi = first[cls + 1], members = hi - lo;
+			if (it == 0) {
+				/* the pilots alone */
+				memcpy(A, Aa[cls], NF * sizeof *A);
+				memcpy(B, Ba[cls], NF * sizeof *B);
+				for (unsigned i = 0; i < d->npilot; i++) {
+					unsigned q = pslot[i];
+					if (q < lo || q >= hi)
+						continue;
+					float f[NF];
+					packed_features(mods + q, f);
+					accumulate_a(A, f);
+					accumulate_b(B, f, pal[cls][pilot[i]]);
+				}
+				for (int i = 0; i < NF; i++)
+					A[i][i] += 1e-3;
+				if (cholesky_factor(A))
+					return CQ_ERR_PAYLOAD;
+				cholesky_solve(A, B);
+			} else {
+				if (it == 1) {
+					/* every module, once and for all: Aa and Ba now hold the whole fit */
+					for (unsigned q = lo; q < hi; q++) {
+						float f[NF];
+						packed_features(mods + q, f);
+						accumulate_a(Aa[cls], f);
+						accumulate_b(Ba[cls], f, pal[cls][labels[q]]);
+						trained[q] = labels[q];
+					}
+					for (int i = 0; i < NF; i++)
+						Aa[cls][i][i] += 1e-3;
+					if (cholesky_factor(Aa[cls]))
+						return CQ_ERR_PAYLOAD;
+				} else {
+					for (unsigned q = lo; q < hi; q++) {
+						if (labels[q] == trained[q])
+							continue;
+						const float *now = pal[cls][labels[q]], *was = pal[cls][trained[q]];
+						float f[NF], t[3] = {now[0] - was[0], now[1] - was[1], now[2] - was[2]};
+						packed_features(mods + q, f);
+						accumulate_b(Ba[cls], f, t);
+						trained[q] = labels[q];
+					}
+				}
+				memcpy(B, Ba[cls], NF * sizeof *B);
+				cholesky_solve(Aa[cls], B);
 			}
-			for (int i = 0; i < NF; i++)
-				A[i][i] += 1e-3;
-			if (cholesky_solve(A, B))
-				return CQ_ERR_PAYLOAD;
 
 			float X[NF][3];
 			for (int i = 0; i < NF; i++)
 				for (int c = 0; c < 3; c++)
 					X[i][c] = (float) B[i][c];
 
-			/* corrected colours, and distance to each palette colour */
-			unsigned members = 0;
-			for (unsigned i = 0; i < K; i++) {
-				unsigned y = d->order[i * 2], x = d->order[i * 2 + 1];
-				if ((d->dark[y * N + x] != 0) != cls)
-					continue;
-				list[members++] = i;
-				float f[NF], *oi = o + (size_t) i * 3;
-				features(d->samples + (size_t) (y * N + x) * 3, d->nb + (size_t) (y * N + x) * 3,
-				         (float) x / (float) N - 0.5f, (float) y / (float) N - 0.5f, f);
-				float best = 1e30f;
-				for (int c = 0; c < 3; c++) {
-					float s = 0;
-					for (int j = 0; j < NF; j++)
-						s += f[j] * X[j][c];
-					oi[c] = s;
+			/* corrected colours and the nearest palette colour. Raster order: y rarely changes */
+			float rowy = 2, base[3] = {0, 0, 0}, cg[3][3] = {{0}};
+			for (unsigned q = lo; q < hi; q++) {
+				const packed *m = mods + q;
+				float *oi = o + (size_t) q * 3;
+				if (m->y != rowy) {
+					rowy = m->y;
+					for (int c = 0; c < 3; c++) {
+						base[c] = X[6][c] + rowy * X[8][c];
+						for (int j = 0; j < 3; j++)
+							cg[c][j] = X[j][c] + rowy * X[12 + j][c];
+					}
 				}
-				float *di = dist + (size_t) i * n;
+				float x = m->x;
+				for (int c = 0; c < 3; c++) {
+					oi[c] = base[c] + x * X[7][c]
+					      + (cg[c][0] + x * X[9][c]) * m->c[0]
+					      + (cg[c][1] + x * X[10][c]) * m->c[1]
+					      + (cg[c][2] + x * X[11][c]) * m->c[2]
+					      + X[3][c] * m->nb[0] + X[4][c] * m->nb[1] + X[5][c] * m->nb[2];
+				}
+				float best = 1e30f;
 				for (unsigned k = 0; k < n; k++) {
 					float e0 = oi[0] - pal[cls][k][0], e1 = oi[1] - pal[cls][k][1], e2 = oi[2] - pal[cls][k][2];
-					di[k] = e0 * e0 + e1 * e1 + e2 * e2;
-					if (di[k] < best) {
-						best = di[k];
-						labels[i] = (uint8_t) k;
+					float dist = e0 * e0 + e1 * e1 + e2 * e2;
+					if (dist < best) {
+						best = dist;
+						labels[q] = (uint8_t) k;
 					}
 				}
 			}
@@ -670,9 +768,9 @@ static int demodulate(const demod_ctx *d, const uint8_t *anchors, float *ll, cq_
 			memset(m, 0, sizeof m);
 			memset(C, 0, sizeof C);
 			memset(count, 0, sizeof count);
-			for (unsigned q = 0; q < members; q++) {
-				unsigned i = list[q], k = labels[i];
-				const float *oi = o + (size_t) i * 3;
+			for (unsigned q = lo; q < hi; q++) {
+				unsigned k = labels[q];
+				const float *oi = o + (size_t) q * 3;
 				count[k]++;
 				m[k][0] += oi[0];
 				m[k][1] += oi[1];
@@ -682,9 +780,9 @@ static int demodulate(const demod_ctx *d, const uint8_t *anchors, float *ll, cq_
 				if (count[k])
 					for (int c = 0; c < 3; c++)
 						m[k][c] /= count[k];
-			for (unsigned q = 0; q < members; q++) {
-				unsigned i = list[q], k = labels[i];
-				const float *oi = o + (size_t) i * 3;
+			for (unsigned q = lo; q < hi; q++) {
+				unsigned k = labels[q];
+				const float *oi = o + (size_t) q * 3;
 				double e0 = oi[0] - m[k][0], e1 = oi[1] - m[k][1], e2 = oi[2] - m[k][2], *c = C[k];
 				c[0] += e0 * e0; c[1] += e0 * e1; c[2] += e0 * e2;
 				c[3] += e1 * e1; c[4] += e1 * e2; c[5] += e2 * e2;
@@ -715,36 +813,35 @@ static int demodulate(const demod_ctx *d, const uint8_t *anchors, float *ll, cq_
 				for (int v = 0; v < 3; v++)
 					mf[k][v] = (float) m[k][v];
 			}
-			for (unsigned q = 0; q < members; q++) {
-				unsigned i = list[q];
-				const float *oi = o + (size_t) i * 3;
-				float *l = ll + (size_t) i * n;
-				for (unsigned k = 0; k < n; k++) {
-					if (!usable[k]) {
-						l[k] = -dist[(size_t) i * n + k] * 50;
-						continue;
-					}
-					const float *J = I[k];
-					float e0 = oi[0] - mf[k][0], e1 = oi[1] - mf[k][1], e2 = oi[2] - mf[k][2];
-					float qf = J[0] * e0 * e0 + J[3] * e1 * e1 + J[5] * e2 * e2
-					         + 2 * (J[1] * e0 * e1 + J[2] * e0 * e2 + J[4] * e1 * e2);
-					l[k] = -0.5f * qf + norm[k];
-				}
-			}
-		}
-		/* new labels from the likelihoods, pilots back to their known values */
-		if (it >= 1) {
-			for (unsigned i = 0; i < K; i++) {
-				const float *l = ll + (size_t) i * n;
+			/* likelihoods, and new labels from them */
+			for (unsigned q = lo; q < hi; q++) {
+				const float *oi = o + (size_t) q * 3;
+				float *l = sl + (size_t) q * n;
 				unsigned b = 0;
-				for (unsigned k = 1; k < n; k++)
+				for (unsigned k = 0; k < n; k++) {
+					float e0 = oi[0] - (usable[k] ? mf[k][0] : pal[cls][k][0]);
+					float e1 = oi[1] - (usable[k] ? mf[k][1] : pal[cls][k][1]);
+					float e2 = oi[2] - (usable[k] ? mf[k][2] : pal[cls][k][2]);
+					if (usable[k]) {
+						const float *J = I[k];
+						float qf = J[0] * e0 * e0 + J[3] * e1 * e1 + J[5] * e2 * e2
+						         + 2 * (J[1] * e0 * e1 + J[2] * e0 * e2 + J[4] * e1 * e2);
+						l[k] = -0.5f * qf + norm[k];
+					} else {
+						l[k] = -(e0 * e0 + e1 * e1 + e2 * e2) * 50;
+					}
 					if (l[k] > l[b])
 						b = k;
-				labels[i] = (uint8_t) b;
+				}
+				labels[q] = (uint8_t) b;
 			}
 		}
-		memcpy(labels, pilot, d->npilot);
+		/* pilots back to their known values */
+		for (unsigned i = 0; i < d->npilot; i++)
+			labels[pslot[i]] = pilot[i];
 	}
+	for (unsigned q = 0; q < K; q++)
+		memcpy(ll + (size_t) module[q] * n, sl + (size_t) q * n, n * sizeof *ll);
 	return 0;
 }
 
@@ -1011,7 +1108,7 @@ static cq_status decode(const uint8_t *rgb, unsigned width, unsigned height, uns
 			}
 		}
 	}
-	score_ctx sc = {soft, cw, ch, n, count, mods, mx, my, sign, wsum, 0};
+	score_ctx sc = {soft, cw, ch, n, count, mods, mx, my, sign, wsum, 0, 1};
 	refine(&sc, c, 0.5f, STOP_FIRST);
 	STAGE(3);
 
@@ -1036,12 +1133,19 @@ static cq_status decode(const uint8_t *rgb, unsigned width, unsigned height, uns
 	}
 	STAGE(4);
 
+	/* A large symbol needs few rows here: four corners are 8 numbers, and the local grid correction
+	 * below handles what they cannot. */
+	sc.row_step = n >= LOCAL_FROM ? n / POLISH_ROWS : 1;
 	sc.wsum = 0;
-	for (unsigned i = 0; i < n * n; i++) {
+	sc.count = 0;
+	for (unsigned i = 0; i < n * n; i++)
 		sign[i] = dark[i] ? -1 : 1;
-		sc.wsum += sign[i];
+	for (unsigned y = 0; y < n; y += sc.row_step) {
+		for (unsigned x = 0; x < n; x++) {
+			sc.wsum += sign[y * n + x];
+			sc.count++;
+		}
 	}
-	sc.count = n * n;
 	sc.full = 1;
 	refine(&sc, c, 0.125f, STOP_POLISH);   /* the grid is already found: this only polishes it */
 	STAGE(5);
@@ -1101,7 +1205,7 @@ static cq_status decode(const uint8_t *rgb, unsigned width, unsigned height, uns
 		r->rate_den = cq_rate_den[rate];
 	}
 
-	unsigned bits = r->profile == 0 ? 2 : 3, colours = 1u << bits;
+	unsigned bits = r->profile == 1 ? 3 : 2, colours = 1u << bits;
 	unsigned npilot = ((unsigned) K * PILOT_PERCENT + 50) / 100;
 	if ((unsigned) K <= CQ_HEADER_MODULES + npilot) {
 		status = CQ_ERR_PAYLOAD;
@@ -1136,8 +1240,8 @@ static cq_status decode(const uint8_t *rgb, unsigned width, unsigned height, uns
 	if (!ll || !llr || !info)
 		goto done;
 	demod_ctx dc = {listed, order + 2 * CQ_HEADER_MODULES, dark, s, nb, n, colours, npilot,
-	                {bits == 2 ? &cq_pal4_light[0][0] : &cq_pal8_light[0][0],
-	                 bits == 2 ? &cq_pal4_dark[0][0] : &cq_pal8_dark[0][0]}};
+	                {r->profile == 0 ? &cq_pal4_light[0][0] : r->profile == 1 ? &cq_pal8_light[0][0] : &cq_palq_light[0][0],
+	                 r->profile == 0 ? &cq_pal4_dark[0][0] : r->profile == 1 ? &cq_pal8_dark[0][0] : &cq_palq_dark[0][0]}};
 	memset(ll, 0, (size_t) listed * colours * sizeof *ll);
 	STAGE(7);
 	e = demodulate(&dc, fn, ll, a);
