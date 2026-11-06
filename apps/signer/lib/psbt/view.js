@@ -1,7 +1,6 @@
 // A transaction's summary as zg:ui widgets: the totals, the warnings, each
-// output and input, the details. Shared by the PSBT Viewer and the Signer
-// (which carries a copy, tools/share_libs.py). The only module of lib/ that
-// imports zg:ui; the others are pure.
+// output and input, the details. The only module of lib/psbt that imports zg:ui;
+// the others are pure.
 //
 //   const rows = new Rows(page);          // rows that Tab, arrows, Enter reach
 //   showAnalysis(list, rows, a, { encoding, chars, size }, options)

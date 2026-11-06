@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Makes PSBTs and signed transactions with Electrum itself, as its QR codes
-carry them (to_qr_data()), for tests/psbt/run_node.mjs and tests/psbtview.txt.
+carry them (to_qr_data()), for tests/psbt/run_node.mjs and tests/signer_read.txt.
 Writes tests/psbt/electrum_made.json; then run extract_vectors.py, which
 merges it into vectors.json.
 

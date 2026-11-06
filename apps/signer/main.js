@@ -14,8 +14,7 @@
 // The account's public key is on offer too, as a descriptor or Electrum's
 // zpub, once a master key is loaded.
 //
-// Libraries: lib/psbt (the PSBT Viewer's, copied by tools/share_libs.py),
-// lib/codex32.js and vendor/ (the codex32 app's, copied the same way), and
+// Libraries: lib/psbt (reading and explaining PSBTs), lib/codex32.js and vendor/ (the codex32 app's, copied the same way), and
 // the signing library (lib/bip39.js, bip32.js, keys.js, sign.js, combine.js,
 // review.js; tested under Node by tests/signer/run_node.mjs).
 //
@@ -703,6 +702,14 @@ function networkButton(parent, a) {
   });
 }
 
+// A transaction is not secret; warnings are cut short, as they can name
+// wallets' fingerprints.
+function logTotals(a) {
+  console.log(`signer: totals: sent ${a.sent ?? "?"} sat, change ${a.toSelf ?? "?"} sat, fee ${a.fee ?? "?"} sat, ` +
+    `${a.vsize ?? "?"} vB, ${a.network}`);
+  for (const w of a.warnings) console.log(`signer: ${w.level}: ${w.text.slice(0, 48)}`);
+}
+
 function reviewList() {
   return new ui.Container({ layout: "column", gap: wide ? 8 : 5, width: "100%", grow: 1, scrollable: true });
 }
@@ -724,6 +731,7 @@ function showFinished() {
   first.focus();
   console.log(`signer: finished transaction: ${plural(a.inputs.length, "input")}, ${plural(a.outputs.length, "output")}, ` +
     `${a.network}, ${plural(a.warnings.length, "warning")}`);
+  logTotals(a);
 }
 
 // A key for another network than the transaction's is worth a word: its
@@ -792,6 +800,7 @@ function showReview() {
   first.focus();
   console.log(`signer: review: ${plural(a.inputs.length, "input")}, ${count} to sign, ${plural(a.outputs.length, "output")}, ` +
     `fee ${a.fee ?? "?"} sat, ${a.network}, ${plural(a.warnings.length, "warning")}`);
+  logTotals(a);
   const of = (test) => a.outputs.filter(test).length;
   console.log(`signer: change: ${haveKeys ? 0 : of((o) => o.mine)} claimed, ${haveKeys ? of((o) => o.mine) : 0} checked, ` +
     `${of((o) => o.stray !== undefined)} stray, ${of((o) => o.unverified)} unverified, ` +
