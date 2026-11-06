@@ -79,6 +79,8 @@ export function roleText(o) {
 // `source`: { encoding, chars, size } of the QR code it came from.
 // options:
 //   networkNote   text after the network's name (why this network)
+//   changeClaimed outputs marked `mine` are only the PSBT's word so far (the
+//                 Signer, before the keys are in)
 //   inputNote(i)  null or { text, color }: a line under input i (the Signer:
 //                 whether it will be signed)
 export function showAnalysis(list, rows, a, source, options = {}) {
@@ -88,7 +90,10 @@ export function showAnalysis(list, rows, a, source, options = {}) {
     line(top, `Pays ${plural(a.outputs.length, "output")}`, btc(a.totalOut), { font: FONT.big });
   } else {
     line(top, `Sends to ${external.length} ${external.length === 1 ? "address" : "addresses"}`, btc(a.sent), { font: FONT.big });
-    if (a.toSelf) line(top, "Change back to your wallet", btc(a.toSelf), { color: GREEN });
+    if (a.toSelf) {
+      if (options.changeClaimed) line(top, "Claimed change (not checked yet)", btc(a.toSelf), { color: AMBER });
+      else line(top, "Change back to your wallet", btc(a.toSelf), { color: GREEN });
+    }
   }
   const rate = a.feeRate !== null ? ` (${a.feeRate.toFixed(1)} sat/vB)` : "";
   if (!a.complete) {
@@ -111,10 +116,17 @@ export function showAnalysis(list, rows, a, source, options = {}) {
   for (const o of a.outputs) {
     const r = rows.add(list, {}, () => rows.details(`Output ${o.index + 1}`, outputText(o)));
     const where = o.address ? group4(o.address) : o.type === "op_return" ? "OP_RETURN (data, unspendable)" : typeName(o.type) + " script";
-    line(r, `${o.index + 1}. ${where}`, btc(o.amount), { color: o.mine ? GREEN : undefined });
-    if (o.mine) {
-      new ui.Label(r, { text: `${ui.symbols.ok} ${roleText(o)}: ${o.derivations[0].path}` +
+    const claimed = options.changeClaimed && o.mine;
+    line(r, `${o.index + 1}. ${where}`, btc(o.amount), { color: claimed ? AMBER : o.mine ? GREEN : undefined });
+    if (claimed) {
+      new ui.Label(r, { text: `${ui.symbols.warning} Claimed change (not checked yet): ${o.derivations[0].path}`,
+        color: AMBER, font: FONT.small });
+    } else if (o.mine) {
+      const path = o.checkedPath !== undefined ? o.checkedPath : o.derivations[0].path;
+      new ui.Label(r, { text: `${ui.symbols.ok} ${roleText(o)}${path ? ": " + path : ""}` +
         (o.unchecked ? " (key not checked against the script)" : ""), color: GREEN, font: FONT.small });
+    } else if (o.unverified) {
+      new ui.Label(r, { text: `${ui.symbols.warning} Claims to be change: no key loaded can check it`, color: AMBER, font: FONT.small });
     }
   }
 

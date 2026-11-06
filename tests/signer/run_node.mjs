@@ -16,7 +16,12 @@ import {
   wipe, VERSIONS, versionFor, Bip32Error, HARDENED,
 } from "../../apps/signer/lib/bip32.js";
 import { legacySighash, segwitV0Sighash, taprootSighash, taprootSigMsg, p2wpkhScriptCode } from "../../apps/signer/lib/sighash.js";
-import { plan, signPsbt, verifyChange, finalize, SignError } from "../../apps/signer/lib/sign.js";
+import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, SignError } from "../../apps/signer/lib/sign.js";
+import { parsePrivateKey, parseWif, KeyError } from "../../apps/signer/lib/keys.js";
+import { combine, CombineError } from "../../apps/signer/lib/combine.js";
+import { applyPlan } from "../../apps/signer/lib/review.js";
+import { analyze } from "../../apps/signer/lib/psbt/analyze.js";
+import { base58CheckEncode } from "../../apps/signer/lib/psbt/basen.js";
 import { selfTest } from "../../apps/signer/lib/selftest.js";
 import { fromHex, toHex, equal, concat, Writer, fromBase64 } from "../../apps/signer/lib/psbt/bytes.js";
 import { parseTx, serializeTx, txid as txidOf } from "../../apps/signer/lib/psbt/tx.js";
@@ -581,10 +586,7 @@ check("negative", "absurdly deep path", () => {
   const p = one({ kind: "p2wpkh", amount: 1000, claimPath: "m" + "/1".repeat(40) });
   return has(reasonOf(p), "longer than 16 steps");
 });
-check("negative", "not a master key", () => {
-  throws(() => plan(one({ kind: "p2wpkh", amount: 1000 }), derive(abandon, "m/84'"), {}), SignError);
-  return throws(() => plan(one({ kind: "p2wpkh", amount: 1000 }), neuter(abandon), {}), SignError);
-});
+check("negative", "a public key can't sign", () => throws(() => plan(one({ kind: "p2wpkh", amount: 1000 }), neuter(abandon), {}), SignError));
 check("negative", "finalize refuses an unsigned input", () => has(throws(() => finalize(one({ kind: "p2wpkh", amount: 1000 })), SignError).message,
   "input 1 is not signed"));
 
@@ -725,6 +727,223 @@ check("electrum", "a hostile watch-only PSBT: right account fingerprint, wrong k
   const d = psbt.inputs[0].fields.bip32[0];
   setEntry(psbt.inputs[0], IN.BIP32_DERIVATION, d.pubkey, origin(d.fingerprint, [0, 7]));
   return has(plan(parsePsbt(serializePsbt(psbt)), abandon, {}).inputs[0].reason, "m/84'/0'/0'/0/7");
+});
+
+// --- keys other than a master key -------------------------------------------------
+
+const TWO = { inputs: [{ kind: "p2wpkh", amount: 100000 }, { kind: "p2wpkh", amount: 20000 }], outputs: [EXTERNAL, CHANGE] };
+const wifOf = (node, prefix = 0x80) => base58CheckEncode(concat([[prefix], node.privateKey, [1]]));
+const single = (path) => parseWif(wifOf(derive(abandon, path))).key;
+const ACCOUNT = "m/84'/1'/0'";
+const serialize = (p) => toHex(serializePsbt(p));
+const privBase58 = (node, prefix) => {
+  const w = new Writer();
+  w.bytes(prefix).u8(node.depth).bytes(node.parentFingerprint).bytes(Uint8Array.of(node.childNumber >>> 24,
+    (node.childNumber >>> 16) & 255, (node.childNumber >>> 8) & 255, node.childNumber & 255));
+  w.bytes(node.chainCode).u8(0).bytes(node.privateKey);
+  return base58CheckEncode(w.done());
+};
+const XPRV = [0x04, 0x88, 0xad, 0xe4], TPRV = [0x04, 0x35, 0x83, 0x94];
+
+check("keys", "WIF: Bitcoin's key 1, compressed", () => {
+  const r = parsePrivateKey("KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn");
+  eq([r.kind, r.network, toHex(r.key.publicKey)], ["wif", "mainnet", "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"]);
+});
+check("keys", "WIF: testnet, and whitespace", () => {
+  const n = derive(abandon, "m/84'/1'/0'/0/0");
+  const r = parsePrivateKey("  " + wifOf(n, 0xef).replace(/(.{8})/g, "$1 "));
+  eq([r.network, equal(r.key.privateKey, n.privateKey), r.key.single], ["test", true, true]);
+});
+check("keys", "WIF: uncompressed is refused, saying why", () =>
+  has(throws(() => parsePrivateKey("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf"), KeyError).message, "uncompressed"));
+const SECRET_TEXT = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWo";
+check("keys", "a mistyped WIF is refused, and not quoted", () =>
+  !throws(() => parsePrivateKey(SECRET_TEXT), KeyError).message.includes(SECRET_TEXT.slice(0, 8)));
+check("keys", "characters outside Base58 are refused", () => throws(() => parsePrivateKey("Kw0OIl"), KeyError));
+check("keys", "empty", () => throws(() => parsePrivateKey("  "), KeyError));
+check("keys", "xprv: master and account, by depth", () => {
+  const m = parsePrivateKey(privBase58(abandon, XPRV));
+  const acct = derive(abandon, ACCOUNT);
+  const a = parsePrivateKey(privBase58(acct, TPRV));
+  eq([m.kind, m.network, m.key.depth, a.network, a.key.depth, a.key.childNumber],
+    ["xprv", "mainnet", 0, "test", 3, acct.childNumber]);
+});
+check("keys", "an xpub can't sign", () => {
+  const text = serializeXpub(neuter(abandon), "xpub");
+  return has(throws(() => parsePrivateKey("xprv" + text.slice(4)), KeyError).message, "mistyped");
+});
+
+check("keyring", "an account xprv signs what the master signs, byte for byte (full paths)", () => {
+  const p = build(TWO);
+  const acct = derive(abandon, ACCOUNT);
+  const pl = plan(p, acct, ZERO_AUX);
+  eq([pl.signable, pl.complete, pl.outputs[1].ours, pl.outputs[1].path, pl.outputs[1].role], [2, true, true, "m/84'/1'/0'/1/0", "change"]);
+  eq(serialize(signPsbt(p, acct, ZERO_AUX).psbt), serialize(signPsbt(p, abandon, ZERO_AUX).psbt));
+});
+check("keyring", "an account xprv: another account, same number, is another wallet", () => {
+  const other = fromSeed(new Uint8Array(32).fill(5));
+  const pl = plan(build(TWO), derive(other, ACCOUNT), ZERO_AUX);
+  eq([pl.signable, pl.inputs[0].mine, pl.outputs[1].ours, pl.outputs[1].problem], [0, false, false, null]);
+  return has(pl.inputs[0].reason, "another wallet");
+});
+check("keyring", "an account xprv: a lie below its own fingerprint is a problem", () => {
+  const acct = derive(abandon, ACCOUNT);
+  const fp = fingerprint(acct).slice();
+  const change = { ...CHANGE, fp, claimPath: "m/1/9" };
+  const pl = plan(build({ ...TWO, outputs: [EXTERNAL, change] }), acct, ZERO_AUX);
+  return has(pl.outputs[1].problem, "key/1/9") && !pl.outputs[1].ours;
+});
+check("keyring", "an account xprv: Electrum's watch-only PSBT, by its own fingerprint", () => {
+  const c = E.cases.find((x) => x.name === "mainnet-p2wpkh-watch-only");
+  const psbt = parsePsbt(readPayload(c.qr).bytes);
+  const pl = plan(psbt, derive(abandon, c.account), {});
+  eq([pl.signable, pl.inputs[0].path.startsWith("key/0/") || pl.inputs[0].path.startsWith("key/1/")], [psbt.inputs.length, true]);
+  eq(serialize(signPsbt(psbt, derive(abandon, c.account), {}).psbt), serialize(signPsbt(psbt, abandon, {}).psbt));
+});
+check("keyring", "a WIF signs only its own coin, and needs no derivation", () => {
+  const p = build(TWO);
+  const k = single("m/84'/1'/0'/0/1");
+  const pl = plan(p, k, ZERO_AUX);
+  eq(pl.inputs.map((i) => [i.sign, i.path]), [[false, null], [true, null]]);
+  has(pl.inputs[0].reason, "doesn't control");
+  eq([pl.complete, pl.outputs[1].ours], [false, false]);
+  const q = parsePsbt(serializePsbt(p));
+  q.inputs[1].entries = q.inputs[1].entries.filter((e) => e.type !== IN.BIP32_DERIVATION);
+  eq(plan(parsePsbt(serializePsbt(q)), k, ZERO_AUX).signable, 1);
+});
+check("keyring", "a WIF proves an output that pays to it, in any script", () => {
+  for (const kind of ["p2wpkh", "p2sh-p2wpkh", "p2tr"]) {
+    const change = { kind, path: "m/84'/1'/0'/1/0", amount: 40000 };
+    const o = plan(build({ ...TWO, outputs: [EXTERNAL, change] }), single("m/84'/1'/0'/1/0"), ZERO_AUX).outputs[1];
+    eq([o.ours, o.type, o.path], [true, kind, null]);
+  }
+});
+check("keyring", "two keys: 1 of 2 each, complete together, as the master signs", () => {
+  const p = build(TWO);
+  const ks = [single("m/84'/1'/0'/0/0"), single("m/84'/1'/0'/0/1")];
+  const pl = planKeys(p, ks, ZERO_AUX);
+  eq([pl.keys.map((k) => k.signs), pl.signable, pl.complete], [[1, 1], 2, true]);
+  const r = signKeys(p, ks, ZERO_AUX);
+  eq([r.signed.length, r.plan.complete, r.plan.signable], [2, true, 0]);
+  eq(toHex(finalize(r.psbt).tx), toHex(finalize(signPsbt(p, abandon, ZERO_AUX).psbt).tx));
+});
+check("keyring", "the same coin under two keys is signed once", () => {
+  const r = signKeys(build(TWO), [abandon, derive(abandon, ACCOUNT)], ZERO_AUX);
+  eq([r.signed.length, r.plan.complete], [2, true]);
+});
+check("keyring", "no keys: nothing signable, claims unchecked", () => {
+  const pl = planKeys(build(TWO), [], ZERO_AUX);
+  eq([pl.signable, pl.complete, pl.outputs[1].ours, pl.outputs[1].claimed, pl.outputs[0].claimed], [0, false, false, true, false]);
+});
+
+// --- merging ---------------------------------------------------------------------
+
+const halfSigned = (p, path) => signPsbt(p, single(path), ZERO_AUX).psbt;
+const merged = (p) => combine(halfSigned(p, "m/84'/1'/0'/0/0"), halfSigned(p, "m/84'/1'/0'/0/1"));
+
+check("combine", "two half-signed copies finish the transaction", () => {
+  const p = build(TWO);
+  const { psbt, added } = merged(p);
+  eq(added, 1);
+  eq(planKeys(psbt, [], ZERO_AUX).complete, true); // no key needed: every signature is there
+  eq(planKeys(halfSigned(p, "m/84'/1'/0'/0/0"), [], ZERO_AUX).complete, false);
+  const held = plan(psbt, abandon, ZERO_AUX);
+  eq([held.signable, held.complete, held.inputs[0].signed, held.inputs[0].reason], [0, true, true, "it is signed already"]);
+  eq(toHex(finalize(psbt).tx), toHex(finalize(signPsbt(p, abandon, ZERO_AUX).psbt).tx));
+});
+check("combine", "the same copy twice adds nothing", () => {
+  const p = build(TWO);
+  const r = combine(p, p);
+  eq([r.added, serialize(r.psbt)], [0, serialize(p)]);
+});
+check("combine", "keeps what each copy added", () => merged(build(TWO)).psbt.inputs.every((m) => m.fields.partialSigs.length === 1));
+check("combine", "an entry nobody knows travels too (BIP-174: unknown keys are kept)", () => {
+  const p = build(TWO), b = parsePsbt(serializePsbt(p));
+  setEntry(b.inputs[0], 0xfc, Uint8Array.of(1, 2), Uint8Array.of(3));
+  const r = combine(p, parsePsbt(serializePsbt(b)));
+  return r.added === 1 && r.psbt.inputs[0].entries.some((e) => e.type === 0xfc);
+});
+check("combine", "leaves its arguments as they were", () => {
+  const p = build(TWO), a = halfSigned(p, "m/84'/1'/0'/0/0"), before = serialize(a);
+  combine(a, halfSigned(p, "m/84'/1'/0'/0/1"));
+  eq(serialize(a), before);
+});
+check("combine", "a different transaction is refused", () => {
+  const q = build({ ...TWO, outputs: [{ ...EXTERNAL, amount: 49999 }, CHANGE] });
+  return has(throws(() => combine(build(TWO), q), CombineError).message, "different transaction");
+});
+check("combine", "a different version is refused", () => {
+  const p = build(TWO), q = parsePsbt(serializePsbt(p));
+  q.version = 2;
+  return has(throws(() => combine(p, q), CombineError).message, "versions");
+});
+check("combine", "disagreeing signatures are refused", () => {
+  const p = build(TWO), a = halfSigned(p, "m/84'/1'/0'/0/0"), b = parsePsbt(serializePsbt(a));
+  const sig = b.inputs[0].fields.partialSigs[0];
+  const bad = sig.signature.slice();
+  bad[10] ^= 1;
+  setEntry(b.inputs[0], IN.PARTIAL_SIG, sig.pubkey, bad);
+  return has(throws(() => combine(a, parsePsbt(serializePsbt(b))), CombineError).message, "input 1");
+});
+check("combine", "disagreeing coins are refused", () => {
+  const p = build(TWO), b = parsePsbt(serializePsbt(p));
+  setEntry(b.inputs[1], IN.WITNESS_UTXO, new Uint8Array(0), txOut(999999, p.inputs[1].fields.witnessUtxo.script));
+  return has(throws(() => combine(p, parsePsbt(serializePsbt(b))), CombineError).message, "the coin spent in input 2");
+});
+
+const withSig = (psbt, i, change) => {
+  const q = parsePsbt(serializePsbt(psbt));
+  const s = q.inputs[i].fields.partialSigs[0];
+  setEntry(q.inputs[i], IN.PARTIAL_SIG, s.pubkey, change(s.signature.slice()));
+  return parsePsbt(serializePsbt(q));
+};
+check("combine", "a bad signature held doesn't count, and is reported", () => {
+  const q = withSig(signPsbt(build(TWO), abandon, ZERO_AUX).psbt, 0, (b) => { b[12] ^= 1; return b; });
+  const pl = plan(q, single("m/84'/1'/0'/0/1"), ZERO_AUX);
+  eq([pl.inputs[0].signed, pl.inputs[0].badSignature, pl.complete], [false, true, false]);
+  return plan(q, abandon, ZERO_AUX).inputs[0].sign; // and the right key replaces it
+});
+check("combine", "a held signature that isn't SIGHASH_ALL doesn't count", () => {
+  const q = withSig(signPsbt(build(TWO), abandon, ZERO_AUX).psbt, 0, (b) => { b[b.length - 1] = 0x83; return b; });
+  return plan(q, single("m/84'/1'/0'/0/1"), ZERO_AUX).inputs[0].badSignature;
+});
+check("combine", "a taproot signature held is verified", () => {
+  const p = build({ inputs: [{ kind: "p2tr", path: "m/86'/1'/0'/0/0", amount: 100000 }], outputs: [EXTERNAL] });
+  const s = signPsbt(p, abandon, ZERO_AUX).psbt;
+  eq(plan(s, abandon, ZERO_AUX).inputs[0].signed, true);
+  const q = parsePsbt(serializePsbt(s));
+  const bad = s.inputs[0].fields.tapKeySig.slice();
+  bad[3] ^= 1;
+  setEntry(q.inputs[0], IN.TAP_KEY_SIG, new Uint8Array(0), bad);
+  eq(plan(parsePsbt(serializePsbt(q)), abandon, ZERO_AUX).inputs[0].badSignature, true);
+});
+
+// --- change, after the keys ------------------------------------------------------
+
+const notFee = (w) => w.level === "danger" && !w.text.includes("fee"); // (these test PSBTs pay a high one)
+const reviewed = (p, keys) => applyPlan(analyze(p, { network: "testnet" }), planKeys(p, keys, ZERO_AUX));
+check("review", "before keys it is a claim; a key proves it", () => {
+  const p = build(TWO);
+  eq(analyze(p, { network: "testnet" }).outputs[1].mine, true);
+  const a = reviewed(p, [abandon]);
+  eq([a.outputs[1].mine, a.outputs[1].role, a.outputs[1].checkedPath, a.toSelf, a.sent], [true, "change", "m/84'/1'/0'/1/0", 40000, 50000]);
+  eq(a.warnings.filter(notFee), []);
+});
+check("review", "a refuted claim is red and counts as sent", () => {
+  const change = { ...CHANGE, script: EXTERNAL.script };
+  const a = reviewed(build({ ...TWO, outputs: [EXTERNAL, change] }), [abandon]);
+  eq([a.outputs[1].mine, a.toSelf, a.sent], [false, 0, 90000]);
+  return has(a.warnings.find(notFee)?.text ?? "", "pays someone else");
+});
+check("review", "a claim no key can check is amber and counts as sent", () => {
+  const a = reviewed(build(TWO), [single("m/84'/1'/0'/0/0")]);
+  eq([a.outputs[1].mine, a.outputs[1].unverified, a.toSelf, a.sent], [false, true, 0, 90000]);
+  eq(a.warnings.filter(notFee), []);
+  return has(a.warnings[0].text, "can check");
+});
+check("review", "a bad signature held is red", () => {
+  const q = withSig(signPsbt(build(TWO), abandon, ZERO_AUX).psbt, 1, (b) => { b[12] ^= 1; return b; });
+  return has(reviewed(q, [single("m/84'/1'/0'/0/0")]).warnings[0].text, "Input 2");
 });
 
 if (electrumOut) {

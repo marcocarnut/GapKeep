@@ -1,14 +1,18 @@
 // What the Signer's screens need from the signing library, in one place:
-// the key from a recombined codex32 secret, the public key for Electrum,
-// the plan, signing, the self-test.
+// keys (from codex32 shares, seed words, an xprv, a WIF), the public key for
+// Electrum, the plan, signing, the self-test.
+//
+// A loaded key is { node (for sign.js), kind: "seed" | "xprv" | "wif",
+// fingerprint, description, master: can it export an account, network }.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as crypto from "zg:crypto";
 import { setCrypto } from "./crypto.js";
-import { ENTROPY_LENGTHS, mnemonicFromEntropy, seedFromMnemonic } from "./bip39.js";
+import { ENTROPY_LENGTHS, mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic } from "./bip39.js";
 import { fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub, versionFor } from "./bip32.js";
-import { plan as planSigning, signPsbt, finalize } from "./sign.js";
+import { parsePrivateKey } from "./keys.js";
+import { planKeys, signKeys, finalize } from "./sign.js";
 import { serializePsbt } from "./psbt/psbt.js";
 import { selfTest as libSelfTest } from "./selftest.js";
 
@@ -24,36 +28,54 @@ export const EXPORTS = [
 const coin = (network) => (network === "mainnet" ? 0 : 1);
 const accountPath = (purpose, network) => `m/${purpose}'/${coin(network)}'/0'`;
 
-// The master key from a codex32 secret. meaning: "bip39" (dice39's shares:
-// BIP-39 entropy, words, then the seed with the passphrase) or "bip32"
-// (BIP-93: the secret is the master seed). The secret is the caller's to wipe.
-// -> { master, fingerprint, description }
-export function loadKey(secret, { meaning, passphrase = "" }) {
-  let seed, description;
-  if (meaning === "bip39") {
-    if (!ENTROPY_LENGTHS.includes(secret.length)) {
-      throw new RangeError(`The shares hold ${secret.length} bytes: not a seed phrase's entropy (16 to 32 bytes). ` +
-        "Maybe they hold a master seed (the other choice).");
-    }
-    const words = secret.length * 3 / 4;
-    let mnemonic = mnemonicFromEntropy(secret);
-    seed = seedFromMnemonic(mnemonic, passphrase);
-    mnemonic = null;
-    description = `a ${words}-word seed phrase` + (passphrase ? " and a passphrase" : ", no passphrase");
-  } else {
-    seed = Uint8Array.from(secret);
-    description = `a ${secret.length}-byte BIP-32 master seed`;
-  }
+const fromSeedBytes = (seed, description) => {
   try {
-    const master = fromSeed(seed);
-    return { master, fingerprint: fingerprintHex(master), description };
+    const node = fromSeed(seed);
+    return { node, kind: "seed", fingerprint: fingerprintHex(node), description, master: true, network: null };
   } finally {
     seed.fill(0);
   }
+};
+
+const words = (n) => `a ${n}-word seed phrase`;
+const withPassphrase = (passphrase) => (passphrase ? " and a passphrase" : ", no passphrase");
+
+// A key from a codex32 secret. meaning: "bip39" (dice39's shares: BIP-39
+// entropy, words, then the seed with the passphrase) or "bip32" (BIP-93: the
+// secret is the master seed). The secret is the caller's to wipe.
+export function loadKey(secret, { meaning, passphrase = "" }) {
+  if (meaning !== "bip39") return fromSeedBytes(Uint8Array.from(secret), `a ${secret.length}-byte BIP-32 master seed`);
+  if (!ENTROPY_LENGTHS.includes(secret.length)) {
+    throw new RangeError(`The shares hold ${secret.length} bytes: not a seed phrase's entropy (16 to 32 bytes). ` +
+      "Maybe they hold a master seed (the other choice).");
+  }
+  let mnemonic = mnemonicFromEntropy(secret);
+  const seed = seedFromMnemonic(mnemonic, passphrase);
+  mnemonic = null;
+  return fromSeedBytes(seed, words(secret.length * 3 / 4) + withPassphrase(passphrase));
+}
+
+// A key from BIP-39 words. Throws Bip39Error (bad word, bad checksum).
+export function loadWords(text, passphrase = "") {
+  const entropy = entropyFromMnemonic(text);
+  const n = entropy.length * 3 / 4;
+  entropy.fill(0);
+  return fromSeedBytes(seedFromMnemonic(text, passphrase), words(n) + withPassphrase(passphrase));
+}
+
+// A key from an xprv (and SLIP-132's yprv, zprv...) or a WIF. Throws KeyError.
+export function loadPrivate(text) {
+  const { key, kind, network } = parsePrivateKey(text);
+  if (kind === "wif") {
+    return { node: key, kind, fingerprint: fingerprintHex(key), description: "a single private key (WIF)", master: false, network };
+  }
+  const master = key.depth === 0;
+  return { node: key, kind, fingerprint: fingerprintHex(key), master, network,
+    description: master ? "a master private key (xprv)" : `an extended private key at depth ${key.depth}` };
 }
 
 export function wipeKey(key) {
-  if (key && key.master) wipe(key.master);
+  if (key && key.node) wipe(key.node);
 }
 
 // The account's public key, as Electrum takes it ("Use a master key"):
@@ -62,7 +84,7 @@ export function wipeKey(key) {
 export function exportKey(key, id, network) {
   const x = EXPORTS.find((e) => e.id === id);
   const path = accountPath(x.purpose, network);
-  const account = derive(key.master, path);
+  const account = derive(key.node, path);
   try {
     const pub = neuter(account);
     return { text: serializeXpub(pub, versionFor(id, network)), path, fingerprint: fingerprintHex(pub) };
@@ -71,11 +93,13 @@ export function exportKey(key, id, network) {
   }
 }
 
-export const plan = (psbt, key, options) => planSigning(psbt, key.master, options);
+const nodes = (keys) => keys.map((k) => k.node);
+
+export const plan = (psbt, keys, options) => planKeys(psbt, nodes(keys), options);
 
 // -> { psbt (bytes), tx (bytes, when every input is signed) | null, count }
-export function sign(psbt, key, options) {
-  const r = signPsbt(psbt, key.master, options);
+export function sign(psbt, keys, options) {
+  const r = signKeys(psbt, nodes(keys), options);
   const tx = r.plan.complete ? finalize(r.psbt).tx : null;
   return { psbt: serializePsbt(r.psbt), tx, count: r.signed.length };
 }
