@@ -19,7 +19,7 @@ them back.
   character codex32 does not have (B, I, O, or 1 after the prefix). Shares
   of another split, or the same share twice, are flagged on the box.
 - **Recover the phrase** shows what the page shows: the threshold,
-  identifier and number of shares, the 12 or 24 words, the entropy in hex
+  identifier and number of shares, the 12, 15, 18 or 24 words, the entropy in hex
   and the codex32 secret (index S), so it can be checked by hand.
 - **Getting the phrase off**: as on the page, a QR code of the words (one,
   or three parts), SeedQR or Compact SeedQR, each behind its warning and a
@@ -40,12 +40,10 @@ Escape leaves the camera, the QR pages and About.
   0, like BIP-93's test vector 1), or a split's secret typed on its own.
   The page asks for at least two lines, and its `cxRecover` fails on such a
   string anyway (below).
-- The page's "3-part QR (8 + 8 + 8 words)" says 8 at 12 words too; here
-  it says 4 + 4 + 4 for a 12-word phrase.
-- As on the page, only 16- and 32-byte secrets (12 and 24 words) are
-  recovered: dice39 makes no other sizes, and other valid BIP-93 secrets
-  (20, 24, 28 or 64 bytes) are refused with the page's message rather than
-  shown as words they are not.
+- As on the page, only 16-, 20-, 24- and 32-byte secrets (12, 15, 18 and
+  24 words) are recovered: dice39 makes no other sizes, and other valid
+  BIP-93 secrets (28 or 64 bytes) are refused with the page's message
+  rather than shown as words they are not.
 
 ## What the seed is
 

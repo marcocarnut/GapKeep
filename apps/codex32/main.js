@@ -251,7 +251,7 @@ async function doRecover() {
     return;
   }
   if (!RECOVER_SIZES[res.seed.length]) {
-    console.log(`codex32: recovered ${res.seed.length} bytes, not a 12- or 24-word phrase: refused`);
+    console.log(`codex32: recovered ${res.seed.length} bytes, not a 12-, 15-, 18- or 24-word phrase: refused`);
     res.seed.fill(0);
     return showError(F(S.errWrongSize, { n: res.seed.length }));
   }
@@ -273,9 +273,12 @@ async function doRecover() {
   showResult();
 }
 
+// The page's placeholders for the phrase on screen: {t} words, {third} of
+// them per part of the 3-part QR, {bytes} of entropy (16, 20, 24 or 32)
 function lenVars() {
   const t = state.result ? state.result.words.length : 24;
-  return { t, third: Math.ceil(t / 3), bytes: t === 12 ? 16 : 32 };
+  const bytes = Number(Object.keys(RECOVER_SIZES).find((n) => RECOVER_SIZES[n].words === t));
+  return { t, third: Math.ceil(t / 3), bytes };
 }
 const FL = (text, vars) => F(text, { ...lenVars(), ...(vars || {}) });
 

@@ -1,5 +1,5 @@
 // Extracted from dice39 by tools/extract_dice39.py - do not edit.
-// Source: bip39_generator.html (sha256 9d8f7ba296e81fa3fae05eb1398b94ed00e38148b5014cf350f039f3c8364fe8), core algorithm block starting at line 3223.
+// Source: bip39_generator.html (sha256 2761011a95e7b961bfe3a6001df7e6ec4d49106134c19453e49e1364c67357dd), core algorithm block starting at line 3227.
 // dice39 is licensed under the GNU AGPL v3; see apps/dice39/LICENSE-dice39.txt.
 // The code between the prelude and the export line is copied verbatim.
 
@@ -9,15 +9,17 @@ const window = {}, module = undefined;
 // Pure logic, no DOM — testable under Node and reusable verbatim inside the SPA.
 //
 // Design recap (per spec worked out with the user):
-//  - User supplies N words (12<=N<=22), sourced from physical dice + printed tables.
+//  - A phrase is T = 12, 15, 18 or 24 words (PHRASE_SIZES below).
+//  - User supplies N words (12<=N<=22 at T=24), sourced from physical dice +
+//    printed tables.
 //  - Words are used VERBATIM for positions 1..N.
-//  - Words 23 and 24 are ALWAYS device-sourced (CSPRNG mixed with user screen
-//    interaction) — capping user input at 22 avoids ever needing a user-guessed
-//    word 24 that gets silently checksum-corrected, so there's nothing to explain
+//  - Words T-1 and T are ALWAYS device-sourced (CSPRNG mixed with user screen
+//    interaction) — capping user input at T-2 avoids ever needing a user-guessed
+//    word T that gets silently checksum-corrected, so there's nothing to explain
 //    about a "wrong" final word.
 //
 // importMnemonic is the other door, and deliberately not the same one: it takes
-// a complete 24-word phrase the user already holds, generates nothing, and
+// a complete phrase the user already holds, generates nothing, and
 // REFUSES a bad checksum instead of correcting it. It exists so an existing
 // phrase can be split with codex32 by this page. See its own comment.
 //
@@ -94,15 +96,25 @@ async function deriveKeystream(seed, neededBits) {
    a checksum of entropy/32 bits, and the two always add up to 11*T:
 
      T=24  ->  256 entropy + 8 checksum = 264 = 11*24   last word: 3 + 8
+     T=18  ->  192 entropy + 6 checksum = 198 = 11*18   last word: 5 + 6
+     T=15  ->  160 entropy + 5 checksum = 165 = 11*15   last word: 6 + 5
      T=12  ->  128 entropy + 4 checksum = 132 = 11*12   last word: 7 + 4
 
    The last word is the only one that straddles the boundary, and how it
-   straddles differs between the two: at 24 words it is 3 entropy bits then 8
-   of checksum, at 12 it is 7 then 4. Everything below reads those numbers off
-   this table rather than spelling them out, because the pair that is easy to
-   transpose is exactly the pair that produces a valid-looking wrong phrase. */
+   straddles differs at every length: at 24 words it is 3 entropy bits then 8
+   of checksum, at 12 it is 7 then 4, and 18 and 15 sit in between. Everything
+   below reads those numbers off this table rather than spelling them out,
+   because the pair that is easy to transpose is exactly the pair that
+   produces a valid-looking wrong phrase.
+
+   The words you may roll follow one rule at every length: at least half the
+   phrase, rounded up, and at most all but the last two, which the device
+   always writes. That is 6..10 at 12 words, 8..13 at 15, 9..16 at 18 and
+   12..22 at 24. */
 const PHRASE_SIZES = {
   12: { total: 12, entropyBits: 128, checksumBits: 4, entropyBytes: 16, minUser: 6,  maxUser: 10 },
+  15: { total: 15, entropyBits: 160, checksumBits: 5, entropyBytes: 20, minUser: 8,  maxUser: 13 },
+  18: { total: 18, entropyBits: 192, checksumBits: 6, entropyBytes: 24, minUser: 9,  maxUser: 16 },
   24: { total: 24, entropyBits: 256, checksumBits: 8, entropyBytes: 32, minUser: 12, maxUser: 22 }
 };
 
@@ -121,8 +133,8 @@ function phraseSize(total) {
 //            explain about a word coming back different from what was typed.
 // seedBytes: 32-byte seed for the device-entropy stream (already mixed from
 //            CSPRNG + screen interaction by the caller).
-// total:     12 or 24. Defaults to 24, so callers predating 12-word support
-//            keep the behaviour they were written against.
+// total:     12, 15, 18 or 24. Defaults to 24, so callers predating the other
+//            lengths keep the behaviour they were written against.
 // Returns: { finalWords: string[T], sourceTags: string[T], userBits, deviceBits }
 async function buildMnemonic(wordlist, userWords, seedBytes, total) {
   const spec = phraseSize(total || 24);
@@ -165,7 +177,7 @@ async function buildMnemonic(wordlist, userWords, seedBytes, total) {
   }
 
   // Last position: the remaining device entropy bits, then the checksum.
-  const tailBits = 11 - spec.checksumBits;   // 3 at 24 words, 7 at 12
+  const tailBits = 11 - spec.checksumBits;   // 3 at 24 words, 5 at 18, 6 at 15, 7 at 12
   const tail = reader.read(tailBits);
   writer.push(tail, tailBits);
   sourceTags[T - 1] = 'device';
@@ -173,7 +185,8 @@ async function buildMnemonic(wordlist, userWords, seedBytes, total) {
   const entropyBytes = writer.toBytes();     // exactly spec.entropyBytes long
   const hash = await sha256(entropyBytes);
   // The checksum is the TOP checksumBits of SHA256(entropy): 8 bits is the
-  // whole first byte, 4 bits is its high nibble, not its low one.
+  // whole first byte, 4 bits is its high nibble, not its low one, and 5 and 6
+  // are likewise its top five and top six bits.
   const checksum = hash[0] >> (8 - spec.checksumBits);
 
   wordIndices[T - 1] = (tail << spec.checksumBits) | checksum;
@@ -199,8 +212,11 @@ async function buildMnemonic(wordlist, userWords, seedBytes, total) {
   //
   // Both are far more conservative than the coin check. All-N-identical needs
   // no argument. Strictly ordered indices happen with probability ~1/N! per
-  // direction, i.e. under 1 in 100 million even at the minimum N = 12, and
-  // ~1 in 6e20 at N = 22 — against 1 in 2048 for the coin detector at N = 12.
+  // direction, i.e. under 1 in 100 million at N = 12, and ~1 in 6e20 at
+  // N = 22 — against 1 in 2048 for the coin detector at N = 12. The shorter
+  // phrases allow fewer words (6 at 12, 8 at 15, 9 at 18), where it is 1 in
+  // 720, 40,320 and 362,880: still rare, but the copy quotes the real figure
+  // for the N in front of it rather than the 24-word one.
   const userIdx = userWords.map(w => wordIndex.get(w));
   const allSame = userIdx.every(i => i === userIdx[0]);
   const nonDecreasing = userIdx.every((v, i) => i === 0 || v >= userIdx[i - 1]);
@@ -221,26 +237,28 @@ async function buildMnemonic(wordlist, userWords, seedBytes, total) {
 // A phrase the user already has, taken as-is so the rest of the page (and in
 // particular the codex32 split) can work on it. Nothing is generated here.
 //
-// The checksum is RECOMPUTED from the first 256 bits and compared, and a
+// The checksum is RECOMPUTED from the entropy bits and compared, and a
 // mismatch is refused rather than repaired. buildMnemonic can afford to write
-// the correct final word because it owns the entropy; here the 24 words are
+// the correct final word because it owns the entropy; here the words are
 // evidence about a phrase that already exists somewhere else, so a silent
 // correction would hand back a DIFFERENT wallet from the one being imported
 // and the split would be of a seed that secures nothing.
 //
-// The 8-bit checksum still passes roughly 1 mistyped phrase in 256, so this
-// catches most typos and proves nothing on its own. It is a typo check, not
-// an assurance that the phrase is the one the user meant.
+// The checksum still passes roughly 1 mistyped phrase in 2^checksumBits -- 256
+// at 24 words, only 16 at 12 -- so this catches most typos and proves nothing
+// on its own. It is a typo check, not an assurance that the phrase is the one
+// the user meant.
 //
-// words: exactly 24 strings from the wordlist.
+// words: exactly 12, 15, 18 or 24 strings from the wordlist.
 // Returns the same shape as buildMnemonic, plus imported: true.
 async function importMnemonic(wordlist, words) {
   // The length decides the arithmetic, so it is read off the phrase rather
-  // than assumed: 12 and 24 differ in where the last word stops being entropy
-  // and starts being checksum, and using the wrong split silently produces a
-  // different wallet from a phrase that looks perfectly valid.
+  // than assumed: every length differs in where the last word stops being
+  // entropy and starts being checksum, and using the wrong split silently
+  // produces a different wallet from a phrase that looks perfectly valid.
   if (!PHRASE_SIZES[words.length]) {
-    throw new Error('an imported phrase must be 12 or 24 words, got ' + words.length);
+    throw new Error('an imported phrase must be ' + Object.keys(PHRASE_SIZES).join(', ') +
+                    ' words, got ' + words.length);
   }
   const spec = phraseSize(words.length);
   const T = spec.total;

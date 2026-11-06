@@ -1,5 +1,5 @@
 // Extracted from dice39 by tools/extract_codex32.py - do not edit.
-// Source: codex32_recover.html (sha256 6ab1b53c74045669cad1c449c1208288aed386b52c130b15d26daf8ac5723606), codex32 block starting at line 311.
+// Source: codex32_recover.html (sha256 5be40379e29864054befe322d7439f7f06ab800d2b7ef09ac429228f372ee9c0), codex32 block starting at line 311.
 // dice39 is licensed under the GNU AGPL v3; see apps/codex32/LICENSE-dice39.txt.
 // The code between the prelude and the export line is copied verbatim.
 
