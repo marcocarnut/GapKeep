@@ -36,20 +36,32 @@ codes but cannot draw them.
 
 ### Showing colour codes to the camera
 
-Measured on the rig's Pi camera with codes on a monitor (2026-11-05: a few
-frames, one monitor; soft focus not yet tried). A recommendation, not a
-measured limit:
+Measured on the rig's Pi camera on 2026-11-05, with one version 10 code
+(profile a8.50, rate 3/4) on one monitor at one distance, shown at several
+sizes; colorqr scored each raw frame against the known payload. A guide, not
+a specification: a4.50 is untested at small sizes, and so is soft focus.
 
-- **Aim for 4 camera pixels a module or more**, in the scanner field you
-  use (the scanner's log gives the code's side in pixels: divide by the
-  modules, 17 + 4 per version). Reads have succeeded down to about 2 pixels
-  a module in the `"full"` field, near the limit of rate 3/4; at 1.4 neither
-  the code nor its colours read.
-- **Prefer 100 % zoom** (or a whole multiple), as a precaution: whether an
-  image viewer's resampling hurts is not settled yet.
-- **Profiles:** a4.50 at rate 3/4 is the safe default; a8.50 at rate 3/4
-  (about 50 % more data) read as well here, and suits steady, in-focus
-  setups.
+| Field | Camera pixels a module | Result |
+| --- | --- | --- |
+| `"center"` (the default) | 5.5, 3.7 | read at once, under 0.1 % of symbols wrong |
+| | 2.8 | read, about 11 % wrong: near the limit |
+| | 2.3 | fails: the code is rarely found, and its colours are gone |
+| `"full"` | 2.8 | read at once, 0.04 % wrong |
+| | 1.9 | colours read (about 9 % wrong), but the code is found only now and then |
+| | 1.4 | fails |
+
+- **Prefer the default field for small or distant codes**: the same code
+  covers twice the pixels there. The `"full"` field is for a wider view;
+  pixel for pixel it is cleaner (it bins on the sensor), but codes are
+  smaller in it.
+- **Aim for at least 4 camera pixels a module in the default field, 3 in
+  `"full"`**, for margin. The scanner's log gives the code's side in pixels
+  (divide by the modules: 17 + 4 per version).
+- Scaling the code on the screen (an image viewer at 67 % or 50 %) made no
+  difference to the colours; whole-number zoom is tidy, not needed.
+- **Profiles:** a4.50 at rate 3/4 is the default to recommend; a8.50 at
+  rate 3/4 (about 50 % more data) read as well at these sizes, and suits
+  steady, in-focus setups.
 
 ### Why it is experimental
 

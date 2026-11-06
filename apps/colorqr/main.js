@@ -60,16 +60,27 @@ function describe (bytes, text) {
   return `${plural (bytes.length, "byte")}${text === null ? ", binary" : ""}\n${what}`;
 }
 
+// The scanner reports a colour layer it could not read after a second of
+// trying, but only while it still sees the code: one glimpsed and lost
+// gets no report, so give up waiting after a while.
+let waiting = null;
+
 function showBase ({ bytes, text }) {
   count++;
   base.text = describe (bytes, text);
   colour.text = "Reading the colours...";
   colour.color = MUTED;
+  clearTimeout (waiting);
+  waiting = setTimeout (() => {
+    colour.text = "Not read: the code went out of view (hold it steady, closer)";
+    colour.color = AMBER;
+  }, 3000);
   status.text = `Code ${count}`;
   console.log (`colorqr: code ${count}, ${bytes.length} bytes, sha256 ${digest (bytes)}`);
 }
 
 function showColour ({ status: result, colour: data }) {
+  clearTimeout (waiting);
   if (result === "ok") {
     colour.text = describe (data, utf8 (data));
     colour.color = GREEN;
@@ -97,6 +108,7 @@ const toggle = new ui.Button (buttons, {
 new ui.Button (buttons, {
   text: ui.symbols.trash + " Clear",
   onClick: () => {
+    clearTimeout (waiting);
     base.text = colour.text = "-";
     status.text = "Show a colour QR code to the camera";
   },
