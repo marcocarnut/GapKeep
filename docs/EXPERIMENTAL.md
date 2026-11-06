@@ -71,7 +71,11 @@ specification: soft focus is untested.
   must be framed with care: one cut off at an edge isn't found. Decoding
   takes about 0.9 s at version 20, 2.3 s at 36 and 3 s at 40 on a Pi Zero.
   From version 20 the decoder corrects the grid locally (the lens bends it
-  by up to half a module at the corners).
+  by up to half a module at the corners), which these reads need: with it
+  they have good margin (version 36: 0.1 % of symbols wrong, version 40:
+  0.17 %), without it the same frames are far weaker (1.1 % and 2.6 %).
+  At version 40 the bend reached 1.6 pixels, near the correction's 2-pixel
+  reach: a code larger in the frame might exceed it.
 - A colour layer that can't be read costs more than one that can: about
   0.36 s a try on a Pi Zero for version 10, against 0.2-0.3 s.
 
