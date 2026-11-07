@@ -46,7 +46,8 @@ back a QR code Electrum loads, or animated BBQr codes.
 
 **Once: the public key.** "Public key" needs a master key: it shows an account
 of BIP-84, BIP-49, BIP-44 or BIP-86 (account 0, or the number you give) as a
-QR code, with the master fingerprint as text:
+QR code, with the master fingerprint as text; BIP-48's multisig key
+(m/48'/c'/a'/2') is a cosigner's key expression, or a Zpub for Electrum:
 
 - a descriptor, `wpkh([fingerprint/84h/0h/0h]xpub.../<0;1>/*)#checksum`, with
   the key's origin, for wallets that take one;
@@ -184,7 +185,7 @@ Errors: `Bip32Error`. Private keys are never serialized.
 | --- | --- |
 | `plan(psbt, key, options)` | What signing would do, without signing (below). |
 | `signPsbt(psbt, key, options)` | `{ psbt, signed: [{ input, path, pubkey }], skipped: [{ input, reason }], plan }`. Signs exactly what `plan` says; `psbt` is a new, re-parsed PSBT (the one given is left as it was). Adds `PSBT_IN_PARTIAL_SIG` (DER + sighash byte) or `PSBT_IN_TAP_KEY_SIG`; each signature is verified first. |
-| `planKeys(psbt, keys, options)` | `plan` for several keys: `{ inputs, outputs, signable, complete, keys: [{ fingerprint, signs }] }`. Each output adds `claimed`, `stray` and `far`. With no keys, it still says which inputs are signed. |
+| `planKeys(psbt, keys, options)` | `plan` for several keys: `{ inputs, outputs, signable, complete, keys: [{ fingerprint, signs }] }`. Each output adds `claimed`, `stray`, `far` and `unproved`. With no keys, it still says which inputs are signed. |
 | `signKeys(psbt, keys, options)` | Each key in turn: `{ psbt, signed, plan }`. |
 | `partialSigGood(psbt, i, pubkey, signature)` | Would the signer accept this signature? `null`: it can't tell. |
 | `verifyChange(psbt, key, options)` | `plan(...).outputs`. |
@@ -258,6 +259,27 @@ home up to `CHANGE_NEAR` past the inputs' highest index (same account, either
 chain) is green. Past that, `far` gives its index: it is still change and
 counted as change, but amber, with a note that the wallet finds the coin only
 if it looks that far ahead (gap limit). Past `CHANGE_GAP` it is stray.
+
+**Multisig** (`multisig.js`). P2WSH and P2SH-P2WSH m-of-n are signed and
+finalized; only the plain script, with compressed keys, each once. Any other
+witness script is refused. `plan().inputs[i].multisig` is `{ m, n, have, will }`:
+signatures good so far, and how many these keys add. An input is `signed` at m
+good ones; the final witness has exactly m, in the script's order.
+
+Our key in a change script proves nothing by itself: a hostile computer can
+write 2-of-3 with it and two keys of its own. Nothing is stored here, so the
+others are proved from the PSBT's global xpubs. Change is ours only when
+every input is one wallet (same type, m, n and xpubs), each script's keys and
+xpubs match one to one, the change has exactly that m and n, and its keys share
+one relative path (else it is stray), and each input's keys share one suffix of
+exactly two steps below their xpubs. Change the proved inputs show isn't their
+wallet's is red (`problem`, `notWallet`), and counted as sent. Where the proof
+can't be made (no xpubs, inputs not proved, too much to derive) `unproved` says
+why: amber, and counted as sent. The reasoning is at the top of `multisig.js`.
+
+Electrum leaves the xpubs out unless "For hardware device; include xpubs" is
+ticked in the transaction's export menu (desktop), so its multisig change is
+amber by default, with a note saying that. Android has no such option.
 
 **Oddities** (signed anyway, shown to the person): a path that isn't
 m/purpose'/coin'/account'/change/index, a purpose that doesn't match the

@@ -6,6 +6,9 @@
 //     an output is the wallet's only if a key proved it;
 //     a claim a key refuted is a red warning (it pays someone else);
 //     a claim no loaded key can check is amber, and counts as sent;
+//     so is multisig change these inputs can't prove (`unproved`, see
+//     multisig.js), which says why, and what to do about Electrum;
+//     multisig change that isn't the inputs' wallet (`notWallet`) is red;
 //     an output of ours at a path the wallet may never scan (`stray`, see
 //     sign.js) is amber with the path, and counts as sent;
 //     an output of ours past where wallets scan (`far`, see sign.js) stays
@@ -15,6 +18,9 @@
 //   flagSignatures(a, plan)  red warnings for bad signatures in the PSBT.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+const XPUBS_HINT = "In Electrum on a computer, tick \"For hardware device; include xpubs\" in the transaction's " +
+  "export menu, and show its code again.";
 
 export function applyPlan(a, plan) {
   for (const o of a.outputs) {
@@ -38,9 +44,16 @@ export function applyPlan(a, plan) {
         a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} comes back to you at index ${p.far}: ` +
           "your wallet finds this coin only if it looks that far ahead (gap limit)." });
       }
+    } else if (p.notWallet) {
+      a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but it is not the ` +
+        `wallet the inputs are (${p.problem}): it may pay someone else.` });
     } else if (p.problem) {
       a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but its key ` +
         `doesn't derive from these keys (${p.problem}): it pays someone else.` });
+    } else if (p.unproved) {
+      o.unverified = true;
+      a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} claims to be your change, but that can't be proved: ` +
+        `${p.unproved}. It is counted as sent.${p.noXpubs ? " " + XPUBS_HINT : ""}` });
     } else if (claimed) {
       o.unverified = true;
       a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} claims to be your change, but none of the keys ` +

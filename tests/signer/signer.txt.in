@@ -398,8 +398,17 @@ key ret
 expect signer: showing the p2tr public key \(mainnet\), account 0, descriptor 10
 wait 0.5
 shot 23-taproot
+# a multisig cosigner's key
 key tab
 key ret
+key down
+mark
+key ret
+expect signer: showing the p2wsh public key \(mainnet\), account 0, descriptor 10
+wait 0.5
+shot 23-cosigner
+key ret
+key up
 key up
 key up
 key up
@@ -735,3 +744,131 @@ key ret
 expect signer: signed 1 input, transaction complete \(SHA-256 @uncompressedHash@\) 30
 wait 0.3
 shot 35-uncompressed-signed
+
+# 22. Multisig, a 2-of-3 with the cosigners' xpubs in the PSBT (made here, in
+# the form Electrum writes; not Electrum's own): one cosigner has signed, the
+# change is proved, and this key completes it. Its hash: Node's, whose witness
+# tests/signer/run_node.mjs checks as a node would run it.
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+@msHalfCodes@
+expect signer: review: 1 input, 0 to sign 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+mark
+key ret
+expect signer: review: 1 input, 1 to sign 5
+expect signer: multisig: 1\+1/2 5
+expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted, 0 far 5
+wait 0.5
+shot 36-multisig-proved
+mark
+key ret
+expect signer: signed 1 input, transaction complete \(SHA-256 @msHash@\) 30
+wait 0.3
+
+# 23. Multisig as Electrum shows it by default: no xpubs, so the change is
+# amber, saying what to tick; one signature of two, so a PSBT comes out
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+@msNoXpubsCodes@
+expect signer: review: 1 input, 0 to sign 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+mark
+key ret
+expect signer: review: 1 input, 1 to sign 5
+expect signer: multisig: 0\+1/2 5
+expect signer: change: 0 claimed, 0 checked, 0 stray, 1 unverified, 0 refuted, 0 far 5
+wait 0.5
+shot 37-multisig-no-xpubs
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+wait 0.5
+shot 38-multisig-input
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+key shift-tab
+wait 0.3
+mark
+key ret
+expect signer: signed 1 input 30
+wait 0.5
+shot 39-multisig-partly
+
+# 24. Change that the proved inputs show isn't their wallet (1-of-3, one
+# cosigner alone could spend it): red, counted as sent
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+@msRefutedCodes@
+expect signer: review: 1 input, 0 to sign 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+mark
+key ret
+expect signer: review: 1 input, 1 to sign 5
+expect signer: change: 0 claimed, 0 checked, 0 stray, 0 unverified, 1 refuted, 0 far 5
+wait 0.5
+shot 40-multisig-refuted

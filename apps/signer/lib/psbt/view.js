@@ -131,7 +131,7 @@ export function showAnalysis(list, rows, a, source, options = {}) {
       new ui.Label(r, { text: `${ui.symbols.warning} Yours${o.stray ? `, but at ${o.stray}` : ""}: the wallet may not see it`,
         color: AMBER, font: FONT.small, width: "100%", overflow: "wrap" });
     } else if (o.unverified) {
-      new ui.Label(r, { text: `${ui.symbols.warning} Claims to be change: no key loaded can check it`, color: AMBER, font: FONT.small });
+      new ui.Label(r, { text: `${ui.symbols.warning} Claims to be change: not proved, see above`, color: AMBER, font: FONT.small });
     }
   }
 
@@ -141,8 +141,8 @@ export function showAnalysis(list, rows, a, source, options = {}) {
     line(r, `${i.index + 1}. ${i.address ? group4(i.address) : i.prevTxid.slice(0, 16) + "...:" + i.vout}`,
       i.amount === null ? "amount unknown" : btc(i.amount), { color: i.problems.length ? RED : undefined });
     const bits = [typeName(i.type)];
-    if (i.multisig) bits.push(`${i.multisig.m}-of-${i.multisig.n}`);
-    if (i.derivations.length) bits.push(`${i.derivations[0].path} [${i.derivations[0].fingerprint}]`);
+    if (i.multisig) bits.push(`${i.multisig.m}-of-${i.multisig.n}`, `keys ${[...new Set(i.derivations.map((d) => d.fingerprint))].join(", ")}`);
+    else if (i.derivations.length) bits.push(`${i.derivations[0].path} [${i.derivations[0].fingerprint}]`);
     bits.push(i.final ? "signed, final" : i.signatures ? `${plural(i.signatures, "signature")}` : "not signed");
     new ui.Label(r, { text: bits.join(", "), font: FONT.small, color: MUTED, width: "100%", overflow: "wrap" });
     const note = options.inputNote ? options.inputNote(i) : null;
