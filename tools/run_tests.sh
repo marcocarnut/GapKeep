@@ -87,6 +87,9 @@ done
 if [ -f "$OUT/signer/23-descriptor.png" ]; then
 	check signer_descriptor python3 tests/signer/check_descriptor.py "$OUT/signer"
 fi
+if [ -f "$OUT/signer/30-part-00.png" ]; then
+	check signer_bbqr node --experimental-default-type=module tests/signer/check_bbqr.mjs "$OUT/signer"
+fi
 
 tools/build.sh qemu >/dev/null	# back to the production app set
 

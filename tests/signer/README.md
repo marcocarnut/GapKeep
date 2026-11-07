@@ -50,6 +50,10 @@ any earlier step.
   says where they come from; multipath against an independent Python
   implementation (`check_descriptor.py`), which also checks what the app
   shows, from its QR code.
+- **codes**: BBQr read in any order, in each encoding; progress, other
+  series, other file types, damaged and oversized files; what the signer
+  shows. `check_bbqr.mjs` joins the series the app shows, from its screenshots,
+  with `lib/js/bbqr.js`, and compares it with the SHA-256 the app logged.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
   way of rerouting it, and the gap's limit).

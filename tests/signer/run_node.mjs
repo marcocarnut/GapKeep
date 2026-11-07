@@ -22,8 +22,8 @@ import { combine, CombineError } from "../../apps/signer/lib/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
 import { analyze } from "../../apps/signer/lib/psbt/analyze.js";
 import { base58CheckEncode } from "../../apps/signer/lib/psbt/basen.js";
-import { CodeReader } from "../../apps/signer/lib/codes.js";
-import { split, deflateRaw, toBase32 } from "../../lib/js/bbqr.js";
+import { CodeReader, seriesFor } from "../../apps/signer/lib/codes.js";
+import { split, deflateRaw, toBase32, Joiner } from "../../lib/js/bbqr.js";
 import { accountDescriptor, descriptorChecksum, checkDescriptor } from "../../apps/signer/lib/descriptor.js";
 import { selfTest } from "../../apps/signer/lib/selftest.js";
 import { fromHex, toHex, equal, concat, Writer, fromBase64, DecodeError } from "../../apps/signer/lib/psbt/bytes.js";
@@ -1201,6 +1201,21 @@ check("codes", "two contents for one part are refused", () => {
   const bad = parts[0].slice(0, -8) + "AAAAAAAA";
   return has(throws(() => r.read(bad), DecodeError).message, "can't be used");
 });
+for (const [name, size, most] of [["small", 900, 8], ["large", 6000, 40]]) {
+  check("codes", `what the signer shows: a ${name} file, at one version up to 12`, () => {
+    const bytes = new Uint8Array(size).map((_, i) => (i * 2654435761) >>> 13);
+    const s = seriesFor(bytes, "tx");
+    if (s.version > 12 || s.parts.length > most) throw new Error(`version ${s.version}, ${s.parts.length} parts`);
+    const j = new Joiner();
+    for (const p of s.parts) j.add(p);
+    return equal(j.result().bytes, bytes) && j.result().type === "T";
+  });
+}
+check("codes", "a PSBT's series says it is one, and reads back", () => {
+  const got = new CodeReader();
+  const { parts } = seriesFor(BIG, "psbt");
+  return equal(parts.map((t) => got.read(t)).at(-1).payload.bytes, BIG);
+});
 check("codes", "a BBQr-looking text with a bad header isn't a part", () =>
   throws(() => new CodeReader().read("B$ZP!!!!"), DecodeError));
 
@@ -1218,8 +1233,8 @@ if (madeOut) {
     half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
     half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),
     other: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/1" }))),
-    big: split(serializePsbt(build({ inputs: Array.from({ length: 12 }, (_, i) => ({ kind: "p2wpkh", path: `m/84'/1'/0'/0/${i}`, amount: 10000 })),
-      outputs: [{ ...EXTERNAL, amount: 110000 }, { ...CHANGE, path: "m/84'/1'/0'/1/0", amount: 9000 }] })), "P", { maxVersion: 12, maxParts: 8, minVersion: 5, encoding: "2" }).parts,
+    big: split(serializePsbt(build({ inputs: Array.from({ length: 30 }, (_, i) => ({ kind: "p2wpkh", path: `m/84'/1'/0'/0/${i}`, amount: 10000 })),
+      outputs: [{ ...EXTERNAL, amount: 290000 }, { ...CHANGE, path: "m/84'/1'/0'/1/0", amount: 9000 }] })), "P", { maxVersion: 12, maxParts: 20, encoding: "2" }).parts,
     otherSeries: split(new TextEncoder().encode("not a transaction"), "U", { encoding: "2", minVersion: 20 }).parts[0],
     finished: electrumQrText(finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).tx),
     xprv: privBase58(abandon, XPRV),

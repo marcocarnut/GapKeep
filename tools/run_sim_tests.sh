@@ -73,6 +73,14 @@ if [ -f "$OUT/signer/23-descriptor.png" ]; then
 	fi
 fi
 
+if [ -f "$OUT/signer/30-part-00.png" ]; then
+	if node --experimental-default-type=module tests/signer/check_bbqr.mjs "$OUT/signer" > "$OUT/signer_bbqr.log" 2>&1; then
+		echo "PASS  sim:signer_bbqr"
+	else
+		echo "FAIL  sim:signer_bbqr   (see $OUT/signer_bbqr.log)"; FAILED=1
+	fi
+fi
+
 if [ -f "$OUT/dice39_import/12-zpub.png" ]; then
 	if python3 tests/dice39/check_zpub.py "$OUT/dice39_import" > "$OUT/dice39_zpub.log" 2>&1; then
 		echo "PASS  sim:dice39_zpub"

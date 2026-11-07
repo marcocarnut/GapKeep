@@ -2,7 +2,7 @@
 
 Shows what a Bitcoin transaction does, then signs it. It takes the
 transaction first, so you see it before any secret is in memory, and gives
-back a QR code Electrum loads.
+back a QR code Electrum loads, or animated BBQr codes.
 
 ## Using it
 
@@ -40,6 +40,10 @@ back a QR code Electrum loads.
    signature needs no key at all: "Finish the transaction". Then "Done,
    forget the keys" (Escape does the same), or "Next transaction (keep
    keys)". In Electrum: Tools, Load transaction, From QR code, and broadcast.
+   A result that fits one QR code is shown as one, in Base43, as Electrum
+   reads it, with "Show as BBQr" on offer; one that doesn't is shown as
+   animated BBQr codes, all of one version up to 12, at 500 ms each, with
+   Pause and Next part. Electrum doesn't read BBQr.
 
 **Once: the public key.** "Public key" needs a master key: it shows an account
 of BIP-84 or BIP-49 (account 0, or the number you give) as a QR code, with the
@@ -94,7 +98,8 @@ whitespace, as **hex**, else **Base64** if it starts with `cHNidP`, else
 **Base43** (Electrum's QR form, at most 30000 characters); the bytes are a
 **PSBT** (version 0, BIP-174, or version 2, BIP-370) or a **signed
 transaction** (shown too: no fee, as it doesn't say what its coins were
-worth). Payment requests (`bitcoin:`), UR and BBQr codes, and Electrum's
+worth). Besides that, **BBQr** codes: a series, or one
+(`lib/codes.js`). Payment requests (`bitcoin:`), UR codes, and Electrum's
 pre-4.0 format are refused with a message saying so; so is anything
 malformed or truncated, with what is wrong.
 
@@ -246,6 +251,16 @@ m/purpose'/coin'/account'/change/index, a purpose that doesn't match the
 script (84' for P2WPKH...), a coin type for another network, a branch other
 than 0/1, a hardened or very high index, an account other than the inputs',
 change to another script type than the inputs'.
+
+### `lib/codes.js`
+
+`new CodeReader()`: `read(text, bytes)` for each code the camera gives, ->
+`{ part: { have, total, added } }` or `{ payload: { encoding, bytes, kind,
+chars } }`. BBQr series in any order, each part as often as it comes; other
+codes go to `readPayload()`. `DecodeError`, for people: a code of another
+series is refused and the series goes on; `reset()` starts over.
+`seriesFor(bytes, kind)`: `{ version, encoding, parts }` to show. `lib/bbqr.js`
+is a copy of `lib/js/bbqr.js`.
 
 ### `lib/descriptor.js`
 
