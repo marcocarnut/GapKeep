@@ -61,7 +61,7 @@ any earlier step.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
   way of rerouting it, and the gap's limit), and far (the four indices around
-  the two limits).
+  the two limits); why nothing can be signed.
 - **rules, negative, change, oddities**: PSBTs built in the test for each
   input type, and each safety rule broken one at a time (fingerprint, key
   at the path, script, redeemScript, taproot tweak and script tree, missing

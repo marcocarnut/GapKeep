@@ -1072,6 +1072,30 @@ check("review", "a stray output isn't far as well", () => {
   eq(o.far, null);
   has(o.stray, "another account");
 });
+const nothing = (a) => a.warnings.find((w) => w.text.startsWith("Nothing here"));
+const foreign = { kind: "p2wpkh", amount: 50000, fp: "01020304" };
+check("review", "another wallet's inputs: the first warning says why nothing can be signed", () => {
+  const a = reviewed(build({ inputs: [foreign, foreign], outputs: [EXTERNAL] }), [abandon]);
+  eq(a.warnings[0].level, "warn");
+  has(a.warnings[0].text, "Nothing here can be signed with these keys. Inputs 1, 2: its key is from another wallet");
+  return has(a.warnings[0].text, "01020304");
+});
+check("review", "nothing to sign, for different reasons, gives each", () => {
+  const a = reviewed(build({ inputs: [foreign, { kind: "p2wpkh", amount: 50000, sighash: 2 }], outputs: [EXTERNAL] }), [abandon]);
+  has(nothing(a).text, "Input 1: its key is from another wallet");
+  has(nothing(a).text, "; input 2: it asks for sighash");
+});
+check("review", "no such warning when something can be signed, or all is signed", () => {
+  eq(nothing(reviewed(build({ inputs: [foreign, { kind: "p2wpkh", amount: 50000 }], outputs: [EXTERNAL] }), [abandon])), undefined);
+  const signed = signPsbt(build(TWO), abandon, ZERO_AUX).psbt;
+  eq(nothing(reviewed(signed, [abandon])), undefined);
+});
+check("review", "partly signed by others, the rest not ours: it says so of the rest", () => {
+  const p = signPsbt(build({ inputs: [foreign, { kind: "p2wpkh", amount: 50000 }], outputs: [EXTERNAL] }), abandon, ZERO_AUX).psbt;
+  const a = reviewed(p, [abandon]);
+  has(nothing(a).text, "Input 1: its key is from another wallet");
+  return !nothing(a).text.includes("input 2");
+});
 check("review", "ransom: a hardened index", () => has(stray({ path: "m/84'/1'/0'/1/5'" }).stray, "hardened"));
 check("review", "ransom: a short path", () => has(stray({ path: "m/84'" }).stray, "no account"));
 check("review", "a stray output is amber with its path, and counts as sent", () => {
@@ -1405,6 +1429,7 @@ if (madeOut) {
     plain: qr(plain),
     stray: qr(build(FEE_OK({ path: "m/84'/1'/7'/1/500000" }))),
     far: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/900" }))),
+    otherWallet: qr(build({ ...FEE_OK({ path: "m/84'/1'/0'/1/0", fp: "01020304" }), inputs: FEE_OK({}).inputs.map((i) => ({ ...i, fp: "01020304" })) })),
     refuted: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/0", pubkey: attacker, script: p2wpkhScript(hash160(attacker)) }))),
     half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
     half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),
