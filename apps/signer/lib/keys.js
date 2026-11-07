@@ -2,7 +2,8 @@
 // its SLIP-132 cousins). Pure, as the rest of lib/: tests run it under Node.
 //
 //   parsePrivateKey(text) -> a key for sign.js, with what to say about it:
-//     { key, kind: "wif" | "xprv", network: "mainnet" | "test", script | null }
+//     { key, kind: "wif" | "xprv", network: "mainnet" | "test", script | null,
+//       compressed (WIF only) }
 //
 // Errors are KeyError, for people. They never quote the text.
 //
@@ -23,8 +24,8 @@ export class KeyError extends Error {
 const WIF_PREFIX = { 0x80: "mainnet", 0xef: "test" };
 
 // A WIF: base58check of the prefix, 32 bytes, and 0x01 for a compressed key.
-// An uncompressed key can only have spent from legacy addresses, which
-// come with legacy signing: refused until then, saying so.
+// An uncompressed key's addresses hash the 65-byte public key: old P2PKH
+// coins. It can't spend segwit: sign.js keeps it to legacy.
 export function parseWif(text) {
   let raw;
   try {
@@ -36,14 +37,14 @@ export function parseWif(text) {
   try {
     const network = WIF_PREFIX[raw[0]];
     if (!network) throw new KeyError("That is not a WIF key: it doesn't start as one does.");
-    if (raw.length === 33) throw new KeyError("That is an uncompressed WIF key: only legacy coins can use it, and they can't be signed yet.");
-    if (raw.length !== 34 || raw[33] !== 1) throw new KeyError("That is not a WIF key: wrong length.");
+    const compressed = raw.length === 34 && raw[33] === 1;
+    if (!compressed && raw.length !== 33) throw new KeyError("That is not a WIF key: wrong length.");
     const privateKey = raw.slice(1, 33);
     if (!cr().isPrivateKey(privateKey)) {
       zero(privateKey);
       throw new KeyError("That WIF key is outside the range of private keys.");
     }
-    return { key: { single: true, privateKey, publicKey: cr().publicKey(privateKey, true) }, kind: "wif", network, script: null };
+    return { key: { single: true, privateKey, publicKey: cr().publicKey(privateKey, compressed) }, kind: "wif", network, script: null, compressed };
   } finally {
     zero(raw);
   }

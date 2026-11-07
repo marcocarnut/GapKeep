@@ -51,7 +51,7 @@ const MAX_KEYS = 8;
 const PART_MS = 500;  // each code of a series on screen (core tunes it: B2)
 const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 const NETWORK_ORDER = ["mainnet", "testnet", "regtest"];
-const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub", field: "text" }];
+const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub/xpub", field: "text" }];
 
 const state = {
   page: null,

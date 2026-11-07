@@ -6,6 +6,7 @@ codes (tests/signer/electrum.json) and those tests/signer/run_node.mjs makes
 
   python3 tests/signer/make_scenario.py
 """
+import hashlib
 import json
 import os
 import re
@@ -40,6 +41,12 @@ def main():
     shots = "\n".join("mark\nkey ret\nexpect signer: part \\d+ of \\d+, \\d+ modules 10\nwait 0.5\nshot %s-part-%02d" % ("%s", n) for n in range(24))
     made["txshots"] = shots.replace("%s", "30")
     made["psbtshots"] = shots.replace("%s", "31")
+    file = cases["testnet-p2pkh-file"]
+    made["p2pkhfile"] = file["qr"]
+    made["p2pkhhash"] = hashlib.sha256(bytes.fromhex(file["electrum_final_tx"])).hexdigest()[:16]
+    legacy = made.pop("legacy")
+    made["legacycodes"] = "\n".join("mark\ncamera qr %s" % part + ("\nexpect signer: BBQr part: %d of %d 15" % (n + 1, len(legacy)) if n + 1 < len(legacy) else "")
+                                     for n, part in enumerate(legacy))
     made["backspaces"] = "\n".join(["key backspace"] * len("notakey"))
     with open(os.path.join(HERE, "signer.txt.in")) as f:
         text = f.read()

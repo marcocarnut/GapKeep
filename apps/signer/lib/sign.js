@@ -29,7 +29,8 @@
 //     public key the PSBT names: deriving must give that very key;
 //   - a single key, { single: true, privateKey, publicKey } (keys.js: WIF).
 //     It has no paths: an input or output is its own if the script pays to
-//     that key.
+//     that key. An uncompressed one (a 65-byte publicKey) only ever spends
+//     or recognises P2PKH: its other scripts would not be spendable.
 // options:
 //   accounts  account paths whose own fingerprint may stand for the master's:
 //             Electrum's watch-only wallets made from an account xpub (zpub...)
@@ -240,10 +241,13 @@ function heldSignature(psbt, i, ct, coin, prevouts) {
     const coins = prevouts.map((c) => ({ value: c.value, script: c.script }));
     return cr().schnorrVerify(sig.subarray(0, 64), taprootSighash(tx, i, coins, type), ct.program) ? "good" : "bad";
   }
-  const held = f.partialSigs.filter((s) => s.pubkey.length === 33 && equal(hash160(s.pubkey), ct.hash));
+  const held = f.partialSigs.filter((s) => keyFits(s.pubkey, ct) && equal(hash160(s.pubkey), ct.hash));
   if (!held.length) return "none";
   return held.some((s) => ecdsaGood(tx, i, ct, coin, s.pubkey, s.signature)) ? "good" : "bad";
 }
+
+// Only P2PKH can use an uncompressed key.
+const keyFits = (pubkey, ct) => pubkey.length === 33 || (pubkey.length === 65 && ct.type === "p2pkh");
 
 function ecdsaGood(tx, i, ct, coin, pubkey, signature) {
   if (signature.length < 9 || signature[signature.length - 1] !== SIGHASH.ALL) return false;
@@ -259,7 +263,7 @@ export function partialSigGood(psbt, i, pubkey, signature) {
   const coin = spentOutput(psbt, i);
   if (coin.error) return null;
   const ct = coinType(coin.script, psbt.inputs[i].fields);
-  if (ct.error || ct.type === "p2tr" || pubkey.length !== 33 || !equal(hash160(pubkey), ct.hash)) return null;
+  if (ct.error || ct.type === "p2tr" || !keyFits(pubkey, ct) || !equal(hash160(pubkey), ct.hash)) return null;
   return ecdsaGood(psbt.tx, i, ct, coin, pubkey, signature);
 }
 
@@ -341,8 +345,8 @@ function planInput(psbt, i, keys, prevouts) {
   const taproot = ct.type === "p2tr";
 
   if (ct.type === "p2pkh" && !coin.full) {
-    return no("a P2PKH coin is signed only with its previous transaction in the PSBT (Electrum's QR codes leave it out: " +
-      "export the PSBT as a file instead)");
+    return no("a P2PKH coin is signed only with its previous transaction in the PSBT, which Electrum's QR codes leave " +
+      "out: it needs a wallet that sends it whole (BBQr, for the size)");
   }
   r.sighash = f.sighashType ?? (taproot ? SIGHASH.DEFAULT : SIGHASH.ALL);
   if (!(r.sighash === SIGHASH.ALL || (taproot && r.sighash === SIGHASH.DEFAULT))) {
@@ -364,6 +368,10 @@ function planInput(psbt, i, keys, prevouts) {
 
   if (keys.single) {
     const node = keys.root;
+    if (node.publicKey.length !== 33) {
+      if (taproot || !equal(hash160(node.publicKey), ct.hash)) return no("this key doesn't control it");
+      if (!keyFits(node.publicKey, ct)) return no("an uncompressed key spends only legacy (P2PKH) coins");
+    }
     const xonly = node.publicKey.subarray(1);
     if (!(taproot ? equal(p2trOutputKey(xonly), ct.program) : equal(hash160(node.publicKey), ct.hash))) {
       return no("this key doesn't control it");
@@ -417,6 +425,7 @@ function planInput(psbt, i, keys, prevouts) {
 // The scripts a key can pay to: what kind this one is, or null.
 function paysTo(script, publicKey) {
   const h = hash160(publicKey);
+  if (publicKey.length !== 33) return equal(script, p2pkhScript(h)) ? "p2pkh" : null;
   const w = p2wpkhScript(h);
   if (equal(script, w)) return "p2wpkh";
   if (equal(script, p2shScript(hash160(w)))) return "p2sh-p2wpkh";
@@ -428,8 +437,8 @@ function planOutput(psbt, i, keys) {
   const f = psbt.outputs[i].fields, script = psbt.tx.outputs[i].script;
   const o = { index: i, ours: false, type: null, path: null, role: null, problem: null, oddities: [] };
   if (keys.single) {
-    const type = paysTo(script, keys.root.publicKey) ||
-      (equal(script, concat([Uint8Array.of(0x51, 32), p2trOutputKey(keys.root.publicKey.subarray(1))])) ? "p2tr" : null);
+    const type = paysTo(script, keys.root.publicKey) || (keys.root.publicKey.length === 33 &&
+      equal(script, concat([Uint8Array.of(0x51, 32), p2trOutputKey(keys.root.publicKey.subarray(1))])) ? "p2tr" : null);
     if (type) {
       o.ours = true;
       o.type = type;
@@ -689,7 +698,7 @@ export function finalize(psbt) {
       tx.inputs.push({ ...txin, scriptSig: new Uint8Array(0), witness: [f.tapKeySig] });
       continue;
     }
-    const sig = f.partialSigs.find((s) => s.pubkey.length === 33 && equal(hash160(s.pubkey), ct.hash));
+    const sig = f.partialSigs.find((s) => keyFits(s.pubkey, ct) && equal(hash160(s.pubkey), ct.hash));
     if (!sig) throw new SignError(`input ${n} is not signed`);
     if (ct.type === "p2pkh") {
       tx.inputs.push({ ...txin, scriptSig: concat([push(sig.signature), push(sig.pubkey)]), witness: [] });

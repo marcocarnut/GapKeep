@@ -19,11 +19,12 @@ import { selfTest as libSelfTest } from "./selftest.js";
 
 setCrypto(crypto);
 
-// The public keys Electrum can make a watch-only wallet of (it has no
-// taproot wallets; P2PKH can't be signed from its QR codes)
+// The public keys on offer. (Electrum has no taproot wallets, and its QR codes
+// can't carry a P2PKH transaction to sign: legacy accounts need another wallet.)
 export const EXPORTS = [
   { id: "p2wpkh", purpose: 84, name: "Native segwit (BIP-84)" },
   { id: "p2sh-p2wpkh", purpose: 49, name: "Nested segwit (BIP-49)" },
+  { id: "p2pkh", purpose: 44, name: "Legacy (BIP-44)" },
 ];
 
 const coin = (network) => (network === "mainnet" ? 0 : 1);
@@ -76,9 +77,10 @@ export function loadWords(text, passphrase = "") {
 
 // A key from an xprv (and SLIP-132's yprv, zprv...) or a WIF. Throws KeyError.
 export function loadPrivate(text) {
-  const { key, kind, network } = parsePrivateKey(text);
+  const { key, kind, network, compressed } = parsePrivateKey(text);
   if (kind === "wif") {
-    return { node: key, kind, fingerprint: fingerprintHex(key), description: "a single private key (WIF)", master: false, network };
+    return { node: key, kind, fingerprint: fingerprintHex(key), master: false, network,
+      description: compressed ? "a single private key (WIF)" : "a single uncompressed private key (WIF), for legacy coins only" };
   }
   const master = key.depth === 0;
   return { node: key, kind, fingerprint: fingerprintHex(key), master, network,

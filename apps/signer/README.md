@@ -19,8 +19,7 @@ back a QR code Electrum loads, or animated BBQr codes.
      says;
    - BIP-39 words, typed or scanned as text, and the passphrase;
    - an xprv (or zprv, yprv...), master or an account's;
-   - a WIF: one key. Uncompressed WIF keys are refused for now: they are
-     for legacy coins.
+   - a WIF: one key. An uncompressed one spends only legacy (P2PKH) coins.
 
    For each, the app shows its fingerprint and what it signs ("signs 2 of 3
    inputs"): check the fingerprint against what you know of the wallet. The
@@ -46,7 +45,7 @@ back a QR code Electrum loads, or animated BBQr codes.
    Pause and Next part. Electrum doesn't read BBQr.
 
 **Once: the public key.** "Public key" needs a master key: it shows an account
-of BIP-84 or BIP-49 (account 0, or the number you give) as a QR code, with the
+of BIP-84, BIP-49 or BIP-44 (account 0, or the number you give) as a QR code, with the
 master fingerprint as text:
 
 - a descriptor, `wpkh([fingerprint/84h/0h/0h]xpub.../<0;1>/*)#checksum`, with
@@ -60,8 +59,10 @@ number on this page are recognised: for another account, set it there before
 signing, each time the app starts. PSBTs with the master fingerprint and the
 full path need nothing of the kind.
 
-Electrum's QR codes leave out the previous transactions, so legacy (P2PKH)
-coins can't be signed from them. Electrum has no taproot wallets; the library
+Legacy (P2PKH) coins are signed only with their previous transactions in the
+PSBT. Electrum's QR codes leave those out, so its legacy wallets can't be signed
+for this way; a wallet that sends the whole PSBT can, as animated BBQr when
+it's large. Electrum has no taproot wallets; the library
 signs BIP-86 key-path inputs, but only the BIP test vectors exercise that.
 
 Never logged: shares, words, the passphrase, keys. The log gets counts,
@@ -230,6 +231,10 @@ ALL); and one of its derivations has our fingerprint, the key derived at
 its path is the one the PSBT names, and that key is what the coin's script
 pays to (taproot: BIP-86's tweak of it is the output key).
 
+**An uncompressed key** (a WIF) hashes its 65-byte public key. Only P2PKH can
+use one: a segwit script paying to that hash could never be spent, so such a
+coin is refused and such an output isn't ours, whatever the hash says.
+
 **An output is ours** only if deriving its stated path gives the key it
 names and that key's script is the output's script. `analyze()` (lib/psbt)
 marks outputs "mine" from fingerprints, which anyone can write: show
@@ -330,7 +335,6 @@ key and script as for any input. The tests check this against PSBTs from
 real Electrum watch-only wallets. Electrum 4.8 has no taproot wallets.
 
 Electrum's QR codes replace each input's previous transaction with the
-output it spends, so P2PKH inputs can't be signed from a QR code (export
-the PSBT as a file instead). Electrum loads both what `signPsbt` gives
+output it spends, so its P2PKH inputs can't be signed from a QR code. Electrum loads both what `signPsbt` gives
 back (the signed PSBT, as `electrumQrText(serializePsbt(psbt))`) and the
 final transaction (`electrumQrText(finalize(psbt).tx)`).

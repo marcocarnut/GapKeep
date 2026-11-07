@@ -54,6 +54,9 @@ any earlier step.
   series, other file types, damaged and oversized files; what the signer
   shows. `check_bbqr.mjs` joins the series the app shows, from its screenshots,
   with `lib/js/bbqr.js`, and compares it with the SHA-256 the app logged.
+- **p2pkh**: uncompressed keys, each signature checked with the reference on
+  its own, and kept from segwit; legacy with other script types; a large
+  PSBT through BBQr; forged previous transactions.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
   way of rerouting it, and the gap's limit).
