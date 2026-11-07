@@ -949,6 +949,7 @@ wait 0.3
 mark
 key ret
 expect signer: signed 1 input, transaction complete \(SHA-256 09440466bd2ceae0\) 30
+expect signer: txid: b0e514960a174934e605448713646d43a28ac9a8e947ae8d923c423338d2ab9b 5
 wait 0.3
 
 # 19. Next transaction (keep keys): six legacy inputs, each with its large
@@ -1138,6 +1139,7 @@ shot 32-legacy-review
 mark
 key ret
 expect signer: signed 6 inputs, transaction complete \(SHA-256 0e56470d3c9dfa16\) 30
+expect signer: txid: 527efa22651d63490c4aaed295ece27c07acd375e0e52542139efcf31398b79f 5
 wait 0.3
 
 # 20. The legacy account's public key (Done forgets; Scan, Public key)
@@ -1283,7 +1285,9 @@ shot 36-multisig-proved
 mark
 key ret
 expect signer: signed 1 input, transaction complete \(SHA-256 d011691e30b3032f\) 30
-wait 0.3
+expect signer: txid: a400cc888e1ab10d30281150f8f095963c3100fda4890453a1cf12dfcd197a47 5
+wait 0.5
+shot 36b-multisig-signed
 
 # 23. Multisig as Electrum shows it by default: no xpubs, so the change is
 # amber, saying what to tick; one signature of two, so a PSBT comes out
@@ -1368,6 +1372,7 @@ wait 0.3
 mark
 key ret
 expect signer: signed 1 input 30
+expect signer: txid: none yet 5
 wait 0.5
 shot 39-multisig-partly
 
