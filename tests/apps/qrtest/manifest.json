@@ -1,0 +1,7 @@
+{
+  "id": "qrtest",
+  "name": "QR code test",
+  "version": "1.0.0",
+  "description": "Test builds only: checks ui.QRCode's rules (tests/qrtest.txt).",
+  "hidden": true
+}

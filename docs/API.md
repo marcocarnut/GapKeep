@@ -274,6 +274,7 @@ A QR code, drawn from text or bytes.
 | --- | --- | --- |
 | `data` | string or `Uint8Array` | Encoded content. Text uses the most compact single mode (numeric for digits only, alphanumeric for `0-9 A-Z $%*+-./:` and space, otherwise byte mode with UTF-8); a `Uint8Array` is encoded as raw bytes. Throws `RangeError` if it doesn't fit. |
 | `ecc` | `"L"`, `"M"`, `"Q"`, `"H"` | Error correction level (default `"M"`). Never raised automatically, so the symbol is exactly what was asked for. |
+| `version` | number | The smallest version to use, 1 to 40 (default 1): a larger one is used only if the data needs it. For a series of codes shown in turn, such as BBQr's, which should all be one version. `modules` gives the version used: (modules - 17) / 4. |
 | `size` | number | Side length in px (default 160), including a 4-module quiet zone. Modules are drawn at an integer scale. |
 | `dark`, `light` | color | Module colors (default black on white). |
 | `modules` | number | *Read-only*. Modules per side of the current symbol (21 for version 1, +4 per version), 0 when empty. |
