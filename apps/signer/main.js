@@ -35,7 +35,7 @@ import { parsePsbt } from "./lib/psbt/psbt.js";
 import { parseTx } from "./lib/psbt/tx.js";
 import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
 import { NETWORKS } from "./lib/psbt/script.js";
-import { Rows, showAnalysis, MUTED, RED, GREEN, AMBER, wide, FONT, plural } from "./lib/psbt/view.js";
+import { Rows, showAnalysis, group4, MUTED, RED, GREEN, AMBER, wide, FONT, plural } from "./lib/psbt/view.js";
 import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32.js";
 import { Bip39Error } from "./lib/bip39.js";
 import { KeyError } from "./lib/keys.js";
@@ -869,6 +869,7 @@ async function sign(a) {
   // (a transaction is not secret: its hash lets the tests compare it with Electrum's)
   console.log(`signer: signed ${plural(r.count, "input")}` +
     (r.tx ? `, transaction complete (SHA-256 ${toHex(crypto.sha256(r.tx).subarray(0, 8))})` : ""));
+  console.log(`signer: txid: ${r.txid || "none yet"}`);
   showSigned(r.tx ? "tx" : "psbt");
 }
 
@@ -896,6 +897,9 @@ function showSigned(form) {
   const left = new ui.Container(body, { layout: "column", gap: 4, alignItems: "center" });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1 });
   const note = paragraph(side, "", { color: MUTED, font: FONT.small });
+  // to compare with what the wallet says it broadcast
+  if (s.txid) paragraph(side, `Transaction ID: ${group4(s.txid)}`, { font: FONT.small });
+  else paragraph(side, "No transaction ID yet: it isn't final until all its signatures are in.", { color: AMBER, font: FONT.small });
   const buttons = buttonRow(side);
   const done = new ui.Button(buttons, { text: ui.symbols.ok + (state.keys.length ? " Done, forget the keys" : " Done"), onClick: () => finish(false) });
   if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.right + " Next transaction (keep keys)", onClick: () => finish(true) });

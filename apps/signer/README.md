@@ -260,6 +260,9 @@ chain) is green. Past that, `far` gives its index: it is still change and
 counted as change, but amber, with a note that the wallet finds the coin only
 if it looks that far ahead (gap limit). Past `CHANGE_GAP` it is stray.
 
+The Signed page gives the transaction ID, grouped in fours, to compare with what
+the wallet says it broadcast; a partly signed PSBT says it has none yet.
+
 **Multisig** (`multisig.js`). P2WSH and P2SH-P2WSH m-of-n are signed and
 finalized; only the plain script, with compressed keys, each once. Any other
 witness script is refused. `plan().inputs[i].multisig` is `{ m, n, have, will }`:

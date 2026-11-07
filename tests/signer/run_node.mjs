@@ -1484,6 +1484,13 @@ function runsOnChain(p, tx, i) {
 }
 const sigsOf = (p, i = 0) => p.inputs[i].fields.partialSigs;
 
+check("multisig", "finalize's txid: SHA-256 twice of the transaction without its witness, reversed", () => {
+  const r = signKeys(build(SPEND()), COSIGNERS.slice(0, 2), {});
+  const { txid, tx } = finalize(r.psbt);
+  const t = parseTx(tx), bare = serializeTx(t, { withWitness: false });
+  eq(txid, toHex(ref.sha256(ref.sha256(bare)).reverse()));
+  eq(txid, txidOf(r.psbt.tx)); // what the witness doesn't change
+});
 check("multisig", "BIP-143's P2SH-P2WSH 6-of-6, with SIGHASH_ALL", () => {
   const t = parseTx(fromHex("010000000136641869ca081e70f394c6948e8af409e18b619df2ed74aa106c1ca29787b96e0100000000ffffffff0200e9a435000000001976a914389ffce9cd9ae88dcc0631e88a821ffdbe9bfe2688acc0832f05000000001976a9147480a33f950689af511e6e84c138dbbd3c3ee41588ac00000000"));
   const ws = fromHex("56210307b8ae49ac90a048e9b53357a2354b3334e9c8bee813ecb98e99a7e07e8c3ba32103b28f0c28bfab54554ae8c658ac5c3e0ce6e79ad336331f78c428dd43eea8449b21034b8113d703413d57761b8b9781957b8c0ac1dfe69f492580ca4195f50376ba4a21033400f6afecb833092a9a21cfdf1ed1376e58c5d1f47de74683123987e967a8f42103a6d48b1131e94ba04d9737d61acdaa1322008af9602b3b14862c07a1789aac162102d8b661b0b3302ee2f162b09e07a55ad5dfbe673a9f01d9f0c19617681024306b56ae");
@@ -1810,6 +1817,8 @@ if (madeOut) {
   writeFileSync(madeOut, JSON.stringify({
     msHalf: parts(msHalf),
     msHash: hashOf(finalize(signKeys(msHalf, [abandon], {}).psbt).tx),
+    msTxid: finalize(signKeys(msHalf, [abandon], {}).psbt).txid,
+    legacyTxid: finalize(signPsbt(legacyBig, abandon, ZERO_AUX).psbt).txid,
     msNoXpubs: parts(msSpend([])),
     msRefuted: parts(build({ inputs: [msInput(WALLET("0/3"))], outputs: [{ ...EXTERNAL, amount: 59000 }, msOutput(WALLET("1/3"), { m: 1 })], globals: XPUBS })),
     plain: qr(plain),

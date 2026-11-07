@@ -44,6 +44,9 @@ def main():
     file = cases["testnet-p2pkh-file"]
     made["p2pkhfile"] = file["qr"]
     made["p2pkhhash"] = hashlib.sha256(bytes.fromhex(file["electrum_final_tx"])).hexdigest()[:16]
+    # a legacy transaction has no witness: its id is Electrum's bytes, hashed here
+    final = bytes.fromhex(file["electrum_final_tx"])
+    made["p2pkhtxid"] = hashlib.sha256(hashlib.sha256(final).digest()).digest()[::-1].hex()
     def codes(parts):
         return "\n".join("mark\ncamera qr %s" % part + ("\nexpect signer: BBQr part: %d of %d 15" % (n + 1, len(parts)) if n + 1 < len(parts) else "")
                          for n, part in enumerate(parts))
