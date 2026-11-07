@@ -141,6 +141,32 @@ expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted, 1
 camera scene
 wait 0.5
 shot 10b-far
+# down to output 2's row, below the fold
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+wait 0.5
+shot 10c-far-row
+key esc
+wait 0.3
+
+# 4c. Another wallet's PSBT: Sign is off, and the first warning says why
+mark
+key ret
+wait 0.3
+mark
+camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:36:/BYA94YVLNN47OJU3N7ZZ*C:O$OQDNQ2470/TNM0-D69XX1NU+*U0D8.VLKL8ESX-TI.75::$P5EK5LOK4G0.J:/$:EYEBAW1DTUHMMLC:5-2$9NO4$YQ++*I-LXQT4PPT$Y46M8-MWO9NC/U47$E78S.NR.P85Z552G8N7XK2HHEE$X8$B7228DF/HCB14QQ3JC5*0IU3XFGPC16TQH6Y+1NC:6OB7PX.*H5$EJ6-QLD7MKQE2M4QKCNH*+R25.5N7-A0DQS/6K2$F2*PV*LYTQP2.C2JBP6O38OQ6K8O206ML:H0L1XTY-4B1Q6L5GN:EU7WV$751SJTEC.TZW8MMAC0BM*CVOXIQTC4H62-SUIPFSY+DRVC6SL894F4BAINH+PPDN.EMGBFBT6V8HTUAH
+expect signer: review: 2 inputs, 0 to sign 15
+camera scene
+wait 0.5
+shot 10d-other-wallet
 key esc
 wait 0.3
 
@@ -359,6 +385,39 @@ key ret
 expect signer: showing the p2wpkh public key \(mainnet\), account 0, extended key, 111 characters 10
 wait 0.5
 shot 23-zpub
+# taproot: a bare xpub is warned about, the descriptor is the export; then as before
+key tab
+key ret
+key down
+key down
+key down
+mark
+key ret
+expect signer: showing the p2tr public key \(mainnet\), account 0, extended key 10
+wait 0.5
+shot 23-taproot-xpub
+key shift-tab
+key ret
+key up
+mark
+key ret
+expect signer: showing the p2tr public key \(mainnet\), account 0, descriptor 10
+wait 0.5
+shot 23-taproot
+key tab
+key ret
+key up
+key up
+key up
+mark
+key ret
+expect signer: showing the p2wpkh public key \(mainnet\), account 0, descriptor 10
+key shift-tab
+key ret
+key down
+mark
+key ret
+expect signer: showing the p2wpkh public key \(mainnet\), account 0, extended key 10
 key esc
 wait 0.3
 

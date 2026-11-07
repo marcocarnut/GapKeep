@@ -17,6 +17,7 @@ import sys
 
 FINGERPRINT = "73c5da0a"
 BIP84_ZPUB = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
+BIP86_XPUB = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ"
 
 B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 XPUB = bytes.fromhex("0488b21e")
@@ -83,7 +84,9 @@ def full(body):
 
 
 XPUB84 = with_version(BIP84_ZPUB, XPUB)
-SHOTS = {"23-descriptor": full("wpkh([%s/84h/0h/0h]%s/<0;1>/*)" % (FINGERPRINT, XPUB84)), "23-zpub": BIP84_ZPUB}
+TAPROOT = full("tr([%s/86h/0h/0h]%s/<0;1>/*)" % (FINGERPRINT, BIP86_XPUB))
+SHOTS = {"23-descriptor": full("wpkh([%s/84h/0h/0h]%s/<0;1>/*)" % (FINGERPRINT, XPUB84)), "23-zpub": BIP84_ZPUB,
+         "23-taproot": TAPROOT}
 
 
 def vectors():
@@ -91,7 +94,7 @@ def vectors():
     bodies = ["wpkh([%s/84h/0h/0h]%s/<0;1>/*)" % (FINGERPRINT, XPUB84),
               "sh(wpkh([%s/49h/1h/0h]%s/<0;1>/*))" % (FINGERPRINT, tpub),
               "pkh([%s/44h/0h/7h]%s/<0;1>/*)" % (FINGERPRINT, XPUB84)]
-    return [full(b) for b in bodies]
+    return [full(b) for b in bodies] + [TAPROOT]
 
 
 def main():

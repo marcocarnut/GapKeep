@@ -646,6 +646,8 @@ function drawExport() {
   new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}; master fingerprint ${x.master}`, font: FONT.text,
     width: "100%", overflow: "wrap", textAlign: "center" });
   new ui.Label(page.out, { text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
+  const note = wallet.EXPORTS[state.exportType].note;
+  if (note && form.id !== "descriptor") new ui.Label(page.out, { text: note, font: FONT.text, color: AMBER, width: "100%", overflow: "wrap", textAlign: "center" });
   console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork}), ` +
     `account ${page.account}, ${form.id}, ${text.length} characters`);
 }
@@ -820,7 +822,7 @@ function showReview() {
   if (haveKeys) {
     const each = state.keys.map((k, i) => `key ${k.fingerprint} signs ${plan.keys[i].signs}`).join(", ");
     paragraph(ui.screen, `${plural(a.inputs.length, "input")}: ${each}.`, { color: plan.signable ? GREEN : RED });
-    if (!plan.complete) paragraph(ui.screen, "Not every input can be signed here: the result is a PSBT that needs more signatures.", { color: AMBER });
+    if (plan.signable && !plan.complete) paragraph(ui.screen, "Not every input can be signed here: the result is a PSBT that needs more signatures.", { color: AMBER });
   } else if (!plan.complete) {
     paragraph(ui.screen, "Check it. Change is only the transaction's claim until the keys are in.", { color: MUTED });
   }

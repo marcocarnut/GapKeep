@@ -1072,6 +1072,30 @@ check("review", "a stray output isn't far as well", () => {
   eq(o.far, null);
   has(o.stray, "another account");
 });
+const nothing = (a) => a.warnings.find((w) => w.text.startsWith("Nothing here"));
+const foreign = { kind: "p2wpkh", amount: 50000, fp: "01020304" };
+check("review", "another wallet's inputs: the first warning says why nothing can be signed", () => {
+  const a = reviewed(build({ inputs: [foreign, foreign], outputs: [EXTERNAL] }), [abandon]);
+  eq(a.warnings[0].level, "warn");
+  has(a.warnings[0].text, "Nothing here can be signed with these keys. Inputs 1, 2: its key is from another wallet");
+  return has(a.warnings[0].text, "01020304");
+});
+check("review", "nothing to sign, for different reasons, gives each", () => {
+  const a = reviewed(build({ inputs: [foreign, { kind: "p2wpkh", amount: 50000, sighash: 2 }], outputs: [EXTERNAL] }), [abandon]);
+  has(nothing(a).text, "Input 1: its key is from another wallet");
+  has(nothing(a).text, "; input 2: it asks for sighash");
+});
+check("review", "no such warning when something can be signed, or all is signed", () => {
+  eq(nothing(reviewed(build({ inputs: [foreign, { kind: "p2wpkh", amount: 50000 }], outputs: [EXTERNAL] }), [abandon])), undefined);
+  const signed = signPsbt(build(TWO), abandon, ZERO_AUX).psbt;
+  eq(nothing(reviewed(signed, [abandon])), undefined);
+});
+check("review", "partly signed by others, the rest not ours: it says so of the rest", () => {
+  const p = signPsbt(build({ inputs: [foreign, { kind: "p2wpkh", amount: 50000 }], outputs: [EXTERNAL] }), abandon, ZERO_AUX).psbt;
+  const a = reviewed(p, [abandon]);
+  has(nothing(a).text, "Input 1: its key is from another wallet");
+  return !nothing(a).text.includes("input 2");
+});
 check("review", "ransom: a hardened index", () => has(stray({ path: "m/84'/1'/0'/1/5'" }).stray, "hardened"));
 check("review", "ransom: a short path", () => has(stray({ path: "m/84'" }).stray, "no account"));
 check("review", "a stray output is amber with its path, and counts as sent", () => {
@@ -1238,7 +1262,7 @@ check("descriptor", "BIP-380's valid checksum", () => D.bip380_valid.every(check
 for (const s of D.bip380_invalid) check("descriptor", `BIP-380 refuses ${JSON.stringify(s)}`, () => !checkDescriptor(s));
 check("descriptor", "multipath, against an independent BIP-380 in Python", () => {
   for (const s of D.multipath) eq(descriptorChecksum(bodyOf(s)), s.slice(-8));
-  return D.multipath.length === 3;
+  return D.multipath.length === 4;
 });
 check("descriptor", "BIP-84's account, in the plan's form", () => {
   const acct = neuter(derive(abandon, "m/84'/0'/0'"));
@@ -1250,13 +1274,45 @@ check("descriptor", "BIP-49 on a test network, nested", () => {
   const d = accountDescriptor({ script: "p2sh-p2wpkh", fingerprint: ABANDON_FP, network: "testnet", account: 0, xpub: serializeXpub(acct, "tpub") });
   return d.startsWith(`sh(wpkh([${ABANDON_FP}/49h/1h/0h]tpub`) && d.includes("/<0;1>/*))#") && checkDescriptor(d);
 });
+// What a wallet does with tr(KEY): the output script, from BIP-341's tweak with no script tree.
+const trScript = (x) => "5120" + toHex(ref.taprootTweakPublicKey(x, taggedHash("TapTweak", x)).key);
+const taprootExport = (network, account) => accountDescriptor({ script: "p2tr", fingerprint: ABANDON_FP, network, account,
+  xpub: serializeXpub(neuter(derive(abandon, `m/86'/${network === "mainnet" ? 0 : 1}'/${account}'`)), network === "mainnet" ? "xpub" : "tpub") });
+check("descriptor", "BIP-86's account, in the plan's form, against an independent BIP-380 in Python", () => {
+  const d = taprootExport("mainnet", 0);
+  eq(d, D.multipath[3]);
+  eq(d, accountDescriptor({ script: "p2tr", fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub: V.bip86.xpub }));
+  return checkDescriptor(d);
+});
+check("descriptor", "tr() as exported derives BIP-86's published addresses", () => {
+  const m = /^tr\(\[73c5da0a\/86h\/0h\/0h\]([1-9A-HJ-NP-Za-km-z]+)\/<0;1>\/\*\)#[a-z0-9]{8}$/.exec(taprootExport("mainnet", 0));
+  if (!m) throw new Error("not tr(KEY/<0;1>/*)");
+  const acct = parseXpub(m[1]).node;
+  for (const a of V.bip86.addresses) {
+    const [chain, index] = a.path.split("/").slice(-2).map(Number);
+    const x = deriveChild(deriveChild(acct, chain), index).publicKey.subarray(1);
+    eq(toHex(x), a.internal_key);
+    eq(trScript(x), a.scriptPubKey);
+    eq(scriptToAddress(fromHex(trScript(x)), "mainnet"), a.address);
+  }
+});
+check("descriptor", "BIP-386: tr(KEY) with a raw key and a WIF gives the BIP's script", () => {
+  const want = "512077aab6e066f8a7419c5ab714c12c67d25007ed55a43cadcacb4d7a970a093f11";
+  eq(trScript(fromHex("a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd")), want);
+  const k = parseWif("L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1");
+  eq(trScript(ref.publicKey(k.key.privateKey).subarray(1)), want);
+});
+check("descriptor", "taproot on a test network, in its account", () => {
+  const d = taprootExport("testnet", 7);
+  return d.startsWith(`tr([${ABANDON_FP}/86h/1h/7h]tpub`) && d.includes("/<0;1>/*)#") && checkDescriptor(d);
+});
 check("descriptor", "the account number goes in the path", () => {
   const xpub = serializeXpub(neuter(derive(abandon, "m/44'/0'/7'")), "xpub");
   return accountDescriptor({ script: "p2pkh", fingerprint: ABANDON_FP, network: "mainnet", account: 7, xpub }).startsWith(`pkh([${ABANDON_FP}/44h/0h/7h]`);
 });
 check("descriptor", "refuses what would make a wrong one", () => {
   const xpub = serializeXpub(neuter(abandon), "xpub"), good = { script: "p2wpkh", fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub };
-  throws(() => accountDescriptor({ ...good, script: "p2tr" }), RangeError);
+  throws(() => accountDescriptor({ ...good, script: "p2wsh" }), RangeError);
   throws(() => accountDescriptor({ ...good, fingerprint: "73C5DA0A" }), RangeError);
   throws(() => accountDescriptor({ ...good, fingerprint: null }), RangeError);
   throws(() => accountDescriptor({ ...good, account: -1 }), RangeError);
@@ -1373,6 +1429,7 @@ if (madeOut) {
     plain: qr(plain),
     stray: qr(build(FEE_OK({ path: "m/84'/1'/7'/1/500000" }))),
     far: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/900" }))),
+    otherWallet: qr(build({ ...FEE_OK({ path: "m/84'/1'/0'/1/0", fp: "01020304" }), inputs: FEE_OK({}).inputs.map((i) => ({ ...i, fp: "01020304" })) })),
     refuted: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/0", pubkey: attacker, script: p2wpkhScript(hash160(attacker)) }))),
     half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
     half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),

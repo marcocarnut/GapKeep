@@ -45,8 +45,8 @@ back a QR code Electrum loads, or animated BBQr codes.
    Pause and Next part. Electrum doesn't read BBQr.
 
 **Once: the public key.** "Public key" needs a master key: it shows an account
-of BIP-84, BIP-49 or BIP-44 (account 0, or the number you give) as a QR code, with the
-master fingerprint as text:
+of BIP-84, BIP-49, BIP-44 or BIP-86 (account 0, or the number you give) as a
+QR code, with the master fingerprint as text:
 
 - a descriptor, `wpkh([fingerprint/84h/0h/0h]xpub.../<0;1>/*)#checksum`, with
   the key's origin, for wallets that take one;
@@ -62,8 +62,9 @@ full path need nothing of the kind.
 Legacy (P2PKH) coins are signed only with their previous transactions in the
 PSBT. Electrum's QR codes leave those out, so its legacy wallets can't be signed
 for this way; a wallet that sends the whole PSBT can, as animated BBQr when
-it's large. Electrum has no taproot wallets; the library
-signs BIP-86 key-path inputs, but only the BIP test vectors exercise that.
+it's large. Electrum has no taproot wallets; the library signs BIP-86 key-path
+inputs and exports `tr()` descriptors, but only the BIP test vectors and the
+simulator exercise that: no taproot wallet has read one yet.
 
 Never logged: shares, words, the passphrase, keys. The log gets counts,
 sizes, and the hash of a signed transaction (not secret: it is about to be
