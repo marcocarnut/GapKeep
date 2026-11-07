@@ -63,6 +63,10 @@ public:
 	// next RequestRaw.
 	void RequestRaw (void);
 
+	// Test builds: the grey frame made last, while streaming ("#camera
+	// grey", testshot.h). 0 otherwise.
+	const u8 *GetGrey (unsigned *pWidth, unsigned *pHeight) const;
+
 	// colour (camera.h): linear, black level removed, no white balance
 	void SetColour (boolean bColour)		{ m_bColour = bColour; }
 	const u8 *GetColourFrame (void)			{ return m_bColour ? m_pRGB : 0; }

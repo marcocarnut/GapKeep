@@ -379,6 +379,17 @@ void CZgPiCamera::SetTestPattern (unsigned nPattern)
 	CLogger::Get ()->Write (FromCamera, LogNotice, "test pattern %u", nPattern);
 }
 
+const u8 *CZgPiCamera::GetGrey (unsigned *pWidth, unsigned *pHeight) const
+{
+	if (!m_bStreaming || m_pError != 0)
+	{
+		return 0;
+	}
+	*pWidth = m_nWidth;
+	*pHeight = m_nHeight;
+	return m_pGrey;
+}
+
 const u8 *CZgPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight)
 {
 	if (!m_bStreaming || m_pError != 0)

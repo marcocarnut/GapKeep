@@ -162,6 +162,22 @@ void CTestShot::SendRaw (void)
 	SendBinary (Header, pRaw, nLength);
 }
 
+void CTestShot::SendGrey (void)
+{
+	unsigned nWidth, nHeight;
+	const u8 *pGrey = m_pPiCamera->GetGrey (&nWidth, &nHeight);
+	if (pGrey == 0)
+	{
+		CLogger::Get ()->Write ("camera", LogWarning, "#camera grey: the Pi Camera isn't streaming");
+		return;
+	}
+	unsigned nLength = nWidth * nHeight;
+	CString Header;
+	Header.Format ("\nZGRAW1 %u %u %u 0 0 0 %u %08x\n", nWidth, nHeight, nWidth,
+		       nLength, Crc32 (0, pGrey, nLength));
+	SendBinary (Header, pGrey, nLength);
+}
+
 // (Logs what the camera shows, never the text: tests may use secrets.)
 void CTestShot::Camera (const char *pArgs)
 {
@@ -233,6 +249,16 @@ void CTestShot::Camera (const char *pArgs)
 		delete [] pRGB;
 		return;
 	}
+	if (strcmp (pArgs, "grey") == 0)
+	{
+		if (m_pPiCamera == 0)
+		{
+			pLogger->Write ("camera", LogWarning, "#camera grey: no Pi Camera");
+			return;
+		}
+		SendGrey ();
+		return;
+	}
 	if (strcmp (pArgs, "raw") == 0)
 	{
 		if (m_pPiCamera == 0)
@@ -289,7 +315,7 @@ void CTestShot::Camera (const char *pArgs)
 	else
 	{
 		pLogger->Write ("camera", LogWarning,
-				"#camera qr <text> | picture <name> | scene | none | synth | pi | raw | pattern <n> | mode <name>");
+				"#camera qr <text> | picture <name> | scene | none | synth | pi | grey | raw | pattern <n> | mode <name>");
 		return;
 	}
 	CZgCamera::Set (&m_Camera);

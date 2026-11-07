@@ -87,10 +87,10 @@ def parse_raw(buf):
     return info, payload
 
 
-def capture_raw(read, write, timeout=120.0):
-    """Asks for the next raw frame of the running Pi Camera. Returns (info,
-    payload)."""
-    write(b'\n#camera raw\n')
+def capture_raw(read, write, timeout=120.0, command=b'#camera raw'):
+    """Asks for the next raw frame of the running Pi Camera, or with
+    command=b'#camera grey' its last grey one. Returns (info, payload)."""
+    write(b'\n' + command + b'\n')
     buf = b''
     deadline = time.time() + timeout
     while time.time() < deadline:

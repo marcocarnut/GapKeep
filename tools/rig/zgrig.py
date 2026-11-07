@@ -12,6 +12,10 @@ GPIO17 (pulled low to reset, otherwise left floating).
   zgrig.py run kernel.hex scenario.txt [--out DIR]
                                        flash, then play a QEMU harness
                                        scenario (tests/*.txt) on the Zero
+  zgrig.py peek [kernel.hex]           the Pi Camera's grey frames, one after
+                                       another, as PGM on stdout: with a kernel,
+                                       flash it and open the scanner first;
+                                       without, one is running. For camview.py
 
 Keyboard and mouse come from this machine's USB gadget (gadget.sh up):
 /dev/hidg0 and /dev/hidg1.
@@ -249,6 +253,20 @@ class RigMachine:
 
     shot = serialshot	# no other way to see the screen on the rig
 
+    def grey(self):
+        """The running Pi Camera's last grey frame: (info, payload)."""
+        with self.lock:
+            del self.rx[:]		# frames add up, and nothing reads them
+        pos = 0
+
+        def read():
+            nonlocal pos
+            with self.lock:
+                data = bytes(self.rx[pos:])
+                pos = len(self.rx)
+            return data
+        return serialshot.capture_raw(read, self.port.write, timeout=15, command=b'#camera grey')
+
     def serialraw(self, path):
         """The running Pi Camera's next raw frame: path (.raw) and path.json."""
         import json
@@ -269,6 +287,31 @@ class RigMachine:
         return path
 
 
+def peek(port, hexfile):
+    """PGM frames on stdout until the reader goes away; all else on stderr."""
+    out = sys.stdout.buffer
+    sys.stdout = sys.stderr
+    if hexfile:
+        flash(port, hexfile)
+    m = RigMachine(port, hexfile)
+    if hexfile:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if qemu_harness.run_scenario(m, os.path.join(here, 'peek.txt'), '/tmp'):
+            print(m.serial()[-2000:])
+            sys.exit('zgrig: the camera did not start')
+    while True:
+        try:
+            info, grey = m.grey()
+        except serialshot.ShotError as e:	# a log line in the frame: the next one
+            print('zgrig: %s' % e)
+            continue
+        try:
+            out.write(b'P5\n%d %d\n255\n' % (info['width'], info['height']) + grey)
+            out.flush()
+        except BrokenPipeError:
+            return
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -286,6 +329,8 @@ def main():
     p.add_argument('hexfile')
     p.add_argument('scenario')
     p.add_argument('--out', default='rig-out')
+    p = sub.add_parser('peek')
+    p.add_argument('hexfile', nargs='?')
     args = ap.parse_args()
 
     if args.cmd == 'reset':
@@ -305,6 +350,8 @@ def main():
             image = serialshot.capture(lambda: port.read(65536), port.write, timeout=60)
             image.save(args.out)
             print('%s: %dx%d' % (args.out, image.width, image.height))
+        elif args.cmd == 'peek':
+            peek(port, args.hexfile)
         elif args.cmd == 'run':
             os.makedirs(args.out, exist_ok=True)
             flash(port, args.hexfile)

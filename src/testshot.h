@@ -43,6 +43,10 @@
 // "experimental = yes" in zerogap.txt would, for the rig, whose card never
 // changes. The launcher lists the experimental apps from its next start.
 //
+// "#camera grey": the grey frame the running Pi Camera made last, at once, for
+// aiming it (tools/rig/camview.py): as "#camera raw" below, stride = width and
+// no exposure or gains; 640x480 takes 3.4 s at 921600 baud.
+//
 // "#camera raw": the next raw frame of the running Pi Camera (RAW8 Bayer,
 // as the sensor sends it: for checking colours), answered with
 //
@@ -75,6 +79,7 @@ public:
 private:
 	void Send (void);
 	void SendRaw (void);
+	void SendGrey (void);
 	void SendBinary (const CString &rHeader, const u8 *pData, unsigned nLength);
 	void Camera (const char *pArgs);
 

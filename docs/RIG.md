@@ -84,6 +84,11 @@ with the rig tools to `~/zerogap-rig` on the rig, plays each scenario and
 fetches screenshots and logs. Each scenario starts with a reset and a fresh
 upload (about 33 s).
 
+**Aiming the camera:** `tools/rig/camview.py` shows the Pi Camera in a window
+on the development machine, a 640x480 grey frame every 3.5 s or so, with lines
+marking the middle. It builds and sends a test kernel and opens the scanner
+(about a minute); `--no-flash` skips that when the scanner is already open.
+
 On the rig itself, `zgrig.py` does the individual steps:
 
 ```sh
@@ -91,6 +96,7 @@ python3 zgrig.py reset                  # reset the Zero
 python3 zgrig.py flash kernel.hex --log 20   # upload, run, print the log for 20 s
 python3 zgrig.py log 10                 # print the serial log for 10 s
 python3 zgrig.py shot screen.png        # screenshot (test builds)
+python3 zgrig.py peek [kernel.hex]      # the camera's grey frames, as PGM on stdout
 python3 zgrig.py run kernel.hex scenario.txt --out DIR
 ```
 

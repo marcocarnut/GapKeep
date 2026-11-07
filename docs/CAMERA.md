@@ -277,6 +277,7 @@ are the same code as with a real camera.
   | Command | Does |
   | --- | --- |
   | `#camera pi` | the Pi Camera, if the probe finds one (logs `picamera: IMX219 found (model 0219)` and `camera: pi`) |
+  | `#camera grey` | the running Pi Camera's last grey frame, over the serial line, for aiming it (`tools/rig/camview.py`) |
   | `#camera synth` | back to the synthetic camera (so do `qr`, `scene` and `none`) |
   | `#camera pattern <n>` | the sensor's test pattern: 0 off, 1 solid colour, 2 colour bars, 7 column counter, ... |
   | `#camera mode <name>` | the Pi Camera's mode, from the next start: `detail` (default), `centre`, `full`, `wide`, `mid` (see above) |
