@@ -356,7 +356,8 @@ const origin = (fp, path) => {
 const txOut = (value, script) => new Writer().u64(value).varBytes(script).done();
 
 // A PSBT spending coins of `master` (default: "abandon ... about").
-//   inputs:  [{ kind, path, amount, fp?, pubkey?, script?, utxo?: false, sighash?, merkleRoot?, internalKey?, extra? }]
+//   inputs:  [{ kind, path, amount, fp?, pubkey?, script?, utxo?: false, sighash?, merkleRoot?, internalKey?, extra?,
+//              noOrigin?: true, prevOutputs? (more outputs in a P2PKH coin's previous transaction) }]
 //   outputs: [{ kind, path, amount, fp?, pubkey?, script? } | { script, amount }]
 function build({ inputs, outputs, master = abandon, version = 2, locktime = 0 }) {
   const ins = [], inMaps = [];
@@ -374,8 +375,9 @@ function build({ inputs, outputs, master = abandon, version = 2, locktime = 0 })
     const entries = [];
     let txid = sha("coin " + i), vout = i;
     if (x.kind === "p2pkh") {
-      const prev = { version: 2, inputs: [{ txid: sha("from"), vout: 0, scriptSig: new Uint8Array(0), sequence: 0, witness: [] }],
-        outputs: [{ value: 1, script: p2pkhScript(new Uint8Array(20)) }, { value: x.amount, script }], locktime: 0 };
+      const prev = { version: 2, inputs: [{ txid: sha("from " + i), vout: 0, scriptSig: new Uint8Array(0), sequence: 0, witness: [] }],
+        outputs: [{ value: 1, script: p2pkhScript(new Uint8Array(20)) }, { value: x.amount, script },
+          ...Array.from({ length: x.prevOutputs || 0 }, (_, n) => ({ value: 1000 + n, script: p2pkhScript(new Uint8Array(20).fill(n & 255)) }))], locktime: 0 };
       vout = 1;
       txid = fromHex(txidOf(prev)).reverse();
       if (x.utxo !== false) entries.push([IN.NON_WITNESS_UTXO, [], serializeTx(prev)]);
@@ -390,7 +392,7 @@ function build({ inputs, outputs, master = abandon, version = 2, locktime = 0 })
       entries.push([IN.TAP_BIP32_DERIVATION, x.pubkey || xonly, concat([[0], origin(fp, dpath)])]);
       entries.push([IN.TAP_INTERNAL_KEY, [], x.internalKey || xonly]);
       if (x.merkleRoot) entries.push([IN.TAP_MERKLE_ROOT, [], x.merkleRoot]);
-    } else {
+    } else if (!x.noOrigin) {
       entries.push([IN.BIP32_DERIVATION, x.pubkey || pub, origin(fp, dpath)]);
     }
     for (const e of x.extra || []) entries.push(e);
@@ -765,8 +767,11 @@ check("keys", "WIF: testnet, and whitespace", () => {
   const r = parsePrivateKey("  " + wifOf(n, 0xef).replace(/(.{8})/g, "$1 "));
   eq([r.network, equal(r.key.privateKey, n.privateKey), r.key.single], ["test", true, true]);
 });
-check("keys", "WIF: uncompressed is refused, saying why", () =>
-  has(throws(() => parsePrivateKey("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf"), KeyError).message, "uncompressed"));
+check("keys", "WIF: Bitcoin's key 1, uncompressed", () => {
+  const r = parsePrivateKey("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf");
+  eq([r.kind, r.network, r.compressed, r.key.publicKey.length, toHex(r.key.publicKey).slice(0, 66)],
+    ["wif", "mainnet", false, 65, "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"]);
+});
 const SECRET_TEXT = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWo";
 check("keys", "a mistyped WIF is refused, and not quoted", () =>
   !throws(() => parsePrivateKey(SECRET_TEXT), KeyError).message.includes(SECRET_TEXT.slice(0, 8)));
@@ -1084,6 +1089,104 @@ check("review", "a bad signature held is red", () => {
   return has(reviewed(q, [single("m/84'/1'/0'/0/0")]).warnings[0].text, "Input 2");
 });
 
+// --- legacy ------------------------------------------------------------------------
+
+const LEGACY = "m/44'/1'/0'/0/0";
+const secretOf = (path) => derive(abandon, path);
+const uncompressed = (path) => {
+  const n = secretOf(path);
+  return parseWif(base58CheckEncode(concat([[0xef], n.privateKey]))).key;
+};
+const hash65 = (path) => hash160(uncompressed(path).publicKey);
+const oneOut = [{ ...EXTERNAL, amount: 49000 }];
+const spending = (kind, script, extra = {}) => build({ inputs: [{ kind, path: LEGACY, amount: 50000, script, ...extra }], outputs: oneOut });
+
+check("rules", "segwit v0 with only WITNESS_UTXO signs, and two inputs get the note on amounts", () => {
+  const p = build(TWO);
+  if (p.inputs.some((m) => !m.fields.witnessUtxo || m.fields.nonWitnessUtxo)) throw new Error("not the case under test");
+  const pl = plan(p, abandon, ZERO_AUX);
+  eq([pl.signable, pl.complete], [2, true]);
+  eq(parseTx(finalize(signPsbt(p, abandon, ZERO_AUX).psbt).tx).inputs.map((i) => i.witness.length), [2, 2]);
+  const a = reviewed(p, [abandon]);
+  eq(a.warnings.filter((w) => w.level === "info" && w.text.startsWith("Inputs 1, 2: amounts as the PSBT states them")).length, 1);
+});
+check("rules", "with one input there is no second signature to play against: no note", () => {
+  const a = reviewed(build({ inputs: [TWO.inputs[0]], outputs: oneOut }), [abandon]);
+  eq(a.warnings.filter((w) => w.text.includes("amounts as the PSBT")), []);
+});
+check("p2pkh", "an uncompressed key signs its P2PKH coin, checked apart from the library", () => {
+  const k = uncompressed(LEGACY), script = p2pkhScript(hash65(LEGACY));
+  const p = spending("p2pkh", script, { noOrigin: true });
+  const pl = plan(p, k, ZERO_AUX);
+  eq([pl.signable, pl.complete, pl.inputs[0].type, pl.inputs[0].pubkey.length], [1, true, "p2pkh", 130]);
+  const s = signPsbt(p, k, ZERO_AUX).psbt, sig = s.inputs[0].fields.partialSigs[0];
+  eq(sig.pubkey.length, 65);
+  const der = sig.signature.subarray(0, sig.signature.length - 1);
+  if (!ref.ecdsaVerify(der, legacySighash(s.tx, 0, script, 1), k.publicKey)) throw new Error("the reference refuses the signature");
+  const tx = parseTx(finalize(s).tx), scriptSig = tx.inputs[0].scriptSig;
+  eq([scriptSig[0], scriptSig[scriptSig.length - 66], toHex(scriptSig.subarray(scriptSig.length - 65))],
+    [sig.signature.length, 65, toHex(k.publicKey)]);
+});
+check("p2pkh", "the compressed form of that key doesn't control it, and the reverse", () => {
+  has(plan(spending("p2pkh", p2pkhScript(hash65(LEGACY))), single(LEGACY), ZERO_AUX).inputs[0].reason, "doesn't control");
+  has(plan(spending("p2pkh"), uncompressed(LEGACY), ZERO_AUX).inputs[0].reason, "doesn't control");
+});
+check("p2pkh", "an uncompressed key never signs segwit, though the hash is its own", () => {
+  const h = hash65(LEGACY), k = uncompressed(LEGACY);
+  has(plan(spending("p2wpkh", p2wpkhScript(h)), k, ZERO_AUX).inputs[0].reason, "only legacy");
+  const redeem = p2wpkhScript(h);
+  has(plan(spending("p2sh-p2wpkh", p2shScript(hash160(redeem)), { redeemScript: redeem }), k, ZERO_AUX).inputs[0].reason, "only legacy");
+  eq(plan(build({ inputs: [{ kind: "p2tr", path: "m/86'/1'/0'/0/0", amount: 50000 }], outputs: oneOut }), k, ZERO_AUX).signable, 0);
+  eq(signPsbt(spending("p2wpkh", p2wpkhScript(h)), k, ZERO_AUX).signed, []);
+});
+check("p2pkh", "an uncompressed key proves only a P2PKH output", () => {
+  const k = uncompressed(LEGACY), h = hash65(LEGACY);
+  const out = (script) => plan(build({ inputs: [{ kind: "p2pkh", path: "m/44'/1'/0'/0/1", amount: 50000 }], outputs: [{ script, amount: 40000 }] }), k, ZERO_AUX).outputs[0];
+  eq([out(p2pkhScript(h)).ours, out(p2pkhScript(h)).type, out(p2wpkhScript(h)).ours, out(p2shScript(hash160(p2wpkhScript(h)))).ours], [true, "p2pkh", false, false]);
+});
+check("p2pkh", "a held signature by an uncompressed key is verified, and finishes", () => {
+  const p = spending("p2pkh", p2pkhScript(hash65(LEGACY))), s = signPsbt(p, uncompressed(LEGACY), ZERO_AUX).psbt;
+  eq(planKeys(s, [], ZERO_AUX).complete, true);
+  eq(combine(p, s).added, 1);
+  const q = withSig(s, 0, (b) => { b[12] ^= 1; return b; });
+  eq([planKeys(q, [], ZERO_AUX).complete, planKeys(q, [], ZERO_AUX).inputs[0].badSignature], [false, true]);
+});
+check("p2pkh", "a 65-byte signature's key on a segwit coin doesn't count", () => {
+  const h = hash65(LEGACY), p = spending("p2wpkh", p2wpkhScript(h)), q = parsePsbt(serializePsbt(p));
+  setEntry(q.inputs[0], IN.PARTIAL_SIG, uncompressed(LEGACY).publicKey, new Uint8Array(71).fill(1));
+  eq(planKeys(parsePsbt(serializePsbt(q)), [], ZERO_AUX).complete, false);
+});
+check("p2pkh", "legacy, nested and native in one transaction", () => {
+  const p = build({ inputs: [{ kind: "p2pkh", path: LEGACY, amount: 30000 }, { kind: "p2sh-p2wpkh", path: "m/49'/1'/0'/0/0", amount: 30000 },
+    { kind: "p2wpkh", path: "m/84'/1'/0'/0/0", amount: 30000 }], outputs: [{ ...EXTERNAL, amount: 89000 }] });
+  const r = signPsbt(p, abandon, ZERO_AUX);
+  eq(r.plan.complete, true);
+  const tx = parseTx(finalize(r.psbt).tx);
+  eq(tx.inputs.map((i) => [i.scriptSig.length > 60 ? "sig" : i.scriptSig.length ? "redeem" : "none", i.witness.length]), [["sig", 0], ["redeem", 2], ["none", 2]]);
+});
+check("p2pkh", "change in the legacy account is at home; a segwit one isn't", () => {
+  const inputs = [{ kind: "p2pkh", path: "m/44'/1'/0'/0/3", amount: 100000 }];
+  const c = (o) => planKeys(build({ inputs, outputs: [EXTERNAL, { kind: "p2pkh", amount: 40000, ...o }] }), [abandon], ZERO_AUX).outputs[1];
+  eq(c({ path: "m/44'/1'/0'/1/0" }).stray, null);
+  has(c({ kind: "p2wpkh", path: "m/84'/1'/0'/1/0" }).stray, "another account");
+});
+check("p2pkh", "a large legacy PSBT through BBQr, signed as if it came whole", () => {
+  const p = build({ inputs: [0, 1, 2].map((i) => ({ kind: "p2pkh", path: `m/44'/1'/0'/0/${i}`, amount: 30000, prevOutputs: 60 })), outputs: [{ ...EXTERNAL, amount: 89000 }] });
+  const b = serializePsbt(p);
+  if (b.length < 3500) throw new Error(`only ${b.length} bytes`);
+  const { parts } = seriesFor(b, "psbt"), r = new CodeReader();
+  const q = parsePsbt(parts.map((t) => r.read(t)).at(-1).payload.bytes);
+  eq(toHex(finalize(signPsbt(q, abandon, ZERO_AUX).psbt).tx), toHex(finalize(signPsbt(p, abandon, ZERO_AUX).psbt).tx));
+});
+check("p2pkh", "a previous transaction with the wrong output is refused, whatever its size", () => {
+  const p = build({ inputs: [{ kind: "p2pkh", path: LEGACY, amount: 30000, prevOutputs: 5 }], outputs: oneOut });
+  const q = parsePsbt(serializePsbt(p));
+  const prev = p.inputs[0].fields.nonWitnessUtxo;
+  const forged = { ...prev, outputs: prev.outputs.map((o, i) => (i === 1 ? { ...o, value: o.value + 1 } : o)) };
+  setEntry(q.inputs[0], IN.NON_WITNESS_UTXO, new Uint8Array(0), serializeTx(forged));
+  return has(plan(parsePsbt(serializePsbt(q)), abandon, ZERO_AUX).inputs[0].reason, "wrong txid");
+});
+
 // --- descriptors -----------------------------------------------------------------
 
 const D = JSON.parse(readFileSync(new URL("./descriptor_vectors.json", import.meta.url), "utf8"));
@@ -1222,6 +1325,9 @@ check("codes", "a BBQr-looking text with a bad header isn't a part", () =>
 // The codes tests/signer.txt shows the camera (tests/signer/make_scenario.py)
 if (madeOut) {
   const qr = (p) => electrumQrText(serializePsbt(p));
+  const hashOf = (bytes) => toHex(ref.sha256(bytes).subarray(0, 8));
+  const legacyBig = build({ inputs: Array.from({ length: 6 }, (_, i) => ({ kind: "p2pkh", path: `m/44'/1'/0'/0/${i}`, amount: 30000, prevOutputs: 60 })),
+    outputs: [{ ...EXTERNAL, amount: 139000 }, { kind: "p2pkh", path: "m/44'/1'/0'/1/0", amount: 40000 }] });
   const FEE_OK = (o) => ({ inputs: [{ kind: "p2wpkh", amount: 100000 }, { kind: "p2wpkh", amount: 20000 }],
     outputs: [{ ...EXTERNAL, amount: 80000 }, { kind: "p2wpkh", amount: 39000, ...o }] });
   const attacker = derive(fromSeed(new Uint8Array(32).fill(9)), "m/84'/1'/0'/1/0").publicKey;
@@ -1235,6 +1341,11 @@ if (madeOut) {
     other: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/1" }))),
     big: split(serializePsbt(build({ inputs: Array.from({ length: 30 }, (_, i) => ({ kind: "p2wpkh", path: `m/84'/1'/0'/0/${i}`, amount: 10000 })),
       outputs: [{ ...EXTERNAL, amount: 290000 }, { ...CHANGE, path: "m/84'/1'/0'/1/0", amount: 9000 }] })), "P", { maxVersion: 12, maxParts: 20, encoding: "2" }).parts,
+    legacy: split(serializePsbt(legacyBig), "P", { maxVersion: 12, maxParts: 60, encoding: "2" }).parts,
+    legacyHash: hashOf(finalize(signPsbt(legacyBig, abandon, ZERO_AUX).psbt).tx),
+    uncompressedPsbt: qr(spending("p2pkh", p2pkhScript(hash65(LEGACY)), { noOrigin: true })),
+    uncompressedWif: base58CheckEncode(concat([[0xef], secretOf(LEGACY).privateKey])),
+    uncompressedHash: hashOf(finalize(signPsbt(spending("p2pkh", p2pkhScript(hash65(LEGACY)), { noOrigin: true }), uncompressed(LEGACY), ZERO_AUX).psbt).tx),
     otherSeries: split(new TextEncoder().encode("not a transaction"), "U", { encoding: "2", minVersion: 20 }).parts[0],
     finished: electrumQrText(finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).tx),
     xprv: privBase58(abandon, XPRV),

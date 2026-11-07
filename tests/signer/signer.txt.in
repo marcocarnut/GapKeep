@@ -255,15 +255,19 @@ shot 20-finished
 key esc
 wait 0.3
 
-# 11. Seed words, a word wrong then right, signing with the account's tprv too
+# 11. A PSBT with only WITNESS_UTXO, as another wallet may still send: it
+# signs, and the screen says the amounts are the PSBT's word. Seed words, a
+# word wrong then right, signing with the account's tprv too
 mark
 key ret
 wait 0.3
 mark
 camera qr @plain@
 expect signer: change: 1 claimed 15
+expect signer: info: Inputs 1, 2: amounts as the PSBT states th 5
 camera scene
-wait 0.3
+wait 0.5
+shot 20-witness-utxo-only
 key ret
 wait 0.3
 key tab
@@ -541,3 +545,120 @@ key ret
 wait 0.3
 key tab
 @psbtshots@
+
+# 18. Legacy: Electrum's PSBT with the previous transaction: as Electrum signs it
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+mark
+camera qr @p2pkhfile@
+expect signer: review: 1 input, 0 to sign 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+mark
+key ret
+expect signer: review: 1 input, 1 to sign 5
+wait 0.3
+mark
+key ret
+expect signer: signed 1 input, transaction complete \(SHA-256 @p2pkhhash@\) 30
+wait 0.3
+
+# 19. Next transaction (keep keys): six legacy inputs, each with its large
+# previous transaction, as animated BBQr
+key tab
+key ret
+wait 0.3
+@legacycodes@
+expect signer: read a PSBT \(BBQr, \d+ characters, \d+ bytes\) 15
+expect signer: review: 6 inputs, 6 to sign, 2 outputs 5
+expect signer: change: 0 claimed, 1 checked, 0 stray 5
+camera scene
+wait 0.5
+shot 32-legacy-review
+mark
+key ret
+expect signer: signed 6 inputs, transaction complete \(SHA-256 @legacyHash@\) 30
+wait 0.3
+
+# 20. The legacy account's public key (Done forgets; Scan, Public key)
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key tab
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+# form, kind: the third
+key tab
+key tab
+key ret
+key down
+key down
+mark
+key ret
+expect signer: showing the p2pkh public key \(mainnet\), account \d+, 10
+wait 0.5
+shot 33-legacy-key
+key esc
+wait 0.3
+
+# 21. An uncompressed key: refused nowhere, for its own old coin (Scan, Public
+# key, Forget)
+key tab
+key tab
+mark
+key ret
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+mark
+camera qr @uncompressedPsbt@
+expect signer: review: 1 input, 0 to sign 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @uncompressedWif@
+key ret
+expect signer: key loaded \(wif\) 10
+wait 0.5
+shot 34-uncompressed-key
+mark
+key ret
+expect signer: review: 1 input, 1 to sign 5
+wait 0.3
+mark
+key ret
+expect signer: signed 1 input, transaction complete \(SHA-256 @uncompressedHash@\) 30
+wait 0.3
+shot 35-uncompressed-signed
