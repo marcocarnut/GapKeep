@@ -132,6 +132,7 @@ struct TZgQR
 	size_t nLength;
 	boolean bBinary;		// bytes (Uint8Array) rather than text
 	int nECC;			// qrcodegen_Ecc
+	int nMinVersion;		// the smallest version to use (1 to 40)
 	int32_t nSize;			// px
 	lv_color_t Dark, Light;
 	int nModules;			// side length of the current symbol, 0: none
@@ -237,6 +238,7 @@ static JSValue Wrap (JSContext *ctx, lv_obj_t *pObj, TWidgetType Type, JSValueCo
 		pNode->pQR = new TZgQR;
 		memset (pNode->pQR, 0, sizeof *pNode->pQR);
 		pNode->pQR->nECC = qrcodegen_Ecc_MEDIUM;
+		pNode->pQR->nMinVersion = qrcodegen_VERSION_MIN;
 		pNode->pQR->nSize = 160;
 		pNode->pQR->Dark = lv_color_black ();
 		pNode->pQR->Light = lv_color_white ();
@@ -1339,14 +1341,14 @@ static int QRRender (JSContext *ctx, TZgNode *pNode)
 		{
 			memcpy (pTemp, pQR->pData, pQR->nLength);
 			bOK = qrcodegen_encodeBinary (pTemp, pQR->nLength, pCode, (qrcodegen_Ecc) pQR->nECC,
-						      qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+						      pQR->nMinVersion, qrcodegen_VERSION_MAX,
 						      qrcodegen_Mask_AUTO, false);
 		}
 	}
 	else
 	{
 		bOK = qrcodegen_encodeText ((const char *) pQR->pData, pTemp, pCode, (qrcodegen_Ecc) pQR->nECC,
-					    qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+					    pQR->nMinVersion, qrcodegen_VERSION_MAX,
 					    qrcodegen_Mask_AUTO, false);
 	}
 	delete [] pTemp;
@@ -1610,6 +1612,22 @@ SETTER (SetQRECC)
 	return QRChange (ctx, pNode, Old);
 }
 
+// the smallest version: a series of codes (BBQr) shows all its codes at one
+// version, the last one too, though it holds less
+SETTER (SetQRVersion)
+{
+	int32_t n;
+	if (ToInt (ctx, v, pProp, &n)) return -1;
+	if (n < qrcodegen_VERSION_MIN || n > qrcodegen_VERSION_MAX)
+	{
+		JS_ThrowRangeError (ctx, "%s: 1 to 40 expected", pProp);
+		return -1;
+	}
+	TZgQR Old = *pNode->pQR;
+	pNode->pQR->nMinVersion = n;
+	return QRChange (ctx, pNode, Old);
+}
+
 GETTER (GetQRModules) { return JS_NewInt32 (ctx, pNode->pQR->nModules); }
 
 struct TProp
@@ -1678,6 +1696,7 @@ static const TProp Props[] =
 	{"dark",        T (WQRCode), SetQRDark, 0},
 	{"light",       T (WQRCode), SetQRLight, 0},
 	{"ecc",         T (WQRCode), SetQRECC, 0},
+	{"version",     T (WQRCode), SetQRVersion, 0},
 	{"modules",     T (WQRCode), 0, GetQRModules},
 	{"src",         T (WImage), SetImageSrc, 0},
 	{"detect",      T (WScanner), SetDetect, GetDetect},

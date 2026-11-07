@@ -217,6 +217,8 @@ declare module "zg:ui" {
     data?: string | Uint8Array;
     /** Error correction level (default `"M"`). Never raised automatically, so the symbol is exactly what was asked for. */
     ecc?: "L" | "M" | "Q" | "H";
+    /** The smallest version to use, 1 to 40 (default 1): a larger one is used only if the data needs it. For a series of codes shown in turn, such as BBQr's, which should all be one version. `modules` gives the version used: (modules - 17) / 4. */
+    version?: number;
     /** Side length in px (default 160), including a 4-module quiet zone. Modules are drawn at an integer scale. */
     size?: number;
     /** Module colors (default black on white). */
@@ -466,6 +468,8 @@ declare module "zg:ui" {
     data: string | Uint8Array;
     /** Error correction level (default `"M"`). Never raised automatically, so the symbol is exactly what was asked for. */
     ecc: "L" | "M" | "Q" | "H";
+    /** The smallest version to use, 1 to 40 (default 1): a larger one is used only if the data needs it. For a series of codes shown in turn, such as BBQr's, which should all be one version. `modules` gives the version used: (modules - 17) / 4. */
+    version: number;
     /** Side length in px (default 160), including a 4-module quiet zone. Modules are drawn at an integer scale. */
     size: number;
     /** Module colors (default black on white). */
