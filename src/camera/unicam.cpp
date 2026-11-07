@@ -347,6 +347,12 @@ void CZgUnicam::FreeBuffers (void)
 {
 	for (unsigned i = 0; i < Buffers; i++)
 	{
+		// what the camera saw stays out of the heap: a code may hold a
+		// secret, and the next start's first frames come from this memory
+		if (m_pBuffer[i] != 0)
+		{
+			memset (m_pBuffer[i], 0, m_nBufferSize);
+		}
 		free (m_pBuffer[i]);
 		m_pBuffer[i] = 0;
 		m_State[i] = StateFree;

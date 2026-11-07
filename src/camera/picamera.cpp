@@ -344,6 +344,13 @@ void CZgPiCamera::Stop (void)
 	PowerDown ();
 	m_bStreaming = FALSE;
 
+	// as the receiver's buffers: nothing of the picture stays
+	memset (m_pGrey, 0, m_nWidth * m_nHeight);
+	if (m_pRGB != 0)
+	{
+		memset (m_pRGB, 0, m_nRGBSize);
+	}
+
 	CLogger::Get ()->Write (FromCamera, LogNotice,
 		"stopped: %u frames started, %u complete, %u shown, %u replaced unread, %u incomplete;"
 		" grey in %u us each on average, %u us at most",
