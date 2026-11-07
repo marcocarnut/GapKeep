@@ -338,7 +338,8 @@ class SimMachine:
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, cwd=self.workdir)
         self.answers = []
-        threading.Thread(target=self._reader, args=(self.proc, self.log), daemon=True).start()
+        self.reader = threading.Thread(target=self._reader, args=(self.proc, self.log), daemon=True)
+        self.reader.start()
         self.x = self.y = None
         self.buttons = 0
 
@@ -347,8 +348,11 @@ class SimMachine:
             line = raw.decode('utf-8', 'replace')
             if line.startswith('#'):
                 self.answers.append(line.strip())
-            log.write(line)
-            log.flush()
+            try:
+                log.write(line)
+                log.flush()
+            except ValueError:  # stop() gave up waiting and closed it
+                return
 
     def _cmd(self, line):
         self.proc.stdin.write((line + '\n').encode())
@@ -470,6 +474,10 @@ class SimMachine:
                 self.proc.wait(timeout=5)
             except (OSError, subprocess.TimeoutExpired):
                 self.proc.kill()
+        # the log is the reader's until the simulator's output ends: a write
+        # to a closed file would be a traceback during Python's shutdown,
+        # which aborts it and turns a pass into a failure
+        self.reader.join(timeout=5)
         self.log.close()
 
 
