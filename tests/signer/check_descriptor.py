@@ -102,6 +102,16 @@ def main():
         print(json.dumps(vectors(), indent=1))
         return
     failed = 0
+    # BIP-48 publishes no key for this phrase: its form, then, and a valid xpub
+    got = subprocess.run(["zbarimg", "-q", "--raw", "%s/23-cosigner.png" % sys.argv[1]],
+                         capture_output=True, text=True).stdout.strip()
+    prefix = "[%s/48h/0h/0h/2h]" % FINGERPRINT
+    xpub = got[len(prefix):]
+    if got.startswith(prefix) and xpub.startswith("xpub") and b58encode(b58decode(xpub)) == xpub:
+        print("ok   23-cosigner")
+    else:
+        print("FAIL 23-cosigner: not a cosigner's key expression (%d characters)" % len(got))
+        failed = 1
     for name, want in SHOTS.items():
         got = subprocess.run(["zbarimg", "-q", "--raw", "%s/%s.png" % (sys.argv[1], name)],
                              capture_output=True, text=True).stdout.strip()

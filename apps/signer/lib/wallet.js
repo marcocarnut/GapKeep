@@ -12,7 +12,7 @@ import { setCrypto } from "./crypto.js";
 import { ENTROPY_LENGTHS, mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic } from "./bip39.js";
 import { fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub, versionFor } from "./bip32.js";
 import { parsePrivateKey } from "./keys.js";
-import { accountDescriptor } from "./descriptor.js";
+import { accountDescriptor, cosignerKey } from "./descriptor.js";
 import { planKeys, signKeys, finalize, STANDARD_ACCOUNTS } from "./sign.js";
 import { serializePsbt } from "./psbt/psbt.js";
 import { selfTest as libSelfTest } from "./selftest.js";
@@ -27,6 +27,7 @@ export const EXPORTS = [
   { id: "p2pkh", purpose: 44, name: "Legacy (BIP-44)" },
   { id: "p2tr", purpose: 86, name: "Taproot (BIP-86)",
     note: "An xpub alone doesn't say it is taproot: give the wallet the descriptor." },
+  { id: "p2wsh", purpose: 48, name: "Multisig cosigner (BIP-48)", below: "/2'" },
 ];
 
 const coin = (network) => (network === "mainnet" ? 0 : 1);
@@ -39,7 +40,7 @@ export const MAX_ACCOUNT = 0x7fffffff;
 // Account 0 of each kind always; `account` too.
 export function accountsFor(account) {
   if (!account) return STANDARD_ACCOUNTS;
-  return [...STANDARD_ACCOUNTS, ...[84, 49, 86, 44].flatMap((p) => [0, 1].map((c) => `m/${p}'/${c}'/${account}'`))];
+  return [...STANDARD_ACCOUNTS, ...[0, 1].flatMap((c) => [...[84, 49, 86, 44].map((p) => `m/${p}'/${c}'/${account}'`), `m/48'/${c}'/${account}'/2'`])];
 }
 
 const fromSeedBytes = (seed, description) => {
@@ -101,13 +102,14 @@ export function wipeKey(key) {
 // calls the wallet's, as it can't know the master's), master (fingerprint) }
 export function exportKey(key, id, network, account = 0) {
   const x = EXPORTS.find((e) => e.id === id);
-  const path = accountPath(x.purpose, network, account);
+  const path = accountPath(x.purpose, network, account) + (x.below || "");
   const node = derive(key.node, path);
   try {
     const pub = neuter(node);
     const xpub = serializeXpub(pub, network === "mainnet" ? "xpub" : "tpub");
     return { text: serializeXpub(pub, versionFor(id, network)), path, fingerprint: fingerprintHex(pub), master: key.fingerprint,
-      descriptor: accountDescriptor({ script: id, fingerprint: key.fingerprint, network, account, xpub }) };
+      descriptor: id === "p2wsh" ? cosignerKey({ fingerprint: key.fingerprint, network, account, xpub })
+        : accountDescriptor({ script: id, fingerprint: key.fingerprint, network, account, xpub }) };
   } finally {
     wipe(node);
   }
@@ -121,7 +123,7 @@ export const plan = (psbt, keys, options) => planKeys(psbt, nodes(keys), options
 export function sign(psbt, keys, options) {
   const r = signKeys(psbt, nodes(keys), options);
   const tx = r.plan.complete ? finalize(r.psbt).tx : null;
-  return { psbt: serializePsbt(r.psbt), tx, count: r.signed.length };
+  return { psbt: serializePsbt(r.psbt), tx, count: new Set(r.signed.map((s) => s.input)).size };
 }
 
 // -> { passed, failed: [names] }

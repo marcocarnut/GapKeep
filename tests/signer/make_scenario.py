@@ -44,6 +44,11 @@ def main():
     file = cases["testnet-p2pkh-file"]
     made["p2pkhfile"] = file["qr"]
     made["p2pkhhash"] = hashlib.sha256(bytes.fromhex(file["electrum_final_tx"])).hexdigest()[:16]
+    def codes(parts):
+        return "\n".join("mark\ncamera qr %s" % part + ("\nexpect signer: BBQr part: %d of %d 15" % (n + 1, len(parts)) if n + 1 < len(parts) else "")
+                         for n, part in enumerate(parts))
+    made["msHalfCodes"] = codes(made.pop("msHalf"))
+    made["msNoXpubsCodes"] = codes(made.pop("msNoXpubs"))
     legacy = made.pop("legacy")
     made["legacycodes"] = "\n".join("mark\ncamera qr %s" % part + ("\nexpect signer: BBQr part: %d of %d 15" % (n + 1, len(legacy)) if n + 1 < len(legacy) else "")
                                      for n, part in enumerate(legacy))

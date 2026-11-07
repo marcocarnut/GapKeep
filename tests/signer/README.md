@@ -58,6 +58,11 @@ any earlier step.
 - **p2pkh**: uncompressed keys, each signature checked with the reference on
   its own, and kept from segwit; legacy with other script types; a large
   PSBT through BBQr; forged previous transactions.
+- **multisig**: BIP-143's and BIP-174's vectors; signing and finalizing,
+  P2WSH and P2SH-P2WSH, the witness run as a node would (written here, from
+  OP_CHECKMULTISIG's definition); refused scripts; proving change, and each
+  attack on the proof. The fixture with xpubs is made here, in Electrum's
+  form, not by Electrum.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
   way of rerouting it, and the gap's limit), and far (the four indices around

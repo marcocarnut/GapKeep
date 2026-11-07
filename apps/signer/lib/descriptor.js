@@ -2,6 +2,10 @@
 //
 //   accountDescriptor({ script, fingerprint, network, account, xpub })
 //     -> "wpkh([73c5da0a/84h/0h/0h]xpub6.../<0;1>/*)#checksum"
+//   cosignerKey({ fingerprint, network, account, xpub })
+//     -> "[73c5da0a/48h/0h/0h/2h]xpub6...": BIP-48's P2WSH key, for one place
+//     in a multisig wallet: a key expression, not a descriptor, as one signer
+//     doesn't know the others
 //   descriptorChecksum(text)  -> 8 characters (BIP-380)
 //   checkDescriptor(text)     -> is its #checksum right?
 //
@@ -79,14 +83,23 @@ export function checkDescriptor(text) {
   }
 }
 
-export function accountDescriptor({ script, fingerprint, network, account, xpub }) {
-  const s = SCRIPTS[script];
-  if (!s) throw new RangeError(`no descriptor for ${script}`);
+function checkOrigin(fingerprint, network, account, xpub) {
   if (!/^[0-9a-f]{8}$/.test(fingerprint)) throw new RangeError("a master fingerprint is 8 hex digits");
   if (!Number.isInteger(account) || account < 0 || account > 0x7fffffff) throw new RangeError("an account number is 0 to 2^31 - 1");
   const main = network === "mainnet";
   if (!xpub.startsWith(main ? "xpub" : "tpub")) throw new RangeError(`this needs a ${main ? "xpub" : "tpub"}`);
-  const key = `[${fingerprint}/${s.purpose}h/${main ? 0 : 1}h/${account}h]${xpub}/<0;1>/*`;
+}
+
+export function cosignerKey({ fingerprint, network, account, xpub }) {
+  checkOrigin(fingerprint, network, account, xpub);
+  return `[${fingerprint}/48h/${network === "mainnet" ? 0 : 1}h/${account}h/2h]${xpub}`;
+}
+
+export function accountDescriptor({ script, fingerprint, network, account, xpub }) {
+  const s = SCRIPTS[script];
+  if (!s) throw new RangeError(`no descriptor for ${script}`);
+  checkOrigin(fingerprint, network, account, xpub);
+  const key = `[${fingerprint}/${s.purpose}h/${network === "mainnet" ? 0 : 1}h/${account}h]${xpub}/<0;1>/*`;
   const body = s.wrap(key);
   return `${body}#${descriptorChecksum(body)}`;
 }

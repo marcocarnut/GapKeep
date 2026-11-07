@@ -15,9 +15,10 @@
 //   InputPlan  = { index, sign, final (already finalized), signed (holds a good signature), badSignature,
 //                  mine (false: this key has nothing to do with it), type,
 //                  path ("m/84'/0'/0'/0/3") | null, pubkey (hex) | null, sighash (number),
-//                  reason (for people, when not signing) | null, oddities: [string] }
+//                  reason (for people, when not signing) | null, oddities: [string],
+//                  multisig (those coins only): { m, n, have (good signatures), will (more from these keys) } }
 //   OutputPlan = { index, ours, type, path | null, role: "change" | "receive" | null,
-//                  problem: string | null, oddities: [string] }
+//                  problem: string | null, unproved: string | null, noXpubs, oddities: [string] }
 //     planKeys adds `claimed`; `stray`: why an output that is ours may
 //     still be lost in practice (below), or null; and `far`: the index of an
 //     output at home that a wallet finds only by scanning that far, or null.
@@ -65,7 +66,8 @@
 //
 // An output is "ours" only when deriving its stated path gives the key it
 // names, and that key's script (P2WPKH, P2SH-P2WPKH, P2PKH, or BIP-86 P2TR)
-// is the output's script. Fingerprints alone prove nothing: anyone can
+// is the output's script. Multisig change needs more: see ./multisig.js. What
+// it can't prove stays not ours, with `unproved` saying why. Fingerprints alone prove nothing: anyone can
 // write ours into a PSBT.
 //
 // An output can be truly ours and still be a way to lose the money: at a path
@@ -94,6 +96,7 @@ import { HARDENED, deriveChild, fingerprint, parsePath, formatPath, wipe } from 
 import { SIGHASH, legacySighash, segwitV0Sighash, taprootSighash, p2wpkhScriptCode } from "./sighash.js";
 import { toHex, toHexReversed, equal, concat } from "./psbt/bytes.js";
 import { parsePsbt, serializePsbt, setEntry, IN } from "./psbt/psbt.js";
+import { multisigCoin, cosignerWallet, proveOutput } from "./multisig.js";
 import { txid as txidOf, serializeTx, vsize as vsizeOf } from "./psbt/tx.js";
 import { classify, p2wpkhScript, p2shScript, p2pkhScript, TYPE_NAMES } from "./psbt/script.js";
 
@@ -104,8 +107,8 @@ export class SignError extends Error {
   }
 }
 
-export const STANDARD_ACCOUNTS = ["m/84'/0'/0'", "m/49'/0'/0'", "m/86'/0'/0'", "m/44'/0'/0'",
-  "m/84'/1'/0'", "m/49'/1'/0'", "m/86'/1'/0'", "m/44'/1'/0'"];
+export const STANDARD_ACCOUNTS = ["m/84'/0'/0'", "m/49'/0'/0'", "m/86'/0'/0'", "m/44'/0'/0'", "m/48'/0'/0'/2'",
+  "m/84'/1'/0'", "m/49'/1'/0'", "m/86'/1'/0'", "m/44'/1'/0'", "m/48'/1'/0'/2'"];
 
 export const MAX_INDEX = 1000000;
 const MAX_DEPTH = 16;
@@ -113,9 +116,9 @@ export const CHANGE_NEAR = 20;
 export const CHANGE_GAP = 1000;
 
 // BIP-44/49/84/86: the purpose each script type's accounts use.
-const PURPOSE = { p2pkh: 44, "p2sh-p2wpkh": 49, p2wpkh: 84, p2tr: 86 };
+const PURPOSE = { p2pkh: 44, "p2sh-p2wpkh": 49, p2wpkh: 84, p2tr: 86, p2wsh: 48, "p2sh-p2wsh": 48 };
 
-const typeName = (t) => (t === "p2sh-p2wpkh" ? "P2SH-P2WPKH" : TYPE_NAMES[t] || t);
+const typeName = (t) => (t.startsWith("p2sh-") ? "P2SH-" + TYPE_NAMES[t.slice(5)] : TYPE_NAMES[t] || t);
 const sighashName = (t) => ({ 0: "DEFAULT", 1: "ALL", 2: "NONE", 3: "SINGLE", 0x81: "ALL|ANYONECANPAY",
   0x82: "NONE|ANYONECANPAY", 0x83: "SINGLE|ANYONECANPAY" })[t] || "0x" + t.toString(16);
 
@@ -204,17 +207,19 @@ function spentOutput(psbt, i) {
 
 // What kind of coin: { type, hash?, program?, redeemScript? } or { error }.
 function coinType(script, f) {
+  const multisig = multisigCoin(script, f);
+  if (multisig) return multisig;
   const c = classify(script);
   if (c.type === "p2sh") {
     if (!f.redeemScript) return { error: "it spends a P2SH coin without its redeemScript" };
     if (!equal(hash160(f.redeemScript), c.hash)) return { error: "its redeemScript is not the one the coin's script commits to" };
     const inner = classify(f.redeemScript);
     if (inner.type === "p2wpkh") return { type: "p2sh-p2wpkh", hash: inner.hash, redeemScript: f.redeemScript };
-    return { error: "it spends a P2SH coin that is not P2SH-P2WPKH (multisig and other scripts are not supported)" };
+    return { error: "it spends a P2SH coin that is not P2SH-P2WPKH or P2SH-P2WSH (other scripts are not supported)" };
   }
   if (c.type === "p2wpkh" || c.type === "p2pkh") return { type: c.type, hash: c.hash };
   if (c.type === "p2tr") return { type: "p2tr", program: c.program };
-  return { error: `it spends a ${TYPE_NAMES[c.type] || c.type} coin: only single-key P2WPKH, P2SH-P2WPKH, P2TR and P2PKH are signed` };
+  return { error: `it spends a ${TYPE_NAMES[c.type] || c.type} coin: only P2WPKH, P2SH-P2WPKH, P2TR, P2PKH and P2WSH multisig are signed` };
 }
 
 const bip86Tweak = (xonly) => taggedHash("TapTweak", xonly);
@@ -235,8 +240,8 @@ function keyControls(node, d, coin, f, where) {
   return null;
 }
 
-// A signature the PSBT already holds for this single-key coin (from a merged
-// copy): "none", "good", or "bad" (doesn't verify, or isn't SIGHASH_ALL).
+// A signature the PSBT already holds for this coin (from a merged copy; a
+// multisig coin's are all it needs): "none", "good", or "bad" (doesn't verify, or isn't SIGHASH_ALL).
 function heldSignature(psbt, i, ct, coin, prevouts) {
   const f = psbt.inputs[i].fields, tx = psbt.tx;
   if (ct.type === "p2tr") {
@@ -248,9 +253,26 @@ function heldSignature(psbt, i, ct, coin, prevouts) {
     const coins = prevouts.map((c) => ({ value: c.value, script: c.script }));
     return cr().schnorrVerify(sig.subarray(0, 64), taprootSighash(tx, i, coins, type), ct.program) ? "good" : "bad";
   }
+  if (ct.multisig) {
+    const h = heldMultisig(psbt, i, ct, coin);
+    return h.good.length >= ct.multisig.m ? "good" : h.bad ? "bad" : "none";
+  }
   const held = f.partialSigs.filter((s) => keyFits(s.pubkey, ct) && equal(hash160(s.pubkey), ct.hash));
   if (!held.length) return "none";
   return held.some((s) => ecdsaGood(tx, i, ct, coin, s.pubkey, s.signature)) ? "good" : "bad";
+}
+
+// The signatures a multisig input holds, of the script's own keys: the keys
+// of the good ones, and how many are bad.
+function heldMultisig(psbt, i, ct, coin) {
+  const good = [];
+  let bad = 0;
+  for (const s of psbt.inputs[i].fields.partialSigs) {
+    if (!ct.multisig.pubkeys.some((k) => equal(k, s.pubkey))) continue;
+    if (ecdsaGood(psbt.tx, i, ct, coin, s.pubkey, s.signature)) good.push(s.pubkey);
+    else bad++;
+  }
+  return { good, bad };
 }
 
 // Only P2PKH can use an uncompressed key.
@@ -259,37 +281,43 @@ const keyFits = (pubkey, ct) => pubkey.length === 33 || (pubkey.length === 65 &&
 function ecdsaGood(tx, i, ct, coin, pubkey, signature) {
   if (signature.length < 9 || signature[signature.length - 1] !== SIGHASH.ALL) return false;
   const hash = ct.type === "p2pkh" ? legacySighash(tx, i, coin.script, SIGHASH.ALL)
-    : segwitV0Sighash(tx, i, p2wpkhScriptCode(ct.hash), coin.value, SIGHASH.ALL);
+    : segwitV0Sighash(tx, i, ct.multisig ? ct.witnessScript : p2wpkhScriptCode(ct.hash), coin.value, SIGHASH.ALL);
   return cr().ecdsaVerify(signature.subarray(0, signature.length - 1), hash, pubkey);
 }
 
 // Is this signature of input i, by this key, one the signer would accept?
-// null: it can't tell (the input is not a single-key coin of that key, or
-// its coin is not described).
+// null: it can't tell (the input is not a coin of that key, or its coin is
+// not described).
 export function partialSigGood(psbt, i, pubkey, signature) {
   const coin = spentOutput(psbt, i);
   if (coin.error) return null;
   const ct = coinType(coin.script, psbt.inputs[i].fields);
-  if (ct.error || ct.type === "p2tr" || !keyFits(pubkey, ct) || !equal(hash160(pubkey), ct.hash)) return null;
+  if (ct.error || ct.type === "p2tr") return null;
+  if (ct.multisig ? !ct.multisig.pubkeys.some((k) => equal(k, pubkey)) : !keyFits(pubkey, ct) || !equal(hash160(pubkey), ct.hash)) return null;
   return ecdsaGood(psbt.tx, i, ct, coin, pubkey, signature);
 }
 
-// What each input holds when no key is loaded: "final", or as heldSignature.
-// (A merged PSBT can be complete with no key in this device.)
+// What each input holds when no key is loaded: { held: "final", or as
+// heldSignature; multisig }. (A merged PSBT can be complete with no key in
+// this device.)
 function heldByNobody(psbt) {
   const prevouts = psbt.inputs.map((_, i) => spentOutput(psbt, i));
   return psbt.inputs.map((m, i) => {
     const f = m.fields;
-    if (f.finalScriptSig !== undefined || f.finalScriptWitness !== undefined) return "final";
-    if (prevouts[i].error) return "none";
+    if (f.finalScriptSig !== undefined || f.finalScriptWitness !== undefined) return { held: "final", multisig: null };
+    if (prevouts[i].error) return { held: "none", multisig: null };
     const ct = coinType(prevouts[i].script, f);
-    return ct.error ? "none" : heldSignature(psbt, i, ct, prevouts[i], prevouts);
+    if (ct.error) return { held: "none", multisig: null };
+    return { held: heldSignature(psbt, i, ct, prevouts[i], prevouts), multisig: ct.multisig ? multisigState(psbt, i, ct, prevouts[i]) : null };
   });
 }
 
-function pathOddities(path, type, network, maxIndex) {
+// BIP-48's paths have a step more, for the script type.
+function pathOddities(fullPath, type, network, maxIndex) {
   const odd = [];
-  const p = formatPath(path);
+  const bip48 = fullPath.length === 6 && fullPath[0] === 48 + HARDENED && (type === "p2wsh" || type === "p2sh-p2wsh");
+  const path = bip48 ? [...fullPath.slice(0, 3), ...fullPath.slice(4)] : fullPath;
+  const p = formatPath(fullPath);
   if (path.length !== 5) {
     odd.push(`${p} is not the usual m/purpose'/coin'/account'/change/index`);
     if (path.length >= 1 && path[path.length - 1] > maxIndex && path[path.length - 1] < HARDENED) {
@@ -367,6 +395,7 @@ function planInput(psbt, i, keys, prevouts) {
 
   held = heldSignature(psbt, i, ct, coin, prevouts);
   r.badSignature = held === "bad";
+  if (ct.multisig) return planMultisig(psbt, i, keys, ct, coin, r, no);
   const ours = () => {
     r.mine = true;
     r.sign = held !== "good";
@@ -429,6 +458,74 @@ function planInput(psbt, i, keys, prevouts) {
   return no(firstProblem);
 }
 
+const multisigState = (psbt, i, ct, coin) => {
+  const { m, n } = ct.multisig;
+  return { m, n, have: Math.min(heldMultisig(psbt, i, ct, coin).good.length, m), will: 0 };
+};
+
+// Which of the script's keys are this key's, wherever the PSBT says they are.
+function ownKeys(f, keys, ct) {
+  const own = [];
+  let problem = null;
+  const inScript = (pubkey) => ct.multisig.pubkeys.some((k) => equal(k, pubkey));
+  if (keys.single) {
+    if (inScript(keys.root.publicKey)) own.push({ keyPath: [], path: null, fullPath: null, home: { single: toHex(keys.fp) }, pubkey: keys.root.publicKey });
+    return { own, problem };
+  }
+  for (const d of f.bip32) {
+    if (!inScript(d.pubkey)) continue;
+    const loc = keys.resolve(d.fingerprint, d.path);
+    if (!loc) continue;
+    const where = pathText(loc);
+    let node;
+    try {
+      node = keys.node(loc.rel);
+    } catch (e) {
+      if (!loc.guess) problem = problem || `the key at ${where} can't be derived (${e.message})`;
+      continue;
+    }
+    if (!equal(d.pubkey, node.publicKey)) {
+      if (!loc.guess) problem = problem || `the key at ${where} is not the one the PSBT names`;
+      continue;
+    }
+    own.push({ keyPath: loc.rel, path: where, fullPath: loc.full, home: homeOf(loc, keys), pubkey: node.publicKey });
+  }
+  return { own, problem };
+}
+
+function planMultisig(psbt, i, keys, ct, coin, r, no) {
+  const f = psbt.inputs[i].fields;
+  const state = r.multisig = multisigState(psbt, i, ct, coin);
+  const { own, problem } = ownKeys(f, keys, ct);
+  if (own.length) {
+    r.mine = true;
+    r.path = own[0].path;
+    r.keyPath = own[0].keyPath;
+    r.fullPath = own[0].fullPath;
+    r.home = own[0].home;
+    r.pubkey = toHex(own[0].pubkey);
+  }
+  if (state.have >= state.m) return no(null);
+  const good = heldMultisig(psbt, i, ct, coin).good;
+  const left = own.filter((k) => !good.some((g) => equal(g, k.pubkey)));
+  if (left.length) {
+    r.sign = true;
+    r.slots = left.slice(0, state.m - state.have);
+    r.scriptCode = ct.witnessScript;
+    state.will = r.slots.length;
+    r.signers = r.slots.map((k) => toHex(k.pubkey));
+    return no(null);
+  }
+  if (own.length) return no(`it has ${state.have} of the ${state.m} signatures it needs, and this key has signed`);
+  if (problem) {
+    r.mine = true;
+    return no(problem);
+  }
+  if (!f.bip32.length) return no("the PSBT names no key (BIP-32 derivation) for it");
+  const fps = [...new Set(f.bip32.map((d) => toHex(d.fingerprint)))].join(", ");
+  return no(`its keys are from another wallet (fingerprints ${fps}; this wallet is ${toHex(keys.fp)})`);
+}
+
 // The scripts a key can pay to: what kind this one is, or null.
 function paysTo(script, publicKey) {
   const h = hash160(publicKey);
@@ -442,7 +539,7 @@ function paysTo(script, publicKey) {
 
 function planOutput(psbt, i, keys) {
   const f = psbt.outputs[i].fields, script = psbt.tx.outputs[i].script;
-  const o = { index: i, ours: false, type: null, path: null, role: null, problem: null, oddities: [] };
+  const o = { index: i, ours: false, type: null, path: null, role: null, problem: null, unproved: null, noXpubs: false, oddities: [] };
   if (keys.single) {
     const type = paysTo(script, keys.root.publicKey) || (keys.root.publicKey.length === 33 &&
       equal(script, concat([Uint8Array.of(0x51, 32), p2trOutputKey(keys.root.publicKey.subarray(1))])) ? "p2tr" : null);
@@ -456,6 +553,7 @@ function planOutput(psbt, i, keys) {
     }
     return o;
   }
+  const multisig = multisigCoin(script, f);
   const claims = [
     ...f.bip32.map((d) => ({ d, taproot: false })),
     ...f.tapBip32.filter((d) => d.leafHashes.length === 0).map((d) => ({ d, taproot: true })),
@@ -487,11 +585,22 @@ function planOutput(psbt, i, keys) {
         claim(`it says it is yours (${where}), but the key it names is not this wallet's key at that path`);
         continue;
       }
-      type = paysTo(script, node.publicKey);
+      if (multisig && multisig.error) {
+        o.unproved = multisig.error;
+        break;
+      }
+      type = multisig ? (multisig.multisig.pubkeys.some((k) => equal(k, node.publicKey)) ? multisig.type : null) : paysTo(script, node.publicKey);
     }
     if (!type) {
       claim(`it says it is yours (${where}), but it doesn't pay to that key`);
       continue;
+    }
+    const proof = multisig ? proveOutput(cosignerWallet(psbt, spentOutput), script, f) : {};
+    if (proof.reason) {
+      o.unproved = proof.reason;
+      o.noXpubs = proof.noXpubs === true;
+      o.problem = null;
+      break;
     }
     o.ours = true;
     o.problem = null;
@@ -499,6 +608,7 @@ function planOutput(psbt, i, keys) {
     o.path = where;
     o.fullPath = loc.full;
     o.home = homeOf(loc, keys);
+    if (proof.uneven) o.home.uneven = proof.uneven;
     const branch = loc.rel.length >= 2 ? loc.rel[loc.rel.length - 2] : -1;
     o.role = branch === 1 ? "change" : branch === 0 ? "receive" : null;
     break;
@@ -541,12 +651,15 @@ function planWith(psbt, keys, options) {
 }
 
 function publicPlan(p, keys) {
-  const strip = ({ fullPath, keyPath, ...rest }) => rest;
-  const inputs = p.inputs.map(strip), outputs = p.outputs.map(strip);
+  const strip = ({ fullPath, keyPath, scriptCode, ...rest }) => rest;
+  const inputs = p.inputs.map(({ slots, ...rest }) => strip(rest)), outputs = p.outputs.map(strip);
   const signable = inputs.filter((r) => r.sign).length;
-  return { fingerprint: toHex(keys.fp), inputs, outputs, signable,
-    complete: inputs.every((r) => r.sign || r.final || r.signed) };
+  return { fingerprint: toHex(keys.fp), inputs, outputs, signable, complete: inputs.every(done) };
 }
+
+// Will this input be complete, as far as these keys go? (Each of a multisig's
+// keys adds its signature; it may need more.)
+const done = (r) => r.final || r.signed || (r.sign && (!r.multisig || r.multisig.have + r.multisig.will >= r.multisig.m));
 
 export function plan(psbt, key, options = {}) {
   const keys = new Keys(key, options.accounts);
@@ -570,17 +683,22 @@ export function planKeys(psbt, list, options = {}) {
   const inputs = psbt.inputs.map((_, i) => {
     let best = null;
     for (const p of plans) if (!best || rank(p.inputs[i]) > rank(best)) best = p.inputs[i];
-    return best || { index: i, sign: false, final: held[i] === "final", signed: held[i] === "good", badSignature: held[i] === "bad",
-      mine: false, type: null, path: null, pubkey: null, sighash: null,
-      reason: held[i] === "final" || held[i] === "good" ? "it is signed already" : "no key is loaded", oddities: [] };
+    if (best) {
+      if (!best.multisig) return best;
+      const signers = new Set(plans.flatMap((p) => p.inputs[i].signers || []));
+      return { ...best, multisig: { ...best.multisig, will: Math.min(signers.size, best.multisig.m - best.multisig.have) } };
+    }
+    return { index: i, sign: false, final: held[i].held === "final", signed: held[i].held === "good", badSignature: held[i].held === "bad",
+      mine: false, type: null, path: null, pubkey: null, sighash: null, multisig: held[i].multisig,
+      reason: held[i].held === "final" || held[i].held === "good" ? "it is signed already" : "no key is loaded", oddities: [] };
   });
   const outputs = psbt.outputs.map((m, i) => {
     let best = null;
     for (const p of plans) {
       const o = p.outputs[i];
-      if (!best || (o.ours && !best.ours) || (!best.ours && o.problem && !best.problem)) best = o;
+      if (!best || (o.ours && !best.ours) || (!best.ours && (o.unproved || o.problem) && !best.unproved && !best.problem)) best = o;
     }
-    return { ...(best || { index: i, ours: false, type: null, path: null, role: null, problem: null, oddities: [] }),
+    return { ...(best || { index: i, ours: false, type: null, path: null, role: null, problem: null, unproved: null, noXpubs: false, oddities: [] }),
       claimed: m.fields.bip32.length + m.fields.tapBip32.length > 0 };
   });
   const homes = inputs.filter((r) => r.home).map((r) => r.home);
@@ -589,7 +707,7 @@ export function planKeys(psbt, list, options = {}) {
     o.far = o.ours && !o.stray ? farIndex(o.home, homes) : null;
   }
   return { inputs, outputs, signable: inputs.filter((r) => r.sign).length,
-    complete: inputs.every((r) => r.sign || r.final || r.signed),
+    complete: inputs.every(done),
     keys: plans.map((p) => ({ fingerprint: p.fingerprint, signs: p.signable })) };
 }
 
@@ -606,6 +724,7 @@ function farIndex(home, inputs) {
 // Why an output of ours may never be seen by the wallet (the rule at the top
 // of this file), or null.
 function strayReason(home, inputs) {
+  if (home.uneven) return home.uneven;
   if (home.single) {
     return !inputs.length || inputs.some((h) => h.single === home.single) ? null : "that key spends nothing here";
   }
@@ -652,8 +771,19 @@ export function signPsbt(psbt, key, options = {}) {
         skipped.push({ input: r.index, reason: r.reason });
         continue;
       }
-      const node = keys.node(r.keyPath);
       const coin = p.prevouts[r.index];
+      if (r.slots) {
+        const hash = segwitV0Sighash(tx, r.index, r.scriptCode, coin.value, r.sighash);
+        for (const slot of r.slots) {
+          const node = keys.node(slot.keyPath);
+          const der = cr().ecdsaSign(hash, node.privateKey);
+          if (!cr().ecdsaVerify(der, hash, node.publicKey)) throw new SignError(`input ${r.index + 1}: the signature made doesn't verify`);
+          setEntry(out.inputs[r.index], IN.PARTIAL_SIG, node.publicKey, concat([der, Uint8Array.of(r.sighash)]));
+          signed.push({ input: r.index, path: slot.path, pubkey: toHex(slot.pubkey) });
+        }
+        continue;
+      }
+      const node = keys.node(r.keyPath);
       if (r.type === "p2tr") {
         const xonly = node.publicKey.subarray(1);
         const tweak = bip86Tweak(xonly);
@@ -691,7 +821,7 @@ export function signPsbt(psbt, key, options = {}) {
 // --- the final transaction -----------------------------------------------------
 
 const push = (data) => {
-  if (data.length > 75) throw new SignError("push too long"); // signatures, keys and P2SH-P2WPKH's redeemScript are short
+  if (data.length > 75) throw new SignError("push too long"); // signatures, keys and P2SH-P2W*'s redeemScript are short
   return concat([Uint8Array.of(data.length), data]);
 };
 
@@ -714,6 +844,18 @@ export function finalize(psbt) {
     if (ct.type === "p2tr") {
       if (!f.tapKeySig) throw new SignError(`input ${n} is not signed`);
       tx.inputs.push({ ...txin, scriptSig: new Uint8Array(0), witness: [f.tapKeySig] });
+      continue;
+    }
+    if (ct.multisig) {
+      const { m, pubkeys } = ct.multisig;
+      const sigs = [];
+      for (const k of pubkeys) {
+        const s = f.partialSigs.find((c) => equal(c.pubkey, k));
+        if (s && sigs.length < m && ecdsaGood(psbt.tx, i, ct, coin, s.pubkey, s.signature)) sigs.push(s.signature);
+      }
+      if (sigs.length < m) throw new SignError(`input ${n} has ${sigs.length} of the ${m} good signatures it needs`);
+      tx.inputs.push({ ...txin, scriptSig: ct.redeemScript ? push(ct.redeemScript) : new Uint8Array(0),
+        witness: [new Uint8Array(0), ...sigs, ct.witnessScript] });
       continue;
     }
     const sig = f.partialSigs.find((s) => keyFits(s.pubkey, ct) && equal(hash160(s.pubkey), ct.hash));

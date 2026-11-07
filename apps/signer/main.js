@@ -832,8 +832,10 @@ function showReview() {
     changeClaimed: !haveKeys,
     inputNote: (i) => {
       const p = plan.inputs[i.index];
-      if (p.sign) return { text: `${ui.symbols.edit} Will be signed${p.path ? ` (${p.path})` : ""}`, color: GREEN };
+      const sigs = p.multisig ? `, ${p.multisig.have + (p.sign ? p.multisig.will : 0)} of ${p.multisig.m} signatures` : "";
+      if (p.sign) return { text: `${ui.symbols.edit} Will be signed${p.path ? ` (${p.path})` : ""}${sigs}`, color: GREEN };
       if (p.signed || p.final) return { text: `${ui.symbols.ok} Signed already`, color: GREEN };
+      if (p.multisig && !haveKeys) return { text: `${p.multisig.have} of ${p.multisig.m} signatures`, color: AMBER };
       return haveKeys ? { text: `${ui.symbols.close} Not signed: ${p.reason}`, color: AMBER } : null;
     },
   });
@@ -841,6 +843,8 @@ function showReview() {
   console.log(`signer: review: ${plural(a.inputs.length, "input")}, ${count} to sign, ${plural(a.outputs.length, "output")}, ` +
     `fee ${a.fee ?? "?"} sat, ${a.network}, ${plural(a.warnings.length, "warning")}`);
   logTotals(a);
+  const several = plan.inputs.filter((i) => i.multisig);
+  if (several.length) console.log(`signer: multisig: ${several.map((i) => `${i.multisig.have}+${i.multisig.will}/${i.multisig.m}`).join(" ")}`);
   const of = (test) => a.outputs.filter(test).length;
   console.log(`signer: change: ${haveKeys ? 0 : of((o) => o.mine)} claimed, ${haveKeys ? of((o) => o.mine) : 0} checked, ` +
     `${of((o) => o.stray !== undefined)} stray, ${of((o) => o.unverified)} unverified, ` +

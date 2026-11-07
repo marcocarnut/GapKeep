@@ -41,6 +41,8 @@ export const VERSIONS = {
   tpub: { pub: 0x043587cf, prv: 0x04358394, network: "testnet", script: "p2pkh" },
   upub: { pub: 0x044a5262, prv: 0x044a4e28, network: "testnet", script: "p2sh-p2wpkh" },
   vpub: { pub: 0x045f1cf6, prv: 0x045f18bc, network: "testnet", script: "p2wpkh" },
+  Zpub: { pub: 0x02aa7ed3, prv: 0x02aa7a99, network: "mainnet", script: "p2wsh" },
+  Vpub: { pub: 0x02575483, prv: 0x02575048, network: "testnet", script: "p2wsh" },
 };
 
 // The version to export an account with, for Electrum: by its script type
@@ -51,6 +53,7 @@ export function versionFor(script, network) {
   switch (script) {
     case "p2wpkh": return test ? "vpub" : "zpub";
     case "p2sh-p2wpkh": return test ? "upub" : "ypub";
+    case "p2wsh": return test ? "Vpub" : "Zpub";
     default: return test ? "tpub" : "xpub";
   }
 }

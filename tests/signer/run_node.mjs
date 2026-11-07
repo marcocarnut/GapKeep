@@ -21,16 +21,17 @@ import { parsePrivateKey, parseWif, KeyError } from "../../apps/signer/lib/keys.
 import { combine, CombineError } from "../../apps/signer/lib/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
 import { analyze } from "../../apps/signer/lib/psbt/analyze.js";
-import { base58CheckEncode } from "../../apps/signer/lib/psbt/basen.js";
+import { base58CheckEncode, base58CheckDecode } from "../../apps/signer/lib/psbt/basen.js";
 import { CodeReader, seriesFor } from "../../apps/signer/lib/codes.js";
 import { split, deflateRaw, toBase32, Joiner } from "../../lib/js/bbqr.js";
-import { accountDescriptor, descriptorChecksum, checkDescriptor } from "../../apps/signer/lib/descriptor.js";
+import { accountDescriptor, cosignerKey, descriptorChecksum, checkDescriptor } from "../../apps/signer/lib/descriptor.js";
 import { selfTest } from "../../apps/signer/lib/selftest.js";
 import { fromHex, toHex, equal, concat, Writer, fromBase64, DecodeError } from "../../apps/signer/lib/psbt/bytes.js";
 import { parseTx, serializeTx, txid as txidOf } from "../../apps/signer/lib/psbt/tx.js";
-import { parsePsbt, serializePsbt, setEntry, IN, OUT, MAGIC } from "../../apps/signer/lib/psbt/psbt.js";
+import { parsePsbt, serializePsbt, setEntry, IN, OUT, GLOBAL, MAGIC } from "../../apps/signer/lib/psbt/psbt.js";
 import { readPayload, electrumQrText } from "../../apps/signer/lib/psbt/transport.js";
-import { scriptToAddress, p2wpkhScript, p2shScript, p2pkhScript } from "../../apps/signer/lib/psbt/script.js";
+import { scriptToAddress, p2wpkhScript, p2shScript, p2pkhScript, p2wshScript, parseMultisig, classify } from "../../apps/signer/lib/psbt/script.js";
+import { multisigScript } from "../../apps/signer/lib/multisig.js";
 
 setCrypto(ref);
 
@@ -328,11 +329,27 @@ check("legacy", "SIGHASH_SINGLE without its output hashes to 1", () => {
     eq(toHex(s0), toHex(want0.signature), "P2SH multisig");
     return toHex(s1) === toHex(want1.signature);
   });
-  check("bip174", "signPsbt leaves multisig alone, saying why", () => {
+  check("bip174", "signPsbt: bare P2SH multisig left alone, saying why; P2SH-P2WSH as the BIP signs it", () => {
     const r = signPsbt(updated, master, {});
-    eq(r.signed.length, 0);
-    for (const s of r.skipped) has(s.reason, "not supported");
-    return equal(serializePsbt(r.psbt), serializePsbt(updated));
+    eq(r.signed.map((s) => s.input), [1, 1]); // this master holds both of its keys
+    has(r.skipped[0].reason, "not supported");
+    eq(r.psbt.inputs[0].fields.partialSigs.length, 0);
+    const want = first.inputs[1].fields.partialSigs[0];
+    eq(toHex(r.psbt.inputs[1].fields.partialSigs.find((s) => equal(s.pubkey, want.pubkey)).signature), toHex(want.signature));
+  });
+  check("bip174", "the combined PSBT's P2SH-P2WSH input finalizes as the BIP's transaction does", () => {
+    const both = parsePsbt(fromHex(wf[5].hex));
+    const f = both.inputs[1].fields;
+    const coin = f.witnessUtxo;
+    const ms = parseMultisig(f.witnessScript);
+    const got = planKeys(both, [], {}).inputs[1].multisig;
+    eq([got.m, got.n, got.have], [ms.m, ms.n, 2]);
+    const want = parseTx(fromHex(PSBT_V.bip174.extracted_tx.hex ?? PSBT_V.bip174.extracted_tx)).inputs[1].witness;
+    const single = parsePsbt(serializePsbt(both));
+    single.inputs[0].fields.finalScriptSig = Uint8Array.of(0); // finalize() checks the second input here
+    const tx = parseTx(finalize(single).tx);
+    eq(tx.inputs[1].witness.map(toHex), want.map(toHex));
+    return coin.value > 0;
   });
 }
 
@@ -359,7 +376,7 @@ const txOut = (value, script) => new Writer().u64(value).varBytes(script).done()
 //   inputs:  [{ kind, path, amount, fp?, pubkey?, script?, utxo?: false, sighash?, merkleRoot?, internalKey?, extra?,
 //              noOrigin?: true, prevOutputs? (more outputs in a P2PKH coin's previous transaction) }]
 //   outputs: [{ kind, path, amount, fp?, pubkey?, script? } | { script, amount }]
-function build({ inputs, outputs, master = abandon, version = 2, locktime = 0 }) {
+function build({ inputs, outputs, master = abandon, version = 2, locktime = 0, globals = [] }) {
   const ins = [], inMaps = [];
   inputs.forEach((x, i) => {
     const path = parsePath(x.path || "m/84'/1'/0'/0/" + i);
@@ -416,13 +433,14 @@ function build({ inputs, outputs, master = abandon, version = 2, locktime = 0 })
       if (o.kind === "p2tr") entries.push([OUT.TAP_BIP32_DERIVATION, o.pubkey || xonly, concat([[0], origin(fp, parsePath(o.claimPath || o.path))])]);
       else entries.push([OUT.BIP32_DERIVATION, o.pubkey || pub, origin(fp, parsePath(o.claimPath || o.path))]);
     }
+    for (const e of o.extra || []) entries.push(e);
     outs.push({ value: o.amount, script });
     outMaps.push(entries);
   }
   const tx = { version, inputs: ins, outputs: outs, locktime, segwit: false };
   const w = new Writer(1024);
   w.bytes(MAGIC);
-  writeMap(w, [[0, [], serializeTx(tx, { withWitness: false })]]);
+  writeMap(w, [[0, [], serializeTx(tx, { withWitness: false })], ...globals]);
   for (const m of inMaps) writeMap(w, m);
   for (const m of outMaps) writeMap(w, m);
   return parsePsbt(w.done());
@@ -579,10 +597,6 @@ check("negative", "already final", () => {
   const p = one({ kind: "p2wpkh", amount: 1000, extra: [[IN.FINAL_SCRIPTWITNESS, [], Uint8Array.of(0)]] });
   const pl = plan(p, abandon, ZERO_AUX);
   return pl.inputs[0].final && pl.complete && has(reasonOf(p), "final");
-});
-check("negative", "multisig P2WSH is not signed", () => {
-  const ms = concat([[0x51, 33], derive(abandon, "m/48'/1'/0'/2'/0/0").publicKey, [0x51, 0xae]]);
-  return has(reasonOf(one({ kind: "p2wpkh", amount: 1000, script: concat([[0, 32], sha(ms)]) })), "only single-key");
 });
 check("negative", "a bad derivation next to a good one: the good one signs", () => {
   const p = one({ kind: "p2wpkh", amount: 1000, extra: [[IN.BIP32_DERIVATION, ref.publicKey(sha("z")), origin(ABANDON_FP, [1, 2])]] });
@@ -1416,6 +1430,341 @@ check("codes", "a BBQr-looking text with a bad header isn't a part", () =>
   throws(() => new CodeReader().read("B$ZP!!!!"), DecodeError));
 
 // The codes tests/signer.txt shows the camera (tests/signer/make_scenario.py)
+// --- multisig -----------------------------------------------------------------------
+
+const COSIGNERS = [abandon, fromSeed(new Uint8Array(32).fill(1)), fromSeed(new Uint8Array(32).fill(2))];
+const MS = "m/48'/1'/0'/2'";
+const msPub = (c, at) => derive(COSIGNERS[c], `${MS}/${at}`).publicKey;
+const xpubEntry = (c, { fp = fingerprint(COSIGNERS[c]), path = MS } = {}) => {
+  const raw = decodeBase58(serializeXpub(neuter(derive(COSIGNERS[c], path)), "tpub"));
+  return [GLOBAL.XPUB, raw, origin(fp, parsePath(path))];
+};
+const decodeBase58 = (text) => base58CheckDecode(text);
+const XPUBS = [0, 1, 2].map((c) => xpubEntry(c));
+const compare = (a, b) => (toHex(a) < toHex(b) ? -1 : 1);
+// The keys of a script: [cosigner, relative path, options], sorted.
+function msScript(places, m = 2) {
+  const keys = places.map(([c, at, o = {}]) => ({ pub: o.pub || msPub(c, at), fp: o.fp || fingerprint(COSIGNERS[c]), path: o.path || `${MS}/${at}` }))
+    .sort((a, b) => compare(a.pub, b.pub));
+  return { ws: multisigScript(m, keys.map((k) => k.pub)), keys };
+}
+const coinScript = (ws, type) => (type === "p2sh-p2wsh" ? p2shScript(hash160(p2wshScript(ref.sha256(ws)))) : p2wshScript(ref.sha256(ws)));
+const msInput = (places, { m = 2, type = "p2wsh", amount = 100000, ws: over } = {}) => {
+  const { ws, keys } = msScript(places, m), script = over || ws;
+  return { kind: "p2wpkh", amount, noOrigin: true, script: coinScript(script, type), extra: [[IN.WITNESS_SCRIPT, [], script],
+    ...(type === "p2sh-p2wsh" ? [[IN.REDEEM_SCRIPT, [], p2wshScript(ref.sha256(script))]] : []),
+    ...keys.map((k) => [IN.BIP32_DERIVATION, k.pub, origin(k.fp, parsePath(k.path))])] };
+};
+const msOutput = (places, { m = 2, type = "p2wsh", amount = 40000 } = {}) => {
+  const { ws, keys } = msScript(places, m);
+  return { script: coinScript(ws, type), amount, extra: [[OUT.WITNESS_SCRIPT, [], ws],
+    ...(type === "p2sh-p2wsh" ? [[OUT.REDEEM_SCRIPT, [], p2wshScript(ref.sha256(ws))]] : []),
+    ...keys.map((k) => [OUT.BIP32_DERIVATION, k.pub, origin(k.fp, parsePath(k.path))])] };
+};
+const WALLET = (at) => [[0, at], [1, at], [2, at]];
+const SPEND = (o = {}) => ({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL, msOutput(WALLET("1/3"))], globals: XPUBS, ...o });
+
+// BIP-147 and OP_CHECKMULTISIG, written here from their definition: the
+// witness a node would run.
+function runsOnChain(p, tx, i) {
+  const w = tx.inputs[i].witness, ws = w[w.length - 1];
+  const { m, pubkeys } = parseMultisig(ws);
+  if (w[0].length !== 0 || w.length !== m + 2) return false;
+  const coin = p.inputs[i].fields.witnessUtxo;
+  const inner = classify(coin.script).type === "p2sh" ? p.inputs[i].fields.redeemScript : coin.script;
+  if (toHex(inner) !== "0020" + toHex(ref.sha256(ws))) return false;
+  let k = 0;
+  for (const sig of w.slice(1, -1)) {
+    if (sig[sig.length - 1] !== 1) return false;
+    const hash = segwitV0Sighash(tx, i, ws, coin.value, 1);
+    while (k < pubkeys.length && !ref.ecdsaVerify(sig.subarray(0, sig.length - 1), hash, pubkeys[k])) k++;
+    if (k++ >= pubkeys.length) return false;
+  }
+  return true;
+}
+const sigsOf = (p, i = 0) => p.inputs[i].fields.partialSigs;
+
+check("multisig", "BIP-143's P2SH-P2WSH 6-of-6, with SIGHASH_ALL", () => {
+  const t = parseTx(fromHex("010000000136641869ca081e70f394c6948e8af409e18b619df2ed74aa106c1ca29787b96e0100000000ffffffff0200e9a435000000001976a914389ffce9cd9ae88dcc0631e88a821ffdbe9bfe2688acc0832f05000000001976a9147480a33f950689af511e6e84c138dbbd3c3ee41588ac00000000"));
+  const ws = fromHex("56210307b8ae49ac90a048e9b53357a2354b3334e9c8bee813ecb98e99a7e07e8c3ba32103b28f0c28bfab54554ae8c658ac5c3e0ce6e79ad336331f78c428dd43eea8449b21034b8113d703413d57761b8b9781957b8c0ac1dfe69f492580ca4195f50376ba4a21033400f6afecb833092a9a21cfdf1ed1376e58c5d1f47de74683123987e967a8f42103a6d48b1131e94ba04d9737d61acdaa1322008af9602b3b14862c07a1789aac162102d8b661b0b3302ee2f162b09e07a55ad5dfbe673a9f01d9f0c19617681024306b56ae");
+  eq(toHex(segwitV0Sighash(t, 0, ws, 987654321, 1)), "185c0be5263dce5b4bb50a047973c1b6272bfbd0103a89444597dc40b248ee7c");
+  eq(multisigScript(6, parseMultisig(ws).pubkeys), ws);
+});
+for (const type of ["p2wsh", "p2sh-p2wsh"]) {
+  const spend = { inputs: [msInput(WALLET("0/3"), { type })], outputs: [EXTERNAL] };
+  check("multisig", `${type}: one key of 2-of-3 signs, and says 1 of 2`, () => {
+    const p = build(spend);
+    const pl = planKeys(p, [abandon], {});
+    eq([pl.inputs[0].sign, pl.inputs[0].multisig, pl.complete], [true, { m: 2, n: 3, have: 0, will: 1 }, false]);
+    eq(pl.inputs[0].path, `${MS}/0/3`);
+    const r = signKeys(p, [abandon], {});
+    eq([r.signed.length, r.plan.inputs[0].multisig.have, r.plan.inputs[0].signed, r.plan.complete, r.plan.inputs[0].sign], [1, 1, false, false, false]);
+    has(r.plan.inputs[0].reason, "1 of the 2");
+    has(throws(() => finalize(r.psbt), SignError).message, "1 of the 2");
+  });
+  check("multisig", `${type}: two copies combined finalize to what a node would run`, () => {
+    const p = build(spend);
+    const a = signPsbt(p, COSIGNERS[0], {}).psbt, b = signPsbt(p, COSIGNERS[2], {}).psbt;
+    const both = combine(a, b).psbt;
+    eq(planKeys(both, [], {}).inputs[0].multisig.have, 2);
+    eq(planKeys(both, [], {}).complete, true);
+    const tx = parseTx(finalize(both).tx);
+    if (!runsOnChain(both, tx, 0)) throw new Error("the witness doesn't run");
+    eq(toHex(tx.inputs[0].scriptSig), type === "p2wsh" ? "" : "22" + toHex(p2wshScript(ref.sha256(both.inputs[0].fields.witnessScript))));
+  });
+  check("multisig", `${type}: two keys in one go are complete, a third adds nothing`, () => {
+    const p = build(spend);
+    const pl = planKeys(p, COSIGNERS.slice(0, 2), {});
+    eq([pl.inputs[0].multisig.will, pl.complete], [2, true]);
+    eq(planKeys(p, COSIGNERS, {}).inputs[0].multisig.will, 2);
+    const r = signKeys(p, COSIGNERS, {});
+    eq([sigsOf(r.psbt).length, r.plan.complete], [2, true]);
+    if (!runsOnChain(r.psbt, parseTx(finalize(r.psbt).tx), 0)) throw new Error("the witness doesn't run");
+  });
+}
+check("multisig", "exactly m signatures in the witness, in the script's order, whatever the PSBT holds", () => {
+  const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
+  const a = signPsbt(p, COSIGNERS[0], {}).psbt, b = signPsbt(p, COSIGNERS[1], {}).psbt, c = signPsbt(p, COSIGNERS[2], {}).psbt;
+  for (const order of [[a, b, c], [c, b, a], [b, c, a]]) {
+    const all = combine(combine(order[0], order[1]).psbt, order[2]).psbt;
+    eq(sigsOf(all).length, 3);
+    const tx = parseTx(finalize(all).tx);
+    eq(tx.inputs[0].witness.length, 4);
+    if (!runsOnChain(all, tx, 0)) throw new Error("the witness doesn't run");
+  }
+});
+const flip = (s) => {
+  const b = s.slice();
+  b[10] ^= 1;
+  return b;
+};
+const msWithSig = (p, pubkey, signature) => {
+  const q = parsePsbt(serializePsbt(p));
+  setEntry(q.inputs[0], IN.PARTIAL_SIG, pubkey, signature);
+  return parsePsbt(serializePsbt(q));
+};
+check("multisig", "a bad signature doesn't count, is flagged, and doesn't reach the witness", () => {
+  const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
+  const a = signPsbt(p, COSIGNERS[0], {}).psbt, s = sigsOf(a)[0];
+  const bad = msWithSig(p, s.pubkey, flip(s.signature));
+  const pl = planKeys(bad, [COSIGNERS[1]], {});
+  eq([pl.inputs[0].badSignature, pl.inputs[0].multisig.have, pl.complete], [true, 0, false]);
+  has(throws(() => finalize(bad), SignError).message, "0 of the 2");
+  const signedBy = signPsbt(bad, COSIGNERS[1], {}).psbt;
+  has(throws(() => finalize(signedBy), SignError).message, "1 of the 2");
+  // with two good ones besides, the bad one is left out
+  const good = signPsbt(signedBy, COSIGNERS[2], {}).psbt;
+  const tx = parseTx(finalize(good).tx);
+  if (!runsOnChain(good, tx, 0)) throw new Error("the witness doesn't run");
+});
+check("multisig", "a signature by a key outside the script doesn't count", () => {
+  const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
+  const s = sigsOf(signPsbt(p, COSIGNERS[0], {}).psbt)[0];
+  const q = msWithSig(p, derive(abandon, "m/1").publicKey, s.signature);
+  eq(planKeys(q, [], {}).inputs[0].multisig.have, 0);
+});
+check("multisig", "SIGHASH other than ALL: refused to sign, and a cosigner's doesn't count", () => {
+  const i = msInput(WALLET("0/3"));
+  i.sighash = 2;
+  has(reasonOf(build({ inputs: [i], outputs: [EXTERNAL] })), "only ALL");
+  const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
+  const s = sigsOf(signPsbt(p, COSIGNERS[0], {}).psbt)[0];
+  const none = msWithSig(p, s.pubkey, concat([s.signature.subarray(0, s.signature.length - 1), [2]]));
+  eq([planKeys(none, [], {}).inputs[0].multisig.have, planKeys(none, [], {}).inputs[0].badSignature], [0, true]);
+});
+check("multisig", "inputs in different states show each their own", () => {
+  const p = build({ inputs: [msInput(WALLET("0/3")), msInput(WALLET("0/4"), { m: 1 })], outputs: [EXTERNAL] });
+  const first = signPsbt(p, COSIGNERS[1], {}).psbt;
+  eq(planKeys(first, [abandon], {}).inputs.map((i) => [i.multisig.m, i.multisig.have, i.multisig.will, i.signed, i.sign]),
+    [[2, 1, 1, false, true], [1, 1, 0, true, false]]);
+});
+check("multisig", "one seed twice in a script gives both signatures", () => {
+  const p = build({ inputs: [msInput([[0, "0/3"], [0, "1/3"], [1, "0/3"]])], outputs: [EXTERNAL] });
+  const r = signKeys(p, [abandon], {});
+  eq([sigsOf(r.psbt).length, r.plan.complete], [2, true]);
+  if (!runsOnChain(r.psbt, parseTx(finalize(r.psbt).tx), 0)) throw new Error("the witness doesn't run");
+});
+check("multisig", "a WIF and an account xprv find their key", () => {
+  const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
+  const k = derive(abandon, `${MS}/0/3`);
+  eq(planKeys(p, [{ single: true, privateKey: k.privateKey, publicKey: k.publicKey }], {}).inputs[0].sign, true);
+  eq(planKeys(p, [derive(abandon, MS)], {}).inputs[0].path, `${MS}/0/3`);
+  const own = build({ inputs: [msInput([[0, "0/3", { fp: fingerprint(derive(abandon, MS)), path: "m/0/3" }], [1, "0/3"], [2, "0/3"]])], outputs: [EXTERNAL] });
+  eq(planKeys(own, [abandon], {}).inputs[0].sign, true); // the account's own fingerprint, as Electrum names a key from an xpub
+});
+check("multisig", "someone else's: says so; our fingerprint with another key: says so", () => {
+  has(reasonOf(build({ inputs: [msInput([[1, "0/3"], [2, "0/3"]], { m: 1 })], outputs: [EXTERNAL] })), "another wallet");
+  const liar = msInput([[0, "0/3", { pub: msPub(1, "0/9") }], [1, "0/3"], [2, "0/3"]]);
+  has(reasonOf(build({ inputs: [liar], outputs: [EXTERNAL] })), "not the one the PSBT names");
+  const none = msInput(WALLET("0/3"));
+  none.extra = none.extra.filter((e) => e[0] !== IN.BIP32_DERIVATION);
+  has(reasonOf(build({ inputs: [none], outputs: [EXTERNAL] })), "names no key");
+});
+const refused = (input) => reasonOf(build({ inputs: [input], outputs: [EXTERNAL] }));
+check("multisig", "scripts refused", () => {
+  const good = msScript(WALLET("0/3")).ws;
+  const other = msInput(WALLET("0/3"));
+  other.script = coinScript(msScript(WALLET("0/4")).ws, "p2wsh");
+  has(refused(other), "not the one the script commits to");
+  const nothing = msInput(WALLET("0/3"));
+  nothing.extra = nothing.extra.filter((e) => e[0] !== IN.WITNESS_SCRIPT);
+  has(refused(nothing), "without its witnessScript");
+  const wrongRedeem = msInput(WALLET("0/3"), { type: "p2sh-p2wsh" });
+  wrongRedeem.extra = wrongRedeem.extra.map((e) => (e[0] === IN.REDEEM_SCRIPT ? [e[0], e[1], p2wshScript(new Uint8Array(32))] : e));
+  has(refused(wrongRedeem), "redeemScript");
+  const K = msPub(0, "0/3"), U = ref.publicKeyConvert(K, false);
+  const script = (s) => msInput(WALLET("0/3"), { ws: s });
+  has(refused(script(concat([[0x51, 65], U, [0x51, 0xae]]))), "uncompressed");
+  has(refused(script(multisigScript(1, [K, K]))), "same key twice");
+  has(refused(script(multisigScript(2, [K, msPub(1, "0/3"), K]))), "same key twice");
+  has(refused(script(concat([[0x51, 0x4c, 33], K, [0x51, 0xae]]))), "the usual way");
+  has(refused(script(concat([[33], K, [0xad, 0x51, 0xb2]]))), "plain m-of-n");
+  has(refused(script(concat([[0x02, 0x90, 0x01, 0xb1, 0x75], good]))), "plain m-of-n");
+  has(refused(script(concat([[0x50, 33], K, [0x51, 0xae]]))), "plain m-of-n");
+  has(refused(script(concat([[0x52, 33], K, [0x51, 0xae]]))), "plain m-of-n");
+});
+
+const change = (o) => planKeys(build(SPEND(o)), [abandon], {}).outputs[1];
+const msReview = (o, keys = [abandon]) => reviewed(build(SPEND(o)), keys);
+const amber = (o, says) => {
+  const a = msReview(o), w = a.outputs[1];
+  eq([w.mine, w.unverified, a.toSelf], [false, true, 0]);
+  eq(a.sent, a.totalOut);
+  has(a.warnings.find((x) => x.text.startsWith("Output 2")).text, says);
+  eq(a.warnings.find((x) => x.text.startsWith("Output 2")).level, "warn");
+};
+check("multisig", "change of the same wallet is proved: green, counted as change", () => {
+  const o = change({});
+  eq([o.ours, o.unproved, o.stray, o.far, o.role, o.type], [true, null, null, null, "change", "p2wsh"]);
+  eq(o.path, `${MS}/1/3`);
+  const a = msReview({});
+  eq([a.outputs[1].mine, a.outputs[1].unverified, a.toSelf], [true, false, 40000]);
+  eq(planKeys(build(SPEND()), COSIGNERS.slice(1, 2).concat(abandon), {}).outputs[1].ours, true);
+});
+check("multisig", "P2SH-P2WSH change of a P2SH-P2WSH wallet is proved, of a P2WSH one not", () => {
+  const nested = { inputs: [msInput(WALLET("0/3"), { type: "p2sh-p2wsh" })], outputs: [EXTERNAL, msOutput(WALLET("1/3"), { type: "p2sh-p2wsh" })] };
+  eq(change(nested).ours, true);
+  has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { type: "p2sh-p2wsh" })] }).unproved, "P2SH-P2WSH");
+  has(change({ ...nested, outputs: [EXTERNAL, msOutput(WALLET("1/3"))] }).unproved, "P2WSH");
+});
+check("multisig", "attack: our key and two of its own", () => {
+  const evil = fromSeed(new Uint8Array(32).fill(66)), pub = (n) => derive(evil, `m/${n}`).publicKey;
+  const places = [[0, "1/3"], [1, "1/3", { pub: pub(1) }], [2, "1/3", { pub: pub(2) }]];
+  amber({ outputs: [EXTERNAL, msOutput(places)] }, "doesn't derive from the PSBT's xpubs");
+});
+check("multisig", "attack: the same, and its xpubs added", () => {
+  const evil = fromSeed(new Uint8Array(32).fill(66));
+  const x = (n) => {
+    const node = neuter(derive(evil, `m/${n}'`));
+    return { pub: derive(node, "m/1/3").publicKey, entry: [GLOBAL.XPUB, base58CheckDecode(serializeXpub(node, "tpub")), origin(fingerprint(evil), [HARDENED + n])], path: `m/${n}'/1/3` };
+  };
+  const a = x(1), b = x(2);
+  const places = [[0, "1/3"], [1, "", { pub: a.pub, fp: fingerprint(evil), path: a.path }], [2, "", { pub: b.pub, fp: fingerprint(evil), path: b.path }]];
+  amber({ outputs: [EXTERNAL, msOutput(places)], globals: [...XPUBS, a.entry, b.entry] }, "not the inputs' cosigners");
+});
+check("multisig", "attack a: a dust coin of the attacker's wallet beside the real ones", () => {
+  const evil = fromSeed(new Uint8Array(32).fill(66));
+  const x = (n) => {
+    const node = neuter(derive(evil, `m/${n}'`));
+    return { pub: (at) => derive(node, "m/" + at).publicKey, entry: [GLOBAL.XPUB, base58CheckDecode(serializeXpub(node, "tpub")), origin(fingerprint(evil), [HARDENED + n])], path: (at) => `m/${n}'/${at}` };
+  };
+  const a = x(1), b = x(2), at = (s) => [[0, s], [1, s, { pub: a.pub(s), fp: fingerprint(evil), path: a.path(s) }], [2, s, { pub: b.pub(s), fp: fingerprint(evil), path: b.path(s) }]];
+  const real = msInput(WALLET("0/3"));
+  const globals = [XPUBS[0], XPUBS[1], XPUBS[2], a.entry, b.entry];
+  // the change proved only against the dust input, the real coin beside it
+  amber({ inputs: [real, msInput(at("0/0"), { amount: 546 })], outputs: [EXTERNAL, msOutput(at("1/3"))], globals }, "not the same wallet");
+  amber({ inputs: [msInput(at("0/0"), { amount: 546 }), real], outputs: [EXTERNAL, msOutput(at("1/3"))], globals }, "not the same wallet");
+  // ... and beside a single-key coin
+  amber({ inputs: [msInput(at("0/0"), { amount: 546 }), { kind: "p2wpkh", amount: 90000 }], outputs: [EXTERNAL, msOutput(at("1/3"))], globals }, "not multisig");
+  // and the real wallet's change, in a mix, stays amber too
+  amber({ inputs: [real, msInput(at("0/0"), { amount: 546 })], outputs: [EXTERNAL, msOutput(WALLET("1/3"))], globals }, "not the same wallet");
+});
+check("multisig", "attack b: one cosigner's key twice", () => {
+  amber({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/5"], [1, "1/6"]])] }, "derive from one xpub");
+  amber({ inputs: [msInput([[0, "0/3"], [1, "0/5"], [1, "0/6"]])] }, "derive from one xpub");
+});
+check("multisig", "attack c: keys at different paths are stray, and count as sent", () => {
+  const o = change({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/4"], [2, "1/3"]])] });
+  eq([o.ours, o.far], [true, null]);
+  has(o.stray, "different paths");
+  const a = msReview({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "0/3"], [2, "1/3"]])] });
+  eq([a.outputs[1].mine, a.toSelf, a.sent], [false, 0, a.totalOut]);
+  has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3/0"))] }).stray, "a chain and an index");
+});
+check("multisig", "m and n exactly", () => {
+  amber({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { m: 1 })] }, "it is 1 of 3, and the inputs 2 of 3");
+  amber({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { m: 3 })] }, "it is 3 of 3, and the inputs 2 of 3");
+  amber({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/3"]])] }, "it is 2 of 2, and the inputs 2 of 3");
+});
+check("multisig", "far and stray go by the shared index", () => {
+  const high = { inputs: [msInput(WALLET("0/40"))] };
+  eq(change({ ...high, outputs: [EXTERNAL, msOutput(WALLET("1/60"))] }).far, null);
+  eq(change({ ...high, outputs: [EXTERNAL, msOutput(WALLET("1/61"))] }).far, 61);
+  has(change({ ...high, outputs: [EXTERNAL, msOutput(WALLET("1/1041"))] }).stray, "over 1040");
+});
+check("multisig", "a hardened relative path can't be proved", () => {
+  const o = change({ outputs: [EXTERNAL, msOutput([[0, "1/3'"], [1, "1/3'"], [2, "1/3'"]])] });
+  has(o.unproved, "doesn't derive");
+});
+check("multisig", "xpubs: extras ignored; a wrong fingerprint or path prefix fails", () => {
+  const extra = xpubEntry(1, { path: "m/48'/1'/7'/2'" });
+  eq(change({ globals: [extra, ...XPUBS] }).ours, true);
+  has(change({ globals: [xpubEntry(0, { fp: "01020304" }), XPUBS[1], XPUBS[2]] }).unproved, "doesn't derive");
+  const rawOf = (e, path) => [e[0], e[1], origin(fingerprint(COSIGNERS[1]), parsePath(path))];
+  has(change({ globals: [XPUBS[0], rawOf(XPUBS[1], "m/48'/1'/1'/2'"), XPUBS[2]] }).unproved, "doesn't derive");
+  has(change({ globals: XPUBS.slice(0, 2) }).unproved, "doesn't derive");
+  has(change({ globals: [XPUBS[0], xpubEntry(1, { path: "m/48'/1'/7'/2'" }), XPUBS[2]] }).unproved, "doesn't derive");
+});
+check("multisig", "no xpubs: amber, with what to tick in Electrum", () => {
+  amber({ globals: [] }, "For hardware device; include xpubs");
+  const a = msReview({ globals: [XPUBS[0], XPUBS[1]] });
+  if (a.warnings.some((w) => w.text.includes("include xpubs"))) throw new Error("the hint is for no xpubs at all");
+});
+check("multisig", "a public key in the xpub's place, or a broken one, is skipped", () => {
+  const broken = [GLOBAL.XPUB, XPUBS[1][1].slice(), XPUBS[1][2]];
+  broken[1][45] = 0;
+  has(change({ globals: [XPUBS[0], broken, XPUBS[2]] }).unproved, "doesn't derive");
+});
+check("multisig", "many derivations asked: not proved, and it stops", () => {
+  const inputs = Array.from({ length: 300 }, (_, i) => msInput(WALLET(`0/${i}`), { amount: 1000 }));
+  has(change({ inputs }).unproved, "too many keys");
+});
+check("multisig", "a key's unsupported script as change is not proved", () => {
+  const out = msOutput(WALLET("1/3"));
+  out.extra = out.extra.map((e) => (e[0] === OUT.WITNESS_SCRIPT ? [e[0], e[1], msScript(WALLET("1/4")).ws] : e));
+  has(change({ outputs: [EXTERNAL, out] }).unproved, "not the one the script commits to");
+});
+check("multisig", "our key not in the script, though named: it pays someone else", () => {
+  const out = msOutput([[1, "1/3"], [2, "1/3"]], { m: 1 });
+  out.extra.push([OUT.BIP32_DERIVATION, msPub(0, "1/3"), origin(ABANDON_FP, parsePath(`${MS}/1/3`))]);
+  has(change({ outputs: [EXTERNAL, out] }).problem, "doesn't pay to that key");
+});
+check("multisig", "BIP-48's paths aren't odd; a wrong purpose is", () => {
+  eq(planKeys(build(SPEND()), [abandon], { network: "testnet" }).inputs[0].oddities, []);
+  has(plan(build({ inputs: [msInput([[0, "", { path: "m/84'/1'/0'/0/3", pub: derive(abandon, "m/84'/1'/0'/0/3").publicKey }], [1, "0/3"], [2, "0/3"]])], outputs: [EXTERNAL] }),
+    abandon, { network: "testnet" }).inputs[0].oddities.join(" "), "not the usual 48'");
+});
+check("multisig", "Electrum's 2-of-3, as its QR code carries it: signed, and its change unproved for want of xpubs", () => {
+  const c = PSBT_V.electrum_made.made.find((x) => x.name === "testnet-2of3-p2wsh");
+  const p = parsePsbt(readPayload(c.qr).bytes);
+  const pl = planKeys(p, [abandon], { network: "testnet" });
+  eq([pl.inputs[0].sign, pl.inputs[0].multisig.m, pl.inputs[0].multisig.n, pl.complete], [true, 2, 3, false]);
+  const claimed = pl.outputs.filter((o) => o.unproved);
+  claimed.forEach((o) => eq([o.ours, o.noXpubs], [false, true]));
+  const r = signKeys(p, [abandon], { network: "testnet" });
+  eq([r.signed.length, r.plan.inputs[0].multisig.have], [1, 1]);
+});
+check("descriptor", "BIP-48: the cosigner's key expression, and Electrum's Zpub", () => {
+  const xpub = serializeXpub(neuter(derive(abandon, "m/48'/0'/0'/2'")), "xpub");
+  eq(cosignerKey({ fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub }), `[${ABANDON_FP}/48h/0h/0h/2h]${xpub}`);
+  throws(() => cosignerKey({ fingerprint: ABANDON_FP, network: "testnet", account: 0, xpub }), RangeError);
+  eq(versionFor("p2wsh", "mainnet"), "Zpub");
+  eq(versionFor("p2wsh", "testnet"), "Vpub");
+  const z = serializeXpub(neuter(derive(abandon, "m/48'/0'/0'/2'")), "Zpub");
+  eq([z[0], parseXpub(z).script, parseXpub(z).network], ["Z", "p2wsh", "mainnet"]);
+  eq(serializeXpub(parseXpub(z).node), xpub);
+});
+
 if (madeOut) {
   const qr = (p) => electrumQrText(serializePsbt(p));
   const hashOf = (bytes) => toHex(ref.sha256(bytes).subarray(0, 8));
@@ -1425,7 +1774,13 @@ if (madeOut) {
     outputs: [{ ...EXTERNAL, amount: 80000 }, { kind: "p2wpkh", amount: 39000, ...o }] });
   const attacker = derive(fromSeed(new Uint8Array(32).fill(9)), "m/84'/1'/0'/1/0").publicKey;
   const plain = build(FEE_OK({ path: "m/84'/1'/0'/1/0" }));
+  const msSpend = (globals) => build({ inputs: [msInput(WALLET("0/3"))], outputs: [{ ...EXTERNAL, amount: 59000 }, msOutput(WALLET("1/3"))], globals });
+  const msHalf = signPsbt(msSpend(XPUBS), COSIGNERS[1], {}).psbt;
+  const parts = (p) => split(serializePsbt(p), "P", { maxVersion: 12, maxParts: 60, encoding: "2" }).parts; // QEMU's test camera takes under 1024 characters
   writeFileSync(madeOut, JSON.stringify({
+    msHalf: parts(msHalf),
+    msHash: hashOf(finalize(signKeys(msHalf, [abandon], {}).psbt).tx),
+    msNoXpubs: parts(msSpend([])),
     plain: qr(plain),
     stray: qr(build(FEE_OK({ path: "m/84'/1'/7'/1/500000" }))),
     far: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/900" }))),
