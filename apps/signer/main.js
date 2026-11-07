@@ -30,7 +30,7 @@ import * as sys from "zg:sys";
 import * as crypto from "zg:crypto";
 import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
-import { readPayload, electrumQrText } from "./lib/psbt/transport.js";
+import { electrumQrText } from "./lib/psbt/transport.js";
 import { parsePsbt } from "./lib/psbt/psbt.js";
 import { parseTx } from "./lib/psbt/tx.js";
 import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
@@ -40,6 +40,7 @@ import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32
 import { Bip39Error } from "./lib/bip39.js";
 import { KeyError } from "./lib/keys.js";
 import { combine, CombineError } from "./lib/combine.js";
+import { CodeReader } from "./lib/codes.js";
 import { applyPlan, flagSignatures } from "./lib/review.js";
 import * as wallet from "./lib/wallet.js";
 
@@ -652,6 +653,7 @@ function drawExport() {
 function showScan(merging) {
   state.merging = merging;
   newPage("scan", ui.symbols.image + (merging ? " Scan another copy" : " Scan a transaction"));
+  page.reader = new CodeReader();
   const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 6, width: "100%" });
   page.scanner = new ui.Scanner(body, {
     detect: ["qr"], width: wide ? 560 : 280, height: wide ? 420 : 210,
@@ -661,8 +663,15 @@ function showScan(merging) {
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
   page.status = paragraph(side, merging
     ? "Show a copy of the same transaction, with other signatures: it is merged into this one."
-    : "Show the transaction's QR code (Electrum: Export, Show as QR code). Large ones need a steady hand and good light.");
-  new ui.Button(side, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
+    : "Show the transaction's QR code (Electrum: Export, Show as QR code), or a wallet's animated BBQr codes. " +
+      "Large ones need a steady hand and good light.");
+  const buttons = buttonRow(side);
+  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
+  page.again = new ui.Button(buttons, { text: ui.symbols.refresh + " Start over", hidden: true, onClick: () => {
+    page.reader.reset();
+    page.again.hidden = true;
+    say("Show the first code of the series.", MUTED);
+  } });
 }
 
 function refuse(text) {
@@ -674,14 +683,23 @@ function scannedTx(text, bytes) {
   if (state.page !== "scan") return;
   let r, loaded;
   try {
-    r = readPayload(text, bytes);
-    loaded = { kind: r.kind, encoding: r.encoding, chars: text === null ? bytes.length : text.length, size: r.bytes.length, copies: 1, notes: [] };
+    const got = page.reader.read(text, bytes);
+    page.again.hidden = !page.reader.started;
+    if (got.part) {
+      if (got.part.added) {
+        console.log(`signer: BBQr part: ${got.part.have} of ${got.part.total}`);
+        say(`${got.part.have} of ${got.part.total} parts read. Keep it in view.`, GREEN);
+      }
+      return;
+    }
+    r = got.payload;
+    loaded = { kind: r.kind, encoding: r.encoding, chars: r.chars, size: r.bytes.length, copies: 1, notes: [] };
     if (r.kind === "psbt") loaded.psbt = parsePsbt(r.bytes);
     else loaded.tx = parseTx(r.bytes);
   } catch (e) {
     if (!(e instanceof DecodeError)) throw e;
     const why = e.message.endsWith(".") ? e.message : e.message + ".";
-    return refuse(/^(This|The code)/.test(why) ? why : "Not a transaction Electrum would load: " + why);
+    return refuse(/^(This|The code|That|These)/.test(why) ? why : "Not a transaction Electrum would load: " + why);
   }
   if (state.merging) {
     if (r.kind !== "psbt") return refuse("That is a finished transaction: there is nothing to merge.");

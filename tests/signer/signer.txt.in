@@ -448,3 +448,31 @@ wait 0.3
 mark
 key ret
 expect signer: signed 1 input, transaction complete 15
+wait 0.3
+
+# 16. An animated PSBT, too big for one of Electrum's codes: its parts in turn,
+# a code of another file refused on the way, then the summary. Escape on the
+# signed page forgets the keys
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+mark
+camera qr @big0@
+expect signer: BBQr part: 1 of @bigparts@ 15
+mark
+camera qr @otherSeries@
+expect signer: refused a code: That code is from another series 15
+wait 0.3
+shot 27-series-refused
+@bigrest@
+mark
+camera qr @biglast@
+expect signer: read a PSBT \(BBQr, \d+ characters, \d+ bytes\) 15
+expect signer: review: 12 inputs, 0 to sign, 2 outputs 5
+expect signer: change: 1 claimed 5
+camera scene
+wait 0.5
+shot 28-bbqr-read

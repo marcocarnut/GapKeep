@@ -70,7 +70,7 @@ export function readPayload(text, bytes = null) {
       parseTx(out);
     } catch (e) {
       if (!(e instanceof DecodeError)) throw e;
-      throw new DecodeError("This is a BBQr code (B$...). Only Electrum's single QR codes are read for now.");
+      throw new DecodeError("This is a BBQr code (B$...) with a damaged header.");
     }
   }
   return { encoding, bytes: out, kind };
