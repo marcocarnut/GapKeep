@@ -25,6 +25,8 @@ export const EXPORTS = [
   { id: "p2wpkh", purpose: 84, name: "Native segwit (BIP-84)" },
   { id: "p2sh-p2wpkh", purpose: 49, name: "Nested segwit (BIP-49)" },
   { id: "p2pkh", purpose: 44, name: "Legacy (BIP-44)" },
+  { id: "p2tr", purpose: 86, name: "Taproot (BIP-86)",
+    note: "An xpub alone doesn't say it is taproot: give the wallet the descriptor." },
 ];
 
 const coin = (network) => (network === "mainnet" ? 0 : 1);

@@ -1238,7 +1238,7 @@ check("descriptor", "BIP-380's valid checksum", () => D.bip380_valid.every(check
 for (const s of D.bip380_invalid) check("descriptor", `BIP-380 refuses ${JSON.stringify(s)}`, () => !checkDescriptor(s));
 check("descriptor", "multipath, against an independent BIP-380 in Python", () => {
   for (const s of D.multipath) eq(descriptorChecksum(bodyOf(s)), s.slice(-8));
-  return D.multipath.length === 3;
+  return D.multipath.length === 4;
 });
 check("descriptor", "BIP-84's account, in the plan's form", () => {
   const acct = neuter(derive(abandon, "m/84'/0'/0'"));
@@ -1250,13 +1250,45 @@ check("descriptor", "BIP-49 on a test network, nested", () => {
   const d = accountDescriptor({ script: "p2sh-p2wpkh", fingerprint: ABANDON_FP, network: "testnet", account: 0, xpub: serializeXpub(acct, "tpub") });
   return d.startsWith(`sh(wpkh([${ABANDON_FP}/49h/1h/0h]tpub`) && d.includes("/<0;1>/*))#") && checkDescriptor(d);
 });
+// What a wallet does with tr(KEY): the output script, from BIP-341's tweak with no script tree.
+const trScript = (x) => "5120" + toHex(ref.taprootTweakPublicKey(x, taggedHash("TapTweak", x)).key);
+const taprootExport = (network, account) => accountDescriptor({ script: "p2tr", fingerprint: ABANDON_FP, network, account,
+  xpub: serializeXpub(neuter(derive(abandon, `m/86'/${network === "mainnet" ? 0 : 1}'/${account}'`)), network === "mainnet" ? "xpub" : "tpub") });
+check("descriptor", "BIP-86's account, in the plan's form, against an independent BIP-380 in Python", () => {
+  const d = taprootExport("mainnet", 0);
+  eq(d, D.multipath[3]);
+  eq(d, accountDescriptor({ script: "p2tr", fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub: V.bip86.xpub }));
+  return checkDescriptor(d);
+});
+check("descriptor", "tr() as exported derives BIP-86's published addresses", () => {
+  const m = /^tr\(\[73c5da0a\/86h\/0h\/0h\]([1-9A-HJ-NP-Za-km-z]+)\/<0;1>\/\*\)#[a-z0-9]{8}$/.exec(taprootExport("mainnet", 0));
+  if (!m) throw new Error("not tr(KEY/<0;1>/*)");
+  const acct = parseXpub(m[1]).node;
+  for (const a of V.bip86.addresses) {
+    const [chain, index] = a.path.split("/").slice(-2).map(Number);
+    const x = deriveChild(deriveChild(acct, chain), index).publicKey.subarray(1);
+    eq(toHex(x), a.internal_key);
+    eq(trScript(x), a.scriptPubKey);
+    eq(scriptToAddress(fromHex(trScript(x)), "mainnet"), a.address);
+  }
+});
+check("descriptor", "BIP-386: tr(KEY) with a raw key and a WIF gives the BIP's script", () => {
+  const want = "512077aab6e066f8a7419c5ab714c12c67d25007ed55a43cadcacb4d7a970a093f11";
+  eq(trScript(fromHex("a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd")), want);
+  const k = parseWif("L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1");
+  eq(trScript(ref.publicKey(k.key.privateKey).subarray(1)), want);
+});
+check("descriptor", "taproot on a test network, in its account", () => {
+  const d = taprootExport("testnet", 7);
+  return d.startsWith(`tr([${ABANDON_FP}/86h/1h/7h]tpub`) && d.includes("/<0;1>/*)#") && checkDescriptor(d);
+});
 check("descriptor", "the account number goes in the path", () => {
   const xpub = serializeXpub(neuter(derive(abandon, "m/44'/0'/7'")), "xpub");
   return accountDescriptor({ script: "p2pkh", fingerprint: ABANDON_FP, network: "mainnet", account: 7, xpub }).startsWith(`pkh([${ABANDON_FP}/44h/0h/7h]`);
 });
 check("descriptor", "refuses what would make a wrong one", () => {
   const xpub = serializeXpub(neuter(abandon), "xpub"), good = { script: "p2wpkh", fingerprint: ABANDON_FP, network: "mainnet", account: 0, xpub };
-  throws(() => accountDescriptor({ ...good, script: "p2tr" }), RangeError);
+  throws(() => accountDescriptor({ ...good, script: "p2wsh" }), RangeError);
   throws(() => accountDescriptor({ ...good, fingerprint: "73C5DA0A" }), RangeError);
   throws(() => accountDescriptor({ ...good, fingerprint: null }), RangeError);
   throws(() => accountDescriptor({ ...good, account: -1 }), RangeError);
