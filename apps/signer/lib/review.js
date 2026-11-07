@@ -8,6 +8,7 @@
 //     a claim no loaded key can check is amber, and counts as sent;
 //     so is multisig change these inputs can't prove (`unproved`, see
 //     multisig.js), which says why, and what to do about Electrum;
+//     multisig change that isn't the inputs' wallet (`notWallet`) is red;
 //     an output of ours at a path the wallet may never scan (`stray`, see
 //     sign.js) is amber with the path, and counts as sent;
 //     an output of ours past where wallets scan (`far`, see sign.js) stays
@@ -43,6 +44,9 @@ export function applyPlan(a, plan) {
         a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} comes back to you at index ${p.far}: ` +
           "your wallet finds this coin only if it looks that far ahead (gap limit)." });
       }
+    } else if (p.notWallet) {
+      a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but it is not the ` +
+        `wallet the inputs are (${p.problem}): it may pay someone else.` });
     } else if (p.problem) {
       a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but its key ` +
         `doesn't derive from these keys (${p.problem}): it pays someone else.` });

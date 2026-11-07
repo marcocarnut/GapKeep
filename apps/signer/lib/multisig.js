@@ -9,8 +9,10 @@
 //     usual way.
 //   cosignerWallet(psbt, coinOf)  what all the inputs together prove:
 //     { type, m, n, xpubs, derive } or { reason, noXpubs }.
-//   proveOutput(wallet, script, f)  { reason } if it isn't that wallet's;
-//     { uneven: why } if it is but no wallet would ever scan it; else {}.
+//   proveOutput(wallet, script, f)  { reason } if it isn't that wallet's
+//     (with `open: true` if that couldn't be told: no wallet was proved, or
+//     too much to derive); { uneven: why } if it is but no wallet would ever
+//     scan it; else {}.
 //
 // That our key is in a change script proves little: a hostile computer can
 // write 2-of-3 with it and two keys of its own. Nothing is stored here, so the
@@ -18,8 +20,11 @@
 //   - a signature commits to the coin's outpoint and script, so if the
 //     transaction is valid at all, its inputs' scripts are the real ones;
 //   - the global xpubs (PSBT_GLOBAL_XPUB) account for the keys of an input's
-//     script. No one can make an xpub that derives to a given key: the HMAC
-//     depends on the xpub. So xpubs that account for them are the cosigners';
+//     script, all at one suffix of exactly two steps (chain, index). No one
+//     can make an xpub that derives to a given key: the HMAC depends on the
+//     xpub. So xpubs that do are the cosigners' accounts, or their ancestors.
+//     With no steps or one, that wouldn't hold: the key itself, public, makes
+//     an "xpub", and change below it is a coin no cosigner's wallet scans;
 //   - keys of a change script derived from those xpubs are the same cosigners'.
 // So that holds only when:
 //   - every input is the same wallet: same type, m, n and xpubs. Else a coin
@@ -41,8 +46,10 @@ import { classify, parseMultisig, TYPE_NAMES } from "./psbt/script.js";
 
 const OP_CHECKMULTISIG = 0xae;
 // Public derivations for one PSBT's proof: a hostile one could ask for many,
-// and the review has seconds. Past this, change is not proved.
-const MAX_DERIVATIONS = 512;
+// and a handler has 10 s. Past this, change is not proved. (512 took 380 ms
+// under QEMU, which says little of a Zero: this leaves 39 ms each. A 2-of-3
+// spend of about 80 inputs fits.)
+const MAX_DERIVATIONS = 256;
 
 export function multisigScript(m, pubkeys) {
   const parts = [Uint8Array.of(0x50 + m)];
@@ -140,6 +147,14 @@ class Deriver {
   }
 }
 
+// What is wrong with where a script's keys sit below their xpubs, or null.
+function unevenPaths(found) {
+  const path = found[0].suffix.join("/");
+  if (found.some((a) => a.suffix.join("/") !== path)) return "its keys are at different paths, which no wallet scans";
+  if (found[0].suffix.length !== 2) return "its keys are not two steps (chain, index) below the cosigners' xpubs";
+  return null;
+}
+
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 const shape = (x) => `${x.m} of ${x.n}`;
 
@@ -173,6 +188,8 @@ function proveInputs(psbt, coinOf) {
     if (c.error) return { reason: `${what}: ${c.error}` };
     const found = derive.accountAll(c.multisig, f.bip32, what);
     if (found.reason) return found;
+    const uneven = unevenPaths(found);
+    if (uneven) return { reason: `${what}: ${uneven}` };
     const ids = found.map((a) => a.id);
     if (!wallet) wallet = { type: c.type, m: c.multisig.m, n: c.multisig.n, xpubs: ids, derive };
     else if (c.type !== wallet.type || c.multisig.m !== wallet.m || c.multisig.n !== wallet.n || !sameSet(ids, wallet.xpubs)) {
@@ -183,7 +200,7 @@ function proveInputs(psbt, coinOf) {
 }
 
 export function proveOutput(wallet, script, f) {
-  if (wallet.reason) return wallet;
+  if (wallet.reason) return { ...wallet, open: true };
   const c = multisigCoin(script, f);
   if (!c) return { reason: "it is not multisig" };
   if (c.error) return { reason: c.error };
@@ -192,10 +209,8 @@ export function proveOutput(wallet, script, f) {
     return { reason: `it is ${shape(c.multisig)}, and the inputs ${shape(wallet)}` };
   }
   const found = wallet.derive.accountAll(c.multisig, f.bip32, "this output");
-  if (found.reason) return found;
+  if (found.reason) return { ...found, open: wallet.derive.spent };
   if (!sameSet(found.map((a) => a.id), wallet.xpubs)) return { reason: "its keys are not the inputs' cosigners" };
-  const path = found[0].suffix.join("/");
-  if (found.some((a) => a.suffix.join("/") !== path)) return { uneven: "its keys are at different paths, which no wallet scans" };
-  if (found[0].suffix.length !== 2) return { uneven: "its keys are not at a chain and an index below the cosigners' xpubs" };
-  return {};
+  const uneven = unevenPaths(found);
+  return uneven ? { uneven } : {};
 }

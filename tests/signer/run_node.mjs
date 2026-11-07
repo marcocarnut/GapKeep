@@ -1626,6 +1626,14 @@ check("multisig", "scripts refused", () => {
 
 const change = (o) => planKeys(build(SPEND(o)), [abandon], {}).outputs[1];
 const msReview = (o, keys = [abandon]) => reviewed(build(SPEND(o)), keys);
+const red = (o, says) => {
+  const a = msReview(o), w = a.outputs[1];
+  eq([w.mine, a.toSelf, a.sent], [false, 0, a.totalOut]);
+  const x = a.warnings.find((y) => y.text.startsWith("Output 2"));
+  has(x.text, says);
+  eq(x.level, "danger");
+  has(x.text, "not the wallet the inputs are");
+};
 const amber = (o, says) => {
   const a = msReview(o), w = a.outputs[1];
   eq([w.mine, w.unverified, a.toSelf], [false, true, 0]);
@@ -1644,13 +1652,13 @@ check("multisig", "change of the same wallet is proved: green, counted as change
 check("multisig", "P2SH-P2WSH change of a P2SH-P2WSH wallet is proved, of a P2WSH one not", () => {
   const nested = { inputs: [msInput(WALLET("0/3"), { type: "p2sh-p2wsh" })], outputs: [EXTERNAL, msOutput(WALLET("1/3"), { type: "p2sh-p2wsh" })] };
   eq(change(nested).ours, true);
-  has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { type: "p2sh-p2wsh" })] }).unproved, "P2SH-P2WSH");
-  has(change({ ...nested, outputs: [EXTERNAL, msOutput(WALLET("1/3"))] }).unproved, "P2WSH");
+  has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { type: "p2sh-p2wsh" })] }).problem, "P2SH-P2WSH");
+  has(change({ ...nested, outputs: [EXTERNAL, msOutput(WALLET("1/3"))] }).problem, "P2WSH");
 });
 check("multisig", "attack: our key and two of its own", () => {
   const evil = fromSeed(new Uint8Array(32).fill(66)), pub = (n) => derive(evil, `m/${n}`).publicKey;
   const places = [[0, "1/3"], [1, "1/3", { pub: pub(1) }], [2, "1/3", { pub: pub(2) }]];
-  amber({ outputs: [EXTERNAL, msOutput(places)] }, "doesn't derive from the PSBT's xpubs");
+  red({ outputs: [EXTERNAL, msOutput(places)] }, "doesn't derive from the PSBT's xpubs");
 });
 check("multisig", "attack: the same, and its xpubs added", () => {
   const evil = fromSeed(new Uint8Array(32).fill(66));
@@ -1660,7 +1668,7 @@ check("multisig", "attack: the same, and its xpubs added", () => {
   };
   const a = x(1), b = x(2);
   const places = [[0, "1/3"], [1, "", { pub: a.pub, fp: fingerprint(evil), path: a.path }], [2, "", { pub: b.pub, fp: fingerprint(evil), path: b.path }]];
-  amber({ outputs: [EXTERNAL, msOutput(places)], globals: [...XPUBS, a.entry, b.entry] }, "not the inputs' cosigners");
+  red({ outputs: [EXTERNAL, msOutput(places)], globals: [...XPUBS, a.entry, b.entry] }, "not the inputs' cosigners");
 });
 check("multisig", "attack a: a dust coin of the attacker's wallet beside the real ones", () => {
   const evil = fromSeed(new Uint8Array(32).fill(66));
@@ -1680,7 +1688,7 @@ check("multisig", "attack a: a dust coin of the attacker's wallet beside the rea
   amber({ inputs: [real, msInput(at("0/0"), { amount: 546 })], outputs: [EXTERNAL, msOutput(WALLET("1/3"))], globals }, "not the same wallet");
 });
 check("multisig", "attack b: one cosigner's key twice", () => {
-  amber({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/5"], [1, "1/6"]])] }, "derive from one xpub");
+  red({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/5"], [1, "1/6"]])] }, "derive from one xpub");
   amber({ inputs: [msInput([[0, "0/3"], [1, "0/5"], [1, "0/6"]])] }, "derive from one xpub");
 });
 check("multisig", "attack c: keys at different paths are stray, and count as sent", () => {
@@ -1689,12 +1697,29 @@ check("multisig", "attack c: keys at different paths are stray, and count as sen
   has(o.stray, "different paths");
   const a = msReview({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "0/3"], [2, "1/3"]])] });
   eq([a.outputs[1].mine, a.toSelf, a.sent], [false, 0, a.totalOut]);
-  has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3/0"))] }).stray, "a chain and an index");
+  has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3/0"))] }).stray, "two steps");
+});
+check("multisig", "attack: an xpub that is the input key itself, change hidden below it", () => {
+  const globals = [0, 1, 2].map((c) => xpubEntry(c, { path: `${MS}/0/3` }));
+  const o = change({ outputs: [EXTERNAL, msOutput(WALLET("0/3/1/7"))], globals });
+  eq(o.ours, false);
+  has(o.unproved, "two steps");
+});
+check("multisig", "attack: an xpub one step below the account, change hidden below it", () => {
+  const globals = [0, 1, 2].map((c) => xpubEntry(c, { path: `${MS}/0` }));
+  const o = change({ outputs: [EXTERNAL, msOutput(WALLET("0/1/7"))], globals });
+  eq(o.ours, false);
+  has(o.unproved, "two steps");
+});
+check("multisig", "an input's keys at different suffixes prove nothing", () => {
+  const o = change({ inputs: [msInput([[0, "0/3"], [1, "0/4"], [2, "0/3"]])] });
+  eq(o.ours, false);
+  has(o.unproved, "different paths");
 });
 check("multisig", "m and n exactly", () => {
-  amber({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { m: 1 })] }, "it is 1 of 3, and the inputs 2 of 3");
-  amber({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { m: 3 })] }, "it is 3 of 3, and the inputs 2 of 3");
-  amber({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/3"]])] }, "it is 2 of 2, and the inputs 2 of 3");
+  red({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { m: 1 })] }, "it is 1 of 3, and the inputs 2 of 3");
+  red({ outputs: [EXTERNAL, msOutput(WALLET("1/3"), { m: 3 })] }, "it is 3 of 3, and the inputs 2 of 3");
+  red({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "1/3"]])] }, "it is 2 of 2, and the inputs 2 of 3");
 });
 check("multisig", "far and stray go by the shared index", () => {
   const high = { inputs: [msInput(WALLET("0/40"))] };
@@ -1704,7 +1729,7 @@ check("multisig", "far and stray go by the shared index", () => {
 });
 check("multisig", "a hardened relative path can't be proved", () => {
   const o = change({ outputs: [EXTERNAL, msOutput([[0, "1/3'"], [1, "1/3'"], [2, "1/3'"]])] });
-  has(o.unproved, "doesn't derive");
+  has(o.problem, "doesn't derive");
 });
 check("multisig", "xpubs: extras ignored; a wrong fingerprint or path prefix fails", () => {
   const extra = xpubEntry(1, { path: "m/48'/1'/7'/2'" });
@@ -1728,11 +1753,16 @@ check("multisig", "a public key in the xpub's place, or a broken one, is skipped
 check("multisig", "many derivations asked: not proved, and it stops", () => {
   const inputs = Array.from({ length: 300 }, (_, i) => msInput(WALLET(`0/${i}`), { amount: 1000 }));
   has(change({ inputs }).unproved, "too many keys");
+  // the inputs just fit: the limit is reached at the change, and that is no refutation
+  const o = change({ inputs: inputs.slice(0, 84) });
+  has(o.unproved, "too many keys");
+  eq(o.problem, null);
+  eq(change({ inputs: inputs.slice(0, 80) }).ours, true);
 });
 check("multisig", "a key's unsupported script as change is not proved", () => {
   const out = msOutput(WALLET("1/3"));
   out.extra = out.extra.map((e) => (e[0] === OUT.WITNESS_SCRIPT ? [e[0], e[1], msScript(WALLET("1/4")).ws] : e));
-  has(change({ outputs: [EXTERNAL, out] }).unproved, "not the one the script commits to");
+  has(change({ outputs: [EXTERNAL, out] }).problem, "not the one the script commits to");
 });
 check("multisig", "our key not in the script, though named: it pays someone else", () => {
   const out = msOutput([[1, "1/3"], [2, "1/3"]], { m: 1 });
@@ -1781,6 +1811,7 @@ if (madeOut) {
     msHalf: parts(msHalf),
     msHash: hashOf(finalize(signKeys(msHalf, [abandon], {}).psbt).tx),
     msNoXpubs: parts(msSpend([])),
+    msRefuted: parts(build({ inputs: [msInput(WALLET("0/3"))], outputs: [{ ...EXTERNAL, amount: 59000 }, msOutput(WALLET("1/3"), { m: 1 })], globals: XPUBS })),
     plain: qr(plain),
     stray: qr(build(FEE_OK({ path: "m/84'/1'/7'/1/500000" }))),
     far: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/900" }))),

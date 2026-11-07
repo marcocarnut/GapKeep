@@ -67,8 +67,9 @@
 // An output is "ours" only when deriving its stated path gives the key it
 // names, and that key's script (P2WPKH, P2SH-P2WPKH, P2PKH, or BIP-86 P2TR)
 // is the output's script. Multisig change needs more: see ./multisig.js. What
-// it can't prove stays not ours, with `unproved` saying why. Fingerprints alone prove nothing: anyone can
-// write ours into a PSBT.
+// it can't tell stays not ours, with `unproved` saying why; change the inputs
+// prove isn't their wallet's gets a `problem`, and `notWallet`. Fingerprints
+// alone prove nothing: anyone can write ours into a PSBT.
 //
 // An output can be truly ours and still be a way to lose the money: at a path
 // the wallet never scans, it is held to ransom by whoever knows the path. So
@@ -585,21 +586,24 @@ function planOutput(psbt, i, keys) {
         claim(`it says it is yours (${where}), but the key it names is not this wallet's key at that path`);
         continue;
       }
-      if (multisig && multisig.error) {
-        o.unproved = multisig.error;
-        break;
-      }
-      type = multisig ? (multisig.multisig.pubkeys.some((k) => equal(k, node.publicKey)) ? multisig.type : null) : paysTo(script, node.publicKey);
+      if (!multisig) type = paysTo(script, node.publicKey);
+      else if (multisig.error) type = "p2wsh"; // proveOutput says what is wrong
+      else type = multisig.multisig.pubkeys.some((k) => equal(k, node.publicKey)) ? multisig.type : null;
     }
     if (!type) {
       claim(`it says it is yours (${where}), but it doesn't pay to that key`);
       continue;
     }
     const proof = multisig ? proveOutput(cosignerWallet(psbt, spentOutput), script, f) : {};
-    if (proof.reason) {
+    if (proof.reason && (proof.open || loc.guess)) {
       o.unproved = proof.reason;
       o.noXpubs = proof.noXpubs === true;
       o.problem = null;
+      break;
+    }
+    if (proof.reason) {
+      o.problem = proof.reason;
+      o.notWallet = true;
       break;
     }
     o.ours = true;

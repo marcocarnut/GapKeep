@@ -842,3 +842,33 @@ key ret
 expect signer: signed 1 input 30
 wait 0.5
 shot 39-multisig-partly
+
+# 24. Change that the proved inputs show isn't their wallet (1-of-3, one
+# cosigner alone could spend it): red, counted as sent
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+@msRefutedCodes@
+expect signer: review: 1 input, 0 to sign 15
+camera scene
+wait 0.3
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+mark
+key ret
+expect signer: review: 1 input, 1 to sign 5
+expect signer: change: 0 claimed, 0 checked, 0 stray, 0 unverified, 1 refuted, 0 far 5
+wait 0.5
+shot 40-multisig-refuted

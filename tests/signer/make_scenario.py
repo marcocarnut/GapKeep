@@ -49,6 +49,7 @@ def main():
                          for n, part in enumerate(parts))
     made["msHalfCodes"] = codes(made.pop("msHalf"))
     made["msNoXpubsCodes"] = codes(made.pop("msNoXpubs"))
+    made["msRefutedCodes"] = codes(made.pop("msRefuted"))
     legacy = made.pop("legacy")
     made["legacycodes"] = "\n".join("mark\ncamera qr %s" % part + ("\nexpect signer: BBQr part: %d of %d 15" % (n + 1, len(legacy)) if n + 1 < len(legacy) else "")
                                      for n, part in enumerate(legacy))

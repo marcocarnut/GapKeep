@@ -271,8 +271,11 @@ write 2-of-3 with it and two keys of its own. Nothing is stored here, so the
 others are proved from the PSBT's global xpubs. Change is ours only when
 every input is one wallet (same type, m, n and xpubs), each script's keys and
 xpubs match one to one, the change has exactly that m and n, and its keys share
-one relative path (else it is stray). Otherwise `unproved` says why: amber, and
-counted as sent. The reasoning is at the top of `multisig.js`.
+one relative path (else it is stray), and each input's keys share one suffix of
+exactly two steps below their xpubs. Change the proved inputs show isn't their
+wallet's is red (`problem`, `notWallet`), and counted as sent. Where the proof
+can't be made (no xpubs, inputs not proved, too much to derive) `unproved` says
+why: amber, and counted as sent. The reasoning is at the top of `multisig.js`.
 
 Electrum leaves the xpubs out unless "For hardware device; include xpubs" is
 ticked in the transaction's export menu (desktop), so its multisig change is
