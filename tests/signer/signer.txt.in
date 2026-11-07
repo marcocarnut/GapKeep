@@ -58,6 +58,24 @@ key ret
 expect signer: signed 2 inputs, transaction complete \(SHA-256 dd31fe69d7368962\) 30
 wait 0.5
 shot 07-signed
+# It fits one code; BBQr on request, and back (Done, Next transaction, Show as
+# PSBT, Show as BBQr; there: Pause, Next part, Show as one code)
+key tab
+key tab
+key tab
+mark
+key ret
+expect signer: showing the signed tx as BBQr 10
+wait 0.8
+key tab
+key tab
+key tab
+key tab
+key tab
+mark
+key ret
+expect signer: showing the signed tx \(\d+ bytes 10
+wait 0.3
 # Done, Next transaction, Show as PSBT
 key tab
 key tab
@@ -448,3 +466,78 @@ wait 0.3
 mark
 key ret
 expect signer: signed 1 input, transaction complete 15
+wait 0.3
+
+# 16. An animated PSBT, 30 inputs, too big for one of Electrum's codes once signed: its parts in turn,
+# a code of another file refused on the way, then the summary. Escape on the
+# signed page forgets the keys
+mark
+key esc
+expect signer: keys forgotten 5
+wait 0.3
+key ret
+wait 0.3
+mark
+camera qr @big0@
+expect signer: BBQr part: 1 of @bigparts@ 15
+mark
+camera qr @otherSeries@
+expect signer: refused a code: That code is from another series 15
+wait 0.3
+shot 27-series-refused
+@bigrest@
+mark
+camera qr @biglast@
+expect signer: read a PSBT \(BBQr, \d+ characters, \d+ bytes\) 15
+expect signer: review: 30 inputs, 0 to sign, 2 outputs 5
+expect signer: change: 1 claimed 5
+camera scene
+wait 0.5
+shot 28-bbqr-read
+
+# 17. Signed, it fits no single code: a BBQr series, all at one version. Each
+# part goes on screen in turn (Pause, then Next part), and
+# tests/signer/check_bbqr.mjs joins the screenshots
+key ret
+wait 0.3
+key tab
+key tab
+key ret
+wait 0.3
+mark
+type @xprv@
+key ret
+expect signer: key loaded \(xprv\) 10
+wait 0.5
+mark
+key ret
+expect signer: review: 30 inputs, 30 to sign 10
+expect signer: change: 0 claimed, 1 checked 5
+wait 0.5
+mark
+key ret
+expect signer: signed 30 inputs, transaction complete 30
+expect signer: showing the signed tx as BBQr 10
+wait 1.2
+shot 29-tx-series
+# Done, Next transaction, Show as PSBT, Pause, Next part
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+key tab
+@txshots@
+key shift-tab
+key shift-tab
+mark
+key ret
+expect signer: showing the signed psbt as BBQr 10
+wait 0.3
+key tab
+key tab
+key tab
+key ret
+wait 0.3
+key tab
+@psbtshots@

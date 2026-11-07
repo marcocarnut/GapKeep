@@ -22,9 +22,11 @@ import { combine, CombineError } from "../../apps/signer/lib/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
 import { analyze } from "../../apps/signer/lib/psbt/analyze.js";
 import { base58CheckEncode } from "../../apps/signer/lib/psbt/basen.js";
+import { CodeReader, seriesFor } from "../../apps/signer/lib/codes.js";
+import { split, deflateRaw, toBase32, Joiner } from "../../lib/js/bbqr.js";
 import { accountDescriptor, descriptorChecksum, checkDescriptor } from "../../apps/signer/lib/descriptor.js";
 import { selfTest } from "../../apps/signer/lib/selftest.js";
-import { fromHex, toHex, equal, concat, Writer, fromBase64 } from "../../apps/signer/lib/psbt/bytes.js";
+import { fromHex, toHex, equal, concat, Writer, fromBase64, DecodeError } from "../../apps/signer/lib/psbt/bytes.js";
 import { parseTx, serializeTx, txid as txidOf } from "../../apps/signer/lib/psbt/tx.js";
 import { parsePsbt, serializePsbt, setEntry, IN, OUT, MAGIC } from "../../apps/signer/lib/psbt/psbt.js";
 import { readPayload, electrumQrText } from "../../apps/signer/lib/psbt/transport.js";
@@ -1124,6 +1126,99 @@ check("descriptor", "refuses what would make a wrong one", () => {
   return true;
 });
 
+// --- what the camera reads: BBQr ----------------------------------------------------
+
+const BIG = serializePsbt(build({ inputs: Array.from({ length: 12 }, (_, i) => ({ kind: "p2wpkh", path: `m/84'/1'/0'/0/${i}`, amount: 10000 })),
+  outputs: [EXTERNAL] }));
+const readAll = (r, parts) => parts.map((t) => r.read(t)).at(-1);
+for (const encoding of ["H", "2", "Z"]) {
+  check("codes", `a PSBT in BBQr, encoding ${encoding}, in any order`, () => {
+    const { parts } = split(BIG, "P", { encoding, maxVersion: 8, maxParts: 20 });
+    if (parts.length < 2) throw new Error("the test needs several parts");
+    const r = new CodeReader();
+    const got = readAll(r, [...parts.slice(1), parts[1], parts[0]]);
+    eq([got.payload.kind, got.payload.encoding, toHex(got.payload.bytes)], ["psbt", "BBQr", toHex(BIG)]);
+    return !r.started;
+  });
+}
+check("codes", "one part is enough for a small one", () => {
+  const p = build(TWO), b = serializePsbt(p);
+  const { parts } = split(b, "P", { minVersion: 25 });
+  eq(parts.length, 1);
+  return equal(new CodeReader().read(parts[0]).payload.bytes, b);
+});
+check("codes", "progress, and a repeated code counts once", () => {
+  const { parts } = split(BIG, "P", { encoding: "2", maxVersion: 8, maxParts: 20 });
+  const r = new CodeReader();
+  eq(r.read(parts[0]).part, { have: 1, total: parts.length, added: true });
+  eq(r.read(parts[0]).part, { have: 1, total: parts.length, added: false });
+  return r.started;
+});
+check("codes", "a transaction in BBQr", () => {
+  const tx = finalize(signPsbt(build(TWO), abandon, ZERO_AUX).psbt).tx;
+  eq(new CodeReader().read(split(tx, "T", { encoding: "2", minVersion: 20 }).parts[0]).payload.kind, "tx");
+});
+check("codes", "Electrum's code goes by as before", () => {
+  const c = E.cases[0], got = new CodeReader().read(c.qr);
+  eq([got.payload.kind, got.payload.encoding, got.payload.chars], ["psbt", "base43", c.qr.length]);
+});
+check("codes", "another series is refused, the first goes on, or starts over", () => {
+  const { parts } = split(BIG, "P", { encoding: "2", maxVersion: 8, maxParts: 20 });
+  const tx = finalize(signPsbt(build(TWO), abandon, ZERO_AUX).psbt).tx;
+  const other = split(tx, "T", { encoding: "2", minVersion: 25 }).parts[0];
+  const r = new CodeReader();
+  r.read(parts[0]);
+  has(throws(() => r.read(other), DecodeError).message, "another series");
+  eq(r.started, true);
+  eq(toHex(readAll(r, parts).payload.bytes), toHex(BIG));
+  r.read(parts[0]);
+  r.reset();
+  eq(r.read(other).payload.kind, "tx");
+});
+check("codes", "other files are refused, saying what they are", () => {
+  const u = split(new TextEncoder().encode("hello"), "U", { encoding: "2", minVersion: 20 }).parts[0];
+  return has(throws(() => new CodeReader().read(u), DecodeError).message, "text");
+});
+check("codes", "a series that says PSBT and isn't one", () => {
+  const u = split(new Uint8Array(40).fill(7), "P", { encoding: "2", minVersion: 20 }).parts[0];
+  return has(throws(() => new CodeReader().read(u), DecodeError).message, "isn't one");
+});
+check("codes", "a damaged deflate stream is refused, and the reader is free again", () => {
+  const z = "B$ZP0100" + toBase32(new Uint8Array(16).fill(0xff));
+  const r = new CodeReader();
+  has(throws(() => r.read(z), DecodeError).message, "don't make a file");
+  return !r.started;
+});
+check("codes", "a deflate bomb stops at the limit", () => {
+  const big = new Uint8Array(3 << 20);
+  const text = "B$ZP0100" + toBase32(deflateRaw(big));
+  return has(throws(() => new CodeReader().read(text), DecodeError).message, "don't make a file");
+});
+check("codes", "two contents for one part are refused", () => {
+  const { parts } = split(BIG, "P", { encoding: "2", maxVersion: 8, maxParts: 20 });
+  const r = new CodeReader();
+  r.read(parts[0]);
+  const bad = parts[0].slice(0, -8) + "AAAAAAAA";
+  return has(throws(() => r.read(bad), DecodeError).message, "can't be used");
+});
+for (const [name, size, most] of [["small", 900, 8], ["large", 6000, 40]]) {
+  check("codes", `what the signer shows: a ${name} file, at one version up to 12`, () => {
+    const bytes = new Uint8Array(size).map((_, i) => (i * 2654435761) >>> 13);
+    const s = seriesFor(bytes, "tx");
+    if (s.version > 12 || s.parts.length > most) throw new Error(`version ${s.version}, ${s.parts.length} parts`);
+    const j = new Joiner();
+    for (const p of s.parts) j.add(p);
+    return equal(j.result().bytes, bytes) && j.result().type === "T";
+  });
+}
+check("codes", "a PSBT's series says it is one, and reads back", () => {
+  const got = new CodeReader();
+  const { parts } = seriesFor(BIG, "psbt");
+  return equal(parts.map((t) => got.read(t)).at(-1).payload.bytes, BIG);
+});
+check("codes", "a BBQr-looking text with a bad header isn't a part", () =>
+  throws(() => new CodeReader().read("B$ZP!!!!"), DecodeError));
+
 // The codes tests/signer.txt shows the camera (tests/signer/make_scenario.py)
 if (madeOut) {
   const qr = (p) => electrumQrText(serializePsbt(p));
@@ -1138,6 +1233,9 @@ if (madeOut) {
     half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
     half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),
     other: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/1" }))),
+    big: split(serializePsbt(build({ inputs: Array.from({ length: 30 }, (_, i) => ({ kind: "p2wpkh", path: `m/84'/1'/0'/0/${i}`, amount: 10000 })),
+      outputs: [{ ...EXTERNAL, amount: 290000 }, { ...CHANGE, path: "m/84'/1'/0'/1/0", amount: 9000 }] })), "P", { maxVersion: 12, maxParts: 20, encoding: "2" }).parts,
+    otherSeries: split(new TextEncoder().encode("not a transaction"), "U", { encoding: "2", minVersion: 20 }).parts[0],
     finished: electrumQrText(finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).tx),
     xprv: privBase58(abandon, XPRV),
     accountTprv: privBase58(derive(abandon, ACCOUNT), TPRV),

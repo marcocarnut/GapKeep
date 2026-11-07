@@ -30,7 +30,7 @@ import * as sys from "zg:sys";
 import * as crypto from "zg:crypto";
 import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
-import { readPayload, electrumQrText } from "./lib/psbt/transport.js";
+import { electrumQrText } from "./lib/psbt/transport.js";
 import { parsePsbt } from "./lib/psbt/psbt.js";
 import { parseTx } from "./lib/psbt/tx.js";
 import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
@@ -40,6 +40,7 @@ import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32
 import { Bip39Error } from "./lib/bip39.js";
 import { KeyError } from "./lib/keys.js";
 import { combine, CombineError } from "./lib/combine.js";
+import { CodeReader, seriesFor } from "./lib/codes.js";
 import { applyPlan, flagSignatures } from "./lib/review.js";
 import * as wallet from "./lib/wallet.js";
 
@@ -47,6 +48,7 @@ setHashes({ sha256: crypto.sha256, ripemd160: crypto.ripemd160 });
 
 const MAX_SHARES = 9;
 const MAX_KEYS = 8;
+const PART_MS = 500;  // each code of a series on screen (core tunes it: B2)
 const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 const NETWORK_ORDER = ["mainnet", "testnet", "regtest"];
 const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub", field: "text" }];
@@ -67,7 +69,7 @@ const state = {
   merging: false,     // the scanner is reading another copy
   network: null,      // chosen by the person; null: as guessed
   lastNetwork: null,  // of the last transaction shown: for a signed one, which says nothing
-  signed: null,       // { psbt bytes, tx bytes | null, count }
+  signed: null,       // { psbt bytes, tx bytes | null, count, series: show BBQr }
   exportForm: 0,      // index into EXPORT_FORMS
   exportType: 0,      // index into wallet.EXPORTS
   exportNetwork: "mainnet",
@@ -99,6 +101,7 @@ function emptySecrets() {
 
 function newPage(name, title) {
   emptySecrets();
+  stopParts();
   state.page = name;
   ui.screen.clear();
   ui.screen.set({ layout: "column", padding: wide ? [20, 32] : [10, 12], gap: wide ? 12 : 6, scrollable: true });
@@ -652,6 +655,7 @@ function drawExport() {
 function showScan(merging) {
   state.merging = merging;
   newPage("scan", ui.symbols.image + (merging ? " Scan another copy" : " Scan a transaction"));
+  page.reader = new CodeReader();
   const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 6, width: "100%" });
   page.scanner = new ui.Scanner(body, {
     detect: ["qr"], width: wide ? 560 : 280, height: wide ? 420 : 210,
@@ -661,8 +665,15 @@ function showScan(merging) {
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
   page.status = paragraph(side, merging
     ? "Show a copy of the same transaction, with other signatures: it is merged into this one."
-    : "Show the transaction's QR code (Electrum: Export, Show as QR code). Large ones need a steady hand and good light.");
-  new ui.Button(side, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
+    : "Show the transaction's QR code (Electrum: Export, Show as QR code), or a wallet's animated BBQr codes. " +
+      "Large ones need a steady hand and good light.");
+  const buttons = buttonRow(side);
+  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
+  page.again = new ui.Button(buttons, { text: ui.symbols.refresh + " Start over", hidden: true, onClick: () => {
+    page.reader.reset();
+    page.again.hidden = true;
+    say("Show the first code of the series.", MUTED);
+  } });
 }
 
 function refuse(text) {
@@ -674,14 +685,23 @@ function scannedTx(text, bytes) {
   if (state.page !== "scan") return;
   let r, loaded;
   try {
-    r = readPayload(text, bytes);
-    loaded = { kind: r.kind, encoding: r.encoding, chars: text === null ? bytes.length : text.length, size: r.bytes.length, copies: 1, notes: [] };
+    const got = page.reader.read(text, bytes);
+    page.again.hidden = !page.reader.started;
+    if (got.part) {
+      if (got.part.added) {
+        console.log(`signer: BBQr part: ${got.part.have} of ${got.part.total}`);
+        say(`${got.part.have} of ${got.part.total} parts read. Keep it in view.`, GREEN);
+      }
+      return;
+    }
+    r = got.payload;
+    loaded = { kind: r.kind, encoding: r.encoding, chars: r.chars, size: r.bytes.length, copies: 1, notes: [] };
     if (r.kind === "psbt") loaded.psbt = parsePsbt(r.bytes);
     else loaded.tx = parseTx(r.bytes);
   } catch (e) {
     if (!(e instanceof DecodeError)) throw e;
     const why = e.message.endsWith(".") ? e.message : e.message + ".";
-    return refuse(/^(This|The code)/.test(why) ? why : "Not a transaction Electrum would load: " + why);
+    return refuse(/^(This|The code|That|These)/.test(why) ? why : "Not a transaction Electrum would load: " + why);
   }
   if (state.merging) {
     if (r.kind !== "psbt") return refuse("That is a finished transaction: there is nothing to merge.");
@@ -863,32 +883,100 @@ function showSigned(form) {
   newPage("signed", ui.symbols.ok + (s.tx ? " Signed" : " Partly signed"));
   const bytes = form === "tx" ? s.tx : s.psbt;
   const text = electrumQrText(bytes);
-  paragraph(ui.screen, (form === "tx"
-    ? "The complete, signed transaction. "
-    : s.tx ? "The PSBT with its signatures. " : "The PSBT with the signatures so far: it needs more before it can be sent. ") +
-    "In Electrum: Tools, Load transaction, From QR code; check it there, then Broadcast.", { color: MUTED });
-  const buttons = buttonRow(ui.screen);
+  const what = form === "tx" ? "The complete, signed transaction. "
+    : s.tx ? "The PSBT with its signatures. " : "The PSBT with the signatures so far: it needs more before it can be sent. ";
+  // the code beside the buttons: a camera must see all of it, unscrolled
+  const body = new ui.Container({ layout: "row", gap: 12, width: "100%", alignItems: "start" });
+  const left = new ui.Container(body, { layout: "column", gap: 4, alignItems: "center" });
+  const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1 });
+  const note = paragraph(side, "", { color: MUTED, font: FONT.small });
+  const buttons = buttonRow(side);
   const done = new ui.Button(buttons, { text: ui.symbols.ok + (state.keys.length ? " Done, forget the keys" : " Done"), onClick: () => finish(false) });
   if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.right + " Next transaction (keep keys)", onClick: () => finish(true) });
   if (s.tx) {
     new ui.Button(buttons, { text: form === "tx" ? "Show as PSBT" : "Show the transaction",
       onClick: () => showSigned(form === "tx" ? "psbt" : "tx") });
   }
-  const size = Math.min(ui.height - 140, ui.width - 64);
+  done.focus();
+  const size = Math.min(ui.height - (wide ? 110 : 80), ui.width - (wide ? 420 : 310));
+
+  // Electrum reads one code, and no BBQr: that first, when it fits
   let qr = null;
-  for (const ecc of ["M", "L"]) {
-    try {
-      qr = new ui.QRCode({ data: text, size, ecc });
-      break;
-    } catch (e) {
-      if (!(e instanceof RangeError)) throw e;
+  if (!s.series) {
+    for (const ecc of ["M", "L"]) {
+      try {
+        qr = new ui.QRCode(left, { data: text, size, ecc });
+        break;
+      } catch (e) {
+        if (!(e instanceof RangeError)) throw e;
+      }
     }
   }
-  if (!qr) warning(ui.screen, `Too large for one QR code (${text.length} characters).` +
-    (form === "psbt" && s.tx ? " Try the transaction: it is smaller." : ""), RED);
-  else new ui.Label({ text: `${bytes.length} bytes, ${text.length} characters, ${qr.modules}x${qr.modules}`, font: FONT.small, color: MUTED });
-  done.focus();
-  console.log(`signer: showing the signed ${form} (${bytes.length} bytes, ${text.length} characters)`);
+  if (qr) {
+    note.text = what + "In Electrum: Tools, Load transaction, From QR code; check it there, then Broadcast.";
+    new ui.Button(buttons, { text: "Show as BBQr", onClick: () => { s.series = true; showSigned(form); } });
+    new ui.Label(left, { text: `${bytes.length} bytes, ${text.length} characters, ${qr.modules}x${qr.modules}`, font: FONT.small, color: MUTED });
+    console.log(`signer: showing the signed ${form} (${bytes.length} bytes, ${text.length} characters)`);
+    return;
+  }
+  note.text = what + "Animated BBQr codes, for a wallet that reads them; Electrum doesn't" +
+    (s.series ? "." : ", and this is too large for one code.");
+  // compressing is JavaScript, and slow on a Zero: a turn of its own, as a
+  // handler has 10 s
+  setTimeout(() => {
+    if (state.page !== "signed" || state.signed !== s) return;
+    const t0 = sys.uptime();
+    const series = seriesFor(bytes, form);
+    const ms = sys.uptime() - t0;
+    showParts(left, buttons, series, size);
+    if (s.series) new ui.Button(buttons, { text: "Show as one code", onClick: () => { s.series = false; showSigned(form); } });
+    console.log(`signer: showing the signed ${form} as BBQr (${bytes.length} bytes, ${plural(series.parts.length, "part")}, ` +
+      `version ${series.version}, encoding ${series.encoding}, SHA-256 ${toHex(crypto.sha256(bytes).subarray(0, 8))}, ${ms.toFixed(0)} ms)`);
+  }, 0);
+}
+
+let partsTimer = null;
+
+function stopParts() {
+  if (partsTimer !== null) clearInterval(partsTimer);
+  partsTimer = null;
+}
+
+// A BBQr series, each part in turn, all at one version; Pause and Next part
+// for a camera that is slow.
+function showParts(parent, buttons, series, size) {
+  const { parts, version } = series;
+  let i = 0;
+  const qr = new ui.QRCode(parent, { ecc: "L", version, data: parts[0], size });
+  const label = new ui.Label(parent, { text: "", font: FONT.small, color: MUTED });
+  const draw = (log) => {
+    qr.data = parts[i];
+    label.text = `Part ${i + 1} of ${parts.length}, ${qr.modules}x${qr.modules}`;
+    if (log) console.log(`signer: part ${i + 1} of ${parts.length}, ${qr.modules} modules`);
+  };
+  const step = () => {
+    i = (i + 1) % parts.length;
+    draw(false);
+  };
+  const run = () => (partsTimer = setInterval(step, PART_MS));
+  const pause = new ui.Button(buttons, { text: ui.symbols.pause + " Pause", onClick: () => {
+    if (parts.length < 2) return;
+    if (partsTimer !== null) {
+      stopParts();
+      pause.text = ui.symbols.play + " Play";
+    } else {
+      run();
+      pause.text = ui.symbols.pause + " Pause";
+    }
+  } });
+  new ui.Button(buttons, { text: ui.symbols.next + " Next part", onClick: () => {
+    stopParts();
+    pause.text = ui.symbols.play + " Play";
+    i = (i + 1) % parts.length;
+    draw(true);
+  } });
+  draw(true);
+  if (parts.length > 1) run();
 }
 
 // --- keys ------------------------------------------------------------------------------
