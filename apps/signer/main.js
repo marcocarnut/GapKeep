@@ -822,7 +822,7 @@ function showReview() {
   if (haveKeys) {
     const each = state.keys.map((k, i) => `key ${k.fingerprint} signs ${plan.keys[i].signs}`).join(", ");
     paragraph(ui.screen, `${plural(a.inputs.length, "input")}: ${each}.`, { color: plan.signable ? GREEN : RED });
-    if (!plan.complete) paragraph(ui.screen, "Not every input can be signed here: the result is a PSBT that needs more signatures.", { color: AMBER });
+    if (plan.signable && !plan.complete) paragraph(ui.screen, "Not every input can be signed here: the result is a PSBT that needs more signatures.", { color: AMBER });
   } else if (!plan.complete) {
     paragraph(ui.screen, "Check it. Change is only the transaction's claim until the keys are in.", { color: MUTED });
   }

@@ -9,7 +9,9 @@
 //     an output of ours at a path the wallet may never scan (`stray`, see
 //     sign.js) is amber with the path, and counts as sent;
 //     an output of ours past where wallets scan (`far`, see sign.js) stays
-//     the wallet's, with a note giving its index.
+//     the wallet's, with a note giving its index;
+//     when the keys can sign nothing, the first warning says why, which
+//     otherwise only the input rows do.
 //   flagSignatures(a, plan)  red warnings for bad signatures in the PSBT.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -51,7 +53,19 @@ export function applyPlan(a, plan) {
   for (const i of plan.inputs) {
     for (const odd of i.oddities || []) a.warnings.push({ level: "warn", text: `Input ${i.index + 1}: ${odd}` });
   }
+  const why = nothingToSign(plan);
+  if (why) a.warnings.unshift({ level: "warn", text: why });
   return flagSignatures(a, plan);
+}
+
+// Why the keys can sign nothing here, or null: the inputs left, by reason.
+function nothingToSign(plan) {
+  const left = plan.inputs.filter((i) => !i.final && !i.signed);
+  if (plan.signable || !left.length) return null;
+  const reasons = new Map();
+  for (const i of left) reasons.set(i.reason, [...(reasons.get(i.reason) || []), i.index + 1]);
+  const parts = [...reasons].map(([reason, n]) => `${n.length > 1 ? "inputs" : "input"} ${n.join(", ")}: ${reason}`);
+  return `Nothing here can be signed with these keys. ${parts.join("; ").replace(/^i/, "I")}.`;
 }
 
 // Signatures that came with the PSBT and don't hold: true with or without keys.
