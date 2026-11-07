@@ -7,7 +7,9 @@
 //     a claim a key refuted is a red warning (it pays someone else);
 //     a claim no loaded key can check is amber, and counts as sent;
 //     an output of ours at a path the wallet may never scan (`stray`, see
-//     sign.js) is amber with the path, and counts as sent.
+//     sign.js) is amber with the path, and counts as sent;
+//     an output of ours past where wallets scan (`far`, see sign.js) stays
+//     the wallet's, with a note giving its index.
 //   flagSignatures(a, plan)  red warnings for bad signatures in the PSBT.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -29,6 +31,11 @@ export function applyPlan(a, plan) {
     }
     if (p.ours) {
       o.role = p.role || "mine";
+      o.far = p.far;
+      if (p.far !== null) {
+        a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} comes back to you at index ${p.far}: ` +
+          "your wallet finds this coin only if it looks that far ahead (gap limit)." });
+      }
     } else if (p.problem) {
       a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but its key ` +
         `doesn't derive from these keys (${p.problem}): it pays someone else.` });

@@ -59,7 +59,8 @@ any earlier step.
   PSBT through BBQr; forged previous transactions.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
-  way of rerouting it, and the gap's limit).
+  way of rerouting it, and the gap's limit), and far (the four indices around
+  the two limits).
 - **rules, negative, change, oddities**: PSBTs built in the test for each
   input type, and each safety rule broken one at a time (fingerprint, key
   at the path, script, redeemScript, taproot tweak and script tree, missing

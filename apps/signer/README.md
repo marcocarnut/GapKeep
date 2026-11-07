@@ -183,7 +183,7 @@ Errors: `Bip32Error`. Private keys are never serialized.
 | --- | --- |
 | `plan(psbt, key, options)` | What signing would do, without signing (below). |
 | `signPsbt(psbt, key, options)` | `{ psbt, signed: [{ input, path, pubkey }], skipped: [{ input, reason }], plan }`. Signs exactly what `plan` says; `psbt` is a new, re-parsed PSBT (the one given is left as it was). Adds `PSBT_IN_PARTIAL_SIG` (DER + sighash byte) or `PSBT_IN_TAP_KEY_SIG`; each signature is verified first. |
-| `planKeys(psbt, keys, options)` | `plan` for several keys: `{ inputs, outputs, signable, complete, keys: [{ fingerprint, signs }] }`. Each output adds `claimed` and `stray`. With no keys, it still says which inputs are signed. |
+| `planKeys(psbt, keys, options)` | `plan` for several keys: `{ inputs, outputs, signable, complete, keys: [{ fingerprint, signs }] }`. Each output adds `claimed`, `stray` and `far`. With no keys, it still says which inputs are signed. |
 | `signKeys(psbt, keys, options)` | Each key in turn: `{ psbt, signed, plan }`. |
 | `partialSigGood(psbt, i, pubkey, signature)` | Would the signer accept this signature? `null`: it can't tell. |
 | `verifyChange(psbt, key, options)` | `plan(...).outputs`. |
@@ -250,6 +250,13 @@ The limit counts from the inputs, not from zero, so a wallet with many
 addresses isn't flagged; the price is an amber flag when an old, low-index
 coin pays change far past it, which costs a look, not money. A single key's
 output is at home if that key spends too. Otherwise `stray` says why.
+
+**Near, or far.** Wallets scan about `CHANGE_NEAR` (20) addresses ahead, so a
+hostile computer could hide change past that behind a green review. Change at
+home up to `CHANGE_NEAR` past the inputs' highest index (same account, either
+chain) is green. Past that, `far` gives its index: it is still change and
+counted as change, but amber, with a note that the wallet finds the coin only
+if it looks that far ahead (gap limit). Past `CHANGE_GAP` it is stray.
 
 **Oddities** (signed anyway, shown to the person): a path that isn't
 m/purpose'/coin'/account'/change/index, a purpose that doesn't match the
