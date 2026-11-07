@@ -13,7 +13,7 @@ import { ENTROPY_LENGTHS, mnemonicFromEntropy, entropyFromMnemonic, seedFromMnem
 import { fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub, versionFor } from "./bip32.js";
 import { parsePrivateKey } from "./keys.js";
 import { accountDescriptor } from "./descriptor.js";
-import { planKeys, signKeys, finalize } from "./sign.js";
+import { planKeys, signKeys, finalize, STANDARD_ACCOUNTS } from "./sign.js";
 import { serializePsbt } from "./psbt/psbt.js";
 import { selfTest as libSelfTest } from "./selftest.js";
 
@@ -27,7 +27,17 @@ export const EXPORTS = [
 ];
 
 const coin = (network) => (network === "mainnet" ? 0 : 1);
-const accountPath = (purpose, network) => `m/${purpose}'/${coin(network)}'/0'`;
+const accountPath = (purpose, network, account) => `m/${purpose}'/${coin(network)}'/${account}'`;
+
+export const MAX_ACCOUNT = 0x7fffffff;
+
+// What sign.js should take for an account's own fingerprint: Electrum's
+// watch-only wallets write it in their PSBTs, as they can't know the master's.
+// Account 0 of each kind always; `account` too.
+export function accountsFor(account) {
+  if (!account) return STANDARD_ACCOUNTS;
+  return [...STANDARD_ACCOUNTS, ...[84, 49, 86, 44].flatMap((p) => [0, 1].map((c) => `m/${p}'/${c}'/${account}'`))];
+}
 
 const fromSeedBytes = (seed, description) => {
   try {
@@ -85,17 +95,17 @@ export function wipeKey(key) {
 // a descriptor, for wallets that want the key's origin.
 // -> { text, descriptor, path, fingerprint (the account key's: what Electrum
 // calls the wallet's, as it can't know the master's), master (fingerprint) }
-export function exportKey(key, id, network) {
+export function exportKey(key, id, network, account = 0) {
   const x = EXPORTS.find((e) => e.id === id);
-  const path = accountPath(x.purpose, network);
-  const account = derive(key.node, path);
+  const path = accountPath(x.purpose, network, account);
+  const node = derive(key.node, path);
   try {
-    const pub = neuter(account);
+    const pub = neuter(node);
     const xpub = serializeXpub(pub, network === "mainnet" ? "xpub" : "tpub");
     return { text: serializeXpub(pub, versionFor(id, network)), path, fingerprint: fingerprintHex(pub), master: key.fingerprint,
-      descriptor: accountDescriptor({ script: id, fingerprint: key.fingerprint, network, account: 0, xpub }) };
+      descriptor: accountDescriptor({ script: id, fingerprint: key.fingerprint, network, account, xpub }) };
   } finally {
-    wipe(account);
+    wipe(node);
   }
 }
 
