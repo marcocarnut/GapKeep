@@ -646,6 +646,8 @@ function drawExport() {
   new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}; master fingerprint ${x.master}`, font: FONT.text,
     width: "100%", overflow: "wrap", textAlign: "center" });
   new ui.Label(page.out, { text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
+  const note = wallet.EXPORTS[state.exportType].note;
+  if (note && form.id !== "descriptor") new ui.Label(page.out, { text: note, font: FONT.text, color: AMBER, width: "100%", overflow: "wrap", textAlign: "center" });
   console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork}), ` +
     `account ${page.account}, ${form.id}, ${text.length} characters`);
 }

@@ -141,6 +141,19 @@ expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted, 1
 camera scene
 wait 0.5
 shot 10b-far
+# down to output 2's row, below the fold
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+wait 0.5
+shot 10c-far-row
 key esc
 wait 0.3
 
@@ -353,6 +366,39 @@ key ret
 expect signer: showing the p2wpkh public key \(mainnet\), account 0, extended key, 111 characters 10
 wait 0.5
 shot 23-zpub
+# taproot: a bare xpub is warned about, the descriptor is the export; then as before
+key tab
+key ret
+key down
+key down
+key down
+mark
+key ret
+expect signer: showing the p2tr public key \(mainnet\), account 0, extended key 10
+wait 0.5
+shot 23-taproot-xpub
+key shift-tab
+key ret
+key up
+mark
+key ret
+expect signer: showing the p2tr public key \(mainnet\), account 0, descriptor 10
+wait 0.5
+shot 23-taproot
+key tab
+key ret
+key up
+key up
+key up
+mark
+key ret
+expect signer: showing the p2wpkh public key \(mainnet\), account 0, descriptor 10
+key shift-tab
+key ret
+key down
+mark
+key ret
+expect signer: showing the p2wpkh public key \(mainnet\), account 0, extended key 10
 key esc
 wait 0.3
 

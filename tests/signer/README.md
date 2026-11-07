@@ -49,7 +49,8 @@ any earlier step.
   valid and invalid, and BIP-380's vectors, in `descriptor_vectors.json`, which
   says where they come from; multipath against an independent Python
   implementation (`check_descriptor.py`), which also checks what the app
-  shows, from its QR code.
+  shows, from its QR code. `tr()` as exported, against BIP-86's published
+  addresses and BIP-386's key-path script.
 - **codes**: BBQr read in any order, in each encoding; progress, other
   series, other file types, damaged and oversized files; what the signer
   shows. `check_bbqr.mjs` joins the series the app shows, from its screenshots,

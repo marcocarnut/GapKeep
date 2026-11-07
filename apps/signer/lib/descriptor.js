@@ -5,8 +5,8 @@
 //   descriptorChecksum(text)  -> 8 characters (BIP-380)
 //   checkDescriptor(text)     -> is its #checksum right?
 //
-// script: "p2wpkh" (BIP-84, wpkh), "p2sh-p2wpkh" (BIP-49, sh(wpkh)) or
-// "p2pkh" (BIP-44, pkh). fingerprint: the MASTER key's, 8 hex digits: a
+// script: "p2wpkh" (BIP-84, wpkh), "p2sh-p2wpkh" (BIP-49, sh(wpkh)), "p2pkh"
+// (BIP-44, pkh) or "p2tr" (BIP-86, tr, key path only). fingerprint: the MASTER key's, 8 hex digits: a
 // wallet needs it to name its keys in PSBTs. network: "mainnet", or any other
 // for coin type 1. account: 0 to 2^31 - 1. xpub: the account's public key, in
 // the plain xpub or tpub form (descriptors don't use SLIP-132's), matching
@@ -28,6 +28,7 @@ const SCRIPTS = {
   p2wpkh: { purpose: 84, wrap: (key) => `wpkh(${key})` },
   "p2sh-p2wpkh": { purpose: 49, wrap: (key) => `sh(wpkh(${key}))` },
   p2pkh: { purpose: 44, wrap: (key) => `pkh(${key})` },
+  p2tr: { purpose: 86, wrap: (key) => `tr(${key})` },
 };
 
 function polymod(symbols) {
