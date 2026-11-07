@@ -18,8 +18,9 @@
 //                  reason (for people, when not signing) | null, oddities: [string] }
 //   OutputPlan = { index, ours, type, path | null, role: "change" | "receive" | null,
 //                  problem: string | null, oddities: [string] }
-//     planKeys adds `claimed`, and `stray`: why an output that is ours may
-//     still be lost in practice (below), or null.
+//     planKeys adds `claimed`; `stray`: why an output that is ours may
+//     still be lost in practice (below), or null; and `far`: the index of an
+//     output at home that a wallet finds only by scanning that far, or null.
 //
 // `psbt` from parsePsbt() (./psbt/psbt.js). `key` is one of:
 //   - a private BIP-32 node (./bip32.js) at depth 0: a master key;
@@ -79,6 +80,11 @@
 // A single key has no path: its output is at home when that key spends too.
 // With no such input to compare with, only the chain and index are checked.
 //
+// Wallets scan about CHANGE_NEAR addresses ahead, so an output at home but
+// more than CHANGE_NEAR past those inputs is `far`: still the wallet's, and
+// counted as change, but hidden from it until someone looks further. A hostile
+// computer can use that, so the review says so and gives the index.
+//
 // Nothing here logs; reasons and errors name paths and positions, never keys.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -103,6 +109,7 @@ export const STANDARD_ACCOUNTS = ["m/84'/0'/0'", "m/49'/0'/0'", "m/86'/0'/0'", "
 
 export const MAX_INDEX = 1000000;
 const MAX_DEPTH = 16;
+export const CHANGE_NEAR = 20;
 export const CHANGE_GAP = 1000;
 
 // BIP-44/49/84/86: the purpose each script type's accounts use.
@@ -577,10 +584,23 @@ export function planKeys(psbt, list, options = {}) {
       claimed: m.fields.bip32.length + m.fields.tapBip32.length > 0 };
   });
   const homes = inputs.filter((r) => r.home).map((r) => r.home);
-  for (const o of outputs) o.stray = o.ours ? strayReason(o.home, homes) : null;
+  for (const o of outputs) {
+    o.stray = o.ours ? strayReason(o.home, homes) : null;
+    o.far = o.ours && !o.stray ? farIndex(o.home, homes) : null;
+  }
   return { inputs, outputs, signable: inputs.filter((r) => r.sign).length,
     complete: inputs.every((r) => r.sign || r.final || r.signed),
     keys: plans.map((p) => ({ fingerprint: p.fingerprint, signs: p.signable })) };
+}
+
+// The highest index of the inputs in home's account, over both chains.
+function topIndex(home, inputs) {
+  return Math.max(0, ...inputs.filter((h) => h.account === home.account).map((h) => (h.index < HARDENED ? h.index : 0)));
+}
+
+// The index of an output at home that wallets don't scan as far as, or null.
+function farIndex(home, inputs) {
+  return home.single || home.index <= topIndex(home, inputs) + CHANGE_NEAR ? null : home.index;
 }
 
 // Why an output of ours may never be seen by the wallet (the rule at the top
@@ -592,10 +612,8 @@ function strayReason(home, inputs) {
   if (home.account === null) return "its path has no account, chain and index";
   if (home.chain !== 0 && home.chain !== 1) return `chain ${home.chain >= HARDENED ? "hardened" : home.chain} is neither change (1) nor receive (0)`;
   if (home.index >= HARDENED) return "its index is hardened";
-  const same = inputs.filter((h) => h.account === home.account);
-  if (inputs.length && !same.length) return "it is another account than the inputs'";
-  const top = Math.max(0, ...same.map((h) => (h.index < HARDENED ? h.index : 0)));
-  const limit = top + CHANGE_GAP;
+  if (inputs.length && !inputs.some((h) => h.account === home.account)) return "it is another account than the inputs'";
+  const limit = topIndex(home, inputs) + CHANGE_GAP;
   if (home.index > limit) return `its index is over ${limit}, ${CHANGE_GAP} past the inputs'`;
   return null;
 }

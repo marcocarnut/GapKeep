@@ -16,7 +16,7 @@ import {
   wipe, VERSIONS, versionFor, Bip32Error, HARDENED,
 } from "../../apps/signer/lib/bip32.js";
 import { legacySighash, segwitV0Sighash, taprootSighash, taprootSigMsg, p2wpkhScriptCode } from "../../apps/signer/lib/sighash.js";
-import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, SignError } from "../../apps/signer/lib/sign.js";
+import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, SignError, CHANGE_NEAR, CHANGE_GAP } from "../../apps/signer/lib/sign.js";
 import { parsePrivateKey, parseWif, KeyError } from "../../apps/signer/lib/keys.js";
 import { combine, CombineError } from "../../apps/signer/lib/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
@@ -1035,6 +1035,43 @@ check("review", "the gap counts from the highest input", () => {
   eq(stray({ path: "m/84'/1'/0'/1/6000" }, inputs).stray, null);
   has(stray({ path: "m/84'/1'/0'/1/6001" }, inputs).stray, "over 6000");
 });
+check("review", "gap tiers, around the inputs' highest index", () => {
+  const inputs = [{ kind: "p2wpkh", path: "m/84'/1'/0'/0/40", amount: 100000 }];
+  const at = (past) => {
+    const p = build(output({ path: `m/84'/1'/0'/1/${40 + past}` }, inputs));
+    const a = reviewed(p, [abandon]), o = a.outputs[1];
+    return [o.mine, o.far ?? null, o.stray !== undefined, a.toSelf, a.warnings.filter((w) => /gap limit|may not see/.test(w.text)).length];
+  };
+  eq(CHANGE_NEAR, 20);
+  eq(at(CHANGE_NEAR), [true, null, false, 40000, 0]);
+  eq(at(CHANGE_NEAR + 1), [true, 61, false, 40000, 1]);
+  eq(at(CHANGE_GAP), [true, 1040, false, 40000, 1]);
+  eq(at(CHANGE_GAP + 1), [false, null, true, 0, 1]);
+});
+check("review", "far: the highest input is over both chains, in that account", () => {
+  const inputs = [{ kind: "p2wpkh", path: "m/84'/1'/0'/0/1", amount: 50000 }, { kind: "p2wpkh", path: "m/84'/1'/0'/1/100", amount: 50000 }];
+  eq(stray({ path: "m/84'/1'/0'/1/120" }, inputs).far, null);
+  eq(stray({ path: "m/84'/1'/0'/1/121" }, inputs).far, 121);
+  eq(stray({ path: "m/84'/1'/0'/0/121" }, inputs).far, 121);
+  const other = [...inputs, { kind: "p2wpkh", path: "m/84'/1'/7'/0/900", amount: 50000 }];
+  eq(stray({ path: "m/84'/1'/0'/1/121" }, other).far, 121);
+});
+check("review", "far gives the index, and the receive chain is far too", () => {
+  const a = reviewed(build(output({ path: "m/84'/1'/0'/0/900" })), [abandon]);
+  eq([a.outputs[1].role, a.outputs[1].far, a.toSelf], ["receive", 900, 40000]);
+  has(a.warnings[0].text, "index 900");
+  return has(a.warnings[0].text, "looks that far ahead");
+});
+check("review", "with no input to compare with, far counts from zero", () => {
+  const p = build({ inputs: [{ kind: "p2wpkh", path: "m/84'/1'/0'/0/1", amount: 100000, utxo: false }], outputs: [EXTERNAL, { ...CHANGE, path: "m/84'/1'/0'/1/21" }] });
+  const o = planKeys(p, [abandon], ZERO_AUX).outputs[1];
+  eq([o.ours, o.stray, o.far], [true, null, 21]);
+});
+check("review", "a stray output isn't far as well", () => {
+  const o = stray({ path: "m/84'/1'/7'/1/500" });
+  eq(o.far, null);
+  has(o.stray, "another account");
+});
 check("review", "ransom: a hardened index", () => has(stray({ path: "m/84'/1'/0'/1/5'" }).stray, "hardened"));
 check("review", "ransom: a short path", () => has(stray({ path: "m/84'" }).stray, "no account"));
 check("review", "a stray output is amber with its path, and counts as sent", () => {
@@ -1335,6 +1372,7 @@ if (madeOut) {
   writeFileSync(madeOut, JSON.stringify({
     plain: qr(plain),
     stray: qr(build(FEE_OK({ path: "m/84'/1'/7'/1/500000" }))),
+    far: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/900" }))),
     refuted: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/0", pubkey: attacker, script: p2wpkhScript(hash160(attacker)) }))),
     half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
     half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),

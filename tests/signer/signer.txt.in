@@ -130,6 +130,20 @@ shot 10-stray
 key esc
 wait 0.3
 
+# 4b. Change the wallet finds only by looking far ahead: counted as change, with a note
+mark
+key ret
+wait 0.3
+mark
+camera qr @far@
+expect signer: review: 2 inputs, 2 to sign 15
+expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted, 1 far 5
+camera scene
+wait 0.5
+shot 10b-far
+key esc
+wait 0.3
+
 # 5. Change the PSBT claims, paying an attacker's key: red, and signing asks
 mark
 key ret

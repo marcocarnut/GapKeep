@@ -91,7 +91,7 @@ export function showAnalysis(list, rows, a, source, options = {}) {
     line(top, `Sends to ${external.length} ${external.length === 1 ? "address" : "addresses"}`, btc(a.sent), { font: FONT.big });
     if (a.toSelf) {
       if (options.changeClaimed) line(top, "Claimed change (not checked yet)", btc(a.toSelf), { color: AMBER });
-      else line(top, "Change back to your wallet", btc(a.toSelf), { color: GREEN });
+      else line(top, "Change back to your wallet", btc(a.toSelf), { color: a.outputs.some((o) => o.mine && o.far) ? AMBER : GREEN });
     }
   }
   const rate = a.feeRate !== null ? ` (${a.feeRate.toFixed(1)} sat/vB)` : "";
@@ -116,10 +116,13 @@ export function showAnalysis(list, rows, a, source, options = {}) {
     const r = rows.add(list, {}, () => rows.details(`Output ${o.index + 1}`, outputText(o)));
     const where = o.address ? group4(o.address) : o.type === "op_return" ? "OP_RETURN (data, unspendable)" : typeName(o.type) + " script";
     const claimed = options.changeClaimed && o.mine;
-    line(r, `${o.index + 1}. ${where}`, btc(o.amount), { color: claimed ? AMBER : o.mine ? GREEN : undefined });
+    line(r, `${o.index + 1}. ${where}`, btc(o.amount), { color: claimed || o.far ? AMBER : o.mine ? GREEN : undefined });
     if (claimed) {
       new ui.Label(r, { text: `${ui.symbols.warning} Claimed change (not checked yet): ${o.derivations[0].path}`,
         color: AMBER, font: FONT.small });
+    } else if (o.mine && o.far) {
+      new ui.Label(r, { text: `${ui.symbols.warning} ${roleText(o)}: ${o.checkedPath}. Index ${o.far}: found only if the wallet looks that far ahead`,
+        color: AMBER, font: FONT.small, width: "100%", overflow: "wrap" });
     } else if (o.mine) {
       const path = o.checkedPath !== undefined ? o.checkedPath : o.derivations[0].path;
       new ui.Label(r, { text: `${ui.symbols.ok} ${roleText(o)}${path ? ": " + path : ""}` +
@@ -170,6 +173,7 @@ export function outputText(o) {
     `Script: ${disassemble(o.script).slice(0, 300)}`,
     ...o.derivations.map((d) => `Key ${d.path} [${d.fingerprint}]${d.taproot ? " (taproot)" : ""}`),
     o.mine ? roleText(o) + (o.unchecked ? ": the key could not be checked against the script here." : ".") : null,
+    o.far ? `Your wallet finds it only if it looks as far ahead as index ${o.far} (gap limit).` : null,
     ...o.problems.map((p) => "Problem: " + p),
   ].filter((x) => x !== null).join("\n");
 }

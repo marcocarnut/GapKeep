@@ -842,7 +842,7 @@ function showReview() {
   const of = (test) => a.outputs.filter(test).length;
   console.log(`signer: change: ${haveKeys ? 0 : of((o) => o.mine)} claimed, ${haveKeys ? of((o) => o.mine) : 0} checked, ` +
     `${of((o) => o.stray !== undefined)} stray, ${of((o) => o.unverified)} unverified, ` +
-    `${haveKeys ? plan.outputs.filter((o) => o.problem).length : 0} refuted`);
+    `${haveKeys ? plan.outputs.filter((o) => o.problem).length : 0} refuted, ${of((o) => o.far)} far`);
 }
 
 async function sign(a) {
