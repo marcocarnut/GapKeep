@@ -59,6 +59,8 @@ DEFS     := -DZG_SIM $(MODEDEF) -DZG_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
 INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -I $(ROOT)/lib/colorqr/include -idirafter $(ROOT)/circle/addon
+# Circle's patches: the simulator compiles its keymaps (patches/circle/0005)
+$(shell $(ROOT)/tools/apply_patches.sh circle >&2)
 ifneq ($(HAVEZX),)
 $(shell $(ROOT)/tools/apply_patches.sh zxing-cpp >&2)
 include $(ROOT)/lib/zxing/zxing.mk
