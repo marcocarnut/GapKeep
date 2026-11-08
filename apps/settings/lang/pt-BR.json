@@ -7,6 +7,8 @@
     "Numbers": "Números",
     "As the language writes them": "Como o idioma escreve",
     "Keyboard": "Teclado",
+    "US": "EUA",
+    "Brazilian (ABNT2)": "Brasileiro (ABNT2)",
     "Type here to try the keyboard": "Digite aqui para testar o teclado",
     "Amount: {amount} BTC": "Valor: {amount} BTC",
     "Number: {number}": "Número: {number}",
@@ -16,6 +18,8 @@
   },
   "notes": {
     "As the language writes them": "The first choice for numbers: the marks the language uses (1.234,5 in Portuguese), shown with the others: 1,234.5, 1234.5 ...",
-    "Amount: {amount} BTC": "A sample, so the person sees the marks chosen."
+    "Amount: {amount} BTC": "A sample, so the person sees the marks chosen.",
+    "US": "A keyboard layout: the United States' (QWERTY, no accents).",
+    "Brazilian (ABNT2)": "A keyboard layout: the Brazilian standard ABNT2, with Ç and dead keys for accents."
   }
 }

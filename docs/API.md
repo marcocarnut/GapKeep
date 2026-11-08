@@ -612,9 +612,9 @@ the change, and at once to the app that made it, through
 | `onLanguageChange(fn)` | Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it. |
 | `marks()` | The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves. |
 | `setMarks(marks)` | *Needs "settings".* The marks, until power-off; `null` or a mark left out: the language's own. If only one is given and the language's other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same. |
-| `keyboard()` | The keyboard layout, `"us"`. |
-| `keyboards()` | The layouts there are: `["us"]` until the kernel can switch layouts. |
-| `setKeyboard(layout)` | *Needs "settings".* The layout, from `keyboards()`, until power-off. (Only `"us"` for now.) |
+| `keyboard()` | The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `zerogap.txt`). |
+| `keyboards()` | The layouts there are: `["us", "br-abnt2"]`. |
+| `setKeyboard(layout)` | *Needs "settings".* The layout, from `keyboards()`, at once for every app, until power-off. A dead key pending is dropped. `RangeError` for a layout not in `keyboards()`. |
 | `formatNumber(x, { decimals }?)` | Thousands grouped, the language's decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent. |
 | `formatSats(sats)` | Whole satoshis, grouped: `2,100,000`. A safe integer or a BigInt, else a `TypeError`. |
 | `formatBtc(sats, { decimals = 8 }?)` | Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it. |

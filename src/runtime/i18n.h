@@ -29,6 +29,7 @@
 #define _i18n_h
 
 #include <circle/types.h>
+#include "keylayout.h"
 
 extern "C" {
 #include <quickjs.h>
@@ -58,10 +59,9 @@ public:
 	static const char *GetDecimal (void)	{ return s_Decimal; }
 	static const char *GetGroup (void)	{ return s_Group; }
 
-	// The keyboard layout. TODO(glyphs): only "us" until the kernel's
-	// layout switch (agent "glyphs", docs/plans/I18N.md "Fonts and
-	// keyboard") is merged; then these call it.
-	static const char *GetKeyboard (void)	{ return "us"; }
+	// The keyboard layout: keylayout.h's, which also lists the layouts and
+	// switches them (ZgKeyLayouts, ZgKeyLayoutSet)
+	static const char *GetKeyboard (void)	{ return ZgKeyLayoutGet (); }
 
 	// The app's catalog, at its start and when the language changes;
 	// returns the time it took, in microseconds
