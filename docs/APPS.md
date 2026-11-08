@@ -84,7 +84,7 @@ handlers and timers.
 | `description` | no | One line for the launcher tile. |
 | `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
-| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)). E.g. `["camera"]`. |
+| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 | `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `zerogap.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 
@@ -224,6 +224,113 @@ const choice = await ui.alert("Erase everything?", {
 });
 if (choice === 1) eraseAll();
 ```
+
+## Languages
+
+An app can show its text in the person's language. Write it in English,
+where it is used, through `t()`: the English is the key.
+
+```js
+import { t, plural, formatBtc } from "zg:i18n";
+
+new ui.Label({ text: t("Sign this transaction?") });
+say(t("Send {amount} BTC to {address}?", { amount: formatBtc(sats), address }));
+label.text = plural(count, "{n} code", "{n} codes");
+t("Open", { $context: "verb" });     // the same English, another meaning
+```
+
+The translations are files of the app, one per language:
+
+```
+apps/myapp/
+  lang/
+    pt-BR.json
+```
+
+```json
+{
+  "$language": "pt-BR",
+  "$app": "myapp",
+  "messages": {
+    "Sign this transaction?": "Assinar esta transação?",
+    "{n} code": "{n} código",
+    "{n} codes": "{n} códigos",
+    "verb\u0004Open": "Abrir"
+  },
+  "notes": {
+    "Sign this transaction?": "On the review page, before the person confirms."
+  }
+}
+```
+
+`notes` is for translators; the runtime ignores it. `tools/i18n.py` keeps
+catalogs in step with the code:
+
+```sh
+python3 tools/i18n.py extract apps/myapp --lang pt-BR   # adds new keys, empty
+python3 tools/i18n.py check apps/myapp                  # what is missing or wrong
+```
+
+A key with an empty translation shows in English. `check` lists keys with
+no translation, translations no longer used, and those the runtime would
+refuse; `tools/run_sim_tests.sh` runs it for every app with a `lang/`
+folder. Keys must be string literals (or literals joined with `+`):
+`t(variable)` works, but `check` can't see it and says so.
+
+What a translation may not do (the runtime checks each one when the app
+starts, logs those it refuses and shows the English instead):
+
+- **Change the `{names}`.** A translation has the same set of `{names}` as
+  its key: it can reword "Send {amount} to {address}", but can't drop the
+  amount or add one. So pass everything that matters (amounts, addresses,
+  fingerprints, paths, words of a seed) as params, never as part of the
+  text.
+- **Hold control characters**: C0 (line feeds are allowed), C1, and the
+  bidi and line controls that could reorder an amount beside them.
+- **Be markup.** Labels show text as text (LVGL's recolor is never on), so
+  a `#ff0000` is just characters.
+
+Catalogs are parsed as JSON, never run, and at most 256 KB. They are files
+of the app like any other, so they are part of its [hash](#app-hashes): a
+changed translation changes the hash the launcher shows.
+
+**Numbers, amounts and dates.** `formatNumber`, `formatSats` and
+`formatBtc` write numbers the language's way (`1,234.5` or `1.234,5`), and
+`parseNumber` and `parseBtc` read them back, refusing what could be read
+two ways (`1.000`: one, or a thousand?). Amounts are whole satoshis, never
+floating point, and the text carries the unit (`"{amount} BTC"`), so a
+translation can move it. Dates and times are ISO 8601 with a space in every
+language (`formatDateTime`: `2026-11-08 14:03:05`). Files and protocols are
+not written the language's way: the clock app shows `+1,5 ppm` on screen,
+and `clock_trim_ppm = +1.5` for `zerogap.txt`.
+
+**The language** comes from `zerogap.txt` on the card:
+
+```
+language = pt-BR
+decimal_mark = ,        # if not the language's own; then group_mark too
+group_mark = .          # . or , or nothing (no grouping)
+```
+
+An unknown language is English, with a line in the log. Sealed builds read
+no card: `make SEALED=1 LANGUAGE=pt-BR`. The Settings app changes all of
+these while running, until power-off (an app needs the `"settings"`
+permission to). Languages fall back from `pt-BR` to `pt` (`lang/pt.json`,
+if the app has one) to English. A language exists if the launcher has a
+catalog for it: the launcher's catalogs (`apps/launcher/lang/`) also hold
+the system's own text.
+
+To see an app in another language, or find text that missed `t()`:
+
+```sh
+tools/zgsim --lang pt-BR apps/myapp
+tools/zgsim --lang qps apps/myapp     # every translated text [Åççéñţéď ·····]
+```
+
+`qps` is a pseudo-language: what went through `t()` comes out accented,
+about 40% longer and in brackets, so text that didn't stands out, and text
+that a longer translation would cut off shows. `apps/clock` and
+`apps/launcher` are examples.
 
 ## Splitting code into modules
 

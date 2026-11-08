@@ -29,7 +29,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 ## Documentation
 
 - [Writing apps](docs/APPS.md): start here.
-- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:crypto`, `zg:clock`, `zg:session`, `zg:apps`, globals.
+- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:crypto`, `zg:clock`, `zg:session`, `zg:i18n`, `zg:apps`, globals.
   Generated from [docs/api/zerogap-api.yaml](docs/api/zerogap-api.yaml), which a
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
