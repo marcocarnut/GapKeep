@@ -11,6 +11,8 @@
 #include <circle/machineinfo.h>
 #include <circle/gpiopin.h>
 #include <circle/pagetable.h>
+#include <circle/string.h>
+#include <circle/util.h>
 #include "runtime/version.h"
 #include "runtime/appstore.h"
 #include "runtime/cursor.h"
@@ -52,6 +54,11 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		bOK = m_Screen.Initialize ();
+	}
+
+	if (bOK)
+	{
+		ShowLoading ();
 	}
 
 #ifdef ZG_SERIAL_LOG
@@ -181,6 +188,33 @@ TShutdownMode CKernel::Run (void)
 	}
 
 	return ShutdownHalt;
+}
+
+// Between the firmware's rainbow and the launcher there are about two and a
+// half seconds of setup (USB, the SD card, LVGL, QuickJS): a line in the
+// middle of the screen says what is happening, instead of a lone blinking
+// cursor. LVGL draws over it. ASCII only: the screen's font has nothing else.
+void CKernel::ShowLoading (void)
+{
+	static const char *Lines[] = {
+		"ZeroGap is loading.",
+		"It will come up in a few seconds."
+	};
+	const unsigned nLines = sizeof Lines / sizeof Lines[0];
+
+	m_Screen.Write ("\x1b[?25l", 6);		// no cursor
+	unsigned nRow = m_Screen.GetRows () / 2 - nLines / 2;
+	for (unsigned i = 0; i < nLines; i++)
+	{
+		size_t nLength = strlen (Lines[i]);
+		unsigned nColumns = m_Screen.GetColumns ();
+		unsigned nColumn = nLength < nColumns ? (nColumns - nLength) / 2 : 0;
+
+		CString Move;
+		Move.Format ("\x1b[%u;%uH", nRow + i + 1, nColumn + 1);	// 1-based
+		m_Screen.Write ((const char *) Move, Move.GetLength ());
+		m_Screen.Write (Lines[i], nLength);
+	}
 }
 
 // The ARM's clock as the firmware has it: the Pi Zero boots at its minimum
