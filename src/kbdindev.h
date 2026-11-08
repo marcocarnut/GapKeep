@@ -67,6 +67,11 @@ public:
 	// Drop queued keys (e.g. when switching apps).
 	void Flush (void);
 
+	// The simulator in a browser: the characters it hands over were composed
+	// by the browser, with the computer's own layout and dead keys, so
+	// zerogap's dead keys must not compose them again. Set around Pressed().
+	void SetComposed (boolean bComposed)	{ m_bComposed = bComposed; }
+
 private:
 	static void KeyPressedHandler (const char *pString);
 	static void KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6]);
@@ -88,6 +93,7 @@ private:
 	boolean m_bGUIDown;
 
 	CZgDeadKeys m_DeadKeys;		// used in interrupt context
+	boolean m_bComposed;		// SetComposed()
 	unsigned m_nLayoutGeneration;	// of the keymap loaded into m_pKeyboard
 
 	// Single producer (USB interrupt context) / single consumer (main loop).

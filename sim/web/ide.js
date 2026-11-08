@@ -677,7 +677,10 @@ function setupScreen () {
     }
     // Ctrl+V (Cmd+V on a Mac): the browser's paste, below, types the text
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase () === "v") return;
-    const mods = (e.shiftKey ? MOD_SHIFT : 0) | (e.ctrlKey ? MOD_CTRL : 0) | (e.altKey ? MOD_ALT : 0);
+    // AltGr types a character (e.key has it): on Windows it also reports
+    // Ctrl and Alt, which would make it a shortcut instead
+    const altGr = e.getModifierState && e.getModifierState ("AltGraph");
+    const mods = (e.shiftKey ? MOD_SHIFT : 0) | (e.ctrlKey && !altGr ? MOD_CTRL : 0) | (e.altKey && !altGr ? MOD_ALT : 0);
     if (machine.keyDown (e.key, mods)) {
       heldCode = e.code;
       e.preventDefault ();

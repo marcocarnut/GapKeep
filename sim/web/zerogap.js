@@ -161,8 +161,9 @@ export class Zerogap {
     this.m._zg_sim_key_up ();
   }
 
-  // Types text as key presses (Ctrl+V on the IDE's screen): printable ASCII,
-  // newlines as Enter, tabs as Tab; other characters are skipped. Paced:
+  // Types text as key presses (Ctrl+V on the IDE's screen): printable ASCII
+  // and Latin-1 (á, ç, £), newlines as Enter, tabs as Tab; other characters
+  // are skipped. Paced:
   // zerogap's key queue holds 64 keys and LVGL reads it every 33 ms or so.
   // Returns the number of keys it will type.
   type (text) {
@@ -170,7 +171,7 @@ export class Zerogap {
     for (const c of text.replace (/\r\n?/g, "\n")) {
       if (c === "\n") keys.push ("Enter");
       else if (c === "\t") keys.push ("Tab");
-      else if (c >= " " && c < "\x7f") keys.push (c);
+      else if ((c >= " " && c < "\x7f") || (c >= "\xa0" && c <= "\xff")) keys.push (c);
     }
     this.typing = (this.typing || []).concat (keys);
     if (!this.typeTimer) {
