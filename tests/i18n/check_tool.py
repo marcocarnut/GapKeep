@@ -43,7 +43,7 @@ x.at("not t"); format("not t");
 function t(text) {}
 t("Escé\n\"q\"");
 '''
-keys = [k for k, _ in i18n.keys_in(src, 'test.js')]
+keys = [k for k, _ in i18n.keys_in(src, 'test.js', ('t', 'plural', 'N_'))]
 expect('keys', keys, ['Plain', 'Single {n}', 'Joined with plus', 'Template', None, None, 'verb\u0004Open',
                       'Member', '{n} code', '{n} codes', 'ctx\u0004one', 'ctx\u0004other', 'Escé\n"q"'])
 
@@ -57,6 +57,7 @@ expect('refused', refused, sorted([
     '"Pay {to}": the translation has a control or bidi character',
     '"Bell": the translation has a control or bidi character',
     '"A number": not a string',
+    '"Test app: zg:i18n and the checks on catalogs (tests/i18n.txt).": the translation has a control or bidi character',
 ]))
 
 with tempfile.TemporaryDirectory() as tmp:

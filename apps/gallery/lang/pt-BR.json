@@ -1,0 +1,33 @@
+{
+  "$language": "pt-BR",
+  "$app": "gallery",
+  "messages": {
+    "Widget Gallery": "Galeria de widgets",
+    "Every zg:ui widget, plus a self-test of the runtime.": "Todos os widgets do zg:ui, e um autoteste do sistema.",
+    "Inputs": "Entradas",
+    "Letters only (accept)": "Só letras (accept)",
+    "Checkbox": "Caixa de seleção",
+    "{n} word": "{n} palavra",
+    "{n} words": "{n} palavras",
+    "Press and drag here": "Pressione e arraste aqui",
+    "Table": "Tabela",
+    "Die": "Dado",
+    "Value": "Valor",
+    "Word": "Palavra",
+    "QR": "QR",
+    "Alerts": "Alertas",
+    "No answer yet.": "Nenhuma resposta ainda.",
+    "Ask a question": "Fazer uma pergunta",
+    "Did the self-test pass?": "O autoteste passou?",
+    "Question": "Pergunta",
+    "No": "Não",
+    "Yes": "Sim",
+    "Answer: {choice}": "Resposta: {choice}",
+    "Self-test": "Autoteste",
+    "Running...": "Rodando...",
+    "{passed} passed, {failed} failed": "{passed} passaram, {failed} falharam"
+  },
+  "notes": {
+    "Letters only (accept)": "\"accept\" is the TextArea property it shows: not translated."
+  }
+}

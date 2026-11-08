@@ -1,0 +1,20 @@
+{
+  "$language": "pt-BR",
+  "$app": "hello",
+  "messages": {
+    "Hello": "Olá",
+    "The smallest useful app. Start here.": "O menor aplicativo útil. Comece por aqui.",
+    "Hello, air gap!": "Olá, air gap!",
+    "Your name": "Seu nome",
+    "Type your name and press Enter.": "Digite seu nome e pressione Enter.",
+    "Hello, {name}!": "Olá, {name}!",
+    "Hello, whoever you are!": "Olá, seja você quem for!",
+    "Clicked {n} time": "Clicado {n} vez",
+    "Clicked {n} times": "Clicado {n} vezes",
+    "Click me": "Clique aqui",
+    "Back": "Voltar"
+  },
+  "notes": {
+    "Hello, air gap!": "\"air gap\" stays in English: the isolation ZeroGap is named after."
+  }
+}

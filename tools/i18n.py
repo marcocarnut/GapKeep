@@ -27,7 +27,8 @@ product's name stays as it is): the runtime shows the launcher and
 sys.app those translations (docs/APPS.md, "Languages").
 
 The keys are the first argument of t() and the second and third of
-plural() (or i18n.t(), ...), string literals (or literals joined with +), with t()'s
+plural() (or i18n.t(), ...), and of N_(), which marks text for t()
+in code that can't import zg:i18n (const N_ = (s) => s; apps/totp), string literals (or literals joined with +), with t()'s
 { $context: "..." } if it has one ("verb\\u0004Open"). The launcher's
 catalogs are also the system's: its keys include those of the runtime's
 own JavaScript (src/runtime/*.js, ts()).
@@ -239,7 +240,7 @@ def sources(appdir):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
         for f in sorted(files):
             if f.endswith('.js'):
-                out.append((os.path.join(root, f), ('t', 'plural')))
+                out.append((os.path.join(root, f), ('t', 'plural', 'N_')))
     if os.path.basename(os.path.normpath(appdir)) == 'launcher':
         rt = os.path.join(ROOT, 'src', 'runtime')
         for f in sorted(os.listdir(rt)):

@@ -1,0 +1,29 @@
+{
+  "$language": "pt-BR",
+  "$app": "colorqr",
+  "messages": {
+    "Color QR": "QR colorido",
+    "Experimental: reads the extra data a colour QR code carries in its colours.": "Experimental: lê os dados extras que um QR code colorido leva nas cores.",
+    "The camera stopped: {reason}": "A câmera parou: {reason}",
+    "Start": "Iniciar",
+    "Color QR (experimental)": "QR colorido (experimental)",
+    "Show a colour QR code to the camera": "Mostre um QR code colorido para a câmera",
+    "What any QR reader sees": "O que qualquer leitor de QR vê",
+    "What only the colours hold": "O que só as cores contêm",
+    "{n} byte, binary": "{n} byte, binário",
+    "{n} bytes, binary": "{n} bytes, binário",
+    "{n} byte": "{n} byte",
+    "{n} bytes": "{n} bytes",
+    "Reading the colours...": "Lendo as cores...",
+    "Not read: the code went out of view (hold it steady, closer)": "Não lido: o código saiu de vista (segure-o firme, mais perto)",
+    "Code {count}": "Código {count}",
+    "None: a plain QR code": "Nenhum: um QR code comum",
+    "Not read (hold the code steady, closer, without glare)": "Não lido (segure o código firme, mais perto, sem reflexo)",
+    "Stop": "Parar",
+    "Clear": "Limpar",
+    "Back": "Voltar"
+  },
+  "notes": {
+    "The camera stopped: {reason}": "{reason} is the runtime's, in English."
+  }
+}

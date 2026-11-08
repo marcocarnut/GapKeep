@@ -8,6 +8,7 @@
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import { sha256 } from "zg:crypto";
+import { t, plural } from "zg:i18n";
 
 const hex = (bytes) => Array.from (bytes, (b) => b.toString (16).padStart (2, "0")).join (" ");
 
@@ -21,15 +22,16 @@ const scanner = new ui.Scanner ({
   height: wide ? 300 : 210,
   onDetect: ({ bytes, text }) => {
     count++;
-    title.text = `Code ${count}: ${bytes.length} byte${bytes.length === 1 ? "" : "s"}` +
-      (text === null ? ", binary" : "");
+    title.text = text === null
+      ? plural (bytes.length, "Code {count}: {n} byte, binary", "Code {count}: {n} bytes, binary", { count })
+      : plural (bytes.length, "Code {count}: {n} byte", "Code {count}: {n} bytes", { count });
     content.text = text ?? hex (bytes);
     console.log (`qrscan: code ${count}, ${bytes.length} bytes, sha256 ${hex (sha256 (bytes).subarray (0, 8)).replaceAll (" ", "")}`);
   },
   onError: ({ reason }) => {
-    title.text = "The camera stopped";
+    title.text = t ("The camera stopped");
     content.text = reason;
-    toggle.text = ui.symbols.play + " Start";
+    toggle.text = ui.symbols.play + " " + t ("Start");
     console.log (`qrscan: error: ${reason}`);
   },
 });
@@ -37,40 +39,40 @@ const scanner = new ui.Scanner ({
 const side = new ui.Container (wide ? { layout: "column", gap: 12, grow: 1 }
                                     : { layout: "column", gap: 6, width: "100%" });
 let count = 0;
-const title = new ui.Label (side, { text: "Show a QR code to the camera", font: wide ? 20 : 16 });
+const title = new ui.Label (side, { text: t ("Show a QR code to the camera"), font: wide ? 20 : 16 });
 const content = new ui.Label (side, { text: "", width: "100%", overflow: "wrap" });
 
 const buttons = new ui.Container (side, { layout: "row", gap: 8 });
 const toggle = new ui.Button (buttons, {
-  text: ui.symbols.pause + " Stop",
+  text: ui.symbols.pause + " " + t ("Stop"),
   onClick: () => {
     if (scanner.scanning) {
       scanner.stop ();
-      toggle.text = ui.symbols.play + " Start";
+      toggle.text = ui.symbols.play + " " + t ("Start");
     } else {
       scanner.start ();
-      toggle.text = ui.symbols.pause + " Stop";
+      toggle.text = ui.symbols.pause + " " + t ("Stop");
     }
   },
 });
 new ui.Button (buttons, {
-  text: ui.symbols.trash + " Clear",
+  text: ui.symbols.trash + " " + t ("Clear"),
   onClick: () => {
-    title.text = "Show a QR code to the camera";
+    title.text = t ("Show a QR code to the camera");
     content.text = "";
   },
 });
 // the camera's field: the middle at full detail (the default), or all of
 // its view with less detail (for codes that fill less of it, use "center")
 const field = new ui.Button (buttons, {
-  text: "Wide view",
+  text: t ("Wide view"),
   onClick: () => {
     scanner.field = scanner.field === "center" ? "full" : "center";
-    field.text = scanner.field === "center" ? "Wide view" : "Detail";
+    field.text = scanner.field === "center" ? t ("Wide view") : t ("Detail");
     console.log (`qrscan: field ${scanner.field}`);
   },
 });
-new ui.Button (buttons, { text: ui.symbols.home + " Back", onClick: () => sys.exit () });
+new ui.Button (buttons, { text: ui.symbols.home + " " + t ("Back"), onClick: () => sys.exit () });
 
 toggle.focus ();
 console.log ("qrscan ready");
