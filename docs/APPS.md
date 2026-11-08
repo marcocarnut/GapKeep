@@ -212,6 +212,13 @@ ui.onKey((ev) => {
 });
 ```
 
+Characters come as the keyboard layout types them, in UTF-8: `zerogap.txt`
+chooses `keyboard = us` (the default) or `br-abnt2` (Brazilian, with dead
+keys: ´ then a is á). A TextArea's text and `ev.key` can hold any letter of
+Latin-1 and Latin Extended-A, which every font size draws. A shortcut is
+best a letter or a named key (`"Enter"`, `"F2"`): punctuation moves between
+layouts.
+
 ## Asking questions
 
 `ui.alert` shows a modal message and resolves with the index of the button

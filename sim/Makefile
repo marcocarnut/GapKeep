@@ -81,6 +81,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp $(ROOT)/src/runtime/settings.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
 	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/i18n.cpp \
+	    $(ROOT)/src/runtime/keylayout.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \

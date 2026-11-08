@@ -7,6 +7,7 @@
 //
 //   clock_trim_ppm = <ppm>      the clock's (clock.h, docs/CLOCK.md)
 //   utc_offset = [+-]HH:MM
+//   keyboard = us | br-abnt2    the keyboard layout (keylayout.h)
 //   experimental = yes | no     experimental features (docs/EXPERIMENTAL.md):
 //                               the scanner's "qr-color" detector and the
 //                               apps whose manifest says "experimental"

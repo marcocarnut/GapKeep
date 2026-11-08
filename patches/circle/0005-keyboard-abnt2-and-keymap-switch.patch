@@ -1,0 +1,357 @@
+From: zerogap
+Subject: keyboard: Brazilian ABNT2 keymap, switched at run time
+
+zerogap's keyboard layout is a setting (zerogap.txt "keyboard", and while
+running: src/kbdindev.cpp), so the keymap can change after the keyboard
+is attached: CUSBKeyboardDevice::SetKeyMap() and CKeyMap::LoadMap().
+
+ABNT2 ("BR") has a key at HID usage 0x87 (International1, "/ ?"), above
+the old PHY_MAX_CODE (127), and Circle's cooked mode took the key codes
+0x80-0x87 for the modifier keys: that key acted as a held right Windows
+key. The modifiers now use their HID usages (0xE0-0xE7) and the maps go
+up to 0x87 (the other maps' missing rows are KeyNone).
+
+Its dead keys (´ ` ~ ^ ¨) give their spacing accents (Latin-1);
+src/kbdindev.cpp composes them with the next key. Caps Lock also changes
+the case of Latin-1 letters (ç, á...).
+
+diff --git a/include/circle/input/keymap.h b/include/circle/input/keymap.h
+--- a/include/circle/input/keymap.h
++++ b/include/circle/input/keymap.h
+@@ -22,7 +22,7 @@
+ 
+ #include <circle/types.h>
+ 
+-#define PHY_MAX_CODE	127
++#define PHY_MAX_CODE	0x87		// zerogap: up to International1 (ABNT2's / ?)
+ 
+ #define K_NORMTAB	0
+ #define K_SHIFTTAB	1
+@@ -130,6 +130,10 @@
+ 
+ 	u8 GetLEDStatus (void) const;
+ 
++	// zerogap: switches to one of the built-in maps ("US", "BR", ...),
++	// keeping Caps Lock and Num Lock. FALSE: no such map, nothing changed.
++	boolean LoadMap (const char *pLocale);
++
+ private:
+ 	static const void *LookupDefaultMap (const char *pLocale);
+ 
+diff --git a/lib/input/keymap.cpp b/lib/input/keymap.cpp
+--- a/lib/input/keymap.cpp
++++ b/lib/input/keymap.cpp
+@@ -22,6 +22,7 @@
+ #include <circle/koptions.h>
+ #include <circle/sysconfig.h>
+ #include <circle/util.h>
++#include <circle/synchronize.h>
+ #include <assert.h>
+ 
+ #define KEYPAD_FIRST	0x53
+@@ -101,6 +102,8 @@
+ const u16 CKeyMap::s_DefaultMap[][PHY_MAX_CODE+1][K_CTRLTAB+1] =
+ {
+ 	{
++		#include "keymap_br.h"
++	}, {
+ 		#include "keymap_de.h"
+ 	}, {
+ 		#include "keymap_dv.h"
+@@ -119,6 +122,7 @@
+ 
+ const char *CKeyMap::s_MapDirectory[] =		// same (alphabetical) order as in s_DefaultMap[]
+ {
++	"BR",
+ 	"DE",
+ 	"DV",
+ 	"ES",
+@@ -307,6 +311,16 @@
+ 		{
+ 			chChar -= 'a'-'A';
+ 		}
++		// zerogap: and the Latin-1 letters (not the signs at 0xD7 and 0xF7,
++		// nor 0xDF and 0xFF, which have no capital in Latin-1)
++		else if (0xC0 <= (u8) chChar && (u8) chChar <= 0xDE && (u8) chChar != 0xD7)
++		{
++			chChar += 0x20;
++		}
++		else if (0xE0 <= (u8) chChar && (u8) chChar <= 0xFE && (u8) chChar != 0xF7)
++		{
++			chChar -= 0x20;
++		}
+ 	}
+ 
+ 	Buffer[0] = chChar;
+@@ -337,6 +351,23 @@
+ 	return nResult;
+ }
+ 
++boolean CKeyMap::LoadMap (const char *pLocale)
++{
++	assert (pLocale != 0);
++	const void *pMap = LookupDefaultMap (pLocale);
++	if (pMap == 0)
++	{
++		return FALSE;
++	}
++
++	// Translate() runs in interrupt context (key presses, auto-repeat)
++	EnterCritical (IRQ_LEVEL);
++	memcpy (m_KeyMap, pMap, sizeof m_KeyMap);
++	LeaveCritical ();
++
++	return TRUE;
++}
++
+ const void *CKeyMap::LookupDefaultMap (const char *pLocale)
+ {
+ 	for (unsigned nMap = 0; s_MapDirectory[nMap] != 0; nMap++)
+diff --git a/include/circle/input/keyboardbehaviour.h b/include/circle/input/keyboardbehaviour.h
+--- a/include/circle/input/keyboardbehaviour.h
++++ b/include/circle/input/keyboardbehaviour.h
+@@ -26,7 +26,7 @@
+ 
+ enum TModifierKey
+ {
+-	ModifierKeyLeftCtrl = 0x80,
++	ModifierKeyLeftCtrl = 0xE0,	// zerogap: their HID usages, above every key's
+ 	ModifierKeyLeftShift,
+ 	ModifierKeyAlt,
+ 	ModifierKeyLeftWin,
+@@ -69,6 +69,8 @@
+ 
+ 	u8 GetLEDStatus (void) const;
+ 
++	boolean SetKeyMap (const char *pLocale);	// zerogap: CKeyMap::LoadMap()
++
+ private:
+ 	void GenerateKeyEvent (u8 ucKeyCode);
+ 
+diff --git a/lib/input/keyboardbehaviour.cpp b/lib/input/keyboardbehaviour.cpp
+--- a/lib/input/keyboardbehaviour.cpp
++++ b/lib/input/keyboardbehaviour.cpp
+@@ -65,6 +65,11 @@
+ 	return m_KeyMap.GetLEDStatus ();
+ }
+ 
++boolean CKeyboardBehaviour::SetKeyMap (const char *pLocale)
++{
++	return m_KeyMap.LoadMap (pLocale);
++}
++
+ void CKeyboardBehaviour::GenerateKeyEvent (u8 ucKeyCode)
+ {
+ 	const char *pKeyString;
+@@ -121,9 +126,9 @@
+ 
+ void CKeyboardBehaviour::KeyPressed (u8 ucKeyCode)
+ {
+-	if (0x80 <= ucKeyCode && ucKeyCode < ModifierKeyUnknown)
++	if (ModifierKeyLeftCtrl <= ucKeyCode && ucKeyCode < ModifierKeyUnknown)
+ 	{
+-		unsigned nMask = 1 << (ucKeyCode - 0x80);
++		unsigned nMask = 1 << (ucKeyCode - ModifierKeyLeftCtrl);
+ 		assert (nMask < 0x100);
+ 		m_ucModifiers |= nMask;
+ 	}
+@@ -150,9 +155,9 @@
+ 
+ void CKeyboardBehaviour::KeyReleased (u8 ucKeyCode)
+ {
+-	if (0x80 <= ucKeyCode && ucKeyCode < ModifierKeyUnknown)
++	if (ModifierKeyLeftCtrl <= ucKeyCode && ucKeyCode < ModifierKeyUnknown)
+ 	{
+-		unsigned nMask = 1 << (ucKeyCode - 0x80);
++		unsigned nMask = 1 << (ucKeyCode - ModifierKeyLeftCtrl);
+ 		assert (nMask < 0x100);
+ 		m_ucModifiers &= ~nMask;
+ 	}
+diff --git a/include/circle/usb/usbkeyboard.h b/include/circle/usb/usbkeyboard.h
+--- a/include/circle/usb/usbkeyboard.h
++++ b/include/circle/usb/usbkeyboard.h
+@@ -52,6 +52,9 @@
+ 
+ 	u8 GetLEDStatus (void) const;	// returns USB LED status to be handed-over to SetLEDs()
+ 
++	// zerogap: the cooked mode's keymap, "US", "BR"... (CKeyMap::LoadMap())
++	boolean SetKeyMap (const char *pLocale);
++
+ 	// raw mode (if bMixedMode is FALSE, the cooked handlers are ignored)
+ 	void RegisterKeyStatusHandlerRaw (TKeyStatusHandlerRawEx *pKeyStatusHandlerRaw,
+ 					  boolean bMixedMode, void* pArg);
+diff --git a/lib/usb/usbkeyboard.cpp b/lib/usb/usbkeyboard.cpp
+--- a/lib/usb/usbkeyboard.cpp
++++ b/lib/usb/usbkeyboard.cpp
+@@ -125,6 +125,11 @@
+ 	}
+ }
+ 
++boolean CUSBKeyboardDevice::SetKeyMap (const char *pLocale)
++{
++	return m_Behaviour.SetKeyMap (pLocale);
++}
++
+ u8 CUSBKeyboardDevice::GetLEDStatus (void) const
+ {
+ 	u8 ucStatus = m_Behaviour.GetLEDStatus ();
+@@ -224,12 +229,12 @@
+ 		if (    (pReport[0] & nMask)
+ 		    && !(m_LastReport[0] & nMask))
+ 		{
+-			m_Behaviour.KeyPressed (0x80 + i);
++			m_Behaviour.KeyPressed (ModifierKeyLeftCtrl + i);
+ 		}
+ 		else if (   !(pReport[0] & nMask)
+ 			 &&  (m_LastReport[0] & nMask))
+ 		{
+-			m_Behaviour.KeyReleased (0x80 + i);
++			m_Behaviour.KeyReleased (ModifierKeyLeftCtrl + i);
+ 		}
+ 	}
+ 
+diff --git a/lib/input/keymap_br.h b/lib/input/keymap_br.h
+new file mode 100644
+--- /dev/null
++++ b/lib/input/keymap_br.h
+@@ -0,0 +1,140 @@
++// Brazilian ABNT2 (zerogap): the keys' markings. The dead keys (acute,
++// grave, tilde, circumflex, diaeresis) give their spacing accents here:
++// composing them with the next key is left to the application.
++// Normal	Shift		AltGr		AltGr+Shift	Ctrl
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x00
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x01
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x02
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x03
++{'a',	'A',	KeyNone,	KeyNone,	KeyNone},	// 0x04
++{'b',	'B',	KeyNone,	KeyNone,	KeyNone},	// 0x05
++{'c',	'C',	KeyNone,	KeyNone,	KeyNone},	// 0x06
++{'d',	'D',	KeyNone,	KeyNone,	KeyNone},	// 0x07
++{'e',	'E',	C('\xB0'),	KeyNone,	KeyNone},	// 0x08
++{'f',	'F',	KeyNone,	KeyNone,	KeyNone},	// 0x09
++{'g',	'G',	KeyNone,	KeyNone,	KeyNone},	// 0x0A
++{'h',	'H',	KeyNone,	KeyNone,	KeyNone},	// 0x0B
++{'i',	'I',	KeyNone,	KeyNone,	KeyNone},	// 0x0C
++{'j',	'J',	KeyNone,	KeyNone,	KeyNone},	// 0x0D
++{'k',	'K',	KeyNone,	KeyNone,	KeyNone},	// 0x0E
++{'l',	'L',	KeyNone,	KeyNone,	KeyNone},	// 0x0F
++{'m',	'M',	KeyNone,	KeyNone,	KeyNone},	// 0x10
++{'n',	'N',	KeyNone,	KeyNone,	KeyNone},	// 0x11
++{'o',	'O',	KeyNone,	KeyNone,	KeyNone},	// 0x12
++{'p',	'P',	KeyNone,	KeyNone,	KeyNone},	// 0x13
++{'q',	'Q',	'/',	KeyNone,	KeyNone},	// 0x14
++{'r',	'R',	KeyNone,	KeyNone,	KeyNone},	// 0x15
++{'s',	'S',	KeyNone,	KeyNone,	KeyNone},	// 0x16
++{'t',	'T',	KeyNone,	KeyNone,	KeyNone},	// 0x17
++{'u',	'U',	KeyNone,	KeyNone,	KeyNone},	// 0x18
++{'v',	'V',	KeyNone,	KeyNone,	KeyNone},	// 0x19
++{'w',	'W',	'?',	KeyNone,	KeyNone},	// 0x1A
++{'x',	'X',	KeyNone,	KeyNone,	KeyNone},	// 0x1B
++{'y',	'Y',	KeyNone,	KeyNone,	KeyNone},	// 0x1C
++{'z',	'Z',	KeyNone,	KeyNone,	KeyNone},	// 0x1D
++{'1',	'!',	C('\xB9'),	KeyNone,	KeyNone},	// 0x1E
++{'2',	'@',	C('\xB2'),	KeyNone,	KeyNone},	// 0x1F
++{'3',	'#',	C('\xB3'),	KeyNone,	KeyNone},	// 0x20
++{'4',	'$',	C('\xA3'),	KeyNone,	KeyNone},	// 0x21
++{'5',	'%',	C('\xA2'),	KeyNone,	KeyNone},	// 0x22
++{'6',	C('\xA8'),	C('\xAC'),	KeyNone,	KeyNone},	// 0x23
++{'7',	'&',	KeyNone,	KeyNone,	KeyNone},	// 0x24
++{'8',	'*',	KeyNone,	KeyNone,	KeyNone},	// 0x25
++{'9',	'(',	KeyNone,	KeyNone,	KeyNone},	// 0x26
++{'0',	')',	KeyNone,	KeyNone,	KeyNone},	// 0x27
++{KeyReturn,	KeyReturn,	KeyNone,	KeyNone,	KeyNone},	// 0x28
++{KeyEscape,	KeyEscape,	KeyNone,	KeyNone,	KeyNone},	// 0x29
++{KeyBackspace,	KeyBackspace,	KeyNone,	KeyNone,	KeyNone},	// 0x2A
++{KeyTabulator,	KeyTabulator,	KeyNone,	KeyNone,	KeyNone},	// 0x2B
++{KeySpace,	KeySpace,	KeyNone,	KeyNone,	KeyNone},	// 0x2C
++{'-',	'_',	KeyNone,	KeyNone,	KeyNone},	// 0x2D
++{'=',	'+',	C('\xA7'),	KeyNone,	KeyNone},	// 0x2E
++{C('\xB4'),	'`',	KeyNone,	KeyNone,	KeyNone},	// 0x2F
++{'[',	'{',	C('\xAA'),	KeyNone,	KeyNone},	// 0x30
++{']',	'}',	C('\xBA'),	KeyNone,	KeyNone},	// 0x31
++{']',	'}',	C('\xBA'),	KeyNone,	KeyNone},	// 0x32
++{C('\xE7'),	C('\xC7'),	KeyNone,	KeyNone,	KeyNone},	// 0x33
++{'~',	'^',	KeyNone,	KeyNone,	KeyNone},	// 0x34
++{'\'',	'\"',	KeyNone,	KeyNone,	KeyNone},	// 0x35
++{',',	'<',	KeyNone,	KeyNone,	KeyNone},	// 0x36
++{'.',	'>',	KeyNone,	KeyNone,	KeyNone},	// 0x37
++{';',	':',	KeyNone,	KeyNone,	KeyNone},	// 0x38
++{KeyCapsLock,	KeyCapsLock,	KeyNone,	KeyNone,	KeyNone},	// 0x39
++{KeyF1,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x3A
++{KeyF2,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x3B
++{KeyF3,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x3C
++{KeyF4,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x3D
++{KeyF5,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x3E
++{KeyF6,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x3F
++{KeyF7,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x40
++{KeyF8,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x41
++{KeyF9,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x42
++{KeyF10,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x43
++{KeyF11,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x44
++{KeyF12,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x45
++{KeyPrintScreen,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x46
++{KeyScrollLock,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x47
++{KeyPause,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x48
++{KeyInsert,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x49
++{KeyHome,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlHome},	// 0x4A
++{KeyPageUp,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlPageUp},	// 0x4B
++{KeyDelete,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x4C
++{KeyEnd,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlEnd},	// 0x4D
++{KeyPageDown,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlPageDown},	// 0x4E
++{KeyRight,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlRight},	// 0x4F
++{KeyLeft,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlLeft},	// 0x50
++{KeyDown,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlDown},	// 0x51
++{KeyUp,	KeyNone,	KeyNone,	KeyNone,	KeyCtrlUp},	// 0x52
++{KeyNumLock,	KeyNumLock,	KeyNone,	KeyNone,	KeyNone},	// 0x53
++{KeyKP_Divide,	KeyKP_Divide,	KeyNone,	KeyNone,	KeyNone},	// 0x54
++{KeyKP_Multiply,	KeyKP_Multiply,	KeyNone,	KeyNone,	KeyNone},	// 0x55
++{KeyKP_Subtract,	KeyKP_Subtract,	KeyNone,	KeyNone,	KeyNone},	// 0x56
++{KeyKP_Add,	KeyKP_Add,	KeyNone,	KeyNone,	KeyNone},	// 0x57
++{KeyKP_Enter,	KeyKP_Enter,	KeyNone,	KeyNone,	KeyNone},	// 0x58
++{KeyEnd,	KeyKP_1,	KeyNone,	KeyNone,	KeyCtrlEnd},	// 0x59
++{KeyDown,	KeyKP_2,	KeyNone,	KeyNone,	KeyNone},	// 0x5A
++{KeyPageDown,	KeyKP_3,	KeyNone,	KeyNone,	KeyCtrlPageDown},	// 0x5B
++{KeyLeft,	KeyKP_4,	KeyNone,	KeyNone,	KeyNone},	// 0x5C
++{KeyKP_Center,	KeyKP_5,	KeyNone,	KeyNone,	KeyNone},	// 0x5D
++{KeyRight,	KeyKP_6,	KeyNone,	KeyNone,	KeyNone},	// 0x5E
++{KeyHome,	KeyKP_7,	KeyNone,	KeyNone,	KeyCtrlHome},	// 0x5F
++{KeyUp,	KeyKP_8,	KeyNone,	KeyNone,	KeyNone},	// 0x60
++{KeyPageUp,	KeyKP_9,	KeyNone,	KeyNone,	KeyCtrlPageUp},	// 0x61
++{KeyInsert,	KeyKP_0,	KeyNone,	KeyNone,	KeyNone},	// 0x62
++{KeyDelete,	KeyKP_Comma,	KeyNone,	KeyNone,	KeyNone},	// 0x63
++{'\\',	'|',	KeyNone,	KeyNone,	KeyNone},	// 0x64
++{KeyApplication,	KeyApplication,	KeyNone,	KeyNone,	KeyNone},	// 0x65
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x66
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x67
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x68
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x69
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x6A
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x6B
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x6C
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x6D
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x6E
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x6F
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x70
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x71
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x72
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x73
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x74
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x75
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x76
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x77
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x78
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x79
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x7A
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x7B
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x7C
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x7D
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x7E
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x7F
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x80
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x81
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x82
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x83
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x84
++{KeyKP_Period,	KeyKP_Period,	KeyNone,	KeyNone,	KeyNone},	// 0x85
++{KeyNone,	KeyNone,	KeyNone,	KeyNone,	KeyNone},	// 0x86
++{'/',	'?',	C('\xB0'),	KeyNone,	KeyNone}	// 0x87

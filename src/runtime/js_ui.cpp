@@ -352,9 +352,12 @@ static const char *KeyName (u32 nKey, char *pBuf)
 	case LV_KEY_PREV:	return "Tab";
 	case LV_KEY_HOME:	return "Home";
 	case LV_KEY_END:	return "End";
-	default:
-		pBuf[0] = (char) nKey;
-		pBuf[1] = '\0';
+	default:		// a character: its UTF-8 bytes, the first lowest (kbdindev.h)
+		for (unsigned i = 0; i < 4; i++)
+		{
+			pBuf[i] = (char) (nKey >> (8 * i));
+		}
+		pBuf[4] = '\0';
 		return pBuf;
 	}
 }
@@ -415,7 +418,7 @@ static void NodeEventCallback (lv_event_t *e)
 		JS_SetPropertyStr (ctx, Ev, "target", JS_DupValue (ctx, Wrapper));
 		if (Code == LV_EVENT_KEY)
 		{
-			char Buf[2];
+			char Buf[5];
 			JS_SetPropertyStr (ctx, Ev, "key", JS_NewString (ctx, KeyName (lv_event_get_key (e), Buf)));
 		}
 		else if (   Code == LV_EVENT_PRESSED || Code == LV_EVENT_PRESSING

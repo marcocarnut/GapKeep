@@ -369,7 +369,10 @@ With Ctrl or Alt held, keys are delivered to the handler only, not typed.
 
 #### Key names
 
-Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`). Others:
+Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`, `"ç"`), as
+the keyboard layout types them (`keyboard` in `zerogap.txt`: `us` or
+`br-abnt2`); an accent typed with a dead key arrives once, composed with
+the letter (`"á"`). Others:
 `"Enter"`, `"Escape"`, `"Backspace"`, `"Delete"`, `"Tab"` (check `shift`
 for Shift+Tab), `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`,
 `"Home"`, `"End"`, `"PageUp"`, `"PageDown"`, `"Insert"`, `"F1"`...`"F9"`.

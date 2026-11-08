@@ -56,6 +56,12 @@ void zg_sim_key_up (void);
  * (id 0). Returns 0 if there is such an app. */
 int zg_sim_launch (const char *id);
 
+/* The keyboard layout (src/runtime/keylayout.h): "us", "br-abnt2". QEMU key
+ * names are keys by their place on a US keyboard, so with "br-abnt2"
+ * "semicolon" types ç, as on QEMU and on the Pi. Returns 0 if there is such
+ * a layout. */
+int zg_sim_keyboard (const char *layout);
+
 /* The camera (src/runtime/synthcam.h), after boot. What it films:
  * zg_sim_camera ("none") no camera, ("scene") nothing in particular (the
  * default); a QR code of these bytes; a picture (8-bit grey, scaled to

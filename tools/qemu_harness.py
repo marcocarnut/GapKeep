@@ -40,6 +40,12 @@ Scenario file: one command per line, '#' starts a comment.
     tilefocus <id>              the same, without pressing Enter
     launch <id>                 simulator only: start that app, as the
                                 launcher would
+    keyboard <layout>           the keyboard layout (us, br-abnt2): on the
+                                simulator's stdin, as "#keyboard <layout>"
+                                on a test build's serial line. Key names
+                                stay keys by their place on a US keyboard:
+                                with br-abnt2, "key semicolon" types ç
+                                ("type" assumes us)
     camera qr <text>            what the camera films (test builds and the
     camera scene | none         simulator have a synthetic camera, see
                                 docs/CAMERA.md): a QR code of <text>, nothing,
@@ -470,6 +476,10 @@ class SimMachine:
         self._cmd('launch %s' % app_id)
         time.sleep(0.1)
 
+    def keyboard(self, layout):
+        self._cmd('keyboard %s' % layout)
+        time.sleep(0.05)
+
     def reset(self):
         self.mark = len(self.serial())
         self.stop()
@@ -592,6 +602,11 @@ def run_scenario(m, path, outdir):
                     m.language(rest.strip())
                 else:
                     m.send('#language ' + rest.strip())
+            elif cmd == 'keyboard':
+                if hasattr(m, 'keyboard'):
+                    m.keyboard(rest.strip())
+                else:
+                    m.send('#keyboard ' + rest.strip())
             elif cmd == 'reset':
                 m.reset()
             elif cmd == 'expect':

@@ -39,6 +39,9 @@
 // codes of tests/colorqr, by their PNG's name without ".png") for the
 // synthetic camera, as the simulator's "camera picture <file>".
 //
+// "#keyboard <layout>": the keyboard layout (runtime/keylayout.h), as
+// "keyboard = <layout>" in zerogap.txt would, or a settings app.
+//
 // "#experimental on": experimental features on (runtime/settings.h), as
 // "experimental = yes" in zerogap.txt would, for the rig, whose card never
 // changes. The launcher lists the experimental apps from its next start.
