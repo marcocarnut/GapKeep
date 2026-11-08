@@ -120,7 +120,7 @@ FORCE:
 # Recompile what depends on ZG_TEST / ZG_SEALED when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o runtime/i18n.o: .buildmode
+main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
