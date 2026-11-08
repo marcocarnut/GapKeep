@@ -4,9 +4,11 @@ The terms ZeroGap's apps and GapWallet use in Brazilian Portuguese, so the
 same thing has the same name everywhere. The user decides them; translators
 follow them and propose changes here, not in a catalog alone.
 
-`tools/i18n.py check --lang pt-BR` reads the table below: a translation
-with a word from the "Avoid" column is reported. Rows are matched by whole
-words, ignoring case.
+`tools/i18n.py check --lang pt-BR` reads the table below and warns about
+a translation with a word from the "Avoid" column: a warning for the
+reviewer, not a failure, since some of those words are right in other
+senses ("a maior parte"). Whole words, ignoring case; a hyphenated word is
+one word, so "frase-senha" is not "senha".
 
 ## Style
 
