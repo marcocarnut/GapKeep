@@ -1,0 +1,21 @@
+{
+  "$language": "pt-BR",
+  "$app": "settings",
+  "messages": {
+    "Settings": "Configurações",
+    "Language": "Idioma",
+    "Numbers": "Números",
+    "As the language writes them": "Como o idioma escreve",
+    "Keyboard": "Teclado",
+    "Type here to try the keyboard": "Digite aqui para testar o teclado",
+    "Amount: {amount} BTC": "Valor: {amount} BTC",
+    "Number: {number}": "Número: {number}",
+    "Date and time: {date}": "Data e hora: {date}",
+    "These apply now, until ZeroGap is switched off. To keep them, put these lines in zerogap.txt at the top of the SD card:": "Valem a partir de agora, até o ZeroGap ser desligado. Para mantê-las, coloque estas linhas no zerogap.txt, na raiz do cartão SD:",
+    "Back": "Voltar"
+  },
+  "notes": {
+    "As the language writes them": "The first choice for numbers: the marks the language uses (1.234,5 in Portuguese), shown with the others: 1,234.5, 1234.5 ...",
+    "Amount: {amount} BTC": "A sample, so the person sees the marks chosen."
+  }
+}
