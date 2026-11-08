@@ -13,7 +13,8 @@
 //   checkShareSet(shares) -> null, or the first problem across the shares
 //
 // Errors are Codex32Error: `code` (below), `message` (English), and fields
-// for the details (`share`, `position`, `suggestion`, ...). Positions count
+// for the details (`share`, `position`, `suggestion`, ...), enough for an
+// app to word the message itself (in another language). Positions count
 // from 1 at the "m" of "ms1", spaces left out.
 //
 // What the seed is: BIP-93 calls it the BIP-32 master seed. Shares made by
@@ -98,6 +99,7 @@ export function parseShare(text, options) {
     const c = s[i];
     const like = LOOKALIKES[low[i]];
     const details = { position: i + 1, char: c, count: bad.length };
+    if (like) details.lookalike = caseAs(like, s);
     let msg = `Character ${i + 1} is ${quote(c)}, which codex32 does not use` +
       (like ? ` (perhaps ${quote(caseAs(like, s))}?).` : ".");
     if (bad.length > 1) msg += ` ${bad.length - 1} more character${bad.length > 2 ? "s are" : " is"} not codex32 either.`;
@@ -155,7 +157,8 @@ export function parseShare(text, options) {
       }
       throw new Codex32Error("checksum", msg, details);
     }
-    throw new Codex32Error("invalid", "Not a valid share: " + (e && e.message ? e.message : e) + ".");
+    const reason = String(e && e.message ? e.message : e);
+    throw new Codex32Error("invalid", "Not a valid share: " + reason + ".", { reason });
   }
   return {
     string: low,
@@ -278,18 +281,20 @@ export function checkShareSet(shares) {
     if (b.id !== a.id || b.threshold !== a.threshold) {
       return new Codex32Error("mismatch",
         `Share ${i + 1} belongs to a different split (${b.id.toUpperCase()}, threshold ${b.thresholdChar}) ` +
-        `than share 1 (${a.id.toUpperCase()}, threshold ${a.thresholdChar}).`, { share: i + 1 });
+        `than share 1 (${a.id.toUpperCase()}, threshold ${a.thresholdChar}).`,
+        { share: i + 1, id: b.id, thresholdChar: b.thresholdChar, firstId: a.id, firstThresholdChar: a.thresholdChar });
     }
     if (b.string.length !== a.string.length) {
       return new Codex32Error("lengths",
         `Share ${i + 1} is ${b.string.length} characters long and share 1 ${a.string.length}: ` +
-        "the shares of one split are all the same length.", { share: i + 1 });
+        "the shares of one split are all the same length.",
+        { share: i + 1, length: b.string.length, firstLength: a.string.length });
     }
     for (let j = 0; j < i; j++) {
       if (shares[j].index === b.index) {
         return new Codex32Error("duplicate",
           `Shares ${j + 1} and ${i + 1} are the same share (index ${b.index.toUpperCase()}).`,
-          { share: i + 1, other: j + 1 });
+          { share: i + 1, other: j + 1, index: b.index });
       }
     }
   }
@@ -338,14 +343,16 @@ export function recover(shareTexts) {
     try {
       r = cxRecover(shares.map((s) => s.string));
     } catch (e) {
-      throw new Codex32Error("recover", "Could not recover: " + (e && e.message ? e.message : e) + ".");
+      const reason = String(e && e.message ? e.message : e);
+      throw new Codex32Error("recover", "Could not recover: " + reason + ".", { reason });
     }
     seed = r.seed;
     secret = r.string;
   }
   if (!Object.values(SHARE_LENGTHS).includes(seed.length)) {
     seed.fill(0);
-    throw new Codex32Error("size", `The secret has ${seed.length} bytes, which BIP-93 does not allow.`);
+    throw new Codex32Error("size", `The secret has ${seed.length} bytes, which BIP-93 does not allow.`,
+      { bytes: seed.length });
   }
   return {
     seed,

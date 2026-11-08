@@ -3,10 +3,14 @@
 // The algorithm is dice39's own code, copied verbatim into ./vendor by
 // tools/extract_dice39.py; this file is only the user interface. See
 // ./vendor/*.js for the provenance header (source file and its SHA-256).
+//
+// The text is translated (zg:i18n, lang/<language>.json; most of it in
+// lib/strings.js). The log stays in English, and holds no secret.
 
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as zgcrypto from "zg:crypto";
+import { t, plural } from "zg:i18n";
 import "./lib/cryptoshim.js";
 import { BIP39_WORDS } from "./vendor/wordlist.js";
 import { buildMnemonic, importMnemonic, PHRASE_SIZES, concatBytes, sha256 } from "./vendor/bip39core.js";
@@ -79,7 +83,7 @@ function entropyPad(parent, target, onUpdate) {
   const update = () => {
     const bits = Math.min(state.pad.bits, target);
     bar.value = bits;
-    label.text = `${S.bitsLabel(bits, target)}   ${Math.round(bits / target * 100)}%`;
+    label.text = S.bitsLabel(bits, target, Math.round(bits / target * 100));
     if (bits >= target && !state.pad.announced) {
       state.pad.announced = true;   // counts only: never log what was sampled
       console.log(`dice39: entropy pad full: ${state.pad.samples.length} samples, ${state.pad.bits} bits`);
@@ -95,7 +99,6 @@ function entropyPad(parent, target, onUpdate) {
 // --- helpers --------------------------------------------------------------
 
 const normalize = (w) => (w || "").trim().toLowerCase();
-const group = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const pairs = (code) => `${code.dice[0]}${code.dice[1]} ${code.dice[2]}${code.dice[3]}`;
 
 // Clears the screen and starts a page: a scrollable column.
@@ -126,7 +129,7 @@ function buttonRow(parent) {
 }
 
 async function confirm(text, yes, title) {
-  return (await ui.alert(text, { title, buttons: ["Cancel", yes] })) === 1;
+  return (await ui.alert(text, { title, buttons: [t("Cancel"), yes] })) === 1;
 }
 
 // --- start ----------------------------------------------------------------
@@ -140,9 +143,9 @@ function showStart() {
   paragraph(ui.screen, S.order, { color: MUTED });
 
   const row = new ui.Container({ layout: "row", alignItems: "center", gap: 12 });
-  new ui.Label(row, { text: "Phrase length" });
+  new ui.Label(row, { text: t("Phrase length") });
   const len = new ui.Dropdown(row, {
-    options: SIZES.map((t) => (t === 24 ? "24 words (recommended)" : `${t} words`)),
+    options: SIZES.map((n) => (n === 24 ? t("24 words (recommended)") : t("{n} words", { n }))),
     selected: SIZES.indexOf(state.total),
     width: 300,
     onChange: (ev) => {
@@ -153,24 +156,24 @@ function showStart() {
 
   const buttons = buttonRow(ui.screen);
   const start = new ui.Button(buttons, {
-    text: ui.symbols.right + "  Enter my dice words",
+    text: ui.symbols.right + "  " + t("Enter my dice words"),
     onClick: () => showEntry(),
   });
-  const own = new ui.Button(buttons, { text: "I already have a seed phrase", onClick: () => showImport() });
-  new ui.Button(buttons, { text: "About", onClick: showAbout });
+  const own = new ui.Button(buttons, { text: t("I already have a seed phrase"), onClick: () => showImport() });
+  new ui.Button(buttons, { text: t("About"), onClick: showAbout });
 
   // Nothing is made or split before the self-test has passed: the buttons
   // stay disabled until it has, and the page is redrawn when it finishes.
   const st = state.selftest;
   start.disabled = own.disabled = !st || st.failed.length > 0;
   if (!st) {
-    paragraph(ui.screen, "Self-test running...", { color: MUTED, font: 12 });
+    paragraph(ui.screen, t("Self-test running..."), { color: MUTED, font: 12 });
   } else if (st.failed.length === 0) {
-    paragraph(ui.screen, `${ui.symbols.ok} Self-test passed (${st.passed} checks: BIP-39, BIP-84 and codex32 test vectors, ` +
-      "dice tables, round trips).", { color: GREEN, font: 12 });
+    paragraph(ui.screen, ui.symbols.ok + " " + t("Self-test passed ({n} checks: BIP-39, BIP-84 and codex32 test " +
+      "vectors, dice tables, round trips).", { n: st.passed }), { color: GREEN, font: 12 });
   } else {
-    paragraph(ui.screen, `${ui.symbols.close} Self-test FAILED. Do not use this device to make a seed.\n` +
-      st.failed.join("\n"), { color: RED });
+    paragraph(ui.screen, ui.symbols.close + " " + t("Self-test FAILED. Do not use this device to make a seed.") +
+      "\n" + st.failed.join("\n"), { color: RED });
   }
   (st && st.failed.length === 0 ? start : len).focus();
 }
@@ -180,7 +183,7 @@ function showStart() {
 function showEntry() {
   const spec = PHRASE_SIZES[state.total];
   state.mode = "dice";
-  page(`Words 1 to ${spec.maxUser} of ${state.total}`);
+  page(t("Words 1 to {max} of {total}", { max: spec.maxUser, total: state.total }));
   paragraph(ui.screen, S.entryHelp, { color: MUTED });
 
   const grid = new ui.Container({ layout: "row-wrap", gap: 10, width: "100%" });
@@ -195,16 +198,11 @@ function showEntry() {
   const pad = entropyPad(ui.screen, target, () => state.refresh && state.refresh());
   const buttons = buttonRow(ui.screen);
   const generate = new ui.Button(buttons, {
-    text: ui.symbols.ok + "  Generate",
+    text: ui.symbols.ok + "  " + t("Generate"),
     disabled: true,
     onClick: () => onGenerate(),
   });
-  new ui.Button(buttons, {
-    text: "Back",
-    onClick: async () => {
-      if (countWords() === 0 || (await confirm("Discard the words you entered?", "Discard"))) showStart();
-    },
-  });
+  backButton(buttons);
 
   state.next = () => (state.padFull() ? generate : pad);
   state.ready = () => {
@@ -217,12 +215,13 @@ function showEntry() {
     const ready = state.ready();
     generate.disabled = !(ready && state.padFull());
     const typed = state.fields.filter((f) => normalize(f.ta.text)).length;
-    let text = `${n} word${n === 1 ? "" : "s"} entered (${spec.minUser} to ${spec.maxUser}).`;
-    if (ready) text += ` Words ${n + 1} to ${state.total} will come from this device.`;
-    else text += ` Enter at least ${spec.minUser - n} more.`;
-    if (ready && !state.padFull()) text += " Fill the entropy bar below to enable Generate.";
-    if (typed > n) text += " Words after the first empty or unfinished box are not used.";
-    status.set({ text, color: ready ? GREEN : MUTED });
+    const text = [plural(n, "{n} word entered ({min} to {max}).", "{n} words entered ({min} to {max}).",
+      { min: spec.minUser, max: spec.maxUser })];
+    if (ready) text.push(t("Words {from} to {total} will come from this device.", { from: n + 1, total: state.total }));
+    else text.push(t("Enter at least {n} more.", { n: spec.minUser - n }));
+    if (ready && !state.padFull()) text.push(t("Fill the entropy bar below to enable Generate."));
+    if (typed > n) text.push(t("Words after the first empty or unfinished box are not used."));
+    status.set({ text: text.join(" "), color: ready ? GREEN : MUTED });
   };
   state.refresh();
   state.fields[0].ta.focus();
@@ -238,7 +237,7 @@ function showImport() {
   const T = state.total;
   state.mode = "import";
   state.refresh = null;   // the previous page's, if any: its widgets are gone
-  page(`Your ${T}-word phrase`);
+  page(t("Your {total}-word phrase", { total: T }));
   paragraph(ui.screen, S.importIntro(T), { color: MUTED });
 
   const grid = new ui.Container({ layout: "row-wrap", gap: 10, width: "100%" });
@@ -249,16 +248,11 @@ function showImport() {
   const status = new ui.Label({ width: "100%", font: 14 });
   const buttons = buttonRow(ui.screen);
   const use = new ui.Button(buttons, {
-    text: ui.symbols.ok + "  Use the phrase I typed",
+    text: ui.symbols.ok + "  " + t("Use the phrase I typed"),
     disabled: true,
     onClick: () => onUseImport(status),
   });
-  new ui.Button(buttons, {
-    text: "Back",
-    onClick: async () => {
-      if (countWords() === 0 || (await confirm("Discard the words you entered?", "Discard"))) showStart();
-    },
-  });
+  backButton(buttons);
 
   state.next = () => use;
   state.ready = () => countWords() === T;
@@ -275,7 +269,7 @@ function showImport() {
       logged = null;
       return status.set({ text: S.importNeedAll(T, n), color: MUTED });
     }
-    status.set({ text: "Checking...", color: MUTED });
+    status.set({ text: t("Checking..."), color: MUTED });
     importMnemonic(BIP39_WORDS, state.fields.map((f) => f.word)).then((r) => {
       r.entropyBytes.fill(0);
       if (s !== seq || !status.alive) return;
@@ -308,6 +302,16 @@ async function onUseImport(status) {
   } catch (e) {
     if (status.alive) status.set({ text: ui.symbols.close + " " + e.message, color: RED });
   }
+}
+
+// Back to the start, after asking if words were typed
+function backButton(parent) {
+  new ui.Button(parent, {
+    text: t("Back"),
+    onClick: async () => {
+      if (countWords() === 0 || (await confirm(t("Discard the words you entered?"), t("Discard")))) showStart();
+    },
+  });
 }
 
 function countWords() {
@@ -375,7 +379,8 @@ function updateField(f) {
   if (f.dice && raw === f.dice.word) {
     // the word a dice code resolved to: keep showing the lookup
     f.word = raw;
-    setNote(f, `${ui.symbols.ok} Table ${f.dice.code.parity === 0 ? "A" : "B"}  ${pairs(f.dice.code)}`, GREEN);
+    setNote(f, ui.symbols.ok + " " + t("Table {table}  {dice}",
+      { table: f.dice.code.parity === 0 ? "A" : "B", dice: pairs(f.dice.code) }), GREEN);
     return state.refresh();
   }
 
@@ -403,7 +408,7 @@ function updateField(f) {
     } else if (code) {
       offerBothTables(f, code);
     } else if (isPartialDiceCode(raw) && /\d/.test(raw)) {
-      setNote(f, "dice code: table letter (optional), then four dice");
+      setNote(f, t("dice code: table letter (optional), then four dice"));
     } else {
       completionNote(f, raw);
     }
@@ -413,9 +418,9 @@ function updateField(f) {
 
 function completionNote(f, raw) {
   const c = completions(raw);
-  if (c.length === 1) setNote(f, `Enter: ${c[0]}`);
+  if (c.length === 1) setNote(f, t("Enter: {word}", { word: c[0] }));
   else if (c.length > 1) setNote(f, c.length > 3 ? `${c.slice(0, 3).join(", ")}...` : c.join(", "));
-  else setNote(f, ui.symbols.close + " not a BIP-39 word", RED);
+  else setNote(f, ui.symbols.close + " " + t("not a BIP-39 word"), RED);
 }
 
 // Four dice name one cell on each table; the coin decides which. Never
@@ -461,7 +466,7 @@ async function onGenerate() {
       `${r.deviceBits} from the device`);
     showResults();
   } catch (e) {
-    await ui.alert(String(e && e.message ? e.message : e), { title: "Could not generate" });
+    await ui.alert(String(e && e.message ? e.message : e), { title: t("Could not generate") });
   }
 }
 
@@ -472,14 +477,14 @@ function showResults() {
   const T = r.finalWords.length;
   const n = r.typed.length;
   const spec = PHRASE_SIZES[T];
-  const head = page(`Your ${T}-word phrase`);
+  const head = page(t("Your {total}-word phrase", { total: T }));
 
   const legend = new ui.Container({ layout: "row", gap: 16 });
   if (r.imported) {
-    new ui.Label(legend, { text: "yours, as typed", color: GREEN, font: 14 });
+    new ui.Label(legend, { text: t("yours, as typed"), color: GREEN, font: 14 });
   } else {
-    new ui.Label(legend, { text: "from you (dice), verbatim", color: GREEN, font: 14 });
-    new ui.Label(legend, { text: "from this device", color: AMBER, font: 14 });
+    new ui.Label(legend, { text: t("from you (dice), verbatim"), color: GREEN, font: 14 });
+    new ui.Label(legend, { text: t("from this device"), color: AMBER, font: 14 });
   }
 
   const cols = ui.width >= 900 ? 4 : 3;
@@ -501,8 +506,8 @@ function showResults() {
   if (!verbatim) {
     const box = new ui.Panel({ width: "100%", layout: "column", padding: 10, borderColor: RED, borderWidth: 2 });
     new ui.Label(box, {
-      text: ui.symbols.close + "  The words you typed did not all come back unchanged. Do not use this phrase; " +
-        "this is a bug, please report it.", color: RED, width: "100%",
+      text: ui.symbols.close + "  " + t("The words you typed did not all come back unchanged. Do not use this " +
+        "phrase; this is a bug, please report it."), color: RED, width: "100%",
     });
   }
 
@@ -512,34 +517,34 @@ function showResults() {
   } else {
     if (r.patternSuspected === "identical") warning(ui.screen, S.patternIdentical(n));
     else if (r.patternSuspected === "ordered")
-      warning(ui.screen, S.patternOrdered(n, r.patternDirection === "up" ? "ascending" : "descending"));
+      warning(ui.screen, S.patternOrdered(n, r.patternDirection === "up"));
     if (r.coinSkipSuspected && r.patternSuspected !== "identical")
-      warning(ui.screen, S.coinSkip(n, r.coinSkipTable, group(2 ** (n - 1)), 10 * n, 11 * n));
-    if (r.sorted)
-      warning(ui.screen, S.sortedPairs(n, r.sorted === "up" ? "lowest-first" : "highest-first",
-        group(Math.round((144 / 49) ** n))));
+      warning(ui.screen, S.coinSkip(n, r.coinSkipTable, 2 ** (n - 1), 10 * n, 11 * n));
+    if (r.sorted) warning(ui.screen, S.sortedPairs(n, r.sorted === "up", Math.round((144 / 49) ** n)));
   }
 
   if (r.imported) {
     paragraph(ui.screen, S.summaryImport(T, spec.entropyBits));
   } else {
-    paragraph(ui.screen,
-      `Words 1 to ${n}: yours, used verbatim, ${r.userBits} bits. ` +
-      `Words ${n + 1} to ${T}: from this device, ${r.deviceBits} bits. ` +
-      `Total ${spec.entropyBits} bits of entropy plus a ${spec.checksumBits}-bit checksum in the last word, ` +
-      `which lets about 1 mistyped phrase in ${2 ** spec.checksumBits} through.`);
+    paragraph(ui.screen, t("Words 1 to {n}: yours, used verbatim, {userBits} bits. " +
+      "Words {from} to {total}: from this device, {deviceBits} bits. " +
+      "Total {ent} bits of entropy plus a {cs}-bit checksum in the last word, " +
+      "which lets about 1 mistyped phrase in {space} through.", {
+      n, userBits: r.userBits, from: n + 1, total: T, deviceBits: r.deviceBits,
+      ent: spec.entropyBits, cs: spec.checksumBits, space: 2 ** spec.checksumBits,
+    }));
     paragraph(ui.screen, S.deviceEntropy, { color: MUTED, font: 12 });
   }
 
   publicKeySection();
 
   const buttons = buttonRow(ui.screen);
-  const first = new ui.Button(buttons, { text: "QR codes", onClick: showQR });
-  new ui.Button(buttons, { text: "Split into shares (codex32)", onClick: showSplit });
+  const first = new ui.Button(buttons, { text: t("QR codes"), onClick: showQR });
+  new ui.Button(buttons, { text: t("Split into shares (codex32)"), onClick: showSplit });
   new ui.Button(buttons, {
-    text: ui.symbols.trash + "  Start over",
+    text: ui.symbols.trash + "  " + t("Start over"),
     onClick: async () => {
-      if (await confirm("This erases the phrase from the screen and from this app.", "Erase", "Start over")) {
+      if (await confirm(t("This erases the phrase from the screen and from this app."), t("Erase"), t("Start over"))) {
         wipe();
         showStart();
       }
@@ -560,9 +565,9 @@ function showResults() {
 // at first; Enter in either box derives it again.
 
 const KEY_FORMS = [
-  { name: "Descriptor", what: "Output descriptor: Sparrow, Bitcoin Core, and wallets that take one",
+  { name: t("Descriptor"), what: t("Output descriptor: Sparrow, Bitcoin Core, and wallets that take one"),
     get: (k) => k.descriptor },
-  { name: "zpub (Electrum)", what: "zpub: Electrum, and wallets that take an extended public key",
+  { name: t("zpub (Electrum)"), what: t("zpub: Electrum, and wallets that take an extended public key"),
     get: (k) => k.zpub },
 ];
 
@@ -572,25 +577,25 @@ function publicKeySection() {
   new ui.Label({ text: S.pubkeyHeading, font: 18 });
   paragraph(ui.screen, S.pubkeyBody, { color: MUTED });
   const row = new ui.Container({ layout: "row-wrap", alignItems: "center", gap: 10, width: "100%" });
-  new ui.Label(row, { text: "Account" });
+  new ui.Label(row, { text: t("Account") });
   const account = new ui.TextArea(row, {
     oneLine: true, width: 130, maxLength: 10, accept: "0123456789", text: String(state.account),
   });
-  new ui.Label(row, { text: "Passphrase" });
+  new ui.Label(row, { text: t("Passphrase") });
   const pass = new ui.TextArea(row, {
     oneLine: true, grow: 1, maxLength: 200, text: state.passphrase, password: !state.showPassphrase,
-    placeholder: "none",
+    placeholder: t("none", { $context: "passphrase" }),
   });
   const row2 = new ui.Container({ layout: "row-wrap", alignItems: "center", gap: 16, width: "100%" });
-  const update = new ui.Button(row2, { text: ui.symbols.refresh + "  Update", padding: [6, 14] });
+  const update = new ui.Button(row2, { text: ui.symbols.refresh + "  " + t("Update"), padding: [6, 14] });
   new ui.Checkbox(row2, {
-    text: "Show the passphrase", checked: state.showPassphrase,
+    text: t("Show the passphrase"), checked: state.showPassphrase,
     onChange: (ev) => { state.showPassphrase = ev.value; pass.password = !ev.value; },
   });
   const formRow = new ui.Container(row2, { layout: "row", alignItems: "center", gap: 10 });
-  new ui.Label(formRow, { text: "QR code" });
+  new ui.Label(formRow, { text: t("QR code") });
   const form = new ui.Dropdown(formRow, {
-    options: KEY_FORMS.map((f) => f.name), selected: state.keyForm, width: 200,
+    options: KEY_FORMS.map((f) => f.name), selected: state.keyForm, width: 240,
   });
   const note = paragraph(ui.screen, "", { font: 12 });
   const out = new ui.Container({ layout: "row", gap: 16, width: "100%", alignItems: "start" });
@@ -599,7 +604,7 @@ function publicKeySection() {
   // the boxes no longer match
   const stale = () => {
     out.opacity = 0.3;
-    note.set({ text: "Changed: press Enter or Update to derive the key for these.", color: AMBER });
+    note.set({ text: t("Changed: press Enter or Update to derive the key for these."), color: AMBER });
   };
   account.onChange = stale;
   pass.onChange = stale;
@@ -612,8 +617,10 @@ function publicKeySection() {
     const size = Math.min(260, Math.floor((ui.width - 40) * 0.4));
     new ui.QRCode(out, { size, data: text, ecc: "M" });
     const side = new ui.Container(out, { layout: "column", gap: 6, grow: 1 });
-    new ui.Label(side, { text: `Master fingerprint: ${k.fingerprint}`, font: 18, width: "100%" });
-    new ui.Label(side, { text: `Account ${k.path}, native segwit`, font: 14, color: MUTED, width: "100%" });
+    new ui.Label(side, { text: t("Master fingerprint: {fingerprint}", { fingerprint: k.fingerprint }),
+      font: 18, width: "100%" });
+    new ui.Label(side, { text: t("Account {path}, native segwit", { path: k.path }), font: 14, color: MUTED,
+      width: "100%" });
     new ui.Label(side, { text: f.what, font: 12, color: MUTED, width: "100%" });
     new ui.Label(side, { text, font: 14, width: "100%" });
     // lengths only: the key identifies the wallet
@@ -629,7 +636,8 @@ function publicKeySection() {
     const number = text === "" ? NaN : Number(text);
     if (!Number.isInteger(number) || number > MAX_ACCOUNT) {
       out.clear();
-      note.set({ text: `${ui.symbols.close} An account number is 0 to ${MAX_ACCOUNT}.`, color: RED });
+      note.set({ text: ui.symbols.close + " " + t("An account number is 0 to {max}.", { max: MAX_ACCOUNT }),
+        color: RED });
       return;
     }
     state.account = number;
@@ -638,7 +646,7 @@ function publicKeySection() {
     out.clear();
     out.opacity = 1;
     shown = null;
-    note.set({ text: "Working: the BIP-39 seed takes 2048 rounds of PBKDF2...", color: MUTED });
+    note.set({ text: t("Working: the BIP-39 seed takes 2048 rounds of PBKDF2..."), color: MUTED });
     await new Promise((resolve) => setTimeout(resolve, 30));   // draw that first
     if (seq !== keySeq || !out.alive || !state.result) return;
     let k;
@@ -682,18 +690,18 @@ function wipe() {
 // --- QR export ------------------------------------------------------------
 
 const QR_FORMATS = [
-  { name: "SeedQR", note: "Each word's position in the BIP-39 list as four digits (SeedSigner's SeedQR).",
+  { log: "SeedQR", name: "SeedQR", note: t("Each word's position in the BIP-39 list as four digits (SeedSigner's SeedQR)."),
     make: (r) => ({ data: seedQrDigits(r.finalWords), ecc: "L" }) },
-  { name: "Compact SeedQR", note: "The raw entropy bytes, checksum left off (SeedSigner's Compact SeedQR).",
+  { log: "Compact SeedQR", name: "Compact SeedQR", note: t("The raw entropy bytes, checksum left off (SeedSigner's Compact SeedQR)."),
     make: (r) => ({ data: r.entropyBytes, ecc: "L" }) },
-  { name: "Words", note: "The words as text, separated by spaces.",
+  { log: "Words", name: t("Words"), note: t("The words as text, separated by spaces."),
     make: (r) => ({ data: r.finalWords.join(" "), ecc: "M" }) },
 ];
 
 async function showQR() {
-  if (!(await confirm(S.qrWarning, "Show QR codes", "Seed on screen"))) return;
+  if (!(await confirm(S.qrWarning, t("Show QR codes"), t("Seed on screen")))) return;
   const r = state.result;
-  page("QR codes");
+  page(t("QR codes"));
   const row = new ui.Container({ layout: "row", gap: 16, width: "100%", alignItems: "start" });
   const size = Math.min(ui.height - 110, Math.floor(ui.width / 2));
   const qr = new ui.QRCode(row, { size });
@@ -703,12 +711,13 @@ async function showQR() {
   const show = (i) => {
     const f = QR_FORMATS[i];
     qr.set(f.make(r));
-    info.text = `${f.note}\n${qr.modules}x${qr.modules} modules, error correction ${f.make(r).ecc}.`;
-    console.log(`dice39: QR ${f.name} ${qr.modules}x${qr.modules}`);
+    info.text = f.note + "\n" + t("{size}x{size} modules, error correction {ecc}.",
+      { size: qr.modules, ecc: f.make(r).ecc });
+    console.log(`dice39: QR ${f.log} ${qr.modules}x${qr.modules}`);
   };
   format.onChange = (ev) => show(ev.value);
   show(0);
-  new ui.Button(side, { text: "Done", onClick: showResults });
+  new ui.Button(side, { text: t("Done"), onClick: showResults });
   format.focus();
 }
 
@@ -724,16 +733,16 @@ function randomIdentifier() {
 // The last split stays (state.split) while the phrase does: coming back
 // from a share's QR code shows the same shares, not a new split.
 function showSplit(focusShare) {
-  page("Split into shares");
-  warning(ui.screen, ["Shares hold your entropy, not a BIP-32 seed.", S.codex32Warning]);
+  page(t("Split into shares"));
+  warning(ui.screen, [t("Shares hold your entropy, not a BIP-32 seed."), S.codex32Warning]);
 
   const last = state.split;
   const row = new ui.Container({ layout: "row-wrap", gap: 12, alignItems: "center", width: "100%" });
-  new ui.Label(row, { text: "Scheme" });
+  new ui.Label(row, { text: t("Scheme") });
   const scheme = new ui.Dropdown(row, {
-    options: SCHEMES.map(([k, n]) => `${k} of ${n}`), width: 120, selected: last ? last.scheme : 0,
+    options: SCHEMES.map(([k, n]) => t("{k} of {n}", { k, n })), width: 120, selected: last ? last.scheme : 0,
   });
-  new ui.Label(row, { text: "Identifier" });
+  new ui.Label(row, { text: t("Identifier") });
   const id = new ui.TextArea(row, {
     oneLine: true, width: 100, maxLength: 4, text: last ? last.id : randomIdentifier(),
     accept: CODEX32.CX_CHARSET,
@@ -745,7 +754,8 @@ function showSplit(focusShare) {
   const list = (sp) => {
     const [k, n] = SCHEMES[sp.scheme];
     new ui.Label(out, {
-      text: `${k} of ${n} shares. Any ${k} recover the phrase; checked against ${sp.checked} combinations.`,
+      text: t("{k} of {n} shares. Any {k} recover the phrase; checked against {checked} combinations.",
+        { k, n, checked: sp.checked }),
       color: GREEN, font: 14, width: "100%",
     });
     sp.shares.forEach((share, i) => {
@@ -756,14 +766,14 @@ function showSplit(focusShare) {
   };
 
   new ui.Button(buttons, {
-    text: "Split",
+    text: t("Split"),
     onClick: () => {
       out.clear();
       shareButtons.length = 0;
       state.split = null;
       const [k, n] = SCHEMES[scheme.selected];
       try {
-        if (id.text.length !== 4) throw new Error("the identifier must be 4 characters");
+        if (id.text.length !== 4) throw new Error(t("the identifier must be 4 characters"));
         const split = CODEX32.cxSplit(state.result.entropyBytes, k, n, id.text);
         state.split = { scheme: scheme.selected, id: id.text, shares: split.shares, checked: split.checked };
         list(state.split);
@@ -773,7 +783,7 @@ function showSplit(focusShare) {
       }
     },
   });
-  new ui.Button(buttons, { text: "Done", onClick: showResults });
+  new ui.Button(buttons, { text: t("Done"), onClick: showResults });
   if (last) list(last);
   if (focusShare !== undefined && shareButtons[focusShare]) shareButtons[focusShare].focus();
   else scheme.focus();
@@ -785,38 +795,39 @@ function showShareQR(i) {
   const sp = state.split;
   const [k, n] = SCHEMES[sp.scheme];
   const share = sp.shares[i].toUpperCase();
-  page(`Share ${i + 1} of ${n}, any ${k} recover the phrase`);
+  page(t("Share {i} of {n}, any {k} recover the phrase", { i: i + 1, n, k }));
   const size = Math.min(ui.height - 200, ui.width - 40);
   // uppercase: canonical for codex32, and fits QR's compact alphanumeric mode
   const qr = new ui.QRCode({ size, data: share, ecc: "M" });
   new ui.Label({ text: share, font: 12, width: "100%" });
   paragraph(ui.screen, ui.symbols.warning + " " + S.shareQrWarning, { color: AMBER, font: 12 });
   console.log(`dice39: share QR ${qr.modules}x${qr.modules}`);
-  new ui.Button({ text: "Done", onClick: () => showSplit(i) }).focus();
+  new ui.Button({ text: t("Done"), onClick: () => showSplit(i) }).focus();
 }
 
 // --- about ----------------------------------------------------------------
 
 function showAbout() {
-  page("About");
-  paragraph(ui.screen,
+  page(t("About"));
+  paragraph(ui.screen, t(
     "This is dice39 running on ZeroGap. You supply most of the words with dice and a coin; this device " +
     "supplies the rest and the checksum, and checks that every word you typed was kept as it was. Or you " +
     "type a phrase you already have, to split it into codex32 shares. Either way, it shows the account's " +
-    "public key for a watch-only wallet.");
-  paragraph(ui.screen,
+    "public key for a watch-only wallet."));
+  paragraph(ui.screen, t(
     "The algorithm is dice39's own JavaScript, copied byte for byte from bip39_generator.html by " +
     "tools/extract_dice39.py. Each copied file names the source file and its SHA-256, so it can be " +
-    "checked against the published page.", { color: MUTED });
-  paragraph(ui.screen,
+    "checked against the published page."), { color: MUTED });
+  paragraph(ui.screen, t(
     "Different from the web page: there is no printing (print the dice tables from the web page on any " +
     "computer), no clipboard, and no network check, because this device has no network. The entropy pad " +
     "also takes Space presses, for use without a mouse, and your key timing is mixed in too. The public key " +
-    "(BIP-84, a zpub) is ZeroGap's, from the signer's BIP-39 and BIP-32 code: dice39's page has none.",
+    "(BIP-84, a zpub) is ZeroGap's, from the signer's BIP-39 and BIP-32 code: dice39's page has none."),
     { color: MUTED });
-  paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. ZeroGap ${sys.version.zerogap}, ` +
-    `QuickJS ${sys.version.quickjs}, LVGL ${sys.version.lvgl}.`, { color: MUTED, font: 12 });
-  new ui.Button({ text: "Back", onClick: showStart }).focus();
+  paragraph(ui.screen, t("dice39 is licensed under the GNU AGPL v3. ZeroGap {zerogap}, QuickJS {quickjs}, " +
+    "LVGL {lvgl}.", { zerogap: sys.version.zerogap, quickjs: sys.version.quickjs, lvgl: sys.version.lvgl }),
+  { color: MUTED, font: 12 });
+  new ui.Button({ text: t("Back"), onClick: showStart }).focus();
 }
 
 // --- start-up -------------------------------------------------------------

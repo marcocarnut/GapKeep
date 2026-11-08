@@ -32,8 +32,10 @@ Escape leaves the camera, the QR pages and About.
 
 ## Differences from the web page
 
-- No clipboard (ZeroGap has none), so no copy button; no Portuguese (the
-  page's Portuguese strings are in `vendor/recover.js`, unused).
+- No clipboard (ZeroGap has none), so no copy button.
+- Languages are ZeroGap's (`language` in `zerogap.txt`, or the Settings
+  app), not a button on the page. The Brazilian Portuguese catalog
+  (`lang/pt-BR.json`) has the page's own Portuguese for its strings.
 - One box per share instead of one text area, with the checks above as you
   type. The page only says "checksum failed".
 - A single string with index S is accepted: an unshared secret (threshold
@@ -114,7 +116,13 @@ It needs `vendor/codex32.js` beside it in `../vendor/`.
   steps (about 2 s on a Pi Zero), and logs `codex32 selftest: N passed, 0
   failed`; Recover stays disabled until it has passed.
 - `lib/strings.js`: the page's English strings with the HTML taken out, and
-  a few replaced where they speak of a browser.
+  a few replaced where they speak of a browser, translated through
+  `zg:i18n`. `tests/codex32/run_node.mjs` checks that the page's are still
+  its own, word for word.
+- `lib/messages.js`: the errors of `lib/codex32.js` (English, for logs and
+  Node) worded again through `zg:i18n`, from their codes and details; in
+  English the same words (checked by `tests/codex32/run_node.mjs`).
+- `lang/pt-BR.json`: the Brazilian Portuguese catalog.
 - `main.js`: the screens.
 
 ## dice39's threshold-0 bug

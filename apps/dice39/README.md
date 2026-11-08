@@ -75,6 +75,9 @@ first.
 
 Not ported: printing the dice tables (print them from the web page on any
 computer; they hold no secret), the clipboard export, the network probe
-(there is no network), and the Portuguese translation.
+(there is no network), and the page's language button: languages are
+ZeroGap's (`language` in `zerogap.txt`, or the Settings app). The Brazilian
+Portuguese catalog (`lang/pt-BR.json`) follows the page's own Portuguese
+where the text is the same.
 
 dice39 is licensed under the GNU AGPL v3 (`LICENSE-dice39.txt`).
