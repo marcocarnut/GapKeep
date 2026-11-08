@@ -20,7 +20,7 @@ ui.screen.set({ padding: [20, 28], gap: 16 });
 
 // header
 const header = new ui.Container({ width: "100%", layout: "row", alignItems: "end", gap: 12 });
-new ui.Label(header, { text: "zerogap", font: 32 });
+new ui.Label(header, { text: "ZeroGap", font: 32 });
 new ui.Label(header, {
   text: "v" + sys.version.zerogap,
   color: "#8a9199",
@@ -129,7 +129,7 @@ if (tiles.length === 0) {
 function showSystem() {
   const k = sys.kernel;
   ui.alert(
-    "zerogap " + sys.version.zerogap + " (" + k.build + " build)\n\n" +
+    "ZeroGap " + sys.version.zerogap + " (" + k.build + " build)\n\n" +
       "Kernel: SHA-256 of the first " + k.hashedBytes + " bytes of kernel.img\n" +
       "(its code and constants, as running now):\n" + k.hash + "\n\n" +
       "Check on another computer:\n" +

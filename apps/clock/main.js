@@ -109,7 +109,7 @@ function render() {
   dateLabel.text = `${dateText(now)}   UTC${offsetText(st.utcOffset)}`;
   statusLabel.text = st.set
     ? `Set since this boot. Trim ${ppmText(st.trimPpm, 3)} ppm.`
-    : "Not set since this boot: zerogap has no battery-backed clock, so it counts from 1970 until the time is set here.";
+    : "Not set since this boot: ZeroGap has no battery-backed clock, so it counts from 1970 until the time is set here.";
 
   if (st.drift) {
     const d = st.drift;
