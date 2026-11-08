@@ -32,7 +32,7 @@ import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { electrumQrText } from "./lib/psbt/transport.js";
 import { parsePsbt } from "./lib/psbt/psbt.js";
-import { parseTx } from "./lib/psbt/tx.js";
+import { parseTx, txid as txidOf } from "./lib/psbt/tx.js";
 import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
 import { NETWORKS } from "./lib/psbt/script.js";
 import { Rows, showAnalysis, group4, MUTED, RED, GREEN, AMBER, wide, FONT, plural } from "./lib/psbt/view.js";
@@ -765,12 +765,16 @@ function showFinished() {
   networkButton(buttons, a);
   new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
   paragraph(ui.screen, "It is signed already: there is nothing to sign here.", { color: MUTED });
+  // to compare with what the wallet or a block explorer shows
+  const txid = txidOf(l.tx);
+  paragraph(ui.screen, `Transaction ID: ${group4(txid)}`, { font: FONT.small });
   showAnalysis(reviewList(), page.rows, a, l, {
     networkNote: state.network ? "chosen" : inherited ? "as the transaction before: a signed one doesn't say" : null,
   });
   first.focus();
   console.log(`signer: finished transaction: ${plural(a.inputs.length, "input")}, ${plural(a.outputs.length, "output")}, ` +
     `${a.network}, ${plural(a.warnings.length, "warning")}`);
+  console.log(`signer: txid: ${txid}`);
   logTotals(a);
 }
 

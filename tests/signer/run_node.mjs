@@ -1838,6 +1838,7 @@ if (madeOut) {
     uncompressedHash: hashOf(finalize(signPsbt(spending("p2pkh", p2pkhScript(hash65(LEGACY)), { noOrigin: true }), uncompressed(LEGACY), ZERO_AUX).psbt).tx),
     otherSeries: split(new TextEncoder().encode("not a transaction"), "U", { encoding: "2", minVersion: 20 }).parts[0],
     finished: electrumQrText(finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).tx),
+    finishedTxid: finalize(signPsbt(plain, abandon, ZERO_AUX).psbt).txid,
     xprv: privBase58(abandon, XPRV),
     accountTprv: privBase58(derive(abandon, ACCOUNT), TPRV),
     account1: qr(build({ inputs: [{ kind: "p2wpkh", path: "m/84'/1'/1'/0/0", amount: 100000, fp: fingerprint(derive(abandon, "m/84'/1'/1'")).slice(), claimPath: "m/0/0" }],
