@@ -86,6 +86,31 @@ with tempfile.TemporaryDirectory() as tmp:
     de = json.load(open(os.path.join(app, 'lang', 'de.json'), encoding='utf-8'))
     expect('extract new', (de['$language'], de['$app'], set(de['messages'].values())), ('de', 'clock', {''}))
 
+# the glossary (docs/i18n/pt-BR.md): its Avoid column, whole words, a
+# hyphenated word being one word
+rules = i18n.glossary('pt-BR')
+avoid = {r[0] for r in rules}
+expect('glossary rules', {'parte', 'partes', 'senha', 'passphrase', 'impressão digital'} <= avoid, True)
+warn = lambda text: [w.split('"')[1] for w in i18n.glossary_warnings(text, rules)]
+expect('frase-senha', warn('Digite a frase-senha.'), [])
+expect('senha', warn('A senha da carteira'), ['senha'])
+expect('SENHA', warn('SENHA:'), ['senha'])
+expect('Identificador-Mestre', warn('Identificador-Mestre e o identificador-mestre'), [])
+expect('impressão digital', warn('a impressão\ndigital'), ['impressão digital'])
+expect('parte', warn('a maior parte; partição; partes'), ['parte', 'partes'])
+expect('no glossary', i18n.glossary('xx'), [])
+with tempfile.TemporaryDirectory() as tmp:
+    app = os.path.join(tmp, 'clock')
+    shutil.copytree(os.path.join(ROOT, 'apps', 'clock'), app)
+    path = os.path.join(app, 'lang', 'pt-BR.json')
+    cat = json.load(open(path, encoding='utf-8'))
+    cat['messages']['Back'] = 'Voltar à senha'
+    json.dump(cat, open(path, 'w', encoding='utf-8'), ensure_ascii=False)
+    r = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'i18n.py'), 'check', app],
+                       capture_output=True, text=True)
+    expect('a warning, not a failure', (r.returncode, [l for l in r.stdout.splitlines() if 'warning:' in l]),
+           (0, ['clock lang/pt-BR.json: warning: "Back": uses "senha" (glossary: passphrase (BIP-39) is "frase-senha")']))
+
 for f in failed:
     print('FAIL', f)
 print('i18n tool: %s' % ('%d failed' % len(failed) if failed else 'ok'))

@@ -103,12 +103,15 @@ if [ -f "$OUT/i18n_qps/launcher-qps.png" ]; then
 	fi
 fi
 
-# every app's translations (tools/i18n.py), and the tool on the test app's
+# every app's translations (tools/i18n.py; glossary warnings are shown, and
+# don't fail), and the tool on the test app's
 for a in apps/*/; do
 	[ -d "$a/lang" ] || continue
 	name=i18n_$(basename "$a")
 	if python3 tools/i18n.py check "$a" > "$OUT/$name.log" 2>&1; then
 		echo "PASS  sim:$name"
+		# the glossary's words to avoid: for the reviewer, not failures
+		grep "warning:" "$OUT/$name.log" | sed 's/^/      /' || true
 	else
 		echo "FAIL  sim:$name   (see $OUT/$name.log)"; FAILED=1
 	fi
