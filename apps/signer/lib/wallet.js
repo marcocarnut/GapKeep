@@ -9,6 +9,7 @@
 
 import * as crypto from "zg:crypto";
 import { setCrypto } from "./crypto.js";
+import { t } from "./text.js";
 import { ENTROPY_LENGTHS, mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic } from "./bip39.js";
 import { fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub, versionFor } from "./bip32.js";
 import { parsePrivateKey } from "./keys.js";
@@ -22,12 +23,12 @@ setCrypto(crypto);
 // The public keys on offer. (Electrum has no taproot wallets, and its QR codes
 // can't carry a P2PKH transaction to sign: legacy accounts need another wallet.)
 export const EXPORTS = [
-  { id: "p2wpkh", purpose: 84, name: "Native segwit (BIP-84)" },
-  { id: "p2sh-p2wpkh", purpose: 49, name: "Nested segwit (BIP-49)" },
-  { id: "p2pkh", purpose: 44, name: "Legacy (BIP-44)" },
-  { id: "p2tr", purpose: 86, name: "Taproot (BIP-86)",
-    note: "An xpub alone doesn't say it is taproot: give the wallet the descriptor." },
-  { id: "p2wsh", purpose: 48, name: "Multisig cosigner (BIP-48)", below: "/2'" },
+  { id: "p2wpkh", purpose: 84, name: t("Native segwit (BIP-84)") },
+  { id: "p2sh-p2wpkh", purpose: 49, name: t("Nested segwit (BIP-49)") },
+  { id: "p2pkh", purpose: 44, name: t("Legacy (BIP-44)") },
+  { id: "p2tr", purpose: 86, name: t("Taproot (BIP-86)"),
+    note: t("An xpub alone doesn't say it is taproot: give the wallet the descriptor.") },
+  { id: "p2wsh", purpose: 48, name: t("Multisig cosigner (BIP-48)"), below: "/2'" },
 ];
 
 const coin = (network) => (network === "mainnet" ? 0 : 1);
@@ -52,22 +53,26 @@ const fromSeedBytes = (seed, description) => {
   }
 };
 
-const words = (n) => `a ${n}-word seed phrase`;
-const withPassphrase = (passphrase) => (passphrase ? " and a passphrase" : ", no passphrase");
+// What a key came from, for people (a Message: the app translates it)
+const fromWords = (n, passphrase) => (passphrase ? t("a {n}-word seed phrase and a passphrase", { n })
+  : t("a {n}-word seed phrase, no passphrase", { n }));
 
 // A key from a codex32 secret. meaning: "bip39" (dice39's shares: BIP-39
 // entropy, words, then the seed with the passphrase) or "bip32" (BIP-93: the
 // secret is the master seed). The secret is the caller's to wipe.
 export function loadKey(secret, { meaning, passphrase = "" }) {
-  if (meaning !== "bip39") return fromSeedBytes(Uint8Array.from(secret), `a ${secret.length}-byte BIP-32 master seed`);
+  if (meaning !== "bip39") {
+    return fromSeedBytes(Uint8Array.from(secret), t("a {bytes}-byte BIP-32 master seed", { bytes: secret.length }));
+  }
   if (!ENTROPY_LENGTHS.includes(secret.length)) {
-    throw new RangeError(`The shares hold ${secret.length} bytes: not a seed phrase's entropy (16 to 32 bytes). ` +
-      "Maybe they hold a master seed (the other choice).");
+    const text = t("The shares hold {bytes} bytes: not a seed phrase's entropy (16 to 32 bytes). Maybe they hold a " +
+      "master seed (the other choice).", { bytes: secret.length });
+    throw Object.assign(new RangeError(String(text)), { text });
   }
   let mnemonic = mnemonicFromEntropy(secret);
   const seed = seedFromMnemonic(mnemonic, passphrase);
   mnemonic = null;
-  return fromSeedBytes(seed, words(secret.length * 3 / 4) + withPassphrase(passphrase));
+  return fromSeedBytes(seed, fromWords(secret.length * 3 / 4, passphrase));
 }
 
 // A key from BIP-39 words. Throws Bip39Error (bad word, bad checksum).
@@ -75,7 +80,7 @@ export function loadWords(text, passphrase = "") {
   const entropy = entropyFromMnemonic(text);
   const n = entropy.length * 3 / 4;
   entropy.fill(0);
-  return fromSeedBytes(seedFromMnemonic(text, passphrase), words(n) + withPassphrase(passphrase));
+  return fromSeedBytes(seedFromMnemonic(text, passphrase), fromWords(n, passphrase));
 }
 
 // A key from an xprv (and SLIP-132's yprv, zprv...) or a WIF. Throws KeyError.
@@ -83,11 +88,12 @@ export function loadPrivate(text) {
   const { key, kind, network, compressed } = parsePrivateKey(text);
   if (kind === "wif") {
     return { node: key, kind, fingerprint: fingerprintHex(key), master: false, network,
-      description: compressed ? "a single private key (WIF)" : "a single uncompressed private key (WIF), for legacy coins only" };
+      description: compressed ? t("a single private key (WIF)")
+        : t("a single uncompressed private key (WIF), for legacy coins only") };
   }
   const master = key.depth === 0;
   return { node: key, kind, fingerprint: fingerprintHex(key), master, network,
-    description: master ? "a master private key (xprv)" : `an extended private key at depth ${key.depth}` };
+    description: master ? t("a master private key (xprv)") : t("an extended private key at depth {depth}", { depth: key.depth }) };
 }
 
 export function wipeKey(key) {

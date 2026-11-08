@@ -92,6 +92,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { t } from "./text.js";
 import { cr, hash160, taggedHash, zero } from "./crypto.js";
 import { HARDENED, deriveChild, fingerprint, parsePath, formatPath, wipe } from "./bip32.js";
 import { SIGHASH, legacySighash, segwitV0Sighash, taprootSighash, p2wpkhScriptCode } from "./sighash.js";
@@ -119,9 +120,9 @@ export const CHANGE_GAP = 1000;
 // BIP-44/49/84/86: the purpose each script type's accounts use.
 const PURPOSE = { p2pkh: 44, "p2sh-p2wpkh": 49, p2wpkh: 84, p2tr: 86, p2wsh: 48, "p2sh-p2wsh": 48 };
 
-const typeName = (t) => (t.startsWith("p2sh-") ? "P2SH-" + TYPE_NAMES[t.slice(5)] : TYPE_NAMES[t] || t);
-const sighashName = (t) => ({ 0: "DEFAULT", 1: "ALL", 2: "NONE", 3: "SINGLE", 0x81: "ALL|ANYONECANPAY",
-  0x82: "NONE|ANYONECANPAY", 0x83: "SINGLE|ANYONECANPAY" })[t] || "0x" + t.toString(16);
+const typeName = (x) => (x.startsWith("p2sh-") ? "P2SH-" + TYPE_NAMES[x.slice(5)] : TYPE_NAMES[x] || x);
+const sighashName = (x) => ({ 0: "DEFAULT", 1: "ALL", 2: "NONE", 3: "SINGLE", 0x81: "ALL|ANYONECANPAY",
+  0x82: "NONE|ANYONECANPAY", 0x83: "SINGLE|ANYONECANPAY" })[x] || "0x" + x.toString(16);
 
 // The keys of one call: derived once, cached by path, wiped at the end.
 class Keys {
@@ -189,20 +190,20 @@ function spentOutput(psbt, i) {
   let out = null;
   if (f.nonWitnessUtxo) {
     if (toHexReversed(txin.txid) !== txidOf(f.nonWitnessUtxo)) {
-      return { error: "its previous transaction is not the one it spends (wrong txid)" };
+      return { error: t("its previous transaction is not the one it spends (wrong txid)") };
     }
     const o = f.nonWitnessUtxo.outputs[txin.vout];
-    if (!o) return { error: `its previous transaction has no output ${txin.vout}` };
+    if (!o) return { error: t("its previous transaction has no output {vout}", { vout: String(txin.vout) }) };
     out = { value: o.value, script: o.script, full: true };
   }
   if (f.witnessUtxo) {
     if (out && (out.value !== f.witnessUtxo.value || !equal(out.script, f.witnessUtxo.script))) {
-      return { error: "its previous transaction and its witness UTXO disagree about the coin" };
+      return { error: t("its previous transaction and its witness UTXO disagree about the coin") };
     }
     if (!out) out = { value: f.witnessUtxo.value, script: f.witnessUtxo.script, full: false };
   }
-  if (!out) return { error: "the coin it spends is not described (no UTXO in the PSBT), so its amount is unknown" };
-  if (typeof out.value !== "number" || out.value > 2100000000000000) return { error: "its amount is impossible" };
+  if (!out) return { error: t("the coin it spends is not described (no UTXO in the PSBT), so its amount is unknown") };
+  if (typeof out.value !== "number" || out.value > 2100000000000000) return { error: t("its amount is impossible") };
   return out;
 }
 
@@ -212,15 +213,18 @@ function coinType(script, f) {
   if (multisig) return multisig;
   const c = classify(script);
   if (c.type === "p2sh") {
-    if (!f.redeemScript) return { error: "it spends a P2SH coin without its redeemScript" };
-    if (!equal(hash160(f.redeemScript), c.hash)) return { error: "its redeemScript is not the one the coin's script commits to" };
+    if (!f.redeemScript) return { error: t("it spends a P2SH coin without its redeemScript") };
+    if (!equal(hash160(f.redeemScript), c.hash)) {
+      return { error: t("its redeemScript is not the one the coin's script commits to") };
+    }
     const inner = classify(f.redeemScript);
     if (inner.type === "p2wpkh") return { type: "p2sh-p2wpkh", hash: inner.hash, redeemScript: f.redeemScript };
-    return { error: "it spends a P2SH coin that is not P2SH-P2WPKH or P2SH-P2WSH (other scripts are not supported)" };
+    return { error: t("it spends a P2SH coin that is not P2SH-P2WPKH or P2SH-P2WSH (other scripts are not supported)") };
   }
   if (c.type === "p2wpkh" || c.type === "p2pkh") return { type: c.type, hash: c.hash };
   if (c.type === "p2tr") return { type: "p2tr", program: c.program };
-  return { error: `it spends a ${TYPE_NAMES[c.type] || c.type} coin: only P2WPKH, P2SH-P2WPKH, P2TR, P2PKH and P2WSH multisig are signed` };
+  return { error: t("it spends a {type} coin: only P2WPKH, P2SH-P2WPKH, P2TR, P2PKH and P2WSH multisig are signed",
+    { type: TYPE_NAMES[c.type] || c.type }) };
 }
 
 const bip86Tweak = (xonly) => taggedHash("TapTweak", xonly);
@@ -230,14 +234,20 @@ const p2trOutputKey = (xonly) => cr().taprootTweakPublicKey(xonly, bip86Tweak(xo
 function keyControls(node, d, coin, f, where) {
   if (coin.type === "p2tr") {
     const xonly = node.publicKey.subarray(1);
-    if (!equal(d.xonly, xonly)) return `the key at ${where} is not the one the PSBT names`;
-    if (f.tapInternalKey && !equal(f.tapInternalKey, xonly)) return `the coin's internal key is not the key at ${where}`;
-    if (!equal(p2trOutputKey(xonly), coin.program)) return `the coin's taproot output key is not BIP-86's for the key at ${where}`;
+    if (!equal(d.xonly, xonly)) return t("the key at {path} is not the one the PSBT names", { path: where });
+    if (f.tapInternalKey && !equal(f.tapInternalKey, xonly)) {
+      return t("the coin's internal key is not the key at {path}", { path: where });
+    }
+    if (!equal(p2trOutputKey(xonly), coin.program)) {
+      return t("the coin's taproot output key is not BIP-86's for the key at {path}", { path: where });
+    }
     return null;
   }
-  if (d.pubkey.length !== 33 || !equal(d.pubkey, node.publicKey)) return `the key at ${where} is not the one the PSBT names`;
+  if (d.pubkey.length !== 33 || !equal(d.pubkey, node.publicKey)) {
+    return t("the key at {path} is not the one the PSBT names", { path: where });
+  }
   const h = hash160(node.publicKey);
-  if (!equal(coin.hash, h)) return `the coin's script doesn't pay to the key at ${where}`;
+  if (!equal(coin.hash, h)) return t("the coin's script doesn't pay to the key at {path}", { path: where });
   return null;
 }
 
@@ -320,26 +330,32 @@ function pathOddities(fullPath, type, network, maxIndex) {
   const path = bip48 ? [...fullPath.slice(0, 3), ...fullPath.slice(4)] : fullPath;
   const p = formatPath(fullPath);
   if (path.length !== 5) {
-    odd.push(`${p} is not the usual m/purpose'/coin'/account'/change/index`);
+    odd.push(t("{path} is not the usual m/purpose'/coin'/account'/change/index", { path: p }));
     if (path.length >= 1 && path[path.length - 1] > maxIndex && path[path.length - 1] < HARDENED) {
-      odd.push(`index ${path[path.length - 1]} is unusually high`);
+      odd.push(t("index {index} is unusually high", { index: String(path[path.length - 1]) }));
     }
     return odd;
   }
   const [purpose, coin, account, branch, index] = path;
-  if (purpose < HARDENED || coin < HARDENED || account < HARDENED) odd.push(`${p}: the first three steps are usually hardened`);
+  if (purpose < HARDENED || coin < HARDENED || account < HARDENED) {
+    odd.push(t("{path}: the first three steps are usually hardened", { path: p }));
+  }
   const want = PURPOSE[type];
   if (want !== undefined && purpose !== want + HARDENED) {
-    odd.push(`${p}: purpose ${purpose >= HARDENED ? purpose - HARDENED + "'" : purpose} is not the usual ${want}' for ${typeName(type)}`);
+    odd.push(t("{path}: purpose {purpose} is not the usual {usual} for {type}", { path: p,
+      purpose: purpose >= HARDENED ? purpose - HARDENED + "'" : String(purpose), usual: want + "'", type: typeName(type) }));
   }
   if (network && (coin === HARDENED || coin === HARDENED + 1) && (coin === HARDENED) !== (network === "mainnet")) {
-    odd.push(`${p}: coin type ${coin - HARDENED}' is for ${coin === HARDENED ? "mainnet" : "test networks"}, not ${network}`);
+    odd.push(coin === HARDENED
+      ? t("{path}: coin type 0' is for mainnet, not {network}", { path: p, network })
+      : t("{path}: coin type 1' is for test networks, not {network}", { path: p, network }));
   }
   if (branch !== 0 && branch !== 1) {
-    odd.push(`${p}: branch ${branch >= HARDENED ? branch - HARDENED + "'" : branch} is neither receive (0) nor change (1)`);
+    odd.push(t("{path}: branch {branch} is neither receive (0) nor change (1)",
+      { path: p, branch: branch >= HARDENED ? branch - HARDENED + "'" : String(branch) }));
   }
-  if (index >= HARDENED) odd.push(`${p}: a hardened address index`);
-  else if (index > maxIndex) odd.push(`${p}: index ${index} is unusually high`);
+  if (index >= HARDENED) odd.push(t("{path}: a hardened address index", { path: p }));
+  else if (index > maxIndex) odd.push(t("{path}: index {index} is unusually high", { path: p, index: String(index) }));
   return odd;
 }
 
@@ -366,12 +382,12 @@ function planInput(psbt, i, keys, prevouts) {
   let held = "none";
   const no = (reason) => {
     r.signed = held === "good";
-    r.reason = r.signed ? "it is signed already" : reason;
+    r.reason = r.signed ? t("it is signed already") : reason;
     return r;
   };
   if (f.finalScriptSig !== undefined || f.finalScriptWitness !== undefined) {
     r.final = true;
-    return no("it is already signed (final)");
+    return no(t("it is already signed (final)"));
   }
   const coin = prevouts[i];
   if (coin.error) return no(coin.error);
@@ -381,17 +397,21 @@ function planInput(psbt, i, keys, prevouts) {
   const taproot = ct.type === "p2tr";
 
   if (ct.type === "p2pkh" && !coin.full) {
-    return no("a P2PKH coin is signed only with its previous transaction in the PSBT, which Electrum's QR codes leave " +
-      "out: it needs a wallet that sends it whole (BBQr, for the size)");
+    return no(t("a P2PKH coin is signed only with its previous transaction in the PSBT, which Electrum's QR codes " +
+      "leave out: it needs a wallet that sends it whole (BBQr, for the size)"));
   }
   r.sighash = f.sighashType ?? (taproot ? SIGHASH.DEFAULT : SIGHASH.ALL);
   if (!(r.sighash === SIGHASH.ALL || (taproot && r.sighash === SIGHASH.DEFAULT))) {
-    return no(`it asks for sighash ${sighashName(r.sighash)}: only ALL${taproot ? " (or DEFAULT)" : ""} is signed`);
+    return no(taproot
+      ? t("it asks for sighash {sighash}: only ALL (or DEFAULT) is signed", { sighash: sighashName(r.sighash) })
+      : t("it asks for sighash {sighash}: only ALL is signed", { sighash: sighashName(r.sighash) }));
   }
   if (taproot) {
-    if (f.tapMerkleRoot) return no("its taproot coin has a script tree: only BIP-86 key-path spends are signed");
+    if (f.tapMerkleRoot) return no(t("its taproot coin has a script tree: only BIP-86 key-path spends are signed"));
     const missing = prevouts.findIndex((p) => p.error);
-    if (missing >= 0) return no(`input ${missing + 1}'s coin is not known, and a taproot signature covers every input's amount`);
+    if (missing >= 0) {
+      return no(t("input {n}'s coin is not known, and a taproot signature covers every input's amount", { n: missing + 1 }));
+    }
   }
 
   held = heldSignature(psbt, i, ct, coin, prevouts);
@@ -406,12 +426,12 @@ function planInput(psbt, i, keys, prevouts) {
   if (keys.single) {
     const node = keys.root;
     if (node.publicKey.length !== 33) {
-      if (taproot || !equal(hash160(node.publicKey), ct.hash)) return no("this key doesn't control it");
-      if (!keyFits(node.publicKey, ct)) return no("an uncompressed key spends only legacy (P2PKH) coins");
+      if (taproot || !equal(hash160(node.publicKey), ct.hash)) return no(t("this key doesn't control it"));
+      if (!keyFits(node.publicKey, ct)) return no(t("an uncompressed key spends only legacy (P2PKH) coins"));
     }
     const xonly = node.publicKey.subarray(1);
     if (!(taproot ? equal(p2trOutputKey(xonly), ct.program) : equal(hash160(node.publicKey), ct.hash))) {
-      return no("this key doesn't control it");
+      return no(t("this key doesn't control it"));
     }
     r.keyPath = [];
     r.fullPath = null;
@@ -421,7 +441,7 @@ function planInput(psbt, i, keys, prevouts) {
   }
 
   const derivations = taproot ? f.tapBip32.filter((d) => d.leafHashes.length === 0) : f.bip32;
-  if (derivations.length === 0) return no("the PSBT names no key (BIP-32 derivation) for it");
+  if (derivations.length === 0) return no(t("the PSBT names no key (BIP-32 derivation) for it"));
   let firstProblem = null, anyOurs = false;
   for (const d of derivations) {
     const loc = keys.resolve(d.fingerprint, d.path);
@@ -433,7 +453,7 @@ function planInput(psbt, i, keys, prevouts) {
     } catch (e) {
       if (loc.guess) continue;
       anyOurs = true;
-      firstProblem = firstProblem || `the key at ${where} can't be derived (${e.message})`;
+      firstProblem = firstProblem || t("the key at {path} can't be derived ({why})", { path: where, why: e.message });
       continue;
     }
     const problem = keyControls(node, d, ct, f, where);
@@ -452,8 +472,9 @@ function planInput(psbt, i, keys, prevouts) {
   }
   if (!anyOurs) {
     const fps = [...new Set(derivations.map((d) => toHex(d.fingerprint)))].join(", ");
-    return no(`its key${derivations.length > 1 ? "s are" : " is"} from another wallet (fingerprint ${fps}; ` +
-      `this wallet is ${toHex(keys.fp)})`);
+    return no(derivations.length > 1
+      ? t("its keys are from another wallet (fingerprint {theirs}; this wallet is {ours})", { theirs: fps, ours: toHex(keys.fp) })
+      : t("its key is from another wallet (fingerprint {theirs}; this wallet is {ours})", { theirs: fps, ours: toHex(keys.fp) }));
   }
   r.mine = true;
   return no(firstProblem);
@@ -482,11 +503,11 @@ function ownKeys(f, keys, ct) {
     try {
       node = keys.node(loc.rel);
     } catch (e) {
-      if (!loc.guess) problem = problem || `the key at ${where} can't be derived (${e.message})`;
+      if (!loc.guess) problem = problem || t("the key at {path} can't be derived ({why})", { path: where, why: e.message });
       continue;
     }
     if (!equal(d.pubkey, node.publicKey)) {
-      if (!loc.guess) problem = problem || `the key at ${where} is not the one the PSBT names`;
+      if (!loc.guess) problem = problem || t("the key at {path} is not the one the PSBT names", { path: where });
       continue;
     }
     own.push({ keyPath: loc.rel, path: where, fullPath: loc.full, home: homeOf(loc, keys), pubkey: node.publicKey });
@@ -517,14 +538,17 @@ function planMultisig(psbt, i, keys, ct, coin, r, no) {
     r.signers = r.slots.map((k) => toHex(k.pubkey));
     return no(null);
   }
-  if (own.length) return no(`it has ${state.have} of the ${state.m} signatures it needs, and this key has signed`);
+  if (own.length) {
+    return no(t("it has {have} of the {need} signatures it needs, and this key has signed", { have: state.have, need: state.m }));
+  }
   if (problem) {
     r.mine = true;
     return no(problem);
   }
-  if (!f.bip32.length) return no("the PSBT names no key (BIP-32 derivation) for it");
+  if (!f.bip32.length) return no(t("the PSBT names no key (BIP-32 derivation) for it"));
   const fps = [...new Set(f.bip32.map((d) => toHex(d.fingerprint)))].join(", ");
-  return no(`its keys are from another wallet (fingerprints ${fps}; this wallet is ${toHex(keys.fp)})`);
+  return no(t("its keys are from another wallet (fingerprints {theirs}; this wallet is {ours})",
+    { theirs: fps, ours: toHex(keys.fp) }));
 }
 
 // The scripts a key can pay to: what kind this one is, or null.
@@ -570,20 +594,20 @@ function planOutput(psbt, i, keys) {
     try {
       node = keys.node(loc.rel);
     } catch (e) {
-      claim(`it says it is yours (${where}), but that key can't be derived`);
+      claim(t("it says it is yours ({path}), but that key can't be derived", { path: where }));
       continue;
     }
     let type = null;
     if (taproot) {
       const xonly = node.publicKey.subarray(1);
       if (!equal(d.xonly, xonly)) {
-        claim(`it says it is yours (${where}), but the key it names is not this wallet's key at that path`);
+        claim(t("it says it is yours ({path}), but the key it names is not this wallet's key at that path", { path: where }));
         continue;
       }
       if (equal(script, concat([Uint8Array.of(0x51, 32), p2trOutputKey(xonly)]))) type = "p2tr";
     } else {
       if (d.pubkey.length !== 33 || !equal(d.pubkey, node.publicKey)) {
-        claim(`it says it is yours (${where}), but the key it names is not this wallet's key at that path`);
+        claim(t("it says it is yours ({path}), but the key it names is not this wallet's key at that path", { path: where }));
         continue;
       }
       if (!multisig) type = paysTo(script, node.publicKey);
@@ -591,7 +615,7 @@ function planOutput(psbt, i, keys) {
       else type = multisig.multisig.pubkeys.some((k) => equal(k, node.publicKey)) ? multisig.type : null;
     }
     if (!type) {
-      claim(`it says it is yours (${where}), but it doesn't pay to that key`);
+      claim(t("it says it is yours ({path}), but it doesn't pay to that key", { path: where }));
       continue;
     }
     const proof = multisig ? proveOutput(cosignerWallet(psbt, spentOutput), script, f) : {};
@@ -624,7 +648,7 @@ function planOutput(psbt, i, keys) {
 function planWith(psbt, keys, options) {
   const network = options.network || null, maxIndex = options.maxIndex ?? MAX_INDEX;
   if (psbt.tx.locktime === null) {
-    const reason = "the inputs' locktime requirements contradict each other (PSBT version 2)";
+    const reason = t("the inputs' locktime requirements contradict each other (PSBT version 2)");
     return { inputs: psbt.inputs.map((_, index) => ({ index, sign: false, final: false, signed: false, badSignature: false,
       mine: false, type: null, path: null, pubkey: null, sighash: null, reason, oddities: [] })), outputs: psbt.outputs.map((_, i) => planOutput(psbt, i, keys)) };
   }
@@ -643,12 +667,15 @@ function planWith(psbt, keys, options) {
     r.oddities.push(...pathOddities(r.fullPath, r.type, network, maxIndex));
     const a = accountOf(r.fullPath);
     if (main !== null && a !== main) {
-      r.oddities.push(`account ${a} is not the one ${signing.length > 1 ? "most inputs use" : "the input uses"} (${main})`);
+      r.oddities.push(signing.length > 1
+        ? t("account {account} is not the one most inputs use ({usual})", { account: a, usual: main })
+        : t("account {account} is not the one the input uses ({usual})", { account: a, usual: main }));
     }
   }
   for (const o of outputs) {
     if (o.ours && types.size && !types.has(o.type)) {
-      o.oddities.push(`it pays to a ${typeName(o.type)} script of your key, but the inputs are ${[...types].map(typeName).join(", ")}`);
+      o.oddities.push(t("it pays to a {outputType} script of your key, but the inputs are {inputTypes}",
+        { outputType: typeName(o.type), inputTypes: [...types].map(typeName).join(", ") }));
     }
   }
   return { inputs, outputs, prevouts };
@@ -694,7 +721,7 @@ export function planKeys(psbt, list, options = {}) {
     }
     return { index: i, sign: false, final: held[i].held === "final", signed: held[i].held === "good", badSignature: held[i].held === "bad",
       mine: false, type: null, path: null, pubkey: null, sighash: null, multisig: held[i].multisig,
-      reason: held[i].held === "final" || held[i].held === "good" ? "it is signed already" : "no key is loaded", oddities: [] };
+      reason: held[i].held === "final" || held[i].held === "good" ? t("it is signed already") : t("no key is loaded"), oddities: [] };
   });
   const outputs = psbt.outputs.map((m, i) => {
     let best = null;
@@ -730,14 +757,19 @@ function farIndex(home, inputs) {
 function strayReason(home, inputs) {
   if (home.uneven) return home.uneven;
   if (home.single) {
-    return !inputs.length || inputs.some((h) => h.single === home.single) ? null : "that key spends nothing here";
+    return !inputs.length || inputs.some((h) => h.single === home.single) ? null : t("that key spends nothing here");
   }
-  if (home.account === null) return "its path has no account, chain and index";
-  if (home.chain !== 0 && home.chain !== 1) return `chain ${home.chain >= HARDENED ? "hardened" : home.chain} is neither change (1) nor receive (0)`;
-  if (home.index >= HARDENED) return "its index is hardened";
-  if (inputs.length && !inputs.some((h) => h.account === home.account)) return "it is another account than the inputs'";
+  if (home.account === null) return t("its path has no account, chain and index");
+  if (home.chain !== 0 && home.chain !== 1) {
+    return home.chain >= HARDENED ? t("a hardened chain is neither change (1) nor receive (0)")
+      : t("chain {chain} is neither change (1) nor receive (0)", { chain: String(home.chain) });
+  }
+  if (home.index >= HARDENED) return t("its index is hardened");
+  if (inputs.length && !inputs.some((h) => h.account === home.account)) return t("it is another account than the inputs'");
   const limit = topIndex(home, inputs) + CHANGE_GAP;
-  if (home.index > limit) return `its index is over ${limit}, ${CHANGE_GAP} past the inputs'`;
+  if (home.index > limit) {
+    return t("its index is over {limit}, {gap} past the inputs'", { limit: String(limit), gap: String(CHANGE_GAP) });
+  }
   return null;
 }
 

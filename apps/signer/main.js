@@ -18,6 +18,11 @@
 // the signing library (lib/bip39.js, bip32.js, keys.js, sign.js, combine.js,
 // review.js; tested under Node by tests/signer/run_node.mjs).
 //
+// The text on screen is translated (zg:i18n, lang/<language>.json; the
+// libraries' text through tr(), lib/psbt/view.js). Amounts, addresses,
+// fees, txids, fingerprints and paths are always {placeholders}. The log
+// stays in English.
+//
 // Never logged: shares, words, the passphrase, the seed, keys, public keys.
 // The log goes to the serial port in test builds; it gets counts and sizes
 // only. Keys live in this app's memory until they are forgotten or the app
@@ -28,6 +33,7 @@
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as crypto from "zg:crypto";
+import { t, plural } from "zg:i18n";
 import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { electrumQrText } from "./lib/psbt/transport.js";
@@ -35,8 +41,10 @@ import { parsePsbt } from "./lib/psbt/psbt.js";
 import { parseTx, txid as txidOf } from "./lib/psbt/tx.js";
 import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
 import { NETWORKS } from "./lib/psbt/script.js";
-import { Rows, showAnalysis, group4, MUTED, RED, GREEN, AMBER, wide, FONT, plural } from "./lib/psbt/view.js";
+import { Rows, showAnalysis, group4, tr, btc, networkName, MUTED, RED, GREEN, AMBER, wide, FONT } from "./lib/psbt/view.js";
 import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32.js";
+import { codex32Message } from "./lib/codex32messages.js";
+import * as M from "./lib/text.js";   // Messages: English for the log, translated on screen (tr)
 import { Bip39Error } from "./lib/bip39.js";
 import { KeyError } from "./lib/keys.js";
 import { combine, CombineError } from "./lib/combine.js";
@@ -51,7 +59,24 @@ const MAX_KEYS = 8;
 const PART_MS = 500;  // each code of a series on screen (core tunes it: B2)
 const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ";
 const NETWORK_ORDER = ["mainnet", "testnet", "regtest"];
-const EXPORT_FORMS = [{ id: "descriptor", name: "Descriptor", field: "descriptor" }, { id: "extended key", name: "zpub/xpub", field: "text" }];
+const EXPORT_FORMS = [{ id: "descriptor", name: t("Descriptor"), field: "descriptor" },
+  { id: "extended key", name: t("zpub/xpub"), field: "text" }];
+
+// "3 inputs": for the log, which stays in English
+const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// An error from the libraries, in the person's language
+const errorText = (e) => (e && e.text !== undefined ? tr(e.text) : String(e && e.message ? e.message : e));
+
+// lib/bip39.js's errors (English there), from their code: never the word
+function bip39Message(e) {
+  switch (e.code) {
+    case "count": return t("A seed phrase has 12, 15, 18, 21 or 24 words, not {n}.", { n: e.count });
+    case "word": return t("Word {n} is not in the BIP-39 word list.", { n: e.word });
+    case "checksum": return t("The checksum is wrong: a word is mistyped, or the order is wrong.");
+    default: return e.message;
+  }
+}
 
 const state = {
   page: null,
@@ -108,7 +133,10 @@ function newPage(name, title) {
   page = { name, rows: new Rows() };
   const head = new ui.Container({ layout: "row", alignItems: "end", gap: 12, width: "100%" });
   new ui.Label(head, { text: title, font: FONT.title, grow: 1 });
-  if (state.keys.length) new ui.Label(head, { text: `${ui.symbols.ok} ${plural(state.keys.length, "key")}`, font: FONT.small, color: GREEN });
+  if (state.keys.length) {
+    new ui.Label(head, { text: ui.symbols.ok + " " + plural(state.keys.length, "{n} key", "{n} keys"), font: FONT.small,
+      color: GREEN });
+  }
   return head;
 }
 
@@ -128,28 +156,30 @@ const selftestOk = () => state.selftest && !state.selftest.failed.length;
 // No key goes in until the self-test has passed.
 function gate(button) {
   button.disabled = !selftestOk();
-  if (!selftestOk()) paragraph(ui.screen, state.selftest ? "The self-test failed: no key can be loaded."
-    : "Waiting for the self-test.", { color: RED });
+  if (!selftestOk()) paragraph(ui.screen, state.selftest ? t("The self-test failed: no key can be loaded.")
+    : t("Waiting for the self-test."), { color: RED });
 }
 
 // --- home -----------------------------------------------------------------------
 
 function showHome() {
-  newPage("home", ui.symbols.ok + " Signer");
-  paragraph(ui.screen, "Shows what a Bitcoin transaction does, then signs it. First show it the transaction, " +
-    "as a QR code: you see what it does before any key is in memory. Then load the keys.");
+  newPage("home", ui.symbols.ok + " " + t("Signer"));
+  paragraph(ui.screen, t("Shows what a Bitcoin transaction does, then signs it. First show it the transaction, " +
+    "as a QR code: you see what it does before any key is in memory. Then load the keys."));
   const buttons = buttonRow(ui.screen);
-  const first = new ui.Button(buttons, { text: ui.symbols.image + " Scan a transaction", onClick: () => showScan(false) });
-  if (state.loaded) new ui.Button(buttons, { text: ui.symbols.list + " Last transaction", onClick: showReview });
-  new ui.Button(buttons, { text: ui.symbols.upload + " Public key", onClick: askExport });
-  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " Forget the keys", onClick: forgetKeys });
-  new ui.Button(buttons, { text: ui.symbols.home + " Leave", onClick: () => sys.exit() });
+  const first = new ui.Button(buttons, { text: ui.symbols.image + " " + t("Scan a transaction"), onClick: () => showScan(false) });
+  if (state.loaded) new ui.Button(buttons, { text: ui.symbols.list + " " + t("Last transaction"), onClick: showReview });
+  new ui.Button(buttons, { text: ui.symbols.upload + " " + t("Public key"), onClick: askExport });
+  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " " + t("Forget the keys"), onClick: forgetKeys });
+  new ui.Button(buttons, { text: ui.symbols.home + " " + t("Leave"), onClick: () => sys.exit() });
 
-  if (state.keys.length) paragraph(ui.screen, `${plural(state.keys.length, "key")} in memory.`, { color: GREEN });
-  paragraph(ui.screen, "Setting up Electrum (once): show it the public key (\"Public key\", its zpub), as a new " +
+  if (state.keys.length) {
+    paragraph(ui.screen, plural(state.keys.length, "{n} key in memory.", "{n} keys in memory."), { color: GREEN });
+  }
+  paragraph(ui.screen, t("Setting up Electrum (once): show it the public key (\"Public key\", its zpub), as a new " +
     "wallet: Standard wallet, Use a master key, then scan the QR code. Electrum then makes transactions that " +
     "this device signs. Each time: in Electrum, make the transaction, then Export (or Share), Show as QR code; " +
-    "here, Scan a transaction; after signing, in Electrum: Tools, Load transaction, From QR code.", { color: MUTED });
+    "here, Scan a transaction; after signing, in Electrum: Tools, Load transaction, From QR code."), { color: MUTED });
   page.selftest = paragraph(ui.screen, "", { font: FONT.small });
   showSelftest();
   first.focus();
@@ -158,12 +188,12 @@ function showHome() {
 function showSelftest() {
   if (!page.selftest) return;
   const st = state.selftest;
-  if (!st) page.selftest.set({ text: "Self-test running...", color: MUTED });
+  if (!st) page.selftest.set({ text: t("Self-test running..."), color: MUTED });
   else if (!st.failed.length) {
-    page.selftest.set({ text: `${ui.symbols.ok} Self-test passed (${st.passed} checks: BIP-39, BIP-32, ` +
-      "signatures, against the BIPs' test vectors).", color: GREEN });
+    page.selftest.set({ text: ui.symbols.ok + " " + t("Self-test passed ({n} checks: BIP-39, BIP-32, signatures, " +
+      "against the BIPs' test vectors).", { n: st.passed }), color: GREEN });
   } else {
-    page.selftest.set({ text: `${ui.symbols.close} Self-test FAILED: do not sign with this device.\n` +
+    page.selftest.set({ text: ui.symbols.close + " " + t("Self-test FAILED: do not sign with this device.") + "\n" +
       st.failed.join("\n"), color: RED });
   }
 }
@@ -192,12 +222,12 @@ function addKey(key, how) {
   state.keyNote = null;
   if (state.keys.some((k) => k.fingerprint === key.fingerprint)) {
     wallet.wipeKey(key);
-    state.keyNote = "That key is loaded already.";
+    state.keyNote = t("That key is loaded already.");
     console.log("signer: that key is loaded already");
   } else if (state.keys.length >= MAX_KEYS) {
     wallet.wipeKey(key);
     console.log("signer: too many keys");
-    return showError(`At most ${MAX_KEYS} keys at a time.`);
+    return showError(t("At most {max} keys at a time.", { max: MAX_KEYS }));
   } else {
     state.keys.push(key);
     console.log(`signer: key loaded (${how})`);
@@ -230,54 +260,57 @@ function coverage() {
 
 function showKeys() {
   wipeEntries();
-  newPage("keys", ui.symbols.plus + " Keys");
+  newPage("keys", ui.symbols.plus + " " + t("Keys"));
   const c = coverage();
   if (state.keyNote) paragraph(ui.screen, state.keyNote, { color: AMBER });
   state.keyNote = null;
   if (!state.keys.length) {
     paragraph(ui.screen, state.after === "export"
-      ? "The public key comes from a master key: codex32 shares, seed words or a master xprv."
-      : "Load the keys that sign this transaction. They stay in this app's memory only, and are forgotten " +
-        "after signing, unless you keep them for the next one.", { color: MUTED });
+      ? t("The public key comes from a master key: codex32 shares, seed words or a master xprv.")
+      : t("Load the keys that sign this transaction. They stay in this app's memory only, and are forgotten " +
+        "after signing, unless you keep them for the next one."), { color: MUTED });
   }
   state.keys.forEach((k, i) => {
-    const signs = c ? `: signs ${c.plan.keys[i].signs} of ${plural(c.total, "input")}` : "";
-    paragraph(ui.screen, `${ui.symbols.ok} Key ${k.fingerprint}${signs}.`, { font: FONT.big, color: GREEN });
-    paragraph(ui.screen, `From ${k.description}.`);
+    const what = c ? plural(c.total, "Key {fingerprint}: signs {signs} of {n} input.",
+      "Key {fingerprint}: signs {signs} of {n} inputs.", { fingerprint: k.fingerprint, signs: c.plan.keys[i].signs })
+      : t("Key {fingerprint}.", { fingerprint: k.fingerprint });
+    paragraph(ui.screen, ui.symbols.ok + " " + what, { font: FONT.big, color: GREEN });
+    paragraph(ui.screen, t("From {source}.", { source: tr(k.description) }));
     if (k.master) {
       const acct = wallet.exportKey(k, "p2wpkh", "mainnet");
-      paragraph(ui.screen, `Native segwit account ${acct.path}: fingerprint ${acct.fingerprint}.`);
+      paragraph(ui.screen, t("Native segwit account {path}: fingerprint {fingerprint}.",
+        { path: acct.path, fingerprint: acct.fingerprint }));
     }
   });
   if (state.keys.length) {
-    paragraph(ui.screen, "Check a fingerprint against what you know of this wallet: a wallet made from the seed " +
+    paragraph(ui.screen, t("Check a fingerprint against what you know of this wallet: a wallet made from the seed " +
       "phrase shows the master fingerprint; Electrum's watch-only wallet, made from the public key this device " +
       "exports, shows the account's (Wallet, Information). A different one means another passphrase, " +
-      "other shares, or the other choice of what the shares hold.", { color: MUTED });
+      "other shares, or the other choice of what the shares hold."), { color: MUTED });
   }
   const buttons = buttonRow(ui.screen);
   let first = null;
   if (state.keys.length && state.loaded) {
-    first = new ui.Button(buttons, { text: ui.symbols.list + " Back to the transaction", onClick: showReview });
+    first = new ui.Button(buttons, { text: ui.symbols.list + " " + t("Back to the transaction"), onClick: showReview });
   }
-  const shares = new ui.Button(buttons, { text: ui.symbols.plus + " Codex32 shares", onClick: () => showShares(0) });
-  new ui.Button(buttons, { text: ui.symbols.plus + " Seed words", onClick: showWords });
-  new ui.Button(buttons, { text: ui.symbols.plus + " xprv or WIF", onClick: showPrivate });
-  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " Forget the keys", onClick: forgetKeys });
-  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) });
+  const shares = new ui.Button(buttons, { text: ui.symbols.plus + " " + t("Codex32 shares"), onClick: () => showShares(0) });
+  new ui.Button(buttons, { text: ui.symbols.plus + " " + t("Seed words"), onClick: showWords });
+  new ui.Button(buttons, { text: ui.symbols.plus + " " + t("xprv or WIF"), onClick: showPrivate });
+  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.trash + " " + t("Forget the keys"), onClick: forgetKeys });
+  new ui.Button(buttons, { text: ui.symbols.left + " " + t("Back"), onClick: () => (state.loaded ? showReview() : showHome()) });
   (first || shares).focus();
 }
 
 // The BIP-39 passphrase, for the shares' page and the words' page.
 function passphraseRow(submit) {
   const row = new ui.Container({ layout: "column", gap: 4, width: "100%" });
-  paragraph(row, "BIP-39 passphrase (leave empty if none). A different passphrase is a different wallet: " +
-    "check the fingerprint shown next.", { color: MUTED });
+  paragraph(row, t("BIP-39 passphrase (leave empty if none). A different passphrase is a different wallet: " +
+    "check the fingerprint shown next."), { color: MUTED });
   const pass = page.pass = secret(new ui.TextArea(row, { oneLine: true, password: true, width: "100%", text: state.passphrase,
-    maxLength: 256, placeholder: "no passphrase", font: FONT.text }));
+    maxLength: 256, placeholder: t("no passphrase"), font: FONT.text }));
   pass.onChange = (ev) => (state.passphrase = ev.value);
   pass.onSubmit = submit;
-  new ui.Checkbox(row, { text: "Show the passphrase", onChange: (ev) => (pass.password = !ev.value) });
+  new ui.Checkbox(row, { text: t("Show the passphrase"), onChange: (ev) => (pass.password = !ev.value) });
   return row;
 }
 
@@ -291,22 +324,23 @@ function showError(msg) {
 const countWords = (text) => (text.trim() ? text.trim().split(/\s+/).length : 0);
 
 function showWords() {
-  newPage("words", ui.symbols.plus + " Seed words");
-  paragraph(ui.screen, "Type the BIP-39 words, separated by spaces, or scan them as text.", { color: MUTED });
+  newPage("words", ui.symbols.plus + " " + t("Seed words"));
+  paragraph(ui.screen, t("Type the BIP-39 words, separated by spaces, or scan them as text."), { color: MUTED });
   const area = secret(new ui.TextArea({ width: "100%", height: wide ? 130 : 90, maxLength: 400, text: state.words, font: FONT.text,
     accept: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n", placeholder: "abandon ability able ..." }));
-  page.count = paragraph(ui.screen, plural(countWords(state.words), "word"), { font: FONT.small, color: MUTED });
+  const wordCount = (text) => plural(countWords(text), "{n} word", "{n} words");
+  page.count = paragraph(ui.screen, wordCount(state.words), { font: FONT.small, color: MUTED });
   area.onChange = (ev) => {
     state.words = ev.value;
-    page.count.text = plural(countWords(ev.value), "word");
+    page.count.text = wordCount(ev.value);
     showError(null);
   };
   page.error = paragraph(ui.screen, "", { color: RED, hidden: true });
   passphraseRow(loadWords);
   const buttons = buttonRow(ui.screen);
-  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadWords });
-  new ui.Button(buttons, { text: ui.symbols.image + " Scan", onClick: () => showKeyScan("words") });
-  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showKeys });
+  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " " + t("Load the key"), onClick: loadWords });
+  new ui.Button(buttons, { text: ui.symbols.image + " " + t("Scan"), onClick: () => showKeyScan("words") });
+  new ui.Button(buttons, { text: ui.symbols.left + " " + t("Back"), onClick: showKeys });
   gate(page.load);
   showError(state.error);
   area.focus();
@@ -321,7 +355,7 @@ function loadWords() {
   } catch (e) {
     if (!(e instanceof Bip39Error)) throw e;
     console.log("signer: words refused");
-    return showError(e.message);
+    return showError(bip39Message(e));
   } finally {
     busy = false;
   }
@@ -331,23 +365,23 @@ function loadWords() {
 // --- xprv or WIF ----------------------------------------------------------------
 
 function showPrivate() {
-  newPage("private", ui.symbols.plus + " xprv or WIF");
-  paragraph(ui.screen, "Type or scan a private key: an extended one (xprv, or its zprv and yprv forms), or a " +
+  newPage("private", ui.symbols.plus + " " + t("xprv or WIF"));
+  paragraph(ui.screen, t("Type or scan a private key: an extended one (xprv, or its zprv and yprv forms), or a " +
     "single key (WIF). A master key signs anything of its wallet, an account's key what is below it, and a " +
-    "single key its own coins.", { color: MUTED });
+    "single key its own coins."), { color: MUTED });
   const field = secret(new ui.TextArea({ oneLine: true, password: true, width: "100%", maxLength: 160, text: state.privateText,
-    font: FONT.text, accept: ACCEPT, placeholder: "xprv... or a WIF key" }));
+    font: FONT.text, accept: ACCEPT, placeholder: t("xprv... or a WIF key") }));
   field.onChange = (ev) => {
     state.privateText = ev.value;
     showError(null);
   };
   field.onSubmit = loadPrivate;
-  new ui.Checkbox({ text: "Show the key", onChange: (ev) => (field.password = !ev.value) });
+  new ui.Checkbox({ text: t("Show the key"), onChange: (ev) => (field.password = !ev.value) });
   page.error = paragraph(ui.screen, "", { color: RED, hidden: true });
   const buttons = buttonRow(ui.screen);
-  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadPrivate });
-  new ui.Button(buttons, { text: ui.symbols.image + " Scan", onClick: () => showKeyScan("private") });
-  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showKeys });
+  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " " + t("Load the key"), onClick: loadPrivate });
+  new ui.Button(buttons, { text: ui.symbols.image + " " + t("Scan"), onClick: () => showKeyScan("private") });
+  new ui.Button(buttons, { text: ui.symbols.left + " " + t("Back"), onClick: showKeys });
   gate(page.load);
   showError(state.error);
   field.focus();
@@ -361,7 +395,7 @@ function loadPrivate() {
   } catch (e) {
     if (!(e instanceof KeyError)) throw e;
     console.log("signer: private key refused");
-    return showError(e.message);
+    return showError(errorText(e));
   }
   addKey(key, key.kind);
 }
@@ -369,25 +403,25 @@ function loadPrivate() {
 // A key as a QR code of plain text, into the page that asked.
 function showKeyScan(what) {
   const back = () => (what === "words" ? showWords() : showPrivate());
-  newPage("keyscan", ui.symbols.image + " Scan the key");
+  newPage("keyscan", ui.symbols.image + " " + t("Scan the key"));
   page.back = back;
   const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 8, width: "100%" });
   page.scanner = new ui.Scanner(body, {
     detect: ["qr"], width: wide ? 480 : 280, height: wide ? 360 : 210,
     onDetect: ({ text }) => {
       if (state.page !== "keyscan") return;
-      if (text === null) return say("That code doesn't hold text.", RED);
+      if (text === null) return say(t("That code doesn't hold text."), RED);
       console.log("signer: scanned a key");
       page.scanner.stop();
       if (what === "words") state.words = text;
       else state.privateText = text.trim();
       back();
     },
-    onError: ({ reason }) => say(`The camera stopped: ${reason}.`, RED),
+    onError: ({ reason }) => say(t("The camera stopped: {reason}.", { reason }), RED),
   });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
-  page.status = paragraph(side, "Show the QR code.", { color: MUTED });
-  new ui.Button(side, { text: ui.symbols.left + " Back", onClick: back }).focus();
+  page.status = paragraph(side, t("Show the QR code."), { color: MUTED });
+  new ui.Button(side, { text: ui.symbols.left + " " + t("Back"), onClick: back }).focus();
 }
 
 // --- the shares -----------------------------------------------------------------
@@ -406,19 +440,19 @@ function boxCount() {
 }
 
 function showShares(focus) {
-  newPage("shares", ui.symbols.plus + " Codex32 shares");
-  paragraph(ui.screen, "Type the codex32 shares (spaces don't matter), or scan them. As many as the threshold: " +
-    "the third character of each share.", { color: MUTED });
+  newPage("shares", ui.symbols.plus + " " + t("Codex32 shares"));
+  paragraph(ui.screen, t("Type the codex32 shares (spaces don't matter), or scan them. As many as the threshold: " +
+    "the fourth character of each share."), { color: MUTED });
   page.boxes = new ui.Container({ layout: "column", gap: 4, width: "100%" });
   page.fields = [];
   page.error = paragraph(ui.screen, "", { color: RED, hidden: true });
 
   // what the shares hold
-  new ui.Label({ text: "The shares hold", font: FONT.big, color: MUTED });
+  new ui.Label({ text: t("The shares hold"), font: FONT.big, color: MUTED });
   const meaning = new ui.Dropdown({
     width: "100%",
-    options: ["A seed phrase's entropy, as dice39 makes them (BIP-39: 12 or 24 words)",
-      "A BIP-32 master seed, as BIP-93 says"],
+    options: [t("A seed phrase's entropy, as dice39 makes them (BIP-39: 12 or 24 words)"),
+      t("A BIP-32 master seed, as BIP-93 says")],
     selected: state.meaning === "bip39" ? 0 : 1,
     onChange: (ev) => {
       state.meaning = ev.value === 0 ? "bip39" : "bip32";
@@ -429,10 +463,10 @@ function showShares(focus) {
   page.passRow.hidden = state.meaning !== "bip39";
 
   const buttons = buttonRow(ui.screen);
-  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " Load the key", onClick: loadShares });
-  new ui.Button(buttons, { text: ui.symbols.image + " Scan shares", onClick: showShareScan });
-  new ui.Button(buttons, { text: ui.symbols.trash + " Clear", onClick: clearShares });
-  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: showKeys });
+  page.load = new ui.Button(buttons, { text: ui.symbols.ok + " " + t("Load the key"), onClick: loadShares });
+  new ui.Button(buttons, { text: ui.symbols.image + " " + t("Scan shares"), onClick: showShareScan });
+  new ui.Button(buttons, { text: ui.symbols.trash + " " + t("Clear"), onClick: clearShares });
+  new ui.Button(buttons, { text: ui.symbols.left + " " + t("Back"), onClick: showKeys });
   gate(page.load);
 
   syncBoxes();
@@ -489,17 +523,19 @@ function updateNote(i) {
   const r = checkShare(text, { suggest: f.committed });
   if (r.ok) {
     const s = r.share;
-    const what = s.isSecret ? `the secret itself, identifier ${s.id.toUpperCase()}`
-      : `share ${s.index.toUpperCase()}, identifier ${s.id.toUpperCase()}, threshold ${s.thresholdChar}`;
-    return f.note.set({ text: `${ui.symbols.ok} ${what}, ${s.seedBytes}-byte seed`, color: GREEN, hidden: false });
+    const what = s.isSecret
+      ? t("the secret itself, identifier {id}, {bytes}-byte seed", { id: s.id.toUpperCase(), bytes: s.seedBytes })
+      : t("share {index}, identifier {id}, threshold {k}, {bytes}-byte seed",
+        { index: s.index.toUpperCase(), id: s.id.toUpperCase(), k: s.thresholdChar, bytes: s.seedBytes });
+    return f.note.set({ text: ui.symbols.ok + " " + what, color: GREEN, hidden: false });
   }
   const e = r.error;
   const soft = e.code === "length" || e.code === "checksum" || (e.code === "prefix" && e.partial);
   if (soft && !f.committed) {
     const n = normalizeShare(text).length;
-    return f.note.set({ text: plural(n, "character"), color: MUTED, hidden: false });
+    return f.note.set({ text: plural(n, "{n} character", "{n} characters"), color: MUTED, hidden: false });
   }
-  f.note.set({ text: ui.symbols.close + " " + e.message, color: RED, hidden: false });
+  f.note.set({ text: ui.symbols.close + " " + codex32Message(e), color: RED, hidden: false });
 }
 
 function clearShares() {
@@ -516,7 +552,7 @@ function clearShares() {
 function loadShares() {
   if (busy || state.page !== "shares" || !selftestOk()) return;
   const texts = state.texts.filter((t) => normalizeShare(t));
-  if (!texts.length) return showError("Type or scan the shares first.");
+  if (!texts.length) return showError(t("Type or scan the shares first."));
   let res;
   try {
     res = recover(texts);
@@ -524,7 +560,7 @@ function loadShares() {
     if (!(e instanceof Codex32Error)) throw e;
     console.log(`signer: shares refused: ${e.code}`);
     page.fields.forEach((f, i) => { f.committed = !!normalizeShare(state.texts[i]); updateNote(i); });
-    return showError(e.message);
+    return showError(codex32Message(e));
   }
   busy = true;
   let key;
@@ -532,27 +568,27 @@ function loadShares() {
     key = wallet.loadKey(res.seed, { meaning: state.meaning, passphrase: state.passphrase });
   } catch (e) {
     console.log(`signer: key refused: ${e.name}`);
-    return showError(e.message);
+    return showError(e instanceof Bip39Error ? bip39Message(e) : errorText(e));
   } finally {
     res.seed.fill(0);
     busy = false;
   }
-  addKey(key, `${state.meaning}, ${plural(texts.length, "share")}`);
+  addKey(key, `${state.meaning}, ${count(texts.length, "share")}`);
 }
 
 // --- scanning shares ------------------------------------------------------------
 
 function showShareScan() {
-  newPage("sharescan", ui.symbols.image + " Scan shares");
+  newPage("sharescan", ui.symbols.image + " " + t("Scan shares"));
   const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 8, width: "100%" });
   page.scanner = new ui.Scanner(body, {
     detect: ["qr"], width: wide ? 480 : 280, height: wide ? 360 : 210,
     onDetect: ({ text }) => scannedShare(text),
-    onError: ({ reason }) => say(`The camera stopped: ${reason}.`, RED),
+    onError: ({ reason }) => say(t("The camera stopped: {reason}.", { reason }), RED),
   });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
-  page.status = paragraph(side, "Show the shares' QR codes, one at a time.", { color: MUTED });
-  new ui.Button(side, { text: ui.symbols.left + " Done", onClick: () => showShares(firstEmpty()) }).focus();
+  page.status = paragraph(side, t("Show the shares' QR codes, one at a time."), { color: MUTED });
+  new ui.Button(side, { text: ui.symbols.left + " " + t("Done"), onClick: () => showShares(firstEmpty()) }).focus();
 }
 
 function firstEmpty() {
@@ -569,17 +605,19 @@ function scannedShare(text) {
   const r = text == null ? null : checkShare(text.trim());
   if (!r || !r.ok) {
     console.log("signer: scanned a code that is not a codex32 share");
-    return say("That is not a codex32 share.", RED);
+    return say(t("That is not a codex32 share."), RED);
   }
   const s = r.share;
   const have = state.texts.map((t) => checkShare(t)).filter((x) => x.ok).map((x) => x.share);
   if (have.length && (have[0].id !== s.id || have[0].threshold !== s.threshold)) {
-    return say(`That share is from another split (identifier ${s.id.toUpperCase()}).`, RED);
+    return say(t("That share is from another split (identifier {id}).", { id: s.id.toUpperCase() }), RED);
   }
-  if (have.some((o) => o.index === s.index)) return say(`Share ${s.index.toUpperCase()} is in already.`, AMBER);
+  if (have.some((o) => o.index === s.index)) {
+    return say(t("Share {index} is in already.", { index: s.index.toUpperCase() }), AMBER);
+  }
   let slot = state.texts.findIndex((t) => !normalizeShare(t));
   if (slot < 0) slot = state.texts.length;
-  if (slot >= MAX_SHARES) return say("No room for more shares.", RED);
+  if (slot >= MAX_SHARES) return say(t("No room for more shares."), RED);
   state.texts[slot] = s.string;
   const k = s.threshold === 0 ? 1 : s.threshold, n = have.length + 1;
   console.log(`signer: scanned share ${n} of ${k}`);
@@ -588,7 +626,7 @@ function scannedShare(text) {
     showShares("load");
     return;
   }
-  say(`Share ${s.index.toUpperCase()} added: ${n} of ${k}. Next one.`, GREEN);
+  say(t("Share {index} added: {have} of {need}. Next one.", { index: s.index.toUpperCase(), have: n, need: k }), GREEN);
 }
 
 // --- the public key ------------------------------------------------------------
@@ -596,11 +634,11 @@ function scannedShare(text) {
 function showExport() {
   const key = state.keys.find((k) => k.master);
   if (!key) return showHome();
-  newPage("export", ui.symbols.upload + " Public key");
+  newPage("export", ui.symbols.upload + " " + t("Public key"));
   page.key = key;
-  paragraph(ui.screen, "Show this once to the wallet that will make the transactions this device signs: a " +
+  paragraph(ui.screen, t("Show this once to the wallet that will make the transactions this device signs: a " +
     "descriptor for a wallet that takes them; the zpub for Electrum (File, New/Restore, Standard wallet, Use a " +
-    "master key, then the camera button).", { color: MUTED });
+    "master key, then the camera button)."), { color: MUTED });
   const opts = new ui.Container({ layout: "row-wrap", gap: 8, width: "100%" });
   new ui.Dropdown(opts, {
     options: EXPORT_FORMS.map((x) => x.name), selected: state.exportForm,
@@ -608,15 +646,15 @@ function showExport() {
   });
   new ui.Dropdown(opts, {
     grow: 1,
-    options: wallet.EXPORTS.map((x) => x.name), selected: state.exportType,
+    options: wallet.EXPORTS.map((x) => tr(x.name)), selected: state.exportType,
     onChange: (ev) => { state.exportType = ev.value; drawExport(); },
   });
   new ui.Dropdown(opts, {
-    options: NETWORK_ORDER.map((n) => NETWORKS[n].name), selected: NETWORK_ORDER.indexOf(state.exportNetwork),
+    options: NETWORK_ORDER.map(networkName), selected: NETWORK_ORDER.indexOf(state.exportNetwork),
     onChange: (ev) => { state.exportNetwork = NETWORK_ORDER[ev.value]; drawExport(); },
   });
   const row = new ui.Container({ layout: "row", alignItems: "center", gap: 8, width: "100%" });
-  new ui.Label(row, { text: "Account", font: FONT.text });
+  new ui.Label(row, { text: t("Account"), font: FONT.text });
   const account = new ui.TextArea(row, { oneLine: true, width: 140, maxLength: 10, accept: "0123456789", text: String(state.account), font: FONT.text });
   account.onChange = (ev) => {
     const n = ev.value === "" ? null : Number(ev.value);
@@ -624,10 +662,10 @@ function showExport() {
     if (page.account !== null) state.account = page.account;
     drawExport();
   };
-  new ui.Label(row, { text: "This device signs for the account shown here.", font: FONT.small, color: MUTED, grow: 1, overflow: "wrap" });
+  new ui.Label(row, { text: t("This device signs for the account shown here."), font: FONT.small, color: MUTED, grow: 1, overflow: "wrap" });
   page.account = state.account;
   page.out = new ui.Container({ layout: "column", gap: 6, width: "100%", alignItems: "center" });
-  const back = new ui.Button({ text: ui.symbols.left + " Back", onClick: showHome });
+  const back = new ui.Button({ text: ui.symbols.left + " " + t("Back"), onClick: showHome });
   drawExport();
   back.focus();
 }
@@ -635,7 +673,7 @@ function showExport() {
 function drawExport() {
   page.out.clear();
   if (page.account === null) {
-    new ui.Label(page.out, { text: `An account number is 0 to ${wallet.MAX_ACCOUNT}.`, font: FONT.text, color: RED });
+    new ui.Label(page.out, { text: t("An account number is 0 to {max}.", { max: wallet.MAX_ACCOUNT }), font: FONT.text, color: RED });
     return;
   }
   const x = wallet.exportKey(page.key, wallet.EXPORTS[state.exportType].id, state.exportNetwork, page.account);
@@ -643,11 +681,12 @@ function drawExport() {
   const text = x[form.field];
   const size = Math.min(ui.height - 200, ui.width - 64, 420);
   new ui.QRCode(page.out, { data: text, size, ecc: "M" });
-  new ui.Label(page.out, { text: `Account ${x.path}, fingerprint ${x.fingerprint}; master fingerprint ${x.master}`, font: FONT.text,
+  new ui.Label(page.out, { text: t("Account {path}, fingerprint {accountFingerprint}; master fingerprint {masterFingerprint}",
+    { path: x.path, accountFingerprint: x.fingerprint, masterFingerprint: x.master }), font: FONT.text,
     width: "100%", overflow: "wrap", textAlign: "center" });
   new ui.Label(page.out, { text, font: FONT.small, width: "100%", overflow: "wrap", textAlign: "center" });
   const note = wallet.EXPORTS[state.exportType].note;
-  if (note && form.id !== "descriptor") new ui.Label(page.out, { text: note, font: FONT.text, color: AMBER, width: "100%", overflow: "wrap", textAlign: "center" });
+  if (note && form.id !== "descriptor") new ui.Label(page.out, { text: tr(note), font: FONT.text, color: AMBER, width: "100%", overflow: "wrap", textAlign: "center" });
   console.log(`signer: showing the ${wallet.EXPORTS[state.exportType].id} public key (${state.exportNetwork}), ` +
     `account ${page.account}, ${form.id}, ${text.length} characters`);
 }
@@ -656,31 +695,32 @@ function drawExport() {
 
 function showScan(merging) {
   state.merging = merging;
-  newPage("scan", ui.symbols.image + (merging ? " Scan another copy" : " Scan a transaction"));
+  newPage("scan", ui.symbols.image + " " + (merging ? t("Scan another copy") : t("Scan a transaction")));
   page.reader = new CodeReader();
   const body = new ui.Container({ layout: wide ? "row" : "column", gap: wide ? 20 : 6, width: "100%" });
   page.scanner = new ui.Scanner(body, {
     detect: ["qr"], width: wide ? 560 : 280, height: wide ? 420 : 210,
     onDetect: ({ text, bytes }) => scannedTx(text, bytes),
-    onError: ({ reason }) => say(`The camera stopped: ${reason}.`, RED),
+    onError: ({ reason }) => say(t("The camera stopped: {reason}.", { reason }), RED),
   });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
   page.status = paragraph(side, merging
-    ? "Show a copy of the same transaction, with other signatures: it is merged into this one."
-    : "Show the transaction's QR code (Electrum: Export, Show as QR code), or a wallet's animated BBQr codes. " +
-      "Large ones need a steady hand and good light.");
+    ? t("Show a copy of the same transaction, with other signatures: it is merged into this one.")
+    : t("Show the transaction's QR code (Electrum: Export, Show as QR code), or a wallet's animated BBQr codes. " +
+      "Large ones need a steady hand and good light."));
   const buttons = buttonRow(side);
-  new ui.Button(buttons, { text: ui.symbols.left + " Back", onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
-  page.again = new ui.Button(buttons, { text: ui.symbols.refresh + " Start over", hidden: true, onClick: () => {
+  new ui.Button(buttons, { text: ui.symbols.left + " " + t("Back"), onClick: () => (state.loaded ? showReview() : showHome()) }).focus();
+  page.again = new ui.Button(buttons, { text: ui.symbols.refresh + " " + t("Start over"), hidden: true, onClick: () => {
     page.reader.reset();
     page.again.hidden = true;
-    say("Show the first code of the series.", MUTED);
+    say(t("Show the first code of the series."), MUTED);
   } });
 }
 
+// text: a Message or English; the log gets the English
 function refuse(text) {
   console.log(`signer: refused a code: ${text}`);
-  say(ui.symbols.warning + " " + text, RED);
+  say(ui.symbols.warning + " " + tr(text), RED);
 }
 
 function scannedTx(text, bytes) {
@@ -692,7 +732,7 @@ function scannedTx(text, bytes) {
     if (got.part) {
       if (got.part.added) {
         console.log(`signer: BBQr part: ${got.part.have} of ${got.part.total}`);
-        say(`${got.part.have} of ${got.part.total} parts read. Keep it in view.`, GREEN);
+        say(t("{have} of {total} parts read. Keep it in view.", { have: got.part.have, total: got.part.total }), GREEN);
       }
       return;
     }
@@ -702,23 +742,26 @@ function scannedTx(text, bytes) {
     else loaded.tx = parseTx(r.bytes);
   } catch (e) {
     if (!(e instanceof DecodeError)) throw e;
+    // the libraries' own sentences, or the decoder's English, which says what is wrong with the bytes
+    if (e.text !== undefined && typeof e.text !== "string") return refuse(e.text);
     const why = e.message.endsWith(".") ? e.message : e.message + ".";
-    return refuse(/^(This|The code|That|These)/.test(why) ? why : "Not a transaction Electrum would load: " + why);
+    return refuse(/^(This|The code|That|These)/.test(why) ? why
+      : M.t("Not a transaction Electrum would load: {why}", { why }));
   }
   if (state.merging) {
-    if (r.kind !== "psbt") return refuse("That is a finished transaction: there is nothing to merge.");
+    if (r.kind !== "psbt") return refuse(M.t("That is a finished transaction: there is nothing to merge."));
     let m;
     try {
       m = combine(state.loaded.psbt, loaded.psbt);
     } catch (e) {
       if (!(e instanceof CombineError)) throw e;
-      return refuse(e.message);
+      return refuse(e.text);
     }
     state.loaded.psbt = m.psbt;
     state.loaded.copies++;
     state.loaded.notes.push(...m.notes);
     state.signed = null;
-    console.log(`signer: merged a copy (${r.encoding}, ${plural(m.added, "new field")})`);
+    console.log(`signer: merged a copy (${r.encoding}, ${count(m.added, "new field")})`);
   } else {
     console.log(`signer: read a ${r.kind === "psbt" ? "PSBT" : "finished transaction"} (${loaded.encoding}, ` +
       `${loaded.chars} characters, ${loaded.size} bytes)`);
@@ -734,7 +777,7 @@ function scannedTx(text, bytes) {
 
 function networkButton(parent, a) {
   new ui.Button(parent, {
-    text: "Network: " + NETWORKS[a.network].name,
+    text: t("Network: {network}", { network: networkName(a.network) }),
     onClick: () => {
       state.network = NETWORK_ORDER[(NETWORK_ORDER.indexOf(a.network) + 1) % NETWORK_ORDER.length];
       showReview();
@@ -759,21 +802,22 @@ function showFinished() {
   const inherited = !state.network && state.lastNetwork !== null;
   const a = analyzeTx(l.tx, { network: state.network ?? state.lastNetwork });
   state.lastNetwork = a.network;
-  newPage("review", "Finished transaction");
+  newPage("review", t("Finished transaction"));
   const buttons = buttonRow(ui.screen);
-  const first = new ui.Button(buttons, { text: ui.symbols.image + " Scan another", onClick: () => showScan(false) });
+  const first = new ui.Button(buttons, { text: ui.symbols.image + " " + t("Scan another"), onClick: () => showScan(false) });
   networkButton(buttons, a);
-  new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
-  paragraph(ui.screen, "It is signed already: there is nothing to sign here.", { color: MUTED });
+  new ui.Button(buttons, { text: ui.symbols.home + " " + t("Home"), onClick: showHome });
+  paragraph(ui.screen, t("It is signed already: there is nothing to sign here."), { color: MUTED });
   // to compare with what the wallet or a block explorer shows
   const txid = txidOf(l.tx);
-  paragraph(ui.screen, `Transaction ID: ${group4(txid)}`, { font: FONT.small });
+  paragraph(ui.screen, t("Transaction ID: {txid}", { txid: group4(txid) }), { font: FONT.small });
   showAnalysis(reviewList(), page.rows, a, l, {
-    networkNote: state.network ? "chosen" : inherited ? "as the transaction before: a signed one doesn't say" : null,
+    networkNote: state.network ? t("chosen", { $context: "network" })
+      : inherited ? t("as the transaction before: a signed one doesn't say") : null,
   });
   first.focus();
-  console.log(`signer: finished transaction: ${plural(a.inputs.length, "input")}, ${plural(a.outputs.length, "output")}, ` +
-    `${a.network}, ${plural(a.warnings.length, "warning")}`);
+  console.log(`signer: finished transaction: ${count(a.inputs.length, "input")}, ${count(a.outputs.length, "output")}, ` +
+    `${a.network}, ${count(a.warnings.length, "warning")}`);
   console.log(`signer: txid: ${txid}`);
   logTotals(a);
 }
@@ -784,8 +828,11 @@ function keyNetworkWarnings(a) {
   const test = a.network !== "mainnet";
   for (const k of state.keys) {
     if (k.network && (k.network === "test") !== test) {
-      a.warnings.push({ level: "warn", text: `Key ${k.fingerprint} is a ${k.network === "test" ? "test network" : "mainnet"} key, ` +
-        `and this transaction looks like ${NETWORKS[a.network].name}.` });
+      a.warnings.push({ level: "warn", text: k.network === "test"
+        ? M.t("Key {fingerprint} is a test network key, and this transaction looks like {network}.",
+          { fingerprint: k.fingerprint, network: M.t(NETWORKS[a.network].name) })
+        : M.t("Key {fingerprint} is a mainnet key, and this transaction looks like {network}.",
+          { fingerprint: k.fingerprint, network: M.t(NETWORKS[a.network].name) }) });
     }
   }
 }
@@ -803,49 +850,63 @@ function showReview() {
   keyNetworkWarnings(a);
   a.warnings.unshift(...l.notes);
 
-  newPage("review", "Transaction to sign");
+  newPage("review", t("Transaction to sign"));
   const buttons = buttonRow(ui.screen);
-  const count = plan.signable;
+  const signable = plan.signable;
   let first;
-  if (plan.complete && count === 0) {
-    first = new ui.Button(buttons, { text: ui.symbols.ok + " Finish the transaction", onClick: () => sign(a) });
+  if (plan.complete && signable === 0) {
+    first = new ui.Button(buttons, { text: ui.symbols.ok + " " + t("Finish the transaction"), onClick: () => sign(a) });
   } else if (!haveKeys) {
-    first = new ui.Button(buttons, { text: ui.symbols.plus + " Load the keys to sign", onClick: () => askKeys("review") });
+    first = new ui.Button(buttons, { text: ui.symbols.plus + " " + t("Load the keys to sign"), onClick: () => askKeys("review") });
   } else {
-    first = new ui.Button(buttons, { text: ui.symbols.edit + ` Sign ${plural(count, "input")}`, onClick: () => sign(a) });
-    first.disabled = count === 0;
+    first = new ui.Button(buttons, { text: ui.symbols.edit + " " + plural(signable, "Sign {n} input", "Sign {n} inputs"),
+      onClick: () => sign(a) });
+    first.disabled = signable === 0;
   }
   if (haveKeys && !first.disabled) first.disabled = !selftestOk();
-  if (haveKeys) new ui.Button(buttons, { text: ui.symbols.plus + " Keys", onClick: () => askKeys("review") });
-  new ui.Button(buttons, { text: ui.symbols.copy + " Merge a copy", onClick: () => showScan(true) });
-  new ui.Button(buttons, { text: ui.symbols.image + " Scan another", onClick: () => showScan(false) });
+  if (haveKeys) new ui.Button(buttons, { text: ui.symbols.plus + " " + t("Keys"), onClick: () => askKeys("review") });
+  new ui.Button(buttons, { text: ui.symbols.copy + " " + t("Merge a copy"), onClick: () => showScan(true) });
+  new ui.Button(buttons, { text: ui.symbols.image + " " + t("Scan another"), onClick: () => showScan(false) });
   networkButton(buttons, a);
-  new ui.Button(buttons, { text: ui.symbols.home + " Home", onClick: showHome });
+  new ui.Button(buttons, { text: ui.symbols.home + " " + t("Home"), onClick: showHome });
 
-  if (l.copies > 1) paragraph(ui.screen, `Merged from ${l.copies} copies.`, { color: MUTED });
+  if (l.copies > 1) paragraph(ui.screen, t("Merged from {copies} copies.", { copies: l.copies }), { color: MUTED });
   if (haveKeys) {
-    const each = state.keys.map((k, i) => `key ${k.fingerprint} signs ${plan.keys[i].signs}`).join(", ");
-    paragraph(ui.screen, `${plural(a.inputs.length, "input")}: ${each}.`, { color: plan.signable ? GREEN : RED });
-    if (plan.signable && !plan.complete) paragraph(ui.screen, "Not every input can be signed here: the result is a PSBT that needs more signatures.", { color: AMBER });
+    const each = state.keys.map((k, i) => t("key {fingerprint} signs {signs}", { fingerprint: k.fingerprint,
+      signs: plan.keys[i].signs })).join(", ");
+    paragraph(ui.screen, plural(a.inputs.length, "{n} input: {keys}.", "{n} inputs: {keys}.", { keys: each }),
+      { color: plan.signable ? GREEN : RED });
+    if (plan.signable && !plan.complete) {
+      paragraph(ui.screen, t("Not every input can be signed here: the result is a PSBT that needs more signatures."),
+        { color: AMBER });
+    }
   } else if (!plan.complete) {
-    paragraph(ui.screen, "Check it. Change is only the transaction's claim until the keys are in.", { color: MUTED });
+    paragraph(ui.screen, t("Check it. Change is only the transaction's claim until the keys are in."), { color: MUTED });
   }
 
   showAnalysis(reviewList(), page.rows, a, l, {
-    networkNote: state.network ? "chosen" : null,
+    networkNote: state.network ? t("chosen", { $context: "network" }) : null,
     changeClaimed: !haveKeys,
     inputNote: (i) => {
       const p = plan.inputs[i.index];
-      const sigs = p.multisig ? `, ${p.multisig.have + (p.sign ? p.multisig.will : 0)} of ${p.multisig.m} signatures` : "";
-      if (p.sign) return { text: `${ui.symbols.edit} Will be signed${p.path ? ` (${p.path})` : ""}${sigs}`, color: GREEN };
-      if (p.signed || p.final) return { text: `${ui.symbols.ok} Signed already`, color: GREEN };
-      if (p.multisig && !haveKeys) return { text: `${p.multisig.have} of ${p.multisig.m} signatures`, color: AMBER };
-      return haveKeys ? { text: `${ui.symbols.close} Not signed: ${p.reason}`, color: AMBER } : null;
+      if (p.sign) {
+        const sigs = p.multisig ? { have: p.multisig.have + p.multisig.will, need: p.multisig.m } : null;
+        const text = !sigs ? (p.path ? t("Will be signed ({path})", { path: p.path }) : t("Will be signed"))
+          : p.path ? t("Will be signed ({path}), {have} of {need} signatures", { path: p.path, ...sigs })
+            : t("Will be signed, {have} of {need} signatures", sigs);
+        return { text: ui.symbols.edit + " " + text, color: GREEN };
+      }
+      if (p.signed || p.final) return { text: ui.symbols.ok + " " + t("Signed already"), color: GREEN };
+      if (p.multisig && !haveKeys) {
+        return { text: t("{have} of {need} signatures", { have: p.multisig.have, need: p.multisig.m }), color: AMBER };
+      }
+      return haveKeys ? { text: ui.symbols.close + " " + t("Not signed: {reason}", { reason: tr(p.reason) }), color: AMBER }
+        : null;
     },
   });
   first.focus();
-  console.log(`signer: review: ${plural(a.inputs.length, "input")}, ${count} to sign, ${plural(a.outputs.length, "output")}, ` +
-    `fee ${a.fee ?? "?"} sat, ${a.network}, ${plural(a.warnings.length, "warning")}`);
+  console.log(`signer: review: ${count(a.inputs.length, "input")}, ${signable} to sign, ${count(a.outputs.length, "output")}, ` +
+    `fee ${a.fee ?? "?"} sat, ${a.network}, ${count(a.warnings.length, "warning")}`);
   logTotals(a);
   const several = plan.inputs.filter((i) => i.multisig);
   if (several.length) console.log(`signer: multisig: ${several.map((i) => `${i.multisig.have}+${i.multisig.will}/${i.multisig.m}`).join(" ")}`);
@@ -858,8 +919,8 @@ function showReview() {
 async function sign(a) {
   if (busy || !selftestOk()) return;
   if (a.warnings.some((w) => w.level === "danger")) {
-    const answer = await ui.alert("There are serious warnings (in red) about this transaction. Sign it anyway?",
-      { title: "Sign?", buttons: ["Don't sign", "Sign anyway"] });
+    const answer = await ui.alert(t("There are serious warnings (in red) about this transaction. Sign it anyway?"),
+      { title: t("Sign?"), buttons: [t("Don't sign"), t("Sign anyway")] });
     if (answer !== 1) return;
   }
   busy = true;
@@ -871,7 +932,7 @@ async function sign(a) {
   }
   state.signed = r;
   // (a transaction is not secret: its hash lets the tests compare it with Electrum's)
-  console.log(`signer: signed ${plural(r.count, "input")}` +
+  console.log(`signer: signed ${count(r.count, "input")}` +
     (r.tx ? `, transaction complete (SHA-256 ${toHex(crypto.sha256(r.tx).subarray(0, 8))})` : ""));
   console.log(`signer: txid: ${r.txid || "none yet"}`);
   showSigned(r.tx ? "tx" : "psbt");
@@ -891,24 +952,27 @@ function finish(keep) {
 
 function showSigned(form) {
   const s = state.signed;
-  newPage("signed", ui.symbols.ok + (s.tx ? " Signed" : " Partly signed"));
+  newPage("signed", ui.symbols.ok + " " + (s.tx ? t("Signed") : t("Partly signed")));
   const bytes = form === "tx" ? s.tx : s.psbt;
   const text = electrumQrText(bytes);
-  const what = form === "tx" ? "The complete, signed transaction. "
-    : s.tx ? "The PSBT with its signatures. " : "The PSBT with the signatures so far: it needs more before it can be sent. ";
+  const what = form === "tx" ? t("The complete, signed transaction.")
+    : s.tx ? t("The PSBT with its signatures.") : t("The PSBT with the signatures so far: it needs more before it can be sent.");
   // the code beside the buttons: a camera must see all of it, unscrolled
   const body = new ui.Container({ layout: "row", gap: 12, width: "100%", alignItems: "start" });
   const left = new ui.Container(body, { layout: "column", gap: 4, alignItems: "center" });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1 });
   const note = paragraph(side, "", { color: MUTED, font: FONT.small });
   // to compare with what the wallet says it broadcast
-  if (s.txid) paragraph(side, `Transaction ID: ${group4(s.txid)}`, { font: FONT.small });
-  else paragraph(side, "No transaction ID yet: it isn't final until all its signatures are in.", { color: AMBER, font: FONT.small });
+  if (s.txid) paragraph(side, t("Transaction ID: {txid}", { txid: group4(s.txid) }), { font: FONT.small });
+  else paragraph(side, t("No transaction ID yet: it isn't final until all its signatures are in."), { color: AMBER, font: FONT.small });
   const buttons = buttonRow(side);
-  const done = new ui.Button(buttons, { text: ui.symbols.ok + (state.keys.length ? " Done, forget the keys" : " Done"), onClick: () => finish(false) });
-  if (state.keys.length) new ui.Button(buttons, { text: ui.symbols.right + " Next transaction (keep keys)", onClick: () => finish(true) });
+  const done = new ui.Button(buttons, { text: ui.symbols.ok + " " + (state.keys.length ? t("Done, forget the keys") : t("Done")),
+    onClick: () => finish(false) });
+  if (state.keys.length) {
+    new ui.Button(buttons, { text: ui.symbols.right + " " + t("Next transaction (keep keys)"), onClick: () => finish(true) });
+  }
   if (s.tx) {
-    new ui.Button(buttons, { text: form === "tx" ? "Show as PSBT" : "Show the transaction",
+    new ui.Button(buttons, { text: form === "tx" ? t("Show as PSBT") : t("Show the transaction"),
       onClick: () => showSigned(form === "tx" ? "psbt" : "tx") });
   }
   done.focus();
@@ -927,14 +991,15 @@ function showSigned(form) {
     }
   }
   if (qr) {
-    note.text = what + "In Electrum: Tools, Load transaction, From QR code; check it there, then Broadcast.";
-    new ui.Button(buttons, { text: "Show as BBQr", onClick: () => { s.series = true; showSigned(form); } });
-    new ui.Label(left, { text: `${bytes.length} bytes, ${text.length} characters, ${qr.modules}x${qr.modules}`, font: FONT.small, color: MUTED });
+    note.text = what + " " + t("In Electrum: Tools, Load transaction, From QR code; check it there, then Broadcast.");
+    new ui.Button(buttons, { text: t("Show as BBQr"), onClick: () => { s.series = true; showSigned(form); } });
+    new ui.Label(left, { text: t("{bytes} bytes, {chars} characters, {size}x{size}",
+      { bytes: bytes.length, chars: text.length, size: qr.modules }), font: FONT.small, color: MUTED });
     console.log(`signer: showing the signed ${form} (${bytes.length} bytes, ${text.length} characters)`);
     return;
   }
-  note.text = what + "Animated BBQr codes, for a wallet that reads them; Electrum doesn't" +
-    (s.series ? "." : ", and this is too large for one code.");
+  note.text = what + " " + (s.series ? t("Animated BBQr codes, for a wallet that reads them; Electrum doesn't.")
+    : t("Animated BBQr codes, for a wallet that reads them; Electrum doesn't, and this is too large for one code."));
   // compressing is JavaScript, and slow on a Zero: a turn of its own, as a
   // handler has 10 s
   setTimeout(() => {
@@ -943,8 +1008,8 @@ function showSigned(form) {
     const series = seriesFor(bytes, form);
     const ms = sys.uptime() - t0;
     showParts(left, buttons, series, size);
-    if (s.series) new ui.Button(buttons, { text: "Show as one code", onClick: () => { s.series = false; showSigned(form); } });
-    console.log(`signer: showing the signed ${form} as BBQr (${bytes.length} bytes, ${plural(series.parts.length, "part")}, ` +
+    if (s.series) new ui.Button(buttons, { text: t("Show as one code"), onClick: () => { s.series = false; showSigned(form); } });
+    console.log(`signer: showing the signed ${form} as BBQr (${bytes.length} bytes, ${count(series.parts.length, "part")}, ` +
       `version ${series.version}, encoding ${series.encoding}, SHA-256 ${toHex(crypto.sha256(bytes).subarray(0, 8))}, ${ms.toFixed(0)} ms)`);
   }, 0);
 }
@@ -965,7 +1030,7 @@ function showParts(parent, buttons, series, size) {
   const label = new ui.Label(parent, { text: "", font: FONT.small, color: MUTED });
   const draw = (log) => {
     qr.data = parts[i];
-    label.text = `Part ${i + 1} of ${parts.length}, ${qr.modules}x${qr.modules}`;
+    label.text = t("Part {part} of {parts}, {size}x{size}", { part: i + 1, parts: parts.length, size: qr.modules });
     if (log) console.log(`signer: part ${i + 1} of ${parts.length}, ${qr.modules} modules`);
   };
   const step = () => {
@@ -973,19 +1038,19 @@ function showParts(parent, buttons, series, size) {
     draw(false);
   };
   const run = () => (partsTimer = setInterval(step, PART_MS));
-  const pause = new ui.Button(buttons, { text: ui.symbols.pause + " Pause", onClick: () => {
+  const pause = new ui.Button(buttons, { text: ui.symbols.pause + " " + t("Pause"), onClick: () => {
     if (parts.length < 2) return;
     if (partsTimer !== null) {
       stopParts();
-      pause.text = ui.symbols.play + " Play";
+      pause.text = ui.symbols.play + " " + t("Play");
     } else {
       run();
-      pause.text = ui.symbols.pause + " Pause";
+      pause.text = ui.symbols.pause + " " + t("Pause");
     }
   } });
-  new ui.Button(buttons, { text: ui.symbols.next + " Next part", onClick: () => {
+  new ui.Button(buttons, { text: ui.symbols.next + " " + t("Next part"), onClick: () => {
     stopParts();
-    pause.text = ui.symbols.play + " Play";
+    pause.text = ui.symbols.play + " " + t("Play");
     i = (i + 1) % parts.length;
     draw(true);
   } });

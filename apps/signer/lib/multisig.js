@@ -39,6 +39,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { t } from "./text.js";
 import { cr, hash160 } from "./crypto.js";
 import { HARDENED, deriveChild } from "./bip32.js";
 import { toHex, equal, concat } from "./psbt/bytes.js";
@@ -60,11 +61,13 @@ export function multisigScript(m, pubkeys) {
 
 function plainMultisig(script) {
   const ms = parseMultisig(script);
-  if (!ms) return { error: "its witness script is not a plain m-of-n multisig: only those are signed" };
-  if (ms.pubkeys.some((k) => k.length !== 33)) return { error: "its witness script has an uncompressed key, which segwit doesn't allow" };
+  if (!ms) return { error: t("its witness script is not a plain m-of-n multisig: only those are signed") };
+  if (ms.pubkeys.some((k) => k.length !== 33)) {
+    return { error: t("its witness script has an uncompressed key, which segwit doesn't allow") };
+  }
   const seen = new Set(ms.pubkeys.map(toHex));
-  if (seen.size !== ms.n) return { error: "its witness script has the same key twice" };
-  if (!equal(multisigScript(ms.m, ms.pubkeys), script)) return { error: "its witness script is not written the usual way" };
+  if (seen.size !== ms.n) return { error: t("its witness script has the same key twice") };
+  if (!equal(multisigScript(ms.m, ms.pubkeys), script)) return { error: t("its witness script is not written the usual way") };
   return ms;
 }
 
@@ -78,8 +81,10 @@ export function multisigCoin(script, f) {
     type = "p2sh-p2wsh";
   }
   if (inner.type !== "p2wsh") return null;
-  if (!f.witnessScript) return { error: `it is a ${TYPE_NAMES.p2wsh} script without its witnessScript` };
-  if (!equal(cr().sha256(f.witnessScript), inner.program)) return { error: "its witnessScript is not the one the script commits to" };
+  if (!f.witnessScript) return { error: t("it is a {type} script without its witnessScript", { type: TYPE_NAMES.p2wsh }) };
+  if (!equal(cr().sha256(f.witnessScript), inner.program)) {
+    return { error: t("its witnessScript is not the one the script commits to") };
+  }
   const multisig = plainMultisig(f.witnessScript);
   return multisig.error ? multisig : { type, witnessScript: f.witnessScript, redeemScript, multisig };
 }
@@ -135,14 +140,22 @@ class Deriver {
     return null;
   }
   // Every key of `ms` to an xpub of its own: [{ id, suffix }], or { reason }.
-  accountAll(ms, derivations, what) {
+  // input: its number (from 1), or null for the output being checked.
+  accountAll(ms, derivations, input) {
     const found = [];
     for (const k of ms.pubkeys) {
       const a = this.account(k, derivations);
-      if (!a) return { reason: this.spent ? "it has too many keys to check here" : `a key of ${what} doesn't derive from the PSBT's xpubs` };
+      if (!a) {
+        return { reason: this.spent ? t("it has too many keys to check here")
+          : input ? t("a key of input {n} doesn't derive from the PSBT's xpubs", { n: input })
+            : t("a key of this output doesn't derive from the PSBT's xpubs") };
+      }
       found.push(a);
     }
-    if (new Set(found.map((a) => a.id)).size !== ms.n) return { reason: `two keys of ${what} derive from one xpub` };
+    if (new Set(found.map((a) => a.id)).size !== ms.n) {
+      return { reason: input ? t("two keys of input {n} derive from one xpub", { n: input })
+        : t("two keys of this output derive from one xpub") };
+    }
     return found;
   }
 }
@@ -150,13 +163,12 @@ class Deriver {
 // What is wrong with where a script's keys sit below their xpubs, or null.
 function unevenPaths(found) {
   const path = found[0].suffix.join("/");
-  if (found.some((a) => a.suffix.join("/") !== path)) return "its keys are at different paths, which no wallet scans";
-  if (found[0].suffix.length !== 2) return "its keys are not two steps (chain, index) below the cosigners' xpubs";
+  if (found.some((a) => a.suffix.join("/") !== path)) return t("its keys are at different paths, which no wallet scans");
+  if (found[0].suffix.length !== 2) return t("its keys are not two steps (chain, index) below the cosigners' xpubs");
   return null;
 }
 
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
-const shape = (x) => `${x.m} of ${x.n}`;
 
 const wallets = new WeakMap();
 
@@ -176,41 +188,45 @@ function proveInputs(psbt, coinOf) {
     const node = xpubNode(x.xpub);
     if (node) xpubs.push({ id: toHex(x.xpub.subarray(4)), node, fingerprint: x.fingerprint, path: x.path });
   }
-  if (!xpubs.length) return { reason: "this PSBT doesn't carry the cosigners' xpubs", noXpubs: true };
+  if (!xpubs.length) return { reason: t("this PSBT doesn't carry the cosigners' xpubs"), noXpubs: true };
   const derive = new Deriver(xpubs);
   let wallet = null;
   for (let i = 0; i < psbt.inputs.length; i++) {
-    const what = `input ${i + 1}`, f = psbt.inputs[i].fields;
+    const n = i + 1, f = psbt.inputs[i].fields;
     const coin = coinOf(psbt, i);
-    if (coin.error) return { reason: `${what}: ${coin.error}` };
+    if (coin.error) return { reason: t("input {n}: {why}", { n, why: coin.error }) };
     const c = multisigCoin(coin.script, f);
-    if (!c) return { reason: `${what} is not multisig` };
-    if (c.error) return { reason: `${what}: ${c.error}` };
-    const found = derive.accountAll(c.multisig, f.bip32, what);
+    if (!c) return { reason: t("input {n} is not multisig", { n }) };
+    if (c.error) return { reason: t("input {n}: {why}", { n, why: c.error }) };
+    const found = derive.accountAll(c.multisig, f.bip32, n);
     if (found.reason) return found;
     const uneven = unevenPaths(found);
-    if (uneven) return { reason: `${what}: ${uneven}` };
+    if (uneven) return { reason: t("input {n}: {why}", { n, why: uneven }) };
     const ids = found.map((a) => a.id);
     if (!wallet) wallet = { type: c.type, m: c.multisig.m, n: c.multisig.n, xpubs: ids, derive };
     else if (c.type !== wallet.type || c.multisig.m !== wallet.m || c.multisig.n !== wallet.n || !sameSet(ids, wallet.xpubs)) {
-      return { reason: `${what} is not the same wallet as input 1` };
+      return { reason: t("input {n} is not the same wallet as input 1", { n }) };
     }
   }
-  return wallet || { reason: "it has no inputs" };
+  return wallet || { reason: t("it has no inputs") };
 }
 
 export function proveOutput(wallet, script, f) {
   if (wallet.reason) return { ...wallet, open: true };
   const c = multisigCoin(script, f);
-  if (!c) return { reason: "it is not multisig" };
+  if (!c) return { reason: t("it is not multisig") };
   if (c.error) return { reason: c.error };
-  if (c.type !== wallet.type) return { reason: `it is ${c.type.toUpperCase()}, and the inputs ${wallet.type.toUpperCase()}` };
-  if (c.multisig.m !== wallet.m || c.multisig.n !== wallet.n) {
-    return { reason: `it is ${shape(c.multisig)}, and the inputs ${shape(wallet)}` };
+  if (c.type !== wallet.type) {
+    return { reason: t("it is {outputType}, and the inputs {inputType}",
+      { outputType: c.type.toUpperCase(), inputType: wallet.type.toUpperCase() }) };
   }
-  const found = wallet.derive.accountAll(c.multisig, f.bip32, "this output");
+  if (c.multisig.m !== wallet.m || c.multisig.n !== wallet.n) {
+    return { reason: t("it is {outputM} of {outputN}, and the inputs {inputM} of {inputN}",
+      { outputM: c.multisig.m, outputN: c.multisig.n, inputM: wallet.m, inputN: wallet.n }) };
+  }
+  const found = wallet.derive.accountAll(c.multisig, f.bip32, null);
   if (found.reason) return { ...found, open: wallet.derive.spent };
-  if (!sameSet(found.map((a) => a.id), wallet.xpubs)) return { reason: "its keys are not the inputs' cosigners" };
+  if (!sameSet(found.map((a) => a.id), wallet.xpubs)) return { reason: t("its keys are not the inputs' cosigners") };
   const uneven = unevenPaths(found);
   return uneven ? { uneven } : {};
 }

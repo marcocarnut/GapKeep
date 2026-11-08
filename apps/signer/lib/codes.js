@@ -16,6 +16,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { t } from "./text.js";
 import { DecodeError } from "./psbt/bytes.js";
 import { readPayload } from "./psbt/transport.js";
 import { isPsbt } from "./psbt/psbt.js";
@@ -81,10 +82,10 @@ export class CodeReader {
     } catch (e) {
       if (!(e instanceof BBQrError)) throw e;
       if (e.code === "series") {
-        throw new DecodeError(`That code is from another series. Keep showing the first one (${this.joiner.have} of ` +
-          `${this.joiner.total} read), or start over.`);
+        throw new DecodeError(t("That code is from another series. Keep showing the first one ({have} of {total} " +
+          "read), or start over.", { have: this.joiner.have, total: this.joiner.total }));
       }
-      throw new DecodeError(`This BBQr code can't be used: ${e.message}`);
+      throw new DecodeError(t("This BBQr code can't be used: {why}", { why: e.message }));
     }
     if (p.added) this.chars += text.length;
     if (!p.done) return { part: { have: p.have, total: p.total, added: p.added } };
@@ -99,14 +100,14 @@ export class CodeReader {
     } catch (e) {
       if (!(e instanceof BBQrError)) throw e;
       this.reset();
-      throw new DecodeError(`These BBQr codes don't make a file: ${e.message}`);
+      throw new DecodeError(t("These BBQr codes don't make a file: {why}", { why: e.message }));
     }
     this.reset();
     if (file.type === "T") return { encoding: "BBQr", bytes: file.bytes, kind: "tx", chars };
     if (file.type === "P") {
-      if (!isPsbt(file.bytes)) throw new DecodeError("This BBQr series says it is a PSBT, but it isn't one.");
+      if (!isPsbt(file.bytes)) throw new DecodeError(t("This BBQr series says it is a PSBT, but it isn't one."));
       return { encoding: "BBQr", bytes: file.bytes, kind: "psbt", chars };
     }
-    throw new DecodeError(`This BBQr series holds a ${FILE_TYPES[file.type] || "file"}, not a transaction.`);
+    throw new DecodeError(t("This BBQr series holds a {kind}, not a transaction.", { kind: FILE_TYPES[file.type] || "file" }));
   }
 }

@@ -17,10 +17,11 @@
 //     otherwise only the input rows do.
 //   flagSignatures(a, plan)  red warnings for bad signatures in the PSBT.
 //
+// The warnings are Messages (text.js): English, translated by the app.
+//
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-const XPUBS_HINT = "In Electrum on a computer, tick \"For hardware device; include xpubs\" in the transaction's " +
-  "export menu, and show its code again.";
+import { t, plural, numbers } from "./text.js";
 
 export function applyPlan(a, plan) {
   for (const o of a.outputs) {
@@ -33,38 +34,50 @@ export function applyPlan(a, plan) {
     if (p.ours && p.stray) {
       o.mine = false;
       o.stray = p.path;
-      a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} is yours, but ${p.path ? `at ${p.path}` : "in another key"}: ` +
-        `the wallet may not see it (${p.stray}). It is counted as sent.` });
+      const n = o.index + 1;
+      a.warnings.unshift({ level: "warn", text: p.path
+        ? t("Output {n} is yours, but at {path}: the wallet may not see it ({why}). It is counted as sent.",
+          { n, path: p.path, why: p.stray })
+        : t("Output {n} is yours, but in another key: the wallet may not see it ({why}). It is counted as sent.",
+          { n, why: p.stray }) });
       continue;
     }
     if (p.ours) {
       o.role = p.role || "mine";
       o.far = p.far;
       if (p.far !== null) {
-        a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} comes back to you at index ${p.far}: ` +
-          "your wallet finds this coin only if it looks that far ahead (gap limit)." });
+        a.warnings.unshift({ level: "warn", text: t("Output {n} comes back to you at index {index}: your wallet " +
+          "finds this coin only if it looks that far ahead (gap limit).", { n: o.index + 1, index: p.far }) });
       }
     } else if (p.notWallet) {
-      a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but it is not the ` +
-        `wallet the inputs are (${p.problem}): it may pay someone else.` });
+      a.warnings.unshift({ level: "danger", text: t("Output {n} claims to be your change, but it is not the " +
+        "wallet the inputs are ({why}): it may pay someone else.", { n: o.index + 1, why: p.problem }) });
     } else if (p.problem) {
-      a.warnings.unshift({ level: "danger", text: `Output ${o.index + 1} claims to be your change, but its key ` +
-        `doesn't derive from these keys (${p.problem}): it pays someone else.` });
+      a.warnings.unshift({ level: "danger", text: t("Output {n} claims to be your change, but its key " +
+        "doesn't derive from these keys ({why}): it pays someone else.", { n: o.index + 1, why: p.problem }) });
     } else if (p.unproved) {
       o.unverified = true;
-      a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} claims to be your change, but that can't be proved: ` +
-        `${p.unproved}. It is counted as sent.${p.noXpubs ? " " + XPUBS_HINT : ""}` });
+      a.warnings.unshift({ level: "warn", text: p.noXpubs
+        ? t("Output {n} claims to be your change, but that can't be proved: {why}. It is counted as sent. In " +
+          "Electrum on a computer, tick \"For hardware device; include xpubs\" in the transaction's export menu, " +
+          "and show its code again.", { n: o.index + 1, why: p.unproved })
+        : t("Output {n} claims to be your change, but that can't be proved: {why}. It is counted as sent.",
+          { n: o.index + 1, why: p.unproved }) });
     } else if (claimed) {
       o.unverified = true;
-      a.warnings.unshift({ level: "warn", text: `Output ${o.index + 1} claims to be your change, but none of the keys ` +
-        "loaded can check that: it is counted as sent. Load the key it belongs to." });
+      a.warnings.unshift({ level: "warn", text: t("Output {n} claims to be your change, but none of the keys " +
+        "loaded can check that: it is counted as sent. Load the key it belongs to.", { n: o.index + 1 }) });
     }
-    for (const odd of p.oddities || []) a.warnings.push({ level: "warn", text: `Output ${o.index + 1}: ${odd}` });
+    for (const odd of p.oddities || []) {
+      a.warnings.push({ level: "warn", text: t("Output {n}: {oddity}", { n: o.index + 1, oddity: odd }) });
+    }
   }
   a.toSelf = a.outputs.filter((o) => o.mine).reduce((s, o) => s + o.amount, 0);
   a.sent = a.totalOut === null ? null : a.totalOut - a.toSelf;
   for (const i of plan.inputs) {
-    for (const odd of i.oddities || []) a.warnings.push({ level: "warn", text: `Input ${i.index + 1}: ${odd}` });
+    for (const odd of i.oddities || []) {
+      a.warnings.push({ level: "warn", text: t("Input {n}: {oddity}", { n: i.index + 1, oddity: odd }) });
+    }
   }
   const why = nothingToSign(plan);
   if (why) a.warnings.unshift({ level: "warn", text: why });
@@ -75,18 +88,25 @@ export function applyPlan(a, plan) {
 function nothingToSign(plan) {
   const left = plan.inputs.filter((i) => !i.final && !i.signed);
   if (plan.signable || !left.length) return null;
-  const reasons = new Map();
-  for (const i of left) reasons.set(i.reason, [...(reasons.get(i.reason) || []), i.index + 1]);
-  const parts = [...reasons].map(([reason, n]) => `${n.length > 1 ? "inputs" : "input"} ${n.join(", ")}: ${reason}`);
-  return `Nothing here can be signed with these keys. ${parts.join("; ").replace(/^i/, "I")}.`;
+  const reasons = new Map();   // by their English (Messages are objects)
+  for (const i of left) {
+    const k = String(i.reason);
+    reasons.set(k, reasons.get(k) || { reason: i.reason, inputs: [] });
+    reasons.get(k).inputs.push(i.index + 1);
+  }
+  const parts = [...reasons.values()].map(({ reason, inputs }, j) => j === 0
+    ? plural(inputs.length, "Input {list}: {reason}", "Inputs {list}: {reason}", { list: numbers(inputs), reason })
+    : plural(inputs.length, "input {list}: {reason}", "inputs {list}: {reason}", { list: numbers(inputs), reason }));
+  const all = parts.slice(1).reduce((list, part) => t("{list}; {reason}", { list, reason: part }), parts[0]);
+  return t("Nothing here can be signed with these keys. {reasons}.", { reasons: all });
 }
 
 // Signatures that came with the PSBT and don't hold: true with or without keys.
 export function flagSignatures(a, plan) {
   for (const i of plan.inputs) {
     if (i.badSignature) {
-      a.warnings.unshift({ level: "danger", text: `Input ${i.index + 1}: the signature in this PSBT is not valid for this ` +
-        "transaction (or isn't SIGHASH_ALL): it doesn't count." });
+      a.warnings.unshift({ level: "danger", text: t("Input {n}: the signature in this PSBT is not valid for this " +
+        "transaction (or isn't SIGHASH_ALL): it doesn't count.", { n: i.index + 1 }) });
     }
   }
   return a;

@@ -8,7 +8,8 @@
 // What every parser here throws: the message says what is wrong, for people.
 export class DecodeError extends Error {
   constructor(message) {
-    super(message);
+    super(String(message));
+    this.text = message;   // a Message (text.js) where it is one: the app translates it
     this.name = "DecodeError";
   }
 }

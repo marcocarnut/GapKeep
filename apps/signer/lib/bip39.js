@@ -18,9 +18,12 @@ import { cr, zero } from "./crypto.js";
 
 export const ENTROPY_LENGTHS = [16, 20, 24, 28, 32];
 
+// code: "count" (count: the number of words), "word" (word: its position,
+// from 1), "checksum", "entropy": for an app to word it in another language.
 export class Bip39Error extends Error {
-  constructor(message) {
+  constructor(message, details) {
     super(message);
+    Object.assign(this, details);
     this.name = "Bip39Error";
   }
 }
@@ -36,7 +39,7 @@ function wordIndex() {
 
 export function mnemonicFromEntropy(entropy) {
   if (!(entropy instanceof Uint8Array) || !ENTROPY_LENGTHS.includes(entropy.length)) {
-    throw new Bip39Error("BIP-39 entropy must be 16, 20, 24, 28 or 32 bytes");
+    throw new Bip39Error("BIP-39 entropy must be 16, 20, 24, 28 or 32 bytes", { code: "entropy" });
   }
   const checksum = cr().sha256(entropy)[0];
   const bits = entropy.length * 8, total = bits + bits / 32;
@@ -55,7 +58,8 @@ export function mnemonicFromEntropy(entropy) {
 export function entropyFromMnemonic(mnemonic) {
   const words = String(mnemonic).normalize("NFKD").trim().toLowerCase().split(/\s+/).filter((w) => w);
   if (![12, 15, 18, 21, 24].includes(words.length)) {
-    throw new Bip39Error(`a BIP-39 mnemonic has 12, 15, 18, 21 or 24 words, not ${words.length}`);
+    throw new Bip39Error(`a BIP-39 mnemonic has 12, 15, 18, 21 or 24 words, not ${words.length}`,
+      { code: "count", count: words.length });
   }
   const map = wordIndex();
   const total = words.length * 11, bits = (total * 32) / 33;
@@ -63,7 +67,7 @@ export function entropyFromMnemonic(mnemonic) {
   let checksum = 0;
   for (let w = 0; w < words.length; w++) {
     const v = map.get(words[w]);
-    if (v === undefined) throw new Bip39Error(`word ${w + 1} is not in the BIP-39 word list`);
+    if (v === undefined) throw new Bip39Error(`word ${w + 1} is not in the BIP-39 word list`, { code: "word", word: w + 1 });
     for (let j = 0; j < 11; j++) {
       const i = w * 11 + j, b = (v >> (10 - j)) & 1;
       if (i < bits) entropy[i >> 3] |= b << (7 - (i & 7));
@@ -74,7 +78,7 @@ export function entropyFromMnemonic(mnemonic) {
   const want = cr().sha256(entropy)[0] >> (8 - cs);
   if (want !== checksum) {
     zero(entropy);
-    throw new Bip39Error("the mnemonic's checksum is wrong (a word is mistyped, or the order is wrong)");
+    throw new Bip39Error("the mnemonic's checksum is wrong (a word is mistyped, or the order is wrong)", { code: "checksum" });
   }
   return entropy;
 }
