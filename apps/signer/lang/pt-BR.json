@@ -126,7 +126,7 @@
     "The PSBT with the signatures so far: it needs more before it can be sent.": "A PSBT com as assinaturas até agora: ela precisa de mais antes de poder ser enviada.",
     "No transaction ID yet: it isn't final until all its signatures are in.": "Ainda sem ID da transação: ela não é final até ter todas as assinaturas.",
     "Done, forget the keys": "Concluir, esquecer as chaves",
-    "Next transaction (keep keys)": "Próxima transação (manter as chaves)",
+    "Next transaction (keep keys)": "Próxima (manter as chaves)",
     "Show as PSBT": "Mostrar como PSBT",
     "Show the transaction": "Mostrar a transação",
     "In Electrum: Tools, Load transaction, From QR code; check it there, then Broadcast.": "No Electrum: Tools, Load transaction, From QR code; confira lá, depois Broadcast.",
@@ -448,6 +448,7 @@
     "its keys are from another wallet (fingerprints {theirs}; this wallet is {ours})": "{theirs}: the PSBT's fingerprints; {ours}: the loaded key's.",
     "The two copies disagree about {what} in {where}: not merged.": "{what}: \"a signature\", \"the previous transaction\"...; {where}: \"input 2\", \"output 1\", \"the global fields\".",
     "input {n}": "Goes into {where} of \"The two copies disagree about {what} in {where}\".",
-    "network\u0004chosen": "After the network's name, in brackets: the person chose it."
+    "network\u0004chosen": "After the network's name, in brackets: the person chose it.",
+    "Next transaction (keep keys)": "A button beside the signed QR code, about 280 px wide on a 640 px screen: keep it short."
   }
 }
