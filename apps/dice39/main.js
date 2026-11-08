@@ -800,7 +800,7 @@ function showShareQR(i) {
 function showAbout() {
   page("About");
   paragraph(ui.screen,
-    "This is dice39 running on zerogap. You supply most of the words with dice and a coin; this device " +
+    "This is dice39 running on ZeroGap. You supply most of the words with dice and a coin; this device " +
     "supplies the rest and the checksum, and checks that every word you typed was kept as it was. Or you " +
     "type a phrase you already have, to split it into codex32 shares. Either way, it shows the account's " +
     "public key for a watch-only wallet.");
@@ -812,9 +812,9 @@ function showAbout() {
     "Different from the web page: there is no printing (print the dice tables from the web page on any " +
     "computer), no clipboard, and no network check, because this device has no network. The entropy pad " +
     "also takes Space presses, for use without a mouse, and your key timing is mixed in too. The public key " +
-    "(BIP-84, a zpub) is zerogap's, from the signer's BIP-39 and BIP-32 code: dice39's page has none.",
+    "(BIP-84, a zpub) is ZeroGap's, from the signer's BIP-39 and BIP-32 code: dice39's page has none.",
     { color: MUTED });
-  paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. zerogap ${sys.version.zerogap}, ` +
+  paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. ZeroGap ${sys.version.zerogap}, ` +
     `QuickJS ${sys.version.quickjs}, LVGL ${sys.version.lvgl}.`, { color: MUTED, font: 12 });
   new ui.Button({ text: "Back", onClick: showStart }).focus();
 }

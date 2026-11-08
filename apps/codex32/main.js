@@ -486,7 +486,7 @@ function clearAll() {
 function showAbout() {
   newPage("about", "About");
   paragraph(ui.screen,
-    "This is dice39's codex32 recombiner (codex32_recover.html) running on zerogap. It takes the shares " +
+    "This is dice39's codex32 recombiner (codex32_recover.html) running on ZeroGap. It takes the shares " +
     "dice39 splits a phrase into, any k of a k-of-n split, and gives the phrase back.");
   paragraph(ui.screen,
     "The codex32 arithmetic, the messages and the step from entropy to words are dice39's own JavaScript, " +
@@ -499,7 +499,7 @@ function showAbout() {
     "Different from the web page: no clipboard (this device has none), so no copy button; Escape leaves the " +
     "camera and the QR pages; a single unshared secret (threshold 0) is accepted. The shares and the result " +
     "are only ever in this app's memory, never in the session store or on the card.", { color: MUTED });
-  paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. zerogap ${sys.version.zerogap}, ` +
+  paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. ZeroGap ${sys.version.zerogap}, ` +
     `QuickJS ${sys.version.quickjs}, LVGL ${sys.version.lvgl}.`, { color: MUTED, font: 12 });
   new ui.Button({ text: ui.symbols.left + "  Back", onClick: () => showEntry(0) }).focus();
 }

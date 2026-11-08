@@ -32,7 +32,7 @@ Escape leaves the camera, the QR pages and About.
 
 ## Differences from the web page
 
-- No clipboard (zerogap has none), so no copy button; no Portuguese (the
+- No clipboard (ZeroGap has none), so no copy button; no Portuguese (the
   page's Portuguese strings are in `vendor/recover.js`, unused).
 - One box per share instead of one text area, with the checks above as you
   type. The page only says "checksum failed".
