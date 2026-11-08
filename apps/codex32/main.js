@@ -8,14 +8,20 @@
 //
 // Never logged: shares, the secret, the seed, the words. The log goes to the
 // serial port in test builds; it gets counts and sizes only.
+//
+// The text is translated (zg:i18n, lang/<language>.json): the page's in
+// lib/strings.js, the library's errors in lib/messages.js. The log stays in
+// English.
 
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
+import { t, plural } from "zg:i18n";
 import "./lib/cryptoshim.js";
 import { RECOVER_SIZES, wordsFromEntropy, hex, SEEDQR_ECC, seedQrDigits } from "./vendor/recover.js";
 import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32.js";
 import { runCodex32SelfTest } from "./lib/selftest.js";
 import { S, F } from "./lib/strings.js";
+import { codex32Message } from "./lib/messages.js";
 
 const GREEN = "#66bb6a", AMBER = "#ffb300", RED = "#ef5350", MUTED = "#8a9199";
 const wide = ui.width >= 900;
@@ -65,12 +71,12 @@ function buttonRow(parent) {
 }
 
 const need = (share) => (share.threshold === 0 ? 1 : share.threshold);
-const filled = () => state.texts.filter((t) => normalizeShare(t)).length;
+const filled = () => state.texts.filter((x) => normalizeShare(x)).length;
 
 // The first share that checks out, which sets how many boxes there are
 function firstValid() {
-  for (const t of state.texts) {
-    const r = checkShare(t);
+  for (const text of state.texts) {
+    const r = checkShare(text);
     if (r.ok) return r.share;
   }
   return null;
@@ -91,7 +97,7 @@ function showEntry(focusIndex) {
   page.recover = new ui.Button(buttons, { text: ui.symbols.ok + "  " + S.recoverBtn, onClick: doRecover });
   new ui.Button(buttons, { text: ui.symbols.image + "  " + S.scanBtn, onClick: showScan });
   new ui.Button(buttons, { text: ui.symbols.trash + "  " + S.clearBtn, onClick: clearAll });
-  new ui.Button(buttons, { text: "About", onClick: showAbout });
+  new ui.Button(buttons, { text: t("About"), onClick: showAbout });
   page.selftest = paragraph(ui.screen, "", { font: 12 });
 
   syncBoxes();
@@ -107,7 +113,7 @@ function showEntry(focusIndex) {
 function boxCount() {
   const v = firstValid();
   let last = state.focused + 1;
-  state.texts.forEach((t, i) => { if (normalizeShare(t)) last = Math.max(last, i + 1); });
+  state.texts.forEach((x, i) => { if (normalizeShare(x)) last = Math.max(last, i + 1); });
   return Math.min(MAX_SHARES, Math.max(v ? need(v) : 2, last));
 }
 
@@ -171,18 +177,20 @@ function updateNote(i) {
     const s = r.share;
     const conflict = conflictWithEarlier(i, s);
     if (conflict) return f.note.set({ text: ui.symbols.close + " " + conflict, color: RED, hidden: false });
-    const what = s.isSecret
-      ? `the secret itself (index S), identifier ${s.id.toUpperCase()}`
-      : `share ${s.index.toUpperCase()}, identifier ${s.id.toUpperCase()}, threshold ${s.thresholdChar}`;
-    return f.note.set({ text: `${ui.symbols.ok} Valid: ${what}, ${s.seedBytes}-byte seed.`, color: GREEN, hidden: false });
+    const text = s.isSecret
+      ? t("Valid: the secret itself (index S), identifier {id}, {bytes}-byte seed.",
+        { id: s.id.toUpperCase(), bytes: s.seedBytes })
+      : t("Valid: share {index}, identifier {id}, threshold {k}, {bytes}-byte seed.",
+        { index: s.index.toUpperCase(), id: s.id.toUpperCase(), k: s.thresholdChar, bytes: s.seedBytes });
+    return f.note.set({ text: ui.symbols.ok + " " + text, color: GREEN, hidden: false });
   }
   const e = r.error;
   const soft = e.code === "length" || e.code === "checksum" || (e.code === "prefix" && e.partial);
   if (soft && !state.committed[i]) {
     const n = normalizeShare(text).length;
-    return f.note.set({ text: `${n} character${n === 1 ? "" : "s"}`, color: MUTED, hidden: false });
+    return f.note.set({ text: plural(n, "{n} character", "{n} characters"), color: MUTED, hidden: false });
   }
-  f.note.set({ text: ui.symbols.close + " " + e.message, color: RED, hidden: false });
+  f.note.set({ text: ui.symbols.close + " " + codex32Message(e), color: RED, hidden: false });
 }
 
 // A share that cannot go with the ones in the boxes above it (as the page's
@@ -193,10 +201,12 @@ function conflictWithEarlier(i, s) {
     if (!r.ok) continue;
     const o = r.share;
     if (o.id !== s.id || o.threshold !== s.threshold) {
-      return F(S.scanMismatch, { id: s.id.toUpperCase(), k: s.thresholdChar }) + ` Box ${j + 1} has ` +
-        `${o.id.toUpperCase()}, threshold ${o.thresholdChar}.`;
+      return F(S.scanMismatch, { id: s.id.toUpperCase(), k: s.thresholdChar }) + " " +
+        t("Box {box} has {id}, threshold {k}.", { box: j + 1, id: o.id.toUpperCase(), k: o.thresholdChar });
     }
-    if (o.index === s.index) return `Box ${j + 1} has share index ${s.index.toUpperCase()} already.`;
+    if (o.index === s.index) {
+      return t("Box {box} has share index {index} already.", { box: j + 1, index: s.index.toUpperCase() });
+    }
   }
   return null;
 }
@@ -211,13 +221,13 @@ function showSelftest() {
   if (state.page !== "entry") return;
   const st = state.selftest;
   page.recover.disabled = !st || st.failed.length > 0;
-  if (!st) page.selftest.set({ text: "Self-test running...", color: MUTED });
+  if (!st) page.selftest.set({ text: t("Self-test running..."), color: MUTED });
   else if (!st.failed.length) {
-    page.selftest.set({ text: `${ui.symbols.ok} Self-test passed (${st.passed} checks: every BIP-93 test vector, ` +
-      "valid and invalid, typo suggestions, BIP-39 words).", color: GREEN });
+    page.selftest.set({ text: ui.symbols.ok + " " + t("Self-test passed ({n} checks: every BIP-93 test vector, " +
+      "valid and invalid, typo suggestions, BIP-39 words).", { n: st.passed }), color: GREEN });
   } else {
-    page.selftest.set({ text: `${ui.symbols.close} Self-test FAILED. Do not use this device to recover a seed.\n` +
-      st.failed.join("\n"), color: RED });
+    page.selftest.set({ text: ui.symbols.close + " " + t("Self-test FAILED. Do not use this device to recover a " +
+      "seed.") + "\n" + st.failed.join("\n"), color: RED });
   }
 }
 
@@ -228,10 +238,10 @@ let recovering = false;
 async function doRecover() {
   if (recovering || state.page !== "entry") return;
   // (the button is disabled until then; Enter in the last box is not)
-  if (!state.selftest) return showError("The self-test is still running: try again in a moment.");
-  if (state.selftest.failed.length) return showError("The self-test failed: this device must not recover a seed.");
+  if (!state.selftest) return showError(t("The self-test is still running: try again in a moment."));
+  if (state.selftest.failed.length) return showError(t("The self-test failed: this device must not recover a seed."));
   hideError();
-  const texts = state.texts.filter((t) => normalizeShare(t));
+  const texts = state.texts.filter((x) => normalizeShare(x));
   if (!texts.length) return showError(S.errNoShares);
   let res;
   try {
@@ -239,13 +249,13 @@ async function doRecover() {
   } catch (e) {
     if (!(e instanceof Codex32Error)) throw e;
     console.log(`codex32: recovery refused: ${e.code}` + (e.share ? ` (share ${e.share})` : ""));
-    state.committed = state.texts.map((t) => !!normalizeShare(t));
+    state.committed = state.texts.map((x) => !!normalizeShare(x));
     state.fields.forEach((f, i) => updateNote(i));
-    showError(S.errPrefix.trim() + " " + e.message);
+    showError(t("Could not recover: {reason}", { reason: codex32Message(e) }));
     // to the box at fault (counted among the filled ones)
     if (e.share) {
       let k = 0;
-      const box = state.texts.findIndex((t) => normalizeShare(t) && ++k === e.share);
+      const box = state.texts.findIndex((x) => normalizeShare(x) && ++k === e.share);
       if (box >= 0) state.fields[box].ta.focus();
     }
     return;
@@ -261,7 +271,7 @@ async function doRecover() {
     words = await wordsFromEntropy(res.seed);
   } catch (e) {
     res.seed.fill(0);
-    return showError(S.errPrefix.trim() + " " + (e && e.message ? e.message : e));
+    return showError(t("Could not recover: {reason}", { reason: String(e && e.message ? e.message : e) }));
   } finally {
     recovering = false;
   }
@@ -276,9 +286,9 @@ async function doRecover() {
 // The page's placeholders for the phrase on screen: {t} words, {third} of
 // them per part of the 3-part QR, {bytes} of entropy (16, 20, 24 or 32)
 function lenVars() {
-  const t = state.result ? state.result.words.length : 24;
-  const bytes = Number(Object.keys(RECOVER_SIZES).find((n) => RECOVER_SIZES[n].words === t));
-  return { t, third: Math.ceil(t / 3), bytes };
+  const words = state.result ? state.result.words.length : 24;
+  const bytes = Number(Object.keys(RECOVER_SIZES).find((n) => RECOVER_SIZES[n].words === words));
+  return { t: words, third: Math.ceil(words / 3), bytes };
 }
 const FL = (text, vars) => F(text, { ...lenVars(), ...(vars || {}) });
 
@@ -306,8 +316,8 @@ function showResult() {
   // the buttons straight under the words: focused, they are in view with them
   const buttons = buttonRow(ui.screen);
   const first = new ui.Button(buttons, { text: S.tabWordsLabel, onClick: () => showExport("words") });
-  new ui.Button(buttons, { text: "SeedQR and Compact SeedQR", onClick: () => showExport("seed") });
-  new ui.Button(buttons, { text: ui.symbols.left + "  Back to the shares", onClick: () => backToEntry() });
+  new ui.Button(buttons, { text: t("SeedQR and Compact SeedQR"), onClick: () => showExport("seed") });
+  new ui.Button(buttons, { text: ui.symbols.left + "  " + t("Back to the shares"), onClick: () => backToEntry() });
   new ui.Button(buttons, { text: ui.symbols.trash + "  " + S.clearBtn, onClick: clearAll });
 
   paragraph(ui.screen, FL(S.entropyLabel) + "\n" + hex(r.seed), { font: wide ? 16 : 14 });
@@ -317,7 +327,7 @@ function showResult() {
   showKeys(ui.screen, r);
 
   new ui.Label({ text: S.exportHeading, font: wide ? 22 : 18 });
-  paragraph(ui.screen, S.exportCompareHtml, { color: MUTED });
+  paragraph(ui.screen, S.exportCompare, { color: MUTED });
   first.focus();
 }
 
@@ -347,7 +357,7 @@ function showExport(kind) {
   warning(ui.screen, FL(words ? S.qrWarningHtml : S.seedWarningHtml));
   // a Checkbox's label does not wrap: the page's sentence goes above it
   paragraph(ui.screen, words ? S.qrConfirmLabel : S.seedConfirmLabel);
-  const confirm = new ui.Checkbox({ text: "I understand" });
+  const confirm = new ui.Checkbox({ text: t("I understand") });
   const buttons = buttonRow(ui.screen);
   const modes = words
     ? [["single", FL(S.qrBtnSingle)], ["split", FL(S.qrBtnSplit)]]
@@ -357,7 +367,7 @@ function showExport(kind) {
   const note = words ? null : paragraph(ui.screen, S.qrFormatNote, { color: MUTED, hidden: true });
   const out = new ui.Container({ layout: "row-wrap", gap: 12, width: "100%", justify: "center" });
   const back = buttonRow(ui.screen);
-  new ui.Button(back, { text: ui.symbols.left + "  Back", onClick: showResult });
+  new ui.Button(back, { text: ui.symbols.left + "  " + t("Back"), onClick: showResult });
 
   confirm.onChange = (ev) => {
     for (const b of modeButtons) b.disabled = !ev.value;
@@ -404,7 +414,7 @@ function showScan() {
     height: wide ? 360 : 210,
     onDetect: ({ text }) => scanned(text),
     onError: ({ reason }) => {
-      say(reason === "no camera" ? S.scanNoCamera : `The camera stopped: ${reason}.`, RED);
+      say(reason === "no camera" ? S.scanNoCamera : t("The camera stopped: {reason}.", { reason }), RED);
       console.log(`codex32: camera error: ${reason}`);
     },
   });
@@ -419,7 +429,7 @@ function say(text, color) {
 }
 
 function firstEmpty() {
-  const i = state.texts.findIndex((t) => !normalizeShare(t));
+  const i = state.texts.findIndex((x) => !normalizeShare(x));
   return i >= 0 ? i : "recover";
 }
 
@@ -433,7 +443,7 @@ function scanned(text) {
     return say(S.scanNotShare, RED);
   }
   const s = r.share;
-  const have = state.texts.map((t) => checkShare(t)).filter((x) => x.ok).map((x) => x.share);
+  const have = state.texts.map((x) => checkShare(x)).filter((x) => x.ok).map((x) => x.share);
   const first = have[0];
   if (first && (first.id !== s.id || first.threshold !== s.threshold)) {
     console.log("codex32: scanned a share of another split");
@@ -443,7 +453,7 @@ function scanned(text) {
     console.log("codex32: scanned a share already there");
     return say(F(S.scanDuplicate, { i: s.index.toUpperCase() }), RED);
   }
-  let slot = state.texts.findIndex((t) => !normalizeShare(t));
+  let slot = state.texts.findIndex((x) => !normalizeShare(x));
   if (slot < 0) slot = state.texts.length;
   if (slot >= MAX_SHARES) return say(S.scanNotShare, RED);
   state.texts[slot] = s.string;
@@ -484,24 +494,25 @@ function clearAll() {
 // --- about --------------------------------------------------------------------
 
 function showAbout() {
-  newPage("about", "About");
-  paragraph(ui.screen,
+  newPage("about", t("About"));
+  paragraph(ui.screen, t(
     "This is dice39's codex32 recombiner (codex32_recover.html) running on ZeroGap. It takes the shares " +
-    "dice39 splits a phrase into, any k of a k-of-n split, and gives the phrase back.");
-  paragraph(ui.screen,
+    "dice39 splits a phrase into, any k of a k-of-n split, and gives the phrase back."));
+  paragraph(ui.screen, t(
     "The codex32 arithmetic, the messages and the step from entropy to words are dice39's own JavaScript, " +
     "copied byte for byte from codex32_recover.html by tools/extract_codex32.py; each copied file names the " +
     "source file and its SHA-256. On top, for a keyboard: each share is checked as it is typed, the BIP-93 " +
     "lengths are enforced, and when the checksum fails because of one mistyped character, the app says which " +
-    "one and what it should probably be (BIP-93 suggests offering that; it never fixes the share by itself).",
+    "one and what it should probably be (BIP-93 suggests offering that; it never fixes the share by itself)."),
     { color: MUTED });
-  paragraph(ui.screen,
+  paragraph(ui.screen, t(
     "Different from the web page: no clipboard (this device has none), so no copy button; Escape leaves the " +
     "camera and the QR pages; a single unshared secret (threshold 0) is accepted. The shares and the result " +
-    "are only ever in this app's memory, never in the session store or on the card.", { color: MUTED });
-  paragraph(ui.screen, `dice39 is licensed under the GNU AGPL v3. ZeroGap ${sys.version.zerogap}, ` +
-    `QuickJS ${sys.version.quickjs}, LVGL ${sys.version.lvgl}.`, { color: MUTED, font: 12 });
-  new ui.Button({ text: ui.symbols.left + "  Back", onClick: () => showEntry(0) }).focus();
+    "are only ever in this app's memory, never in the session store or on the card."), { color: MUTED });
+  paragraph(ui.screen, t("dice39 is licensed under the GNU AGPL v3. ZeroGap {zerogap}, QuickJS {quickjs}, " +
+    "LVGL {lvgl}.", { zerogap: sys.version.zerogap, quickjs: sys.version.quickjs, lvgl: sys.version.lvgl }),
+  { color: MUTED, font: 12 });
+  new ui.Button({ text: ui.symbols.left + "  " + t("Back"), onClick: () => showEntry(0) }).focus();
 }
 
 // Escape leaves the camera, the exports and About
