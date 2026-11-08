@@ -59,6 +59,7 @@ public:
 	TShutdownMode Run (void);
 
 private:
+	void ShowLoading (void);
 	void LogClocks (void);
 
 	// do not change this order
