@@ -9,6 +9,7 @@
 #include "../../src/runtime/apphost.h"
 #include "../../src/runtime/appstore.h"
 #include "../../src/runtime/cursor.h"
+#include "../../src/runtime/i18n.h"
 #include "../../src/runtime/synthcam.h"
 #include "../../src/runtime/version.h"
 #include "../../src/crypto/hwrng.h"
@@ -117,6 +118,18 @@ void zg_sim_set_builtin_dir (const char *dir)
 	ZgSimSetBuiltinRoot (dir);
 }
 
+static const char *s_pLanguage;		// --lang, over zerogap.txt
+
+void zg_sim_set_language (const char *tag)
+{
+	s_pLanguage = tag;
+}
+
+int zg_sim_language (const char *tag)
+{
+	return CZgI18n::SetLanguage (tag, "simulator") ? 0 : -1;
+}
+
 int zg_sim_boot (int width, int height, const char *card)
 {
 	ZgSimClockStart ();
@@ -143,6 +156,11 @@ int zg_sim_boot (int width, int height, const char *card)
 
 	s_pCamera = new CZgSynthCamera;
 	CZgCamera::Set (s_pCamera);
+
+	if (s_pLanguage != 0 && !CZgI18n::SetLanguage (s_pLanguage, "--lang"))
+	{
+		return -1;
+	}
 
 	s_pAppHost = new CAppHost (s_pKeyboard);
 	return s_pAppHost->Initialize () ? 0 : -1;

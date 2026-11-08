@@ -49,6 +49,7 @@ struct TZgApp
 	JSValue KeyHandler;		// ui.onKey() handler or JS_UNDEFINED
 	TZgUIState *pUI;		// zg:ui state, 0 until the app imports it
 	struct TZgClockState *pClock;	// zg:clock alarms, 0 until the first every()
+	struct TZgI18nState *pI18n;	// its translations (i18n.h), from its start
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;

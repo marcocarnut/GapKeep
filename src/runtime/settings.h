@@ -10,6 +10,9 @@
 //   experimental = yes | no     experimental features (docs/EXPERIMENTAL.md):
 //                               the scanner's "qr-color" detector and the
 //                               apps whose manifest says "experimental"
+//   language = pt-BR            the language, and the marks numbers are
+//   decimal_mark = ,            written with, if not the language's own
+//   group_mark = .              (i18n.h, docs/plans/I18N.md)
 //
 // What it takes and what it refuses is logged, never silently ignored.
 //

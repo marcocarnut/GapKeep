@@ -1,0 +1,42 @@
+{
+  "$language": "pt-BR",
+  "$app": "launcher",
+  "$name": "Português (Brasil)",
+  "messages": {
+    "SD card": "Cartão SD",
+    "no SD card": "sem cartão SD",
+    "SD card not readable": "cartão SD ilegível",
+    "no /apps on the SD card": "sem /apps no cartão SD",
+    "sealed": "selado",
+    "{n} app": "{n} aplicativo",
+    "{n} apps": "{n} aplicativos",
+    "The hardware random number generator failed its health check ({failure}). Apps cannot get random numbers.": "O gerador de números aleatórios do hardware falhou no teste de integridade ({failure}). Os aplicativos não conseguem obter números aleatórios.",
+    "apps/{folder} not loaded: {error}": "apps/{folder} não carregado: {error}",
+    "SD card, apps/{id}": "cartão SD, apps/{id}",
+    "built in": "embutido",
+    "No apps installed.": "Nenhum aplicativo instalado.",
+    "ZeroGap {version} ({build} build)": "ZeroGap {version} (build {build})",
+    "Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):": "Kernel: SHA-256 dos primeiros {bytes} bytes do kernel.img\n(o código e as constantes dele, como estão rodando agora):",
+    "Check on another computer:": "Confira em outro computador:",
+    "Random number generator: healthy": "Gerador de números aleatórios: íntegro",
+    "Random number generator: FAILED: {failure}": "Gerador de números aleatórios: FALHOU: {failure}",
+    "System": "Sistema",
+    "Arrows or Tab: move    Enter: open    i: system info    Windows key: back to this screen": "Setas ou Tab: mover    Enter: abrir    i: informações do sistema    tecla Windows: voltar a esta tela",
+    "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "Use {d} para os decimais e {g} entre os milhares, ou deixe de fora o separador de milhares.",
+    "Write {d} for decimals, without a thousands separator.": "Use {d} para os decimais, sem separador de milhares.",
+    "“{text}” could be read two ways. Leave out the thousands separator, and write decimals with {d}: 1000 or 1{d}5.": "“{text}” pode ser lido de duas formas. Deixe de fora o separador de milhares e escreva os decimais com {d}: 1000 ou 1{d}5.",
+    "Enter a number, like {example}.": "Digite um número, como {example}.",
+    "Enter an amount in BTC, like {example}.": "Digite um valor em BTC, como {example}.",
+    "Bitcoin has 8 decimal places at most.": "Bitcoin tem no máximo 8 casas decimais.",
+    "That's more bitcoin than there is.": "Isso é mais bitcoin do que existe."
+  },
+  "notes": {
+    "{n} app": "In the launcher's header, before the SD card's state.",
+    "sealed": "The SD card's state in a sealed build: every app is built in and the card is not read.",
+    "ZeroGap {version} ({build} build)": "{build} is production, sealed, test or simulator, not translated.",
+    "apps/{folder} not loaded: {error}": "{error} is the runtime's reason, in English.",
+    "“{text}” could be read two ways. Leave out the thousands separator, and write decimals with {d}: 1000 or 1{d}5.": "zg:i18n's parseNumber and parseBtc: {text} is what the person typed, {d} the decimal mark.",
+    "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "zg:i18n's parseNumber and parseBtc: {d} is the decimal mark, {g} the thousands separator.",
+    "Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):": "In the system info (key i); the hash follows on the next line."
+  }
+}

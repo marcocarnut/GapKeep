@@ -107,6 +107,17 @@ Entries are filed under the app's id and hash; values are serialized by
 QuickJS's object writer (plain data only: no bytecode, no references) and
 copied in and out. Every byte is overwritten before it is freed.
 
+Languages (`i18n.cpp`, `zg:i18n`): the language and number marks are the
+system's (`zerogap.txt`, or the Settings app until power-off). When an app
+starts, its catalog (`lang/<language>.json`, with `lang/pt.json` under
+`lang/pt-BR.json`) is parsed with `JSON.parse`, never evaluated, and each
+translation checked (the same `{names}` as its key, no control or bidi
+characters); what passes is kept in a null-prototype object. The module
+itself is JavaScript, `src/runtime/i18n.js`, embedded by
+`tools/embed_js.py` and compiled when an app imports it; its native half,
+`zg:i18n-native`, can be imported by it alone. The launcher's catalogs are
+the system's: they translate the module's own messages.
+
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for

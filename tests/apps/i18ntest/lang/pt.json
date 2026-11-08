@@ -1,0 +1,8 @@
+{
+  "$language": "pt",
+  "$app": "i18ntest",
+  "messages": {
+    "Both": "pt",
+    "Only in pt": "Só em pt"
+  }
+}

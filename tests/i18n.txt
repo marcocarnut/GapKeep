@@ -1,0 +1,77 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard, with
+# its zerogap.txt): languages (docs/plans/I18N.md). The card asks for a
+# language the system doesn't have and a decimal mark it refuses; then the
+# language is set to pt-BR as the Settings app would, and the test app
+# tests/apps/i18ntest checks its catalog, where the runtime refuses some
+# translations; then the launcher and the clock, translated.
+expect i18n: no language "xx-YY" \(zerogap.txt\) 60
+expect zerogap.txt:8: language: English instead 5
+expect zerogap.txt:9: decimal_mark: \. or , expected 5
+expect Keyboard attached 60
+expect launcher ready 60
+language pt-BR
+expect i18n: language pt-BR, numbers 1\.234,5 10
+tile i18ntest
+expect i18ntest done
+expect i18ntest language: "pt-BR"
+expect i18ntest marks: \{"decimal":",","group":"\."\}
+# taken: pt-BR's over pt's
+expect i18ntest Both: "pt-BR"
+expect i18ntest Only in pt: "Só em pt"
+expect i18ntest Hello: "Olá, Ana"
+expect i18ntest Newline: "Duas\\nlinhas"
+expect i18ntest proto: "protótipo"
+expect i18ntest context: "Abrir"
+expect i18ntest recolor: "Cor #ff0000 texto#"
+# refused, each logged: English instead
+expect i18ntest lang/pt-BR.json: "Send \{amount\}": the translation hasn't the same \{names\} as its key
+expect i18ntest lang/pt-BR.json: "Fee \{fee\}": the translation hasn't the same \{names\} as its key
+expect i18ntest lang/pt-BR.json: "Pay \{to\}": the translation has a control or bidi character
+expect i18ntest lang/pt-BR.json: "Bell": the translation has a control or bidi character
+expect i18ntest lang/pt-BR.json: "A number": the translation is not a string
+expect i18ntest lang/pt-BR.json: 6 translations, 5 ignored
+expect i18ntest Drops: "Send 1,5"
+expect i18ntest Invents: "Fee 2"
+expect i18ntest Bidi: "Pay x"
+expect i18ntest Control: "Bell"
+expect i18ntest Number: "A number"
+expect i18ntest Empty: "Not translated yet"
+expect i18ntest Unknown: "Not in any catalog"
+# the rest of zg:i18n, in pt-BR
+expect i18ntest plural: \["0 codes","1 code","2 codes"\]
+expect i18ntest numbers: \["1\.234\.567,5","2\.100\.000\.000\.000\.000","1,23456789"\]
+expect i18ntest parseBtc: 123450000000
+expect i18ntest parseBtc error: "“1\.000” pode ser lido de duas formas
+expect i18ntest date: "2025-11-08 14:03:05 UTC"
+expect i18ntest languages: \[\{"tag":"en","name":"English"\},\{"tag":"pt-BR","name":"Português \(Brasil\)"\}\]
+expect i18ntest setLanguage: "TypeError: setLanguage needs \\"permissions\\": \[\\"settings\\"\]
+expect i18ntest native: "ReferenceError: no system module 'zg:i18n-native'"
+expect Started i18ntest: modules \d+ ms, catalog \d+\.\d ms
+# the launcher, started again, and the clock, in pt-BR
+mark
+key meta_l
+expect launcher ready
+expect launcher lang/pt-BR.json: 26 translations, 0 ignored
+wait 1
+shot 01-launcher-pt-BR
+tile clock
+expect clock ready
+expect clock lang/pt-BR.json: 32 translations, 0 ignored
+wait 1
+shot 02-clock-pt-BR
+# a trim with a decimal comma (the card's is -12.5: "-12,5" in the field)
+key tab
+key tab
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type -21,4
+key ret
+expect clock: trim -21.400 ppm
+wait 1
+shot 03-clock-trim

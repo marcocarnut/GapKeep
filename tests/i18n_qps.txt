@@ -1,0 +1,15 @@
+# Simulator only (it uses "launch"); with an empty SD card ("# Card: empty",
+# tools/run_sim_tests.sh), so the launcher's screen depends on nothing else.
+# The launcher in the pseudo-language qps (docs/plans/I18N.md): every text
+# that went through t() accented, longer and in brackets, so text that
+# didn't stands out, and text cut off shows. tests/i18n/check_shot.py
+# compares the screenshot with tests/i18n/launcher-qps.png.
+# Card: empty
+expect launcher ready 30
+mark
+language qps
+launch launcher
+expect launcher ready 10
+expect i18n: language qps
+wait 1
+shot launcher-qps

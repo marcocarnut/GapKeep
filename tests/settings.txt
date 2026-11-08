@@ -1,0 +1,38 @@
+# The Settings app (apps/settings), from the keyboard alone: the language
+# and the number marks, applied at once and for the session; the launcher
+# then starts in the new language.
+expect Keyboard attached 60
+expect launcher ready 60
+tile settings
+expect settings ready
+wait 1
+shot 01-settings
+# the language: Português (Brasil), the second in the list
+key ret
+wait 0.5
+key down
+key ret
+expect i18n: language pt-BR, numbers 1\.234,5 \(app settings\)
+expect settings: redrawn in pt-BR
+wait 1
+shot 02-pt-BR
+# numbers without a thousands separator: 1234,5 (the fifth)
+key tab
+key ret
+wait 0.5
+key down
+key down
+key down
+key down
+key ret
+expect i18n: numbers 1234,5 \(app settings\)
+expect settings: redrawn in pt-BR
+wait 1
+shot 03-marks
+# the launcher, started again, is in Portuguese
+mark
+key meta_l
+expect launcher ready
+expect i18n: launcher lang/pt-BR.json: 26 translations, 0 ignored
+wait 1
+shot 04-launcher

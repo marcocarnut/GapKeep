@@ -34,7 +34,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
-	  runtime/session.o runtime/js_session.o \
+	  runtime/session.o runtime/js_session.o runtime/i18n.o generated/i18n_js.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 
@@ -50,6 +50,16 @@ BUILDMODE = sealed
 else
 BUNDLE	= --only launcher ../apps
 BUILDMODE = production
+endif
+
+# The language a build starts in (before zerogap.txt; the only one for
+# sealed builds): make LANGUAGE=pt-BR. Only from the command line: the
+# shell's LANGUAGE (gettext's, "en_US:en") is something else.
+ifeq ($(origin LANGUAGE),command line)
+ifneq ($(strip $(LANGUAGE)),)
+DEFINE	+= -DZG_LANGUAGE=\"$(strip $(LANGUAGE))\"
+BUILDMODE := $(BUILDMODE)-$(strip $(LANGUAGE))
+endif
 endif
 
 ifeq ($(strip $(TEST)),1)
@@ -97,6 +107,10 @@ ifeq ($(strip $(TEST)),1)
 endif
 	@python3 ../tools/bundle_apps.py $@ $(BUNDLE)
 
+# zg:i18n's JavaScript (src/runtime/i18n.js)
+generated/i18n_js.c: runtime/i18n.js ../tools/embed_js.py
+	@python3 ../tools/embed_js.py $@ zg_i18n_js runtime/i18n.js
+
 # the synthetic camera's test pictures (test builds)
 generated/testpictures.c: FORCE
 	@python3 ../tools/make_test_pictures.py $@ $(wildcard ../tests/colorqr/*.png)
@@ -106,7 +120,7 @@ FORCE:
 # Recompile what depends on ZG_TEST / ZG_SEALED when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o: .buildmode
+main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d

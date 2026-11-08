@@ -6,11 +6,16 @@
 // Below the tiles it shows where the focused app came from and its SHA-256
 // (docs/APPS.md, "App hashes"), so it can be checked against a published
 // one before the app is opened, and any app on the card that was not loaded.
+//
+// Its text is translated (zg:i18n, lang/<language>.json). Its catalogs are
+// also the system's: they translate the runtime's own messages, like
+// zg:i18n's parseBtc errors (docs/APPS.md, "Languages").
 
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as apps from "zg:apps";
 import { rngStatus } from "zg:crypto";
+import { t, plural, formatNumber } from "zg:i18n";
 
 const list = apps.list();
 const card = apps.card();
@@ -28,23 +33,26 @@ new ui.Label(header, {
   grow: 1,
 });
 const cardText = {
-  ok: "SD card",
-  none: "no SD card",
-  unreadable: "SD card not readable",
-  "no-apps": "no /apps on the SD card",
-  disabled: "sealed",
+  ok: t("SD card"),
+  none: t("no SD card"),
+  unreadable: t("SD card not readable"),
+  "no-apps": t("no /apps on the SD card"),
+  disabled: t("sealed"),
 }[card.status];
 new ui.Label(header, {
-  text: list.length + (list.length === 1 ? " app" : " apps") + "  |  " + cardText,
+  text: plural(list.length, "{n} app", "{n} apps") + "  |  " + cardText,
   color: "#8a9199",
   font: 14,
+  maxWidth: "60%",      // a long translation is cut, not the version
+  overflow: "dots",
 });
 
 // a failing random number generator must be impossible to miss
 if (!rng.healthy) {
   new ui.Label({
-    text: ui.symbols.warning + " The hardware random number generator failed its health check (" +
-      rng.failure + "). Apps cannot get random numbers.",
+    text: ui.symbols.warning + " " +
+      t("The hardware random number generator failed its health check ({failure}). Apps cannot get random numbers.",
+        { failure: rng.failure }),
     color: "#e05050",
     width: "100%",
   });
@@ -105,7 +113,7 @@ const problems = card.problems.length
   : null;
 for (const p of card.problems) {
   new ui.Label(problems, {
-    text: ui.symbols.warning + " apps/" + p.folder + " not loaded: " + p.error,
+    text: ui.symbols.warning + " " + t("apps/{folder} not loaded: {error}", { folder: p.folder, error: p.error }),
     color: "#e0a030",
     font: 12,
     width: "100%",
@@ -115,12 +123,12 @@ for (const p of card.problems) {
 // the focused app: where it came from, and its hash
 const details = new ui.Label({ text: "", color: "#8a9199", font: 12, width: "100%" });
 function showDetails(app) {
-  const where = app.source === "sdcard" ? "SD card, apps/" + app.id : "built in";
+  const where = app.source === "sdcard" ? t("SD card, apps/{id}", { id: app.id }) : t("built in");
   details.text = app.name + " " + app.version + "  |  " + where + "\nSHA-256 " + app.hash;
 }
 
 if (tiles.length === 0) {
-  new ui.Label(grid, { text: "No apps installed.", color: "#8a9199" });
+  new ui.Label(grid, { text: t("No apps installed."), color: "#8a9199" });
 } else {
   tiles[0].focus();
 }
@@ -128,15 +136,17 @@ if (tiles.length === 0) {
 // "i": what is running, to check against published hashes
 function showSystem() {
   const k = sys.kernel;
+  // the command stays as it is typed: its number is not written the language's way
   ui.alert(
-    "ZeroGap " + sys.version.zerogap + " (" + k.build + " build)\n\n" +
-      "Kernel: SHA-256 of the first " + k.hashedBytes + " bytes of kernel.img\n" +
-      "(its code and constants, as running now):\n" + k.hash + "\n\n" +
-      "Check on another computer:\n" +
+    t("ZeroGap {version} ({build} build)", { version: sys.version.zerogap, build: k.build }) + "\n\n" +
+      t("Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):",
+        { bytes: formatNumber(k.hashedBytes) }) + "\n" + k.hash + "\n\n" +
+      t("Check on another computer:") + "\n" +
       "head -c " + k.hashedBytes + " kernel.img | sha256sum\n\n" +
-      "Random number generator: " + (rng.healthy ? "healthy" : "FAILED: " + rng.failure) + "\n" +
+      (rng.healthy ? t("Random number generator: healthy")
+                   : t("Random number generator: FAILED: {failure}", { failure: rng.failure })) + "\n" +
       "Circle " + sys.version.circle + ", LVGL " + sys.version.lvgl + ", QuickJS " + sys.version.quickjs,
-    { title: "System" },
+    { title: t("System") },
   );
 }
 
@@ -154,9 +164,10 @@ ui.onKey((ev) => {
 });
 
 new ui.Label({
-  text: "Arrows or Tab: move    Enter: open    i: system info    Windows key: back to this screen",
+  text: t("Arrows or Tab: move    Enter: open    i: system info    Windows key: back to this screen"),
   color: "#6b737b",
   font: 12,
+  width: "100%",        // wraps if a translation is longer
 });
 
 console.log("launcher ready:", list.map((a) => a.id).join(", "));

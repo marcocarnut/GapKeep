@@ -18,13 +18,17 @@
 //   camera picture <file>   ... a picture: binary PGM (P5) or PPM (P6, in colour)
 //   camera scene            ... nothing in particular (the default)
 //   camera none             there is no camera
+//   language <tag>          the language of the apps started from now on
+//                           (pt-BR, qps...), as a settings app sets it
 //   quit                    exit
 //
-// Usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--for SECONDS] [--shot FILE.png]
+// Usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]
 //   --card DIR      DIR plays the SD card: apps load from DIR/apps
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
 //                   a launcher to try out; see docs/SIMULATOR.md)
 //   --app ID        start that app right after boot
+//   --lang TAG      the language (over the card's zerogap.txt): en, pt-BR,
+//                   qps (the pseudo-language: shows untranslated text)...
 //   --for SECONDS   run that long, then exit (default: until "quit" or EOF)
 //   --shot FILE     with --for: take a screenshot before exiting
 //
@@ -206,6 +210,13 @@ static int Command (char *pLine)
 	{
 		CameraCommand (pArgs);
 	}
+	else if (strcmp (pLine, "language") == 0)
+	{
+		if (zg_sim_language (pArgs) != 0)
+		{
+			printf ("#error no language %s\n", pArgs);
+		}
+	}
 	else if (strcmp (pLine, "quit") == 0)
 	{
 		return 0;
@@ -235,9 +246,10 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--app") == 0 && i + 1 < argc)	pApp = argv[++i];
 		else if (strcmp (argv[i], "--for") == 0 && i + 1 < argc)	fFor = atof (argv[++i]);
 		else if (strcmp (argv[i], "--shot") == 0 && i + 1 < argc)	pShot = argv[++i];
+		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	zg_sim_set_language (argv[++i]);
 		else
 		{
-			fprintf (stderr, "usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--for SECONDS] [--shot FILE.png]\n");
+			fprintf (stderr, "usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}
 	}

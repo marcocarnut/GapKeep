@@ -22,6 +22,7 @@ Add `TEST=1` for the test app set (`zgsim-test`: every app in `apps/` and
 tools/zgsim apps/hello                               # run; the log on stdout
 tools/zgsim --for 3 --shot /tmp/hello.png apps/hello # run 3 s, screenshot, exit
 tools/zgsim --size 1824x984 path/to/myapp            # another screen size
+tools/zgsim --lang pt-BR apps/clock                  # another language (or qps)
 ```
 
 `tools/zgsim` builds the simulator if needed, copies the app folders onto a
@@ -36,13 +37,16 @@ on stdin, one per line:
 | `shot <file.png>` | Screenshot; answers `#shot <file.png>`. |
 | `launch [<id>]` | Start that app, or the launcher. |
 | `camera <what>` | What the camera films: see [The camera](#the-camera). |
+| `language <tag>` | The language of the apps started from now on (`pt-BR`, `qps`, `en`), as the Settings app sets it. |
 | `quit` | Exit. |
 
 Answers to commands start with `#`; everything else on stdout is the log,
 formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 
 `sim/build/zgsim` itself takes `--card DIR` (DIR plays the SD card: apps in
-`DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`,
+`DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`, `--lang TAG` (the
+language, over the card's `zerogap.txt`; `qps` is the pseudo-language of
+[APPS.md](APPS.md#languages)),
 `--for SECONDS` and `--shot FILE`.
 
 ## The camera

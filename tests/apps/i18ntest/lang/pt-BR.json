@@ -1,0 +1,21 @@
+{
+  "$language": "pt-BR",
+  "$app": "i18ntest",
+  "messages": {
+    "Both": "pt-BR",
+    "Hello {name}": "Olá, {name}",
+    "Two\nlines": "Duas\nlinhas",
+    "__proto__": "protótipo",
+    "verb\u0004Open": "Abrir",
+    "Colour #ff0000 text#": "Cor #ff0000 texto#",
+    "Send {amount}": "Enviar tudo",
+    "Fee {fee}": "Taxa {fee} mais {extra}",
+    "Pay {to}": "Pagar ‮{to}",
+    "Bell": "Sino\u0007",
+    "A number": 5,
+    "Not translated yet": ""
+  },
+  "notes": {
+    "Send {amount}": "Refused on purpose: it drops {amount}."
+  }
+}

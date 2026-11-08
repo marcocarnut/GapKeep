@@ -7,6 +7,7 @@ import * as crypto from "zg:crypto";
 import * as apps from "zg:apps";
 import * as clock from "zg:clock";
 import * as session from "zg:session";
+import * as i18n from "zg:i18n";
 
 // own members of a prototype: methods, and accessors with get/set
 function members(proto) {
@@ -35,6 +36,7 @@ const info = {
     "zg:apps": Object.keys(apps).sort(),
     "zg:clock": Object.keys(clock).sort(),
     "zg:session": Object.keys(session).sort(),
+    "zg:i18n": Object.keys(i18n).sort(),
   },
   base: members(ui.Widget.prototype),
   widgets,

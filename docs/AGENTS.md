@@ -102,6 +102,21 @@ other apps (until power-off; never on the card): `zg:session`'s
 [API.md](API.md#zgcrypto). Don't add npm dependencies; vendor plain ES
 modules into the app if you must, and check they use nothing above.
 
+## Languages
+
+Write text in English through `t()` from `zg:i18n`, with what varies as
+params: `t("Signed {n} of {total} inputs.", { n, total })`, `plural(n,
+"{n} code", "{n} codes")`. Never build sentences by joining pieces, and
+never put an amount, address or seed word inside the text itself: a
+translation must keep the same `{names}` or it is refused. Numbers and
+amounts: `formatNumber`, `formatBtc` (satoshis in, never floats),
+`parseBtc`; dates: `formatDateTime` (ISO, the same in every language).
+Translations go in `lang/<language>.json`: `python3 tools/i18n.py extract
+apps/myapp --lang pt-BR`, fill them in, `python3 tools/i18n.py check
+apps/myapp`. Look at the app with `tools/zgsim --lang pt-BR` and `--lang qps`
+(text that missed `t()` stays plain; text that overflows shows). Example:
+`apps/clock`. Details: [APPS.md](APPS.md#languages).
+
 ## Rules that are easy to get wrong
 
 - **Unknown properties throw.** `new ui.Label({ txt: "x" })` is a

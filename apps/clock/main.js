@@ -6,30 +6,45 @@
 // shows it. Set it again hours later and the clock measures its own drift;
 // the trim that cancels it can be applied here, and written into the
 // card's zerogap.txt (from another computer) so it survives reboots.
+//
+// Its text is translated (zg:i18n, lang/<language>.json): an example of an
+// app in more than one language (docs/APPS.md, "Languages"). Numbers on
+// screen are written the language's way; the zerogap.txt lines it shows are
+// not, since that file is read the same way whatever the language.
 
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import * as clock from "zg:clock";
+import { t, formatDate, formatTime, formatDateTime, formatNumber, parseNumber } from "zg:i18n";
 
 const pad = (n, w = 2) => String(n).padStart(w, "0");
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAYS = [
+  t("Sun", { $context: "weekday" }), t("Mon", { $context: "weekday" }), t("Tue", { $context: "weekday" }),
+  t("Wed", { $context: "weekday" }), t("Thu", { $context: "weekday" }), t("Fri", { $context: "weekday" }),
+  t("Sat", { $context: "weekday" }),
+];
 
 function offsetText(minutes) {
   const a = Math.abs(minutes);
   return `${minutes < 0 ? "-" : "+"}${pad(Math.floor(a / 60))}:${pad(a % 60)}`;
 }
 function dateText(d) {
-  return `${DAYS[d.getDay()]} ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${DAYS[d.getDay()]} ${formatDate(d.getTime() / 1000)}`;
 }
-function timeText(d) {
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
+// on screen, the language's way: +1,5
 function ppmText(ppm, decimals = 1) {
-  return (ppm > 0 ? "+" : "") + ppm.toFixed(decimals);
+  return (ppm > 0 ? "+" : "") + formatNumber(ppm, { decimals });
+}
+// in zerogap.txt, always +1.5
+function ppmFileText(ppm) {
+  return (ppm > 0 ? "+" : "") + ppm.toFixed(1);
+}
+function secondsText(s) {
+  return formatNumber(Math.abs(s), { decimals: 2 });
 }
 function durationText(seconds) {
   const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60);
-  return h > 0 ? `${h} h ${pad(m)} min` : `${m} min`;
+  return h > 0 ? t("{h} h {m} min", { h, m: pad(m) }) : t("{m} min", { m });
 }
 
 // "YYYY-MM-DD HH:MM[:SS]" in local time -> ms since 1970 (UTC), or null
@@ -70,28 +85,30 @@ function row(parent, title, field) {
 }
 
 const form = new ui.Container({ layout: "column", gap: 8, width: "100%" });
-const offsetField = row(form, "UTC offset", { width: 120, maxLength: 6, accept: "+-0123456789:Z", placeholder: "-03:00" });
-const timeField = row(form, "Local time", {
+const offsetField = row(form, t("UTC offset"), { width: 120, maxLength: 6, accept: "+-0123456789:Z", placeholder: "-03:00" });
+const timeField = row(form, t("Local time"), {
   width: wide ? 320 : 260, maxLength: 19, accept: "0123456789-: ",
-  placeholder: "YYYY-MM-DD HH:MM:SS",
+  placeholder: t("YYYY-MM-DD HH:MM:SS"),
 });
 new ui.Label(form, {
-  text: "Type a time a little ahead of a reference clock, and press Enter when the reference shows it.",
+  text: t("Type a time a little ahead of a reference clock, and press Enter when the reference shows it."),
   width: "100%", overflow: "wrap", font: 14, color: "#8a9199",
 });
-const trimField = row(form, "Trim (ppm)", { width: 120, maxLength: 8, accept: "+-0123456789.", placeholder: "0.0" });
+const trimField = row(form, t("Trim (ppm)"), {
+  width: 120, maxLength: 8, accept: "+-0123456789.,", placeholder: formatNumber(0, { decimals: 1 }),
+});
 
 const driftLabel = new ui.Label({ text: "", width: "100%", overflow: "wrap" });
 const buttons = new ui.Container({ layout: "row", gap: 8 });
 const applyDrift = new ui.Button(buttons, {
-  text: ui.symbols.ok + " Apply measured trim",
+  text: ui.symbols.ok + " " + t("Apply measured trim"),
   hidden: true,
   onClick: () => {
     const st = clock.status();
     if (st.drift) setTrim(Math.round(st.drift.trimPpm * 10) / 10);
   },
 });
-new ui.Button(buttons, { text: ui.symbols.home + " Back", onClick: () => sys.exit() });
+new ui.Button(buttons, { text: ui.symbols.home + " " + t("Back"), onClick: () => sys.exit() });
 
 const cardLabel = new ui.Label({ text: "", width: "100%", overflow: "wrap", font: 14 });
 const message = new ui.Label({ text: "", width: "100%", overflow: "wrap", color: "#ffc107" });
@@ -105,34 +122,38 @@ function say(text) {
 function render() {
   const st = clock.status();
   const now = new Date(st.time);
-  timeLabel.text = timeText(now);
+  timeLabel.text = formatTime(st.time / 1000);
   dateLabel.text = `${dateText(now)}   UTC${offsetText(st.utcOffset)}`;
   statusLabel.text = st.set
-    ? `Set since this boot. Trim ${ppmText(st.trimPpm, 3)} ppm.`
-    : "Not set since this boot: ZeroGap has no battery-backed clock, so it counts from 1970 until the time is set here.";
+    ? t("Set since this boot. Trim {ppm} ppm.", { ppm: ppmText(st.trimPpm, 3) })
+    : t("Not set since this boot: ZeroGap has no battery-backed clock, so it counts from 1970 until the time is set here.");
 
   if (st.drift) {
     const d = st.drift;
-    const how = Math.abs(d.correction) < 0.05 ? "right on time"
-      : `${Math.abs(d.correction).toFixed(2)} s ${d.correction > 0 ? "fast" : "slow"}`;
-    driftLabel.text = `At the last setting, after ${durationText(d.over)}, the clock was ${how}. ` +
-      `The trim that keeps it right: ${ppmText(d.trimPpm)} ppm, ± ${d.uncertaintyPpm.toFixed(1)} ppm ` +
-      "(a week between settings measures it to about 2 ppm).";
+    const s = secondsText(d.correction);
+    const how = Math.abs(d.correction) < 0.05 ? t("right on time")
+      : d.correction > 0 ? t("{s} s fast", { s }) : t("{s} s slow", { s });
+    driftLabel.text = t("At the last setting, after {duration}, the clock was {how}. " +
+      "The trim that keeps it right: {ppm} ppm, ± {uncertainty} ppm " +
+      "(a week between settings measures it to about 2 ppm).", {
+      duration: durationText(d.over), how, ppm: ppmText(d.trimPpm),
+      uncertainty: formatNumber(d.uncertaintyPpm, { decimals: 1 }),
+    });
     applyDrift.hidden = false;
   } else {
-    driftLabel.text = "Set the clock again a day or more from now to measure its drift (at least an hour).";
+    driftLabel.text = t("Set the clock again a day or more from now to measure its drift (at least an hour).");
     applyDrift.hidden = true;
   }
 
-  cardLabel.text = "To keep the trim and offset across reboots, put these lines in zerogap.txt " +
-    `at the top of the SD card:\nclock_trim_ppm = ${ppmText(st.trimPpm)}\nutc_offset = ${offsetText(st.utcOffset)}`;
+  cardLabel.text = t("To keep the trim and offset across reboots, put these lines in zerogap.txt at the top of the SD card:") +
+    `\nclock_trim_ppm = ${ppmFileText(st.trimPpm)}\nutc_offset = ${offsetText(st.utcOffset)}`;
 }
 
 function setTrim(ppm) {
   try {
     clock.setTrim(ppm);
     trimField.text = ppmText(ppm);
-    say(`Trim set to ${ppmText(ppm)} ppm.`);
+    say(t("Trim set to {ppm} ppm.", { ppm: ppmText(ppm) }));
   } catch (e) {
     say(e.message);
   }
@@ -142,15 +163,16 @@ function setTrim(ppm) {
 timeField.on("submit", () => {
   const ms = parseLocal(timeField.text, clock.status().utcOffset);
   if (ms === null) {
-    say("The time must be YYYY-MM-DD HH:MM:SS (a real date, 24-hour time).");
+    say(t("The time must be YYYY-MM-DD HH:MM:SS (a real date, 24-hour time)."));
     console.log("clock app: refused the time");
     return;
   }
   try {
     const st = clock.set(ms);
-    say(st.drift
-      ? `Clock set. It was ${Math.abs(st.drift.correction).toFixed(2)} s ${st.drift.correction > 0 ? "fast" : "slow"}.`
-      : "Clock set.");
+    const s = st.drift && secondsText(st.drift.correction);
+    say(!st.drift ? t("Clock set.")
+      : st.drift.correction > 0 ? t("Clock set. It was {s} s fast.", { s })
+      : t("Clock set. It was {s} s slow.", { s }));
     console.log(`clock app: set ${new Date().toISOString()}`);
   } catch (e) {
     say(e.message);
@@ -161,13 +183,13 @@ timeField.on("submit", () => {
 offsetField.on("submit", () => {
   const minutes = parseOffset(offsetField.text);
   if (minutes === null) {
-    say("The offset must look like -03:00 or +05:30.");
+    say(t("The offset must look like -03:00 or +05:30."));
     return;
   }
   try {
     clock.setUtcOffset(minutes);
     offsetField.text = offsetText(minutes);
-    say(`Local time is now UTC${offsetText(minutes)}.`);
+    say(t("Local time is now UTC{offset}.", { offset: offsetText(minutes) }));
   } catch (e) {
     say(e.message);
   }
@@ -175,9 +197,11 @@ offsetField.on("submit", () => {
 });
 
 trimField.on("submit", () => {
-  const ppm = Number(trimField.text);
-  if (trimField.text.trim() === "" || !Number.isFinite(ppm)) {
-    say("The trim is a number of ppm, e.g. -21.4.");
+  let ppm;
+  try {
+    ppm = parseNumber(trimField.text);
+  } catch {
+    say(t("The trim is a number of ppm, like {example}.", { example: formatNumber(-21.4, { decimals: 1 }) }));
     return;
   }
   setTrim(ppm);
@@ -187,7 +211,7 @@ trimField.on("submit", () => {
 const st = clock.status();
 const ahead = new Date(Math.ceil((st.time + 60000) / 60000) * 60000);
 timeField.text = st.set
-  ? `${ahead.getFullYear()}-${pad(ahead.getMonth() + 1)}-${pad(ahead.getDate())} ${timeText(ahead)}`
+  ? formatDateTime(ahead.getTime() / 1000)
   : "";
 offsetField.text = offsetText(st.utcOffset);
 trimField.text = ppmText(st.trimPpm);

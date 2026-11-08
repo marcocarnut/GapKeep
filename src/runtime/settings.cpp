@@ -5,6 +5,7 @@
 //
 #include "settings.h"
 #include "clock.h"
+#include "i18n.h"
 #include <circle/logger.h>
 #include <circle/util.h>
 #ifndef ZG_SEALED
@@ -82,6 +83,10 @@ void CZgSettings::Load (void)
 		*pValue++ = '\0';
 
 		if (CZgClock::Configure (Clean, pValue, nLine))
+		{
+			continue;
+		}
+		if (CZgI18n::Configure (Clean, pValue, nLine))	// language, decimal_mark, group_mark
 		{
 			continue;
 		}
