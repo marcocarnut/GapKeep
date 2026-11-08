@@ -177,6 +177,7 @@ struct TSimKey
 {
 	char String[8];
 	u8 nModifiers;
+	boolean bComposed;	// from the browser: its layout and dead keys applied
 };
 
 static boolean s_bKeyDown;
@@ -202,7 +203,9 @@ static void SimKeyDown (const TSimKey &rKey, u8 nUsage = 4)
 	pKeyboard->Report (rKey.nModifiers, Raw);
 	if (rKey.String[0] != '\0')
 	{
+		s_pKeyboard->SetComposed (rKey.bComposed);
 		pKeyboard->Pressed (rKey.String);
+		s_pKeyboard->SetComposed (FALSE);
 	}
 
 	s_Key = rKey;
@@ -227,7 +230,9 @@ static void KeyRepeat (void)
 	    && s_Key.String[0] != '\0'
 	    && (int) (CTimer::GetClockTicks () - s_nNextRepeat) >= 0)
 	{
+		s_pKeyboard->SetComposed (s_Key.bComposed);
 		ZgSimKeyboard ()->Pressed (s_Key.String);	// no report: a repeat
+		s_pKeyboard->SetComposed (FALSE);
 		s_nNextRepeat += RepeatRate;
 	}
 }
@@ -433,16 +438,32 @@ int zg_sim_key_down_dom (const char *pKey, int nMods)
 		}
 	}
 
-	// one printable ASCII character: the browser already applied Shift and
-	// the keyboard layout
-	if ((unsigned char) pKey[0] >= ' ' && (unsigned char) pKey[0] < 0x7f && pKey[1] == '\0')
+	// One printable character: the browser already applied Shift, the
+	// computer's keyboard layout and its dead keys ("Dead", then "á").
+	// ASCII and Latin-1, as Circle's keymaps give them: one byte each.
+	const unsigned char *p = (const unsigned char *) pKey;
+	int c = -1;
+	if (p[0] >= ' ' && p[0] < 0x7f && p[1] == '\0')
 	{
-		Printable (pKey[0], nMods, &Key);
+		c = p[0];
+	}
+	else if ((p[0] == 0xC2 || p[0] == 0xC3) && (p[1] & 0xC0) == 0x80 && p[2] == '\0')
+	{
+		c = ((p[0] & 0x1F) << 6) | (p[1] & 0x3F);	// U+0080..U+00FF
+		if (c < 0xA0)
+		{
+			c = -1;			// C1 controls
+		}
+	}
+	if (c >= 0)
+	{
+		Printable ((char) c, nMods, &Key);
+		Key.bComposed = TRUE;
 		SimKeyDown (Key);
 		return 0;
 	}
 
-	return -1;		// Shift, Control, Alt alone, dead keys, non-ASCII
+	return -1;		// Shift, Control, Alt alone, dead keys, beyond Latin-1
 }
 
 int zg_sim_launch (const char *pID)

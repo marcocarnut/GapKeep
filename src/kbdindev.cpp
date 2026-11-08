@@ -21,6 +21,7 @@ CKeyboardIndev::CKeyboardIndev (void)
 	m_nRawModifiers (0),
 	m_bNewPress (FALSE),
 	m_bGUIDown (FALSE),
+	m_bComposed (FALSE),
 	m_nLayoutGeneration (0),
 	m_nHead (0),
 	m_nTail (0),
@@ -169,7 +170,7 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 	// Alt+key and Ctrl+letter are for apps, never typed: no dead keys
 	u32 Out[2];
 	boolean bConsumed;
-	if (nChar != 0 && !(Key.nMods & ZG_MOD_ALT))
+	if (nChar != 0 && !(Key.nMods & ZG_MOD_ALT) && !pThis->m_bComposed)
 	{
 		unsigned n = pThis->m_DeadKeys.Feed (nChar, Key.bRepeat, FALSE, Out, &bConsumed);
 		for (unsigned i = 0; i < n; i++)
