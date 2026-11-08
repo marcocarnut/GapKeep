@@ -1,0 +1,7 @@
+{
+  "id": "typetest",
+  "name": "Typing (test)",
+  "version": "1.0.0",
+  "description": "Test builds only: logs what is typed (tests/keyboard.txt).",
+  "icon": "keyboard"
+}

@@ -38,7 +38,7 @@ import * as ui from "zg:ui";
 | `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `Scanner`, `TabView` | classes | [Widgets](#widgets) |
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
-| `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. |
+| `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. |
 | `symbols` | object | Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List](#symbols). |
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |
@@ -369,7 +369,10 @@ With Ctrl or Alt held, keys are delivered to the handler only, not typed.
 
 #### Key names
 
-Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`). Others:
+Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`, `"ç"`), as
+the keyboard layout types them (`keyboard` in `zerogap.txt`: `us` or
+`br-abnt2`); an accent typed with a dead key arrives once, composed with
+the letter (`"á"`). Others:
 `"Enter"`, `"Escape"`, `"Backspace"`, `"Delete"`, `"Tab"` (check `shift`
 for Shift+Tab), `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`,
 `"Home"`, `"End"`, `"PageUp"`, `"PageDown"`, `"Insert"`, `"F1"`...`"F9"`.
@@ -609,9 +612,9 @@ the change, and at once to the app that made it, through
 | `onLanguageChange(fn)` | Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it. |
 | `marks()` | The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves. |
 | `setMarks(marks)` | *Needs "settings".* The marks, until power-off; `null` or a mark left out: the language's own. If only one is given and the language's other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same. |
-| `keyboard()` | The keyboard layout, `"us"`. |
-| `keyboards()` | The layouts there are: `["us"]` until the kernel can switch layouts. |
-| `setKeyboard(layout)` | *Needs "settings".* The layout, from `keyboards()`, until power-off. (Only `"us"` for now.) |
+| `keyboard()` | The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `zerogap.txt`). |
+| `keyboards()` | The layouts there are: `["us", "br-abnt2"]`. |
+| `setKeyboard(layout)` | *Needs "settings".* The layout, from `keyboards()`, at once for every app, until power-off. A dead key pending is dropped. `RangeError` for a layout not in `keyboards()`. |
 | `formatNumber(x, { decimals }?)` | Thousands grouped, the language's decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent. |
 | `formatSats(sats)` | Whole satoshis, grouped: `2,100,000`. A safe integer or a BigInt, else a `TypeError`. |
 | `formatBtc(sats, { decimals = 8 }?)` | Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it. |

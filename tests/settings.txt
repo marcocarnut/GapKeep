@@ -1,6 +1,6 @@
-# The Settings app (apps/settings), from the keyboard alone: the language
-# and the number marks, applied at once and for the session; the launcher
-# then starts in the new language.
+# The Settings app (apps/settings), from the keyboard alone: the language,
+# the number marks and the keyboard layout, applied at once and for the
+# session; the launcher then starts in the new language.
 expect Keyboard attached 60
 expect launcher ready 60
 tile settings
@@ -29,6 +29,24 @@ expect i18n: numbers 1234,5 \(app settings\)
 expect settings: redrawn in pt-BR
 wait 1
 shot 03-marks
+# the keyboard: Brazilian ABNT2 (the second), at once; the box to try it
+# gets ç, á (´ then a) and ã (~ then a): "semicolon", "bracket_left" and
+# "apostrophe" are those keys' places on a US keyboard
+key tab
+key ret
+wait 0.5
+key down
+key ret
+expect keyboard: layout br-abnt2 \(app settings\)
+wait 1
+key tab
+key semicolon
+key bracket_left
+key a
+key apostrophe
+key a
+wait 1
+shot 03b-keyboard
 # the launcher, started again, is in Portuguese
 mark
 key meta_l

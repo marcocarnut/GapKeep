@@ -18,6 +18,9 @@ import { t } from "zg:i18n";
 const MARKS = [null, [".", ","], [",", "."], [".", ""], [",", ""]];
 const sample = (m) => `1${m[1]}234${m[0]}5`;
 
+// The keyboard layouts' names; a layout not here shows its code
+const LAYOUTS = () => ({ us: t("US"), "br-abnt2": t("Brazilian (ABNT2)") });
+
 // Which MARKS entry was chosen here (kept for the session); else the first.
 // (Marks set in zerogap.txt show in the samples, not here.)
 function marksChoice() {
@@ -70,11 +73,12 @@ function build() {
     },
   }));
 
-  // keyboard (TODO(glyphs): only "us" until the kernel can switch layouts)
+  // keyboard: applies at once, to what is typed in every app
   const layouts = i18n.keyboards();
+  const names = LAYOUTS();
   const r = row(t("Keyboard"));
   controls.push(new ui.Dropdown(r, {
-    options: layouts,
+    options: layouts.map((l) => names[l] ?? l),
     selected: Math.max(0, layouts.indexOf(i18n.keyboard())),
     width: 280,
     onChange: (ev) => {
@@ -102,7 +106,7 @@ function build() {
   }
 
   // the lines that keep them (the file is read the same way in every language)
-  const lines = [`language = ${i18n.language()}`];
+  const lines = [`language = ${i18n.language()}`, `keyboard = ${i18n.keyboard()}`];
   if (marksChoice() !== 0) lines.push(`decimal_mark = ${m.decimal}`, `group_mark = ${m.group}`);
   new ui.Label({
     text: t("These apply now, until ZeroGap is switched off. To keep them, put these lines in zerogap.txt at the top of the SD card:") +

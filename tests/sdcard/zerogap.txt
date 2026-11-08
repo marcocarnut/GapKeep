@@ -1,4 +1,4 @@
-# zerogap's settings (docs/CLOCK.md); tests/clock.txt checks how they are read
+# zerogap's settings; tests/clock.txt, i18n.txt and keyboard.txt check how they are read
 clock_trim_ppm = -12.5
 utc_offset = +05:30
 no_such_key = 1
@@ -7,3 +7,4 @@ experimental = yes
 # a decimal mark it refuses
 language = xx-YY
 decimal_mark = ;
+keyboard = qwertz

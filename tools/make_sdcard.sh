@@ -46,6 +46,9 @@ if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
 	# and libsecp256k1 and colorqr (MIT: their notices go with copies)
 	cp third_party/secp256k1/COPYING $OUT/LICENCE.secp256k1
 	cp lib/colorqr/LICENSE $OUT/LICENCE.colorqr
+	# and the fonts (tools/make_fonts.py): Montserrat and Font Awesome
+	# Free, both under the SIL Open Font License
+	cp src/runtime/fonts/LICENCE.montserrat src/runtime/fonts/LICENCE.fontawesome $OUT/
 	if [ $OUT = sdcard-standalone ]; then
 		mkdir $OUT/apps
 		for a in apps/*/; do

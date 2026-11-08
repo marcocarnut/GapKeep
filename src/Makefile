@@ -18,6 +18,10 @@
 #   make TEST=1     every app in ../apps and ../tests/apps, plus test
 #                   features (serial screenshots); /apps is read too
 #
+# The keyboard layout before zerogap.txt is read (the only one for SEALED=1,
+# which reads no card): make KEYBOARD=br-abnt2 (runtime/keylayout.h);
+# default us.
+#
 # The serial port (GPIO 14/15): test builds log to it (and answer serial
 # screenshot requests). Other builds don't touch it, and keep no log
 # anywhere, unless made with LOG=serial (tools/build.sh does that for QEMU,
@@ -34,9 +38,12 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o \
 	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
-	  runtime/session.o runtime/js_session.o runtime/i18n.o generated/i18n_js.o \
+	  runtime/session.o runtime/js_session.o runtime/i18n.o generated/i18n_js.o runtime/keylayout.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
+
+# the fonts (tools/make_fonts.py)
+OBJS	+= $(patsubst %,runtime/fonts/zg_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
 
 ifeq ($(strip $(TEST)),1)
 BUNDLE	= ../apps ../tests/apps
@@ -60,6 +67,15 @@ ifneq ($(strip $(LANGUAGE)),)
 DEFINE	+= -DZG_LANGUAGE=\"$(strip $(LANGUAGE))\"
 BUILDMODE := $(BUILDMODE)-$(strip $(LANGUAGE))
 endif
+endif
+
+KEYBOARD ?= us
+ifneq ($(filter-out us br-abnt2,$(strip $(KEYBOARD)))$(word 2,$(KEYBOARD)),)
+$(error KEYBOARD=$(KEYBOARD): us or br-abnt2 expected)
+endif
+ifneq ($(strip $(KEYBOARD)),us)
+DEFINE	+= -DZG_KEYBOARD=\"$(strip $(KEYBOARD))\"
+BUILDMODE := $(BUILDMODE)-keyboard-$(strip $(KEYBOARD))
 endif
 
 ifeq ($(strip $(TEST)),1)
@@ -117,12 +133,12 @@ generated/testpictures.c: FORCE
 
 FORCE:
 
-# Recompile what depends on ZG_TEST / ZG_SEALED when switching builds.
+# Recompile what depends on ZG_TEST / ZG_SEALED / ZG_LANGUAGE / ZG_KEYBOARD when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o: .buildmode
+main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o: .buildmode
 
-EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d \
+EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/*.o runtime/fonts/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
 
 -include $(DEPS)

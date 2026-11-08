@@ -1,0 +1,78 @@
+# Needs a test build (make TEST=1) and the test SD card: keyboard layouts
+# (src/runtime/keylayout.h, patches/circle/0005). Keys are named by their
+# place on a US keyboard (QEMU's sendkey names): with br-abnt2, "semicolon"
+# is the Ç key. tests/apps/typetest logs what is typed as code points.
+expect zerogap.txt:10: keyboard: one of us, br-abnt2 expected 60
+expect Keyboard attached \(layout us\) 60
+expect launcher ready 60
+tile typetest
+expect typetest ready 10
+
+# us
+mark
+key semicolon
+key shift-apostrophe
+key ret
+expect typetest: typed U\+003B U\+0022 10
+
+keyboard br-abnt2
+expect keyboard: layout br-abnt2 10
+mark
+# ç Ç, the dead keys on a, a, e, a, u: ´a ~a ^e `a ¨u
+key semicolon
+key shift-semicolon
+key bracket_left
+key a
+key apostrophe
+key a
+key shift-apostrophe
+key e
+key shift-bracket_left
+key a
+key shift-6
+key u
+expect typetest: key U\+00FC 10
+shot abnt2-letters
+key ret
+expect typetest: typed U\+00E7 U\+00C7 U\+00E1 U\+00E3 U\+00EA U\+00E0 U\+00FC 10
+
+mark
+# ´ then space: ´; ´ then x: ´x; ~ twice: ~; ^ then Backspace: cancelled,
+# then o; capitals: Shift on the letter
+key bracket_left
+key spc
+key bracket_left
+key x
+key apostrophe
+key apostrophe
+key shift-apostrophe
+key backspace
+key o
+key bracket_left
+key shift-e
+key ret
+expect typetest: typed U\+00B4 U\+00B4 U\+0078 U\+007E U\+006F U\+00C9 10
+
+mark
+# the keys ABNT2 moves or adds: "/ ?" (QEMU's "ro", HID 0x87), "\ |"
+# (QEMU's "less"), AltGr: Q is /, W is ?, E is °, 2 is ², = is §
+key ro
+key shift-ro
+key less
+key shift-less
+key alt_r-q
+key alt_r-w
+key alt_r-e
+key alt_r-2
+key alt_r-equal
+key ret
+expect typetest: typed U\+002F U\+003F U\+005C U\+007C U\+002F U\+003F U\+00B0 U\+00B2 U\+00A7 10
+
+# back to us
+keyboard us
+expect keyboard: layout us 10
+mark
+key semicolon
+key bracket_left
+key ret
+expect typetest: typed U\+003B U\+005B 10

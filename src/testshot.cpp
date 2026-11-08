@@ -7,6 +7,7 @@
 #include "testpictures.h"
 #include "runtime/settings.h"
 #include "runtime/i18n.h"
+#include "runtime/keylayout.h"
 #include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
@@ -51,6 +52,10 @@ void CTestShot::Update (void)
 				else if (strcmp (m_Line, "#experimental on") == 0)
 				{
 					CZgSettings::SetExperimental (TRUE, "serial line, test build");
+				}
+				else if (strncmp (m_Line, "#keyboard ", 10) == 0)
+				{
+					ZgKeyLayoutSet (m_Line + 10, "serial line, test build");
 				}
 				else if (strncmp (m_Line, "#camera ", 8) == 0)
 				{

@@ -81,10 +81,12 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp $(ROOT)/src/runtime/settings.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
 	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/i18n.cpp \
+	    $(ROOT)/src/runtime/keylayout.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
-	    $(ROOT)/src/kbdindev.cpp
+	    $(ROOT)/src/kbdindev.cpp \
+	    $(wildcard $(ROOT)/src/runtime/fonts/zg_montserrat_*.c)
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
 # libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
 include $(ROOT)/lib/secp256k1/secp256k1.mk

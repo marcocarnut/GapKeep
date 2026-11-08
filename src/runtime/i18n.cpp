@@ -664,7 +664,11 @@ static JSValue js_i18n_languages (JSContext *ctx, JSValueConst this_val, int arg
 static JSValue js_i18n_keyboards (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	JSValue List = JS_NewArray (ctx);
-	JS_SetPropertyUint32 (ctx, List, 0, JS_NewString (ctx, CZgI18n::GetKeyboard ()));	// TODO(glyphs)
+	const char *const *ppLayouts = ZgKeyLayouts ();
+	for (unsigned i = 0; ppLayouts[i] != 0; i++)
+	{
+		JS_SetPropertyUint32 (ctx, List, i, JS_NewString (ctx, ppLayouts[i]));
+	}
 	return List;
 }
 
@@ -766,8 +770,11 @@ static JSValue js_i18n_set_keyboard (JSContext *ctx, JSValueConst this_val, int 
 	{
 		return JS_EXCEPTION;
 	}
-	// TODO(glyphs): the kernel's layout switch, when it is merged
-	boolean bOK = strcmp (pLayout, CZgI18n::GetKeyboard ()) == 0;
+	// the keyboard's layout switch (keylayout.h): at once, for every app,
+	// until power-off; logged, never what is typed
+	CString Who;
+	Who.Format ("app %s", CAppHost::GetApp (ctx)->pBundle->id);
+	boolean bOK = ZgKeyLayoutSet (pLayout, Who);
 	JS_FreeCString (ctx, pLayout);
 	if (!bOK)
 	{

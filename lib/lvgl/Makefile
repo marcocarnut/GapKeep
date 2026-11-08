@@ -32,3 +32,6 @@ $(OBJDIR)/lvgl_glue.o: $(ADDON)/lvgl.cpp
 	@$(CPP) $(CPPFLAGS) -c -o $@ $<
 
 EXTRACLEAN += -r $(OBJDIR)
+
+# every object depends on the configuration (which fonts are built in, ...)
+$(OBJS): zg_lv_conf.h

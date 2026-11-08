@@ -14,6 +14,8 @@
 #include "../../src/runtime/version.h"
 #include "../../src/crypto/hwrng.h"
 #include "../../src/kbdindev.h"
+#include "../../src/runtime/keylayout.h"
+#include "../../circle/include/circle/input/keymap.h"
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/usb/usbhid.h>
@@ -184,7 +186,7 @@ static unsigned s_nNextRepeat;		// clock ticks
 static const unsigned RepeatDelay = 400000;	// patches/circle/0002: 400 ms, then
 static const unsigned RepeatRate = 80000;	// every 80 ms
 
-static void KeyDown (const TSimKey &rKey)
+static void SimKeyDown (const TSimKey &rKey, u8 nUsage = 4)
 {
 	if (s_bKeyDown)
 	{
@@ -195,7 +197,7 @@ static void KeyDown (const TSimKey &rKey)
 	unsigned char Raw[6] = {0};
 	if (rKey.String[0] != '\0')
 	{
-		Raw[0] = 4;			// any key code: kbdindev only sees that one went down
+		Raw[0] = nUsage;		// kbdindev only sees that a key went down
 	}
 	pKeyboard->Report (rKey.nModifiers, Raw);
 	if (rKey.String[0] != '\0')
@@ -254,22 +256,86 @@ static const struct { const char *pQemu, *pDom, *pString; } SpecialKeys[] =
 	{"f7", "F7", "\x1b[18~"}, {"f8", "F8", "\x1b[19~"}, {"f9", "F9", "\x1b[20~"},
 };
 
-// QEMU names of the symbol keys (US layout), unshifted and shifted
-static const struct { const char *pQemu; char c, cShifted; } SymbolKeys[] =
+// Circle's keymaps (circle/lib/input/keymap_*.h; "BR": patches/circle/0005),
+// as src/kbdindev.cpp gets them on the Pi
+#define C(chr)		((u16) (u8) (chr))
+static const u16 KeyMapUS[PHY_MAX_CODE+1][K_CTRLTAB+1] =
 {
-	{"minus", '-', '_'}, {"equal", '=', '+'}, {"bracket_left", '[', '{'},
-	{"bracket_right", ']', '}'}, {"semicolon", ';', ':'}, {"apostrophe", '\'', '"'},
-	{"grave_accent", '`', '~'}, {"backslash", '\\', '|'}, {"comma", ',', '<'},
-	{"dot", '.', '>'}, {"slash", '/', '?'},
-	{"1", '1', '!'}, {"2", '2', '@'}, {"3", '3', '#'}, {"4", '4', '$'}, {"5", '5', '%'},
-	{"6", '6', '^'}, {"7", '7', '&'}, {"8", '8', '*'}, {"9", '9', '('}, {"0", '0', ')'},
+#include "../../circle/lib/input/keymap_us.h"
 };
+static const u16 KeyMapBR[PHY_MAX_CODE+1][K_CTRLTAB+1] =
+{
+#include "../../circle/lib/input/keymap_br.h"
+};
+#undef C
+
+// QEMU names of the character keys, and their USB HID usages: keys by their
+// place on a US keyboard, whatever they type ("less" and "ro" are the two
+// keys a US keyboard doesn't have: ABNT2's "\ |" and "/ ?")
+static const struct { const char *pQemu; u8 nUsage; } CharKeys[] =
+{
+	{"minus", 0x2D}, {"equal", 0x2E}, {"bracket_left", 0x2F}, {"bracket_right", 0x30},
+	{"backslash", 0x31}, {"semicolon", 0x33}, {"apostrophe", 0x34}, {"grave_accent", 0x35},
+	{"comma", 0x36}, {"dot", 0x37}, {"slash", 0x38}, {"less", 0x64}, {"ro", 0x87},
+	{"1", 0x1E}, {"2", 0x1F}, {"3", 0x20}, {"4", 0x21}, {"5", 0x22},
+	{"6", 0x23}, {"7", 0x24}, {"8", 0x25}, {"9", 0x26}, {"0", 0x27},
+};
+
+#define ZG_SIM_MOD_ALTGR	8	// "alt_r-": the right Alt, AltGr
 
 static u8 HIDModifiers (int nMods)
 {
 	return   ((nMods & ZG_SIM_MOD_SHIFT) ? LSHIFT : 0)
 	       | ((nMods & ZG_SIM_MOD_CTRL) ? LCTRL : 0)
-	       | ((nMods & ZG_SIM_MOD_ALT) ? ALT : 0);
+	       | ((nMods & ZG_SIM_MOD_ALT) ? ALT : 0)
+	       | ((nMods & ZG_SIM_MOD_ALTGR) ? ALTGR : 0);
+}
+
+// What Circle's keymap types for this key: Ctrl+letter is the control
+// character, Alt+key nothing (as Circle's CKeyMap::Translate, without Caps
+// Lock and Num Lock). FALSE: the key types nothing.
+static boolean KeyMapString (u8 nUsage, int nMods, TSimKey *pKey)
+{
+	const u16 (*pMap)[K_CTRLTAB+1] =
+		strcmp (ZgSimKeyboard ()->GetKeyMap (), "BR") == 0 ? KeyMapBR : KeyMapUS;
+	pKey->nModifiers = HIDModifiers (nMods);
+	if (nMods & ZG_SIM_MOD_ALT)
+	{
+		return FALSE;
+	}
+	boolean bShift = (nMods & ZG_SIM_MOD_SHIFT) != 0;
+	unsigned nTable =   (nMods & ZG_SIM_MOD_ALTGR) ? (bShift ? K_ALTSHIFTTAB : K_ALTTAB)
+			  : bShift ? K_SHIFTTAB : K_NORMTAB;
+	u16 nCode = pMap[nUsage][nTable];
+	char c;
+	if (nCode > ' ' && nCode < 0x100)
+	{
+		c = (char) nCode;
+	}
+	else if (nCode == KeyKP_Comma || nCode == KeyKP_Period)
+	{
+		c = nCode == KeyKP_Comma ? ',' : '.';
+	}
+	else
+	{
+		return FALSE;
+	}
+	if (nMods & ZG_SIM_MOD_CTRL)
+	{
+		if (c < 'a' || c > 'z')
+		{
+			return FALSE;
+		}
+		c = (char) (c - 'a' + 1);
+	}
+	pKey->String[0] = c;
+	pKey->String[1] = '\0';
+	return TRUE;
+}
+
+int zg_sim_keyboard (const char *pLayout)
+{
+	return ZgKeyLayoutSet (pLayout, "simulator") ? 0 : -1;
 }
 
 // A printable character with modifiers, as Circle's keymap gives it:
@@ -294,6 +360,7 @@ int zg_sim_key_down_qemu (const char *pName)
 		if (strncmp (pName, "shift-", 6) == 0)		{ nMods |= ZG_SIM_MOD_SHIFT; pName += 6; }
 		else if (strncmp (pName, "ctrl-", 5) == 0)	{ nMods |= ZG_SIM_MOD_CTRL; pName += 5; }
 		else if (strncmp (pName, "alt-", 4) == 0)	{ nMods |= ZG_SIM_MOD_ALT; pName += 4; }
+		else if (strncmp (pName, "alt_r-", 6) == 0)	{ nMods |= ZG_SIM_MOD_ALTGR; pName += 6; }
 		else break;
 	}
 
@@ -303,7 +370,7 @@ int zg_sim_key_down_qemu (const char *pName)
 	if (strcmp (pName, "meta_l") == 0 || strcmp (pName, "meta_r") == 0)
 	{
 		Key.nModifiers = HIDModifiers (nMods) | (pName[5] == 'l' ? LWIN : RWIN);
-		KeyDown (Key);
+		SimKeyDown (Key);
 		return 0;
 	}
 
@@ -313,27 +380,30 @@ int zg_sim_key_down_qemu (const char *pName)
 		{
 			Key.nModifiers = HIDModifiers (nMods);
 			strcpy (Key.String, SpecialKeys[i].pString);
-			KeyDown (Key);
+			SimKeyDown (Key);
 			return 0;
 		}
 	}
 
-	for (unsigned i = 0; i < sizeof SymbolKeys / sizeof SymbolKeys[0]; i++)
+	u8 nUsage = 0;
+	for (unsigned i = 0; i < sizeof CharKeys / sizeof CharKeys[0]; i++)
 	{
-		if (strcmp (pName, SymbolKeys[i].pQemu) == 0)
+		if (strcmp (pName, CharKeys[i].pQemu) == 0)
 		{
-			char c = (nMods & ZG_SIM_MOD_SHIFT) ? SymbolKeys[i].cShifted : SymbolKeys[i].c;
-			Printable (c, nMods, &Key);
-			KeyDown (Key);
-			return 0;
+			nUsage = CharKeys[i].nUsage;
 		}
 	}
-
 	if (pName[0] >= 'a' && pName[0] <= 'z' && pName[1] == '\0')
 	{
-		char c = (nMods & ZG_SIM_MOD_SHIFT) ? (char) toupper (pName[0]) : pName[0];
-		Printable (c, nMods, &Key);
-		KeyDown (Key);
+		nUsage = 0x04 + (pName[0] - 'a');
+	}
+	if (nUsage != 0)
+	{
+		if (!KeyMapString (nUsage, nMods, &Key))
+		{
+			Key.String[0] = '\0';		// a key down, nothing typed
+		}
+		SimKeyDown (Key, nUsage);
 		return 0;
 	}
 
@@ -348,7 +418,7 @@ int zg_sim_key_down_dom (const char *pKey, int nMods)
 	if (strcmp (pKey, "Meta") == 0 || strcmp (pKey, "OS") == 0)
 	{
 		Key.nModifiers = HIDModifiers (nMods) | LWIN;
-		KeyDown (Key);
+		SimKeyDown (Key);
 		return 0;
 	}
 
@@ -358,7 +428,7 @@ int zg_sim_key_down_dom (const char *pKey, int nMods)
 		{
 			Key.nModifiers = HIDModifiers (nMods);
 			strcpy (Key.String, SpecialKeys[i].pString);
-			KeyDown (Key);
+			SimKeyDown (Key);
 			return 0;
 		}
 	}
@@ -368,7 +438,7 @@ int zg_sim_key_down_dom (const char *pKey, int nMods)
 	if ((unsigned char) pKey[0] >= ' ' && (unsigned char) pKey[0] < 0x7f && pKey[1] == '\0')
 	{
 		Printable (pKey[0], nMods, &Key);
-		KeyDown (Key);
+		SimKeyDown (Key);
 		return 0;
 	}
 

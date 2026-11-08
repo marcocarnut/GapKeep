@@ -79,7 +79,11 @@ ui:
       hidden_in_table: true
     - name: fonts
       ts: number[]
-      md: 'Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40.'
+      md: >-
+        Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size
+        has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the
+        dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the
+        `ui.symbols` icons. Other characters are drawn as an empty box.
     - name: symbols
       kind: object
       ts: SymbolTable
@@ -455,7 +459,10 @@ ui:
 
         #### Key names
 
-        Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`). Others:
+        Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`, `"ç"`), as
+        the keyboard layout types them (`keyboard` in `zerogap.txt`: `us` or
+        `br-abnt2`); an accent typed with a dead key arrives once, composed with
+        the letter (`"á"`). Others:
         `"Enter"`, `"Escape"`, `"Backspace"`, `"Delete"`, `"Tab"` (check `shift`
         for Shift+Tab), `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`,
         `"Home"`, `"End"`, `"PageUp"`, `"PageDown"`, `"Insert"`, `"F1"`...`"F9"`.
@@ -685,9 +692,9 @@ modules:
       - {name: onLanguageChange, signature: onLanguageChange(fn), ts: '(fn: (ev: { language: string; marks: { decimal: string; group: string } }) => void) => () => void', md: 'Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it.'}
       - {name: marks, signature: marks(), ts: '() => { decimal: string; group: string }', md: 'The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves.'}
       - {name: setMarks, signature: setMarks(marks), ts: '(marks: { decimal?: "." | ","; group?: "." | "," | "" } | null) => void', md: '*Needs "settings".* The marks, until power-off; `null` or a mark left out: the language''s own. If only one is given and the language''s other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same.'}
-      - {name: keyboard, signature: keyboard(), ts: '() => string', md: 'The keyboard layout, `"us"`.'}
-      - {name: keyboards, signature: keyboards(), ts: '() => string[]', md: 'The layouts there are: `["us"]` until the kernel can switch layouts.'}
-      - {name: setKeyboard, signature: setKeyboard(layout), ts: '(layout: string) => void', md: '*Needs "settings".* The layout, from `keyboards()`, until power-off. (Only `"us"` for now.)'}
+      - {name: keyboard, signature: keyboard(), ts: '() => string', md: 'The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `zerogap.txt`).'}
+      - {name: keyboards, signature: keyboards(), ts: '() => string[]', md: 'The layouts there are: `["us", "br-abnt2"]`.'}
+      - {name: setKeyboard, signature: setKeyboard(layout), ts: '(layout: string) => void', md: '*Needs "settings".* The layout, from `keyboards()`, at once for every app, until power-off. A dead key pending is dropped. `RangeError` for a layout not in `keyboards()`.'}
       - {name: formatNumber, signature: 'formatNumber(x, { decimals }?)', ts: '(x: number | bigint, options?: { decimals?: number }) => string', md: 'Thousands grouped, the language''s decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent.'}
       - {name: formatSats, signature: formatSats(sats), ts: '(sats: number | bigint) => string', md: 'Whole satoshis, grouped: `2,100,000`. A safe integer or a BigInt, else a `TypeError`.'}
       - {name: formatBtc, signature: 'formatBtc(sats, { decimals = 8 }?)', ts: '(sats: number | bigint, options?: { decimals?: number }) => string', md: 'Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it.'}

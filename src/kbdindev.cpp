@@ -21,6 +21,7 @@ CKeyboardIndev::CKeyboardIndev (void)
 	m_nRawModifiers (0),
 	m_bNewPress (FALSE),
 	m_bGUIDown (FALSE),
+	m_nLayoutGeneration (0),
 	m_nHead (0),
 	m_nTail (0),
 	m_nPressedKey (0),
@@ -84,12 +85,27 @@ void CKeyboardIndev::Update (boolean bPlugAndPlayUpdated)
 			m_pKeyboard->RegisterKeyPressedHandler (KeyPressedHandler);
 			m_pKeyboard->RegisterKeyStatusHandlerRaw (KeyStatusHandlerRaw, TRUE);	// mixed mode
 
-			CLogger::Get ()->Write (FromKbd, LogNotice, "Keyboard attached");
+			m_nLayoutGeneration = ZgKeyLayoutGeneration () - 1;	// load it below
+			CLogger::Get ()->Write (FromKbd, LogNotice, "Keyboard attached (layout %s)",
+						ZgKeyLayoutGet ());
 		}
 	}
 
 	if (m_pKeyboard != 0)
 	{
+		// the layout, when the keyboard comes and when it changes
+		unsigned nGeneration = ZgKeyLayoutGeneration ();
+		if (nGeneration != m_nLayoutGeneration)
+		{
+			m_nLayoutGeneration = nGeneration;
+			if (!m_pKeyboard->SetKeyMap (ZgKeyLayoutCircleMap ()))
+			{
+				CLogger::Get ()->Write (FromKbd, LogError, "no keymap %s",
+							ZgKeyLayoutCircleMap ());
+			}
+			m_DeadKeys.Reset ();
+		}
+
 		// must not be called from interrupt context
 		m_pKeyboard->UpdateLEDs ();
 	}
@@ -140,13 +156,56 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 {
 	assert (s_pThis != 0);
 
+	CKeyboardIndev *pThis = s_pThis;
 	TZgKey Key;
-	Key.bRepeat = !s_pThis->m_bNewPress;
-	s_pThis->m_bNewPress = FALSE;
-	if (s_pThis->Translate (pString, &Key))
+	Key.bRepeat = !pThis->m_bNewPress;
+	pThis->m_bNewPress = FALSE;
+	u32 nChar = 0;
+	if (!pThis->Translate (pString, &Key, &nChar))
 	{
-		s_pThis->Enqueue (Key);
+		return;
 	}
+
+	// Alt+key and Ctrl+letter are for apps, never typed: no dead keys
+	u32 Out[2];
+	boolean bConsumed;
+	if (nChar != 0 && !(Key.nMods & ZG_MOD_ALT))
+	{
+		unsigned n = pThis->m_DeadKeys.Feed (nChar, Key.bRepeat, FALSE, Out, &bConsumed);
+		for (unsigned i = 0; i < n; i++)
+		{
+			pThis->EnqueueChar (Out[i], Key);
+		}
+		return;
+	}
+	if (nChar != 0)
+	{
+		pThis->EnqueueChar (nChar, Key);
+		return;
+	}
+
+	// another key cancels a dead key; Backspace and Escape only cancel it
+	boolean bCancel = Key.nLVKey == LV_KEY_BACKSPACE || Key.nLVKey == LV_KEY_ESC;
+	pThis->m_DeadKeys.Feed (0, Key.bRepeat, bCancel, Out, &bConsumed);
+	if (!bConsumed)
+	{
+		pThis->Enqueue (Key);
+	}
+}
+
+void CKeyboardIndev::EnqueueChar (u32 nChar, const TZgKey &rTemplate)
+{
+	TZgKey Key = rTemplate;
+	unsigned n = ZgUtf8Encode (nChar, Key.Name);
+	Key.nLVKey = 0;
+	if (!(Key.nMods & ZG_MOD_ALT))		// Alt+key: for apps only, don't type it
+	{
+		for (unsigned i = 0; i < n; i++)
+		{
+			Key.nLVKey |= (u32) (u8) Key.Name[i] << (8 * i);
+		}
+	}
+	Enqueue (Key);
 }
 
 void CKeyboardIndev::KeyboardRemovedHandler (CDevice *pDevice, void *pContext)
@@ -249,10 +308,12 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 	pData->state = LV_INDEV_STATE_RELEASED;
 }
 
-boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey) const
+boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey, u32 *pChar) const
 {
 	assert (pString != 0);
 	assert (pKey != 0);
+	assert (pChar != 0);
+	*pChar = 0;
 
 	u8 nRaw = m_nRawModifiers;
 	pKey->nMods =   ((nRaw & (LSHIFT | RSHIFT)) ? ZG_MOD_SHIFT : 0)
@@ -290,12 +351,11 @@ boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey) const
 			return TRUE;
 		}
 
-		if (c >= ' ' && c < 0x7f)
+		// ASCII, and Latin-1 (the keymaps give one byte; 0x80-0x9F are
+		// control characters)
+		if ((c >= ' ' && c < 0x7f) || c >= 0xA0)
 		{
-			pKey->Name[0] = c;
-			pKey->Name[1] = '\0';
-			// Alt+key: for apps only, don't type it
-			pKey->nLVKey = (pKey->nMods & ZG_MOD_ALT) ? 0 : c;
+			*pChar = c;
 			return TRUE;
 		}
 

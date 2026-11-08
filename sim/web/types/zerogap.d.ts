@@ -529,7 +529,7 @@ declare module "zg:ui" {
   export const width: number;
   /** Display size in pixels. */
   export const height: number;
-  /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. */
+  /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
   export const fonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
   export const symbols: SymbolTable;
@@ -658,11 +658,11 @@ declare module "zg:i18n" {
   export function marks(): { decimal: string; group: string };
   /** *Needs "settings".* The marks, until power-off; `null` or a mark left out: the language's own. If only one is given and the language's other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same. */
   export function setMarks(marks: { decimal?: "." | ","; group?: "." | "," | "" } | null): void;
-  /** The keyboard layout, `"us"`. */
+  /** The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `zerogap.txt`). */
   export function keyboard(): string;
-  /** The layouts there are: `["us"]` until the kernel can switch layouts. */
+  /** The layouts there are: `["us", "br-abnt2"]`. */
   export function keyboards(): string[];
-  /** *Needs "settings".* The layout, from `keyboards()`, until power-off. (Only `"us"` for now.) */
+  /** *Needs "settings".* The layout, from `keyboards()`, at once for every app, until power-off. A dead key pending is dropped. `RangeError` for a layout not in `keyboards()`. */
   export function setKeyboard(layout: string): void;
   /** Thousands grouped, the language's decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent. */
   export function formatNumber(x: number | bigint, options?: { decimals?: number }): string;

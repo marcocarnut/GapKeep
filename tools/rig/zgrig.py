@@ -108,7 +108,11 @@ HID_KEYS = {'ret': 40, 'esc': 41, 'backspace': 42, 'tab': 43, 'spc': 44,
             'backslash': 49, 'semicolon': 51, 'apostrophe': 52, 'grave_accent': 53,
             'comma': 54, 'dot': 55, 'slash': 56, 'insert': 73, 'home': 74,
             'pgup': 75, 'delete': 76, 'end': 77, 'pgdn': 78,
-            'right': 79, 'left': 80, 'down': 81, 'up': 82}
+            'right': 79, 'left': 80, 'down': 81, 'up': 82,
+            # ABNT2's extra keys: "less" (\ | left of Z) and "ro" (/ ?, left
+            # of right Shift). Beyond the gadget's declared range (0x65), but
+            # Circle reads boot-protocol reports as bytes.
+            'less': 100, 'ro': 135}
 HID_KEYS.update({chr(ord('a') + i): 4 + i for i in range(26)})
 HID_KEYS.update({str(i): 30 + (i - 1) for i in range(1, 10)})
 HID_KEYS['0'] = 39

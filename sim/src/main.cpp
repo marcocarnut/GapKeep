@@ -6,13 +6,15 @@
 // one per line on stdin, drive it; answers start with "#" on stdout:
 //
 //   key <name>              press and release a key (QEMU sendkey names:
-//                           a, shift-a, ctrl-c, ret, tab, spc, up, meta_l...)
+//                           a, shift-a, ctrl-c, alt_r-q, ret, tab, spc, up,
+//                           meta_l...)
 //   keydown <name>          press a key and hold it (it auto-repeats)
 //   keyup                   release it
 //   pointer <x> <y> <0|1>   mouse at (x, y), left button up (0) or down (1)
 //   shot <file.png>         screenshot; answers "#shot <file.png>"
 //   launch [<id>]           start that app (or the launcher), as the
 //                           launcher would
+//   keyboard <layout>       the keyboard layout: us, br-abnt2
 //   camera qr <text>        the camera films a QR code of <text> (UTF-8)
 //   camera qrhex <hex>      ... of these bytes
 //   camera picture <file>   ... a picture: binary PGM (P5) or PPM (P6, in colour)
@@ -215,6 +217,13 @@ static int Command (char *pLine)
 		if (zg_sim_language (pArgs) != 0)
 		{
 			printf ("#error no language %s\n", pArgs);
+		}
+	}
+	else if (strcmp (pLine, "keyboard") == 0)
+	{
+		if (zg_sim_keyboard (pArgs) != 0)
+		{
+			printf ("#error no keyboard layout %s\n", pArgs);
 		}
 	}
 	else if (strcmp (pLine, "quit") == 0)
