@@ -6,6 +6,7 @@
 #include "testshot.h"
 #include "testpictures.h"
 #include "runtime/settings.h"
+#include "runtime/i18n.h"
 #include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
@@ -54,6 +55,11 @@ void CTestShot::Update (void)
 				else if (strncmp (m_Line, "#camera ", 8) == 0)
 				{
 					Camera (m_Line + 8);
+				}
+				else if (strncmp (m_Line, "#language ", 10) == 0)
+				{
+					// for the apps started from now on
+					CZgI18n::SetLanguage (m_Line + 10, "serial line, test build");
 				}
 				m_nLine = 0;
 			}

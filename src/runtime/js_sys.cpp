@@ -374,6 +374,10 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "rtc"));
 	}
+	if (pApp->permissions & ZG_PERM_SETTINGS)
+	{
+		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "settings"));
+	}
 	JS_SetPropertyStr (ctx, Obj, "permissions", Perms);
 
 	return Obj;

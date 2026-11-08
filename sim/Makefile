@@ -80,7 +80,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/scanner.cpp $(ROOT)/src/runtime/qrdecode.cpp \
 	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp $(ROOT)/src/runtime/settings.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
-	    $(ROOT)/src/runtime/js_session.cpp \
+	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/i18n.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
@@ -104,7 +104,7 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC)) $(OBJDIR)/apps_bundle.c.o
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC)) $(OBJDIR)/apps_bundle.c.o $(OBJDIR)/i18n_js.c.o
 ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
@@ -138,6 +138,14 @@ ifeq ($(strip $(TEST)),1)
 	@python3 $(ROOT)/tools/make_qjstests.py $(QJS) $(ROOT)/tests/apps/qjstests/suites.js
 endif
 	@python3 $(ROOT)/tools/bundle_apps.py $@ $(BUNDLE)
+
+# zg:i18n's JavaScript
+$(OBJDIR)/i18n_js.c: $(ROOT)/src/runtime/i18n.js $(ROOT)/tools/embed_js.py
+	@mkdir -p $(dir $@)
+	@python3 $(ROOT)/tools/embed_js.py $@ zg_i18n_js $<
+
+$(OBJDIR)/i18n_js.c.o: $(OBJDIR)/i18n_js.c
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/apps_bundle.c.o: $(OBJDIR)/apps_bundle.c
 	@$(CC) $(CFLAGS) -I $(ROOT)/src/runtime -c -o $@ $<

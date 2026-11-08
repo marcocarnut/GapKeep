@@ -641,6 +641,47 @@ declare module "zg:session" {
   export function usage(): { used: number; limit: number };
 }
 
+declare module "zg:i18n" {
+  /** The translation of `text`, or `text` itself. `{name}` is replaced by `params.name`: numbers as `formatNumber` writes them, other values as strings; a BigInt throws a `TypeError` (format amounts first). A `{name}` not in `params` stays as written; `{{` and `}}` are braces. `$context` tells apart the same English in two meanings: `t("Open", { $context: "verb" })` is the catalog key `"verb\u0004Open"`. Keys should be string literals, so `tools/i18n.py` finds them. */
+  export function t(text: string, params?: { [name: string]: string | number | boolean; $context?: string }): string;
+  /** `t(one)` or `t(other)` by the language's plural rule (English and Portuguese: one for 1, other otherwise, 0 too), with `n` added to `params`. */
+  export function plural(n: number, one: string, other: string, params?: { [name: string]: string | number | boolean; $context?: string }): string;
+  /** The language, a BCP 47 tag: `"en"`, `"pt-BR"`, or `"qps"` (a pseudo-language for testing: every translated text accented, about 40% longer and in brackets). */
+  export function language(): string;
+  /** The languages the system has (English and those the launcher has a catalog for), each named in itself: `[{ tag: "en", name: "English" }, { tag: "pt-BR", name: "Português (Brasil)" }]`. */
+  export function languages(): { tag: string; name: string }[];
+  /** *Needs "settings".* Changes the language until power-off. This app's catalog is loaded again at once and its `onLanguageChange` handlers run; other apps get it when they start. A `RangeError` for a language not in `languages()` (or `"qps"`). */
+  export function setLanguage(tag: string): void;
+  /** Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it. */
+  export function onLanguageChange(fn: (ev: { language: string; marks: { decimal: string; group: string } }) => void): () => void;
+  /** The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves. */
+  export function marks(): { decimal: string; group: string };
+  /** *Needs "settings".* The marks, until power-off; `null` or a mark left out: the language's own. If only one is given and the language's other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same. */
+  export function setMarks(marks: { decimal?: "." | ","; group?: "." | "," | "" } | null): void;
+  /** The keyboard layout, `"us"`. */
+  export function keyboard(): string;
+  /** The layouts there are: `["us"]` until the kernel can switch layouts. */
+  export function keyboards(): string[];
+  /** *Needs "settings".* The layout, from `keyboards()`, until power-off. (Only `"us"` for now.) */
+  export function setKeyboard(layout: string): void;
+  /** Thousands grouped, the language's decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent. */
+  export function formatNumber(x: number | bigint, options?: { decimals?: number }): string;
+  /** Whole satoshis, grouped: `2,100,000`. A safe integer or a BigInt, else a `TypeError`. */
+  export function formatSats(sats: number | bigint): string;
+  /** Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it. */
+  export function formatBtc(sats: number | bigint, options?: { decimals?: number }): string;
+  /** A number as typed, with a sign if any. What could be read two ways is refused (`"1.000"` in Portuguese, `"1,000"` in English: one or a thousand?); a lone mark that can't be a thousands separator (`0.001`, `1,5`) is the decimal mark in any language; several marks must be the language's thousands, properly grouped. Refusals are a `RangeError` whose message, translated, says what to type. */
+  export function parseNumber(text: string): number;
+  /** An amount in BTC as typed, in whole satoshis (a Number: 21 million BTC fit exactly), with the rules of `parseNumber`; no sign, at most 8 decimals, at most 21,000,000 BTC. */
+  export function parseBtc(text: string): number;
+  /** ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock's local time ([`zg:clock`]'s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped. */
+  export function formatDateTime(seconds: number, options?: { utc?: boolean }): string;
+  /** `2026-11-08`, as `formatDateTime`. */
+  export function formatDate(seconds: number, options?: { utc?: boolean }): string;
+  /** `14:03:05`, as `formatDateTime`. */
+  export function formatTime(seconds: number, options?: { utc?: boolean }): string;
+}
+
 declare module "zg:apps" {
   /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) for every app not marked `hidden`, and not marked `experimental` unless the card's `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
   export function list(): AppInfo[];

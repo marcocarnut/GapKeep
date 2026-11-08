@@ -5,6 +5,7 @@
 //
 #include "apphost.h"
 #include "appstore.h"
+#include "i18n.h"
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
@@ -302,6 +303,9 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 
 	ZgInitGlobals (m_App.pContext);
 
+	// its translations (lang/<language>.json), checked
+	unsigned nCatalogUs = CZgI18n::LoadCatalog (&m_App);
+
 	m_App.pScreen = lv_obj_create (0);
 	m_App.pGroup = lv_group_create ();
 	lv_group_set_focus_cb (m_App.pGroup, ZgGroupFocusCallback);
@@ -339,8 +343,9 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 	RunJobs ();
 
 	unsigned nEndTicks = CTimer::Get ()->GetClockTicks ();
-	CLogger::Get ()->Write (FromHost, LogNotice, "Started %s: modules %u ms, promise jobs %u ms, work %llu%s",
+	CLogger::Get ()->Write (FromHost, LogNotice, "Started %s: modules %u ms, catalog %u.%u ms, promise jobs %u ms, work %llu%s",
 				pApp->id, (nEvalTicks - nStartTicks) / 1000,
+				nCatalogUs / 1000, nCatalogUs % 1000 / 100,
 				(nEndTicks - nEvalTicks) / 1000, m_App.nWork,
 				(const char *) ZeroEstimate (m_App.nWork));
 
@@ -385,6 +390,7 @@ void CAppHost::StopApp (void)
 
 	JS_FreeValue (m_App.pContext, m_App.LastRejection);
 	m_App.LastRejection = JS_UNDEFINED;
+	CZgI18n::FreeApp (&m_App);
 
 	JS_FreeContext (m_App.pContext);
 	JS_FreeRuntime (m_App.pRuntime);	// asserts that nothing leaked
@@ -596,6 +602,12 @@ char *CAppHost::ModuleNormalize (JSContext *pContext, const char *pBase, const c
 {
 	if (strncmp (pName, "zg:", 3) == 0)
 	{
+		// zg:i18n's own native half
+		if (strcmp (pName, "zg:i18n-native") == 0 && strcmp (pBase, "zg:i18n") != 0)
+		{
+			JS_ThrowReferenceError (pContext, "no system module '%s'", pName);
+			return 0;
+		}
 		return js_strdup (pContext, pName);
 	}
 
@@ -694,6 +706,14 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	if (strcmp (pName, "zg:session") == 0)
 	{
 		return ZgInitSessionModule (pContext, pName);
+	}
+	if (strcmp (pName, "zg:i18n") == 0)
+	{
+		return ZgInitI18nModule (pContext, pName);
+	}
+	if (strcmp (pName, "zg:i18n-native") == 0)	// only for zg:i18n (ModuleNormalize)
+	{
+		return ZgInitI18nNativeModule (pContext, pName);
 	}
 	if (strcmp (pName, "zg:apps") == 0)
 	{

@@ -7,6 +7,7 @@
 #include "apphost.h"
 #include "clock.h"
 #include "settings.h"
+#include "i18n.h"
 #include "../crypto/sha256.h"
 #include <circle/logger.h>
 #include <circle/util.h>
@@ -735,6 +736,10 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 				{
 					pApp->permissions |= ZG_PERM_RTC;
 				}
+				else if (p != 0 && strcmp (p, "settings") == 0)
+				{
+					pApp->permissions |= ZG_PERM_SETTINGS;
+				}
 				else
 				{
 					bPermsOK = FALSE;
@@ -746,7 +751,7 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 		JS_FreeValue (ctx, Perms);
 		if (!bPermsOK)
 		{
-			*pError = "manifest.json: \"permissions\" must be a list drawn from [\"apps\", \"camera\", \"rtc\"]";
+			*pError = "manifest.json: \"permissions\" must be a list drawn from [\"apps\", \"camera\", \"rtc\", \"settings\"]";
 			break;
 		}
 
@@ -1025,6 +1030,7 @@ void CAppStore::Initialize (boolean bCardPresent)
 		s_ppApps[s_nApps++] = pApp;
 	}
 	CLogger::Get ()->Write (From, LogNotice, "%u app(s) built in", zg_builtin_app_count);
+	CZgI18n::Initialize ();		// the build's language (it needs the launcher's catalogs)
 
 #ifndef ZG_SEALED
 	if (!bCardPresent)

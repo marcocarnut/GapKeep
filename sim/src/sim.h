@@ -27,6 +27,14 @@ int zg_sim_boot (int width, int height, const char *card);
  * <dir>/launcher, to work on the launcher). 0: none. */
 void zg_sim_set_builtin_dir (const char *dir);
 
+/* Before zg_sim_boot: the language, over the card's zerogap.txt (0: as
+ * zerogap.txt says). zg_sim_boot fails if the system has no such language. */
+void zg_sim_set_language (const char *tag);
+
+/* After boot: the language for the apps started from now on, as a
+ * settings app sets it. Returns 0 if the system has it. */
+int zg_sim_language (const char *tag);
+
 /* One pass of the main loop, as the kernel's: keyboard, LVGL (input,
  * timers, drawing), app host. Call often (every millisecond or so). */
 void zg_sim_step (void);

@@ -12,6 +12,7 @@ modules below, imported by name:
 | [`zg:crypto`](#zgcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
 | [`zg:clock`](#zgclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
 | [`zg:session`](#zgsession) | every app | Values kept across the app's runs, in RAM, until power-off |
+| [`zg:i18n`](#zgi18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
 | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -570,6 +571,55 @@ a way to forget them (`clear()`).
 | `keys()` | The app's keys, in the order they were first set. |
 | `clear()` | Removes all of the app's values. |
 | `usage()` | Bytes the app's keys and values take, and its limit (65536). |
+
+---
+
+## zg:i18n
+
+```js
+import { t, plural } from "zg:i18n";
+
+new ui.Label({ text: t("Sign this transaction?") });
+ui.alert(t("Signed {n} of {total} inputs.", { n, total }));
+label.text = plural(count, "{n} code", "{n} codes");
+```
+
+The app's text in the person's language. The English text is the key,
+written where it is used; the translations are the app's catalogs,
+`lang/<language>.json`, loaded and checked when the app starts (see
+[Languages](APPS.md#languages)). A key without a translation shows in
+English. Numbers, amounts and dates are written the same way on every
+build (QuickJS has no `Intl`).
+
+The language, the number marks and the keyboard layout come from
+`zerogap.txt` at boot (`language = pt-BR`, `decimal_mark`, `group_mark`)
+and can be changed until power-off by an app with
+`"permissions": ["settings"]` (the Settings app); without it the setters
+throw a `TypeError`. A new language applies to the apps started after
+the change, and at once to the app that made it, through
+`onLanguageChange`.
+
+| Name | Description |
+| --- | --- |
+| `t(text, params?)` | The translation of `text`, or `text` itself. `{name}` is replaced by `params.name`: numbers as `formatNumber` writes them, other values as strings; a BigInt throws a `TypeError` (format amounts first). A `{name}` not in `params` stays as written; `{{` and `}}` are braces. `$context` tells apart the same English in two meanings: `t("Open", { $context: "verb" })` is the catalog key `"verb\u0004Open"`. Keys should be string literals, so `tools/i18n.py` finds them. |
+| `plural(n, one, other, params?)` | `t(one)` or `t(other)` by the language's plural rule (English and Portuguese: one for 1, other otherwise, 0 too), with `n` added to `params`. |
+| `language()` | The language, a BCP 47 tag: `"en"`, `"pt-BR"`, or `"qps"` (a pseudo-language for testing: every translated text accented, about 40% longer and in brackets). |
+| `languages()` | The languages the system has (English and those the launcher has a catalog for), each named in itself: `[{ tag: "en", name: "English" }, { tag: "pt-BR", name: "Português (Brasil)" }]`. |
+| `setLanguage(tag)` | *Needs "settings".* Changes the language until power-off. This app's catalog is loaded again at once and its `onLanguageChange` handlers run; other apps get it when they start. A `RangeError` for a language not in `languages()` (or `"qps"`). |
+| `onLanguageChange(fn)` | Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it. |
+| `marks()` | The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves. |
+| `setMarks(marks)` | *Needs "settings".* The marks, until power-off; `null` or a mark left out: the language's own. If only one is given and the language's other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same. |
+| `keyboard()` | The keyboard layout, `"us"`. |
+| `keyboards()` | The layouts there are: `["us"]` until the kernel can switch layouts. |
+| `setKeyboard(layout)` | *Needs "settings".* The layout, from `keyboards()`, until power-off. (Only `"us"` for now.) |
+| `formatNumber(x, { decimals }?)` | Thousands grouped, the language's decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent. |
+| `formatSats(sats)` | Whole satoshis, grouped: `2,100,000`. A safe integer or a BigInt, else a `TypeError`. |
+| `formatBtc(sats, { decimals = 8 }?)` | Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it. |
+| `parseNumber(text)` | A number as typed, with a sign if any. What could be read two ways is refused (`"1.000"` in Portuguese, `"1,000"` in English: one or a thousand?); a lone mark that can't be a thousands separator (`0.001`, `1,5`) is the decimal mark in any language; several marks must be the language's thousands, properly grouped. Refusals are a `RangeError` whose message, translated, says what to type. |
+| `parseBtc(text)` | An amount in BTC as typed, in whole satoshis (a Number: 21 million BTC fit exactly), with the rules of `parseNumber`; no sign, at most 8 decimals, at most 21,000,000 BTC. |
+| `formatDateTime(seconds, { utc }?)` | ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock's local time ([`zg:clock`](#zgclock)'s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped. |
+| `formatDate(seconds, { utc }?)` | `2026-11-08`, as `formatDateTime`. |
+| `formatTime(seconds, { utc }?)` | `14:03:05`, as `formatDateTime`. |
 
 ---
 

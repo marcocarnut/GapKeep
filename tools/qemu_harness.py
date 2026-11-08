@@ -48,6 +48,10 @@ Scenario file: one command per line, '#' starts a comment.
                                 (PGM, PPM or PNG, colour kept; relative to the
                                 scenario's folder); test builds take the
                                 colour codes of tests/colorqr by name
+    language <tag>              the language of the apps started from now on
+                                (pt-BR, qps, en), as a settings app sets it:
+                                the simulator takes it on stdin, test builds
+                                on the serial line ("#language <tag>")
     reset                       reset the machine (on the rig: and upload
                                 the kernel again); "expect" only looks at
                                 what was logged after the reset
@@ -458,6 +462,10 @@ class SimMachine:
     def camera(self, args):
         self._cmd('camera %s' % args)
 
+    def language(self, tag):
+        self._cmd('language %s' % tag)
+        time.sleep(0.1)
+
     def launch(self, app_id):
         self._cmd('launch %s' % app_id)
         time.sleep(0.1)
@@ -579,6 +587,11 @@ def run_scenario(m, path, outdir):
                     if rest.startswith('picture '):
                         rest = 'picture ' + os.path.splitext(os.path.basename(rest[8:].strip()))[0]
                     m.send('#camera ' + rest)
+            elif cmd == 'language':
+                if hasattr(m, 'language'):
+                    m.language(rest.strip())
+                else:
+                    m.send('#language ' + rest.strip())
             elif cmd == 'reset':
                 m.reset()
             elif cmd == 'expect':

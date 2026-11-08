@@ -3,3 +3,7 @@ clock_trim_ppm = -12.5
 utc_offset = +05:30
 no_such_key = 1
 experimental = yes
+# languages (tests/i18n.txt): one the system doesn't have, so English, and
+# a decimal mark it refuses
+language = xx-YY
+decimal_mark = ;
