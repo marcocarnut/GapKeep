@@ -36,6 +36,7 @@ extern "C" {
 }
 
 struct TZgApp;
+#include "bundle.h"
 
 class CZgI18n
 {
@@ -67,6 +68,12 @@ public:
 	// returns the time it took, in microseconds
 	static unsigned LoadCatalog (TZgApp *pApp);
 	static void FreeApp (TZgApp *pApp);
+
+	// An app's name or description in the language: the manifest's English
+	// is the key in the app's own catalog, checked as any translation.
+	// Cached until the language changes (a catalog is parsed once for both).
+	static const char *GetAppName (JSContext *pContext, const zg_app_t *pApp);
+	static const char *GetAppDescription (JSContext *pContext, const zg_app_t *pApp);
 
 private:
 	static boolean IsKnown (const char *pTag);

@@ -272,13 +272,21 @@ apps/myapp/
 }
 ```
 
-`notes` is for translators; the runtime ignores it. `tools/i18n.py` keeps
+`notes` is for translators; the runtime ignores it. The manifest's `name`
+and `description` are keys too: their translations go in the catalog, not
+in manifest.json, and the launcher (`zg:apps`' `list()`) and `sys.app` show
+them in the language, with the same checks (and no line breaks). Leave out
+a name that is a product's (`dice39`): it stays as it is. `tools/i18n.py` keeps
 catalogs in step with the code:
 
 ```sh
 python3 tools/i18n.py extract apps/myapp --lang pt-BR   # adds new keys, empty
 python3 tools/i18n.py check apps/myapp                  # what is missing or wrong
 ```
+
+`check --lang pt-BR` also reads the language's glossary,
+[docs/i18n/pt-BR.md](i18n/pt-BR.md): the terms every app uses, and words
+to avoid, which it reports as warnings.
 
 A key with an empty translation shows in English. `check` lists keys with
 no translation, translations no longer used, and those the runtime would

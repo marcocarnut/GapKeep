@@ -527,6 +527,205 @@ static JSValue LoadMessages (JSContext *ctx, const zg_app_t *pApp, const char *p
 	return Messages;
 }
 
+// --- app names and descriptions ----------------------------------------------------
+
+// The translation of each key, or 0, from one catalog file. Only these
+// keys are looked at (the launcher asks for every app's), with the checks
+// of LoadFile; a refused one is logged.
+static void LookupFile (JSContext *ctx, const zg_app_t *pApp, const zg_file_t *pFile, const char *pTag,
+			const char *pKeys[], char *pOut[], unsigned nKeys)
+{
+	if (pFile == 0 || pFile->size > MaxCatalogSize)
+	{
+		return;		// (LoadFile logs it when the app starts)
+	}
+	JSValue Obj = JS_ParseJSON (ctx, pFile->data, pFile->size, pFile->path);
+	if (JS_IsException (Obj))
+	{
+		JS_FreeValue (ctx, JS_GetException (ctx));
+		return;
+	}
+	JSValue Lang = JS_GetPropertyStr (ctx, Obj, "$language");
+	JSValue App = JS_GetPropertyStr (ctx, Obj, "$app");
+	const char *pLang = JS_IsString (Lang) ? JS_ToCString (ctx, Lang) : 0;
+	const char *pAppID = JS_IsString (App) ? JS_ToCString (ctx, App) : 0;
+	JSValue Table = JS_GetPropertyStr (ctx, Obj, "messages");
+	if (   (JS_IsUndefined (Lang) || (pLang != 0 && strcmp (pLang, pTag) == 0))
+	    && (JS_IsUndefined (App) || (pAppID != 0 && strcmp (pAppID, pApp->id) == 0))
+	    && JS_IsObject (Table) && !JS_IsArray (ctx, Table))
+	{
+		for (unsigned i = 0; i < nKeys; i++)
+		{
+			if (pKeys[i] == 0 || *pKeys[i] == '\0')
+			{
+				continue;
+			}
+			JSValue Value = JS_GetPropertyStr (ctx, Table, pKeys[i]);
+			size_t nText = 0;
+			const char *pText = JS_IsString (Value) ? JS_ToCStringLen (ctx, &nText, Value) : 0;
+			if (pText != 0 && nText > 0)
+			{
+				const char *pWhy = CheckTranslation (pKeys[i], strlen (pKeys[i]), pText, nText);
+				if (pWhy == 0 && memchr (pText, '\n', nText) != 0)
+				{
+					pWhy = "has a line break";
+				}
+				if (pWhy == 0)
+				{
+					delete [] pOut[i];
+					pOut[i] = new char[nText + 1];
+					memcpy (pOut[i], pText, nText + 1);
+				}
+				else
+				{
+					char Key[48];
+					LogKey (Key, pKeys[i], strlen (pKeys[i]));
+					CLogger::Get ()->Write (From, LogWarning, "%s %s: \"%s\": the translation %s:"
+								" ignored, English shown", pApp->id, pFile->path, Key, pWhy);
+				}
+			}
+			JS_FreeCString (ctx, pText);
+			JS_FreeValue (ctx, Value);
+		}
+	}
+	JS_FreeCString (ctx, pLang);
+	JS_FreeCString (ctx, pAppID);
+	JS_FreeValue (ctx, Table);
+	JS_FreeValue (ctx, Lang);
+	JS_FreeValue (ctx, App);
+	JS_FreeValue (ctx, Obj);
+}
+
+struct TAppText
+{
+	const zg_app_t *pApp;
+	char Language[16];	// what these are in
+	char *pName;		// 0: the manifest's
+	char *pDescription;
+};
+
+static const unsigned MaxAppTexts = 256;
+static TAppText s_AppTexts[MaxAppTexts];
+
+static TAppText *AppText (JSContext *ctx, const zg_app_t *pApp, const char *pLanguage)
+{
+	TAppText *pFree = 0;
+	for (unsigned i = 0; i < MaxAppTexts; i++)
+	{
+		if (s_AppTexts[i].pApp == pApp)
+		{
+			pFree = &s_AppTexts[i];
+			if (strcmp (pFree->Language, pLanguage) == 0)
+			{
+				return pFree;
+			}
+			break;
+		}
+		if (pFree == 0 && s_AppTexts[i].pApp == 0)
+		{
+			pFree = &s_AppTexts[i];
+		}
+	}
+	if (pFree == 0)
+	{
+		return 0;
+	}
+
+	TAppText *p = pFree;
+	p->pApp = pApp;
+	strcpy (p->Language, pLanguage);
+	delete [] p->pName;
+	delete [] p->pDescription;
+	p->pName = p->pDescription = 0;
+	if (strcmp (pLanguage, "en") == 0 || strcmp (pLanguage, "qps") == 0)
+	{
+		return p;
+	}
+
+	char Base[16];
+	strcpy (Base, pLanguage);
+	char *pDash = strchr (Base, '-');
+	const char *pKeys[2] = {pApp->name, pApp->description};
+	char *pOut[2] = {0, 0};
+	if (pDash != 0)
+	{
+		*pDash = '\0';
+		LookupFile (ctx, pApp, CatalogFile (pApp, Base), Base, pKeys, pOut, 2);
+	}
+	LookupFile (ctx, pApp, CatalogFile (pApp, pLanguage), pLanguage, pKeys, pOut, 2);
+	p->pName = pOut[0];
+	p->pDescription = pOut[1];
+	return p;
+}
+
+// qps, as i18n.js's pseudo() makes it: accented, about 40% longer, in brackets
+static const char *Accented (char c)
+{
+	static const char *Lower[26] = {"å", 0, "ç", "ď", "é", 0, "ĝ", "ĥ", "î", "ĵ", "ķ", "ĺ", 0, "ñ", "ö",
+					0, 0, "ŕ", "š", "ţ", "û", 0, "ŵ", 0, "ý", "ž"};
+	static const char *Upper[26] = {"Å", 0, "Ç", "Ď", "É", 0, "Ĝ", "Ĥ", "Î", "Ĵ", "Ķ", "Ĺ", 0, "Ñ", "Ö",
+					0, 0, "Ŕ", "Š", "Ţ", "Û", 0, "Ŵ", 0, "Ý", "Ž"};
+	return c >= 'a' && c <= 'z' ? Lower[c - 'a'] : c >= 'A' && c <= 'Z' ? Upper[c - 'A'] : 0;
+}
+
+static const char *Pseudo (const char *pText, char **ppCache)
+{
+	if (*ppCache == 0)
+	{
+		size_t n = strlen (pText), nChars = 0;
+		for (const char *p = pText; *p; p++)
+		{
+			nChars += ((u8) *p & 0xC0) != 0x80;
+		}
+		size_t nDots = (nChars * 4 + 9) / 10;
+		nDots = nDots ? nDots : 1;
+		char *q = *ppCache = new char[1 + n * 2 + 1 + nDots * 2 + 2];	// accents: 2 bytes
+		*q++ = '[';
+		for (const char *p = pText; *p; p++)
+		{
+			const char *a = Accented (*p);
+			if (a != 0)
+			{
+				strcpy (q, a);
+				q += strlen (a);
+			}
+			else
+			{
+				*q++ = *p;
+			}
+		}
+		*q++ = ' ';
+		for (size_t i = 0; i < nDots; i++)
+		{
+			*q++ = (char) 0xC2;	// U+00B7
+			*q++ = (char) 0xB7;
+		}
+		*q++ = ']';
+		*q = '\0';
+	}
+	return *ppCache;
+}
+
+const char *CZgI18n::GetAppName (JSContext *ctx, const zg_app_t *pApp)
+{
+	TAppText *p = AppText (ctx, pApp, s_Language);
+	if (p != 0 && strcmp (s_Language, "qps") == 0)
+	{
+		return Pseudo (pApp->name, &p->pName);
+	}
+	return p != 0 && p->pName != 0 ? p->pName : pApp->name;
+}
+
+const char *CZgI18n::GetAppDescription (JSContext *ctx, const zg_app_t *pApp)
+{
+	TAppText *p = AppText (ctx, pApp, s_Language);
+	if (p != 0 && strcmp (s_Language, "qps") == 0)
+	{
+		return *pApp->description ? Pseudo (pApp->description, &p->pDescription) : "";
+	}
+	return p != 0 && p->pDescription != 0 ? p->pDescription : pApp->description;
+}
+
 unsigned CZgI18n::LoadCatalog (TZgApp *pApp)
 {
 	unsigned nStart = CTimer::Get ()->GetClockTicks ();

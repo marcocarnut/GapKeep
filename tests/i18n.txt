@@ -23,13 +23,17 @@ expect i18ntest Newline: "Duas\\nlinhas"
 expect i18ntest proto: "protótipo"
 expect i18ntest context: "Abrir"
 expect i18ntest recolor: "Cor #ff0000 texto#"
+# the manifest's name in the language; the description's translation refused
+expect i18ntest name: "teste de i18n"
+expect i18ntest description: "Test app: zg:i18n and the checks on catalogs \(tests/i18n.txt\)."
+expect i18ntest lang/pt-BR.json: "Test app: zg:i18n and the checks on cata\.\.\.": the translation has a control or bidi character
 # refused, each logged: English instead
 expect i18ntest lang/pt-BR.json: "Send \{amount\}": the translation hasn't the same \{names\} as its key
 expect i18ntest lang/pt-BR.json: "Fee \{fee\}": the translation hasn't the same \{names\} as its key
 expect i18ntest lang/pt-BR.json: "Pay \{to\}": the translation has a control or bidi character
 expect i18ntest lang/pt-BR.json: "Bell": the translation has a control or bidi character
 expect i18ntest lang/pt-BR.json: "A number": the translation is not a string
-expect i18ntest lang/pt-BR.json: 6 translations, 5 ignored
+expect i18ntest lang/pt-BR.json: 7 translations, 6 ignored
 expect i18ntest Drops: "Send 1,5"
 expect i18ntest Invents: "Fee 2"
 expect i18ntest Bidi: "Pay x"
@@ -51,12 +55,12 @@ expect Started i18ntest: modules \d+ ms, catalog \d+\.\d ms
 mark
 key meta_l
 expect launcher ready
-expect launcher lang/pt-BR.json: 26 translations, 0 ignored
+expect launcher lang/pt-BR.json: 28 translations, 0 ignored
 wait 1
 shot 01-launcher-pt-BR
 tile clock
 expect clock ready
-expect clock lang/pt-BR.json: 32 translations, 0 ignored
+expect clock lang/pt-BR.json: 34 translations, 0 ignored
 wait 1
 shot 02-clock-pt-BR
 # a trim with a decimal comma (the card's is -12.5: "-12,5" in the field)

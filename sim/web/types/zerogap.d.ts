@@ -544,7 +544,7 @@ declare module "zg:ui" {
 declare module "zg:sys" {
   /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
   export const kernel: { readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" };
-  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)). */
+  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)). */
   export const app: AppInfo;
   /** `{ zerogap, quickjs, lvgl, circle }` version strings. */
   export const version: { readonly zerogap: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string };
@@ -683,7 +683,7 @@ declare module "zg:i18n" {
 }
 
 declare module "zg:apps" {
-  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) for every app not marked `hidden`, and not marked `experimental` unless the card's `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
+  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
   export function list(): AppInfo[];
   /** Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. */
   export function launch(id: string): void;

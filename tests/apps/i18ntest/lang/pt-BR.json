@@ -13,7 +13,9 @@
     "Pay {to}": "Pagar ‮{to}",
     "Bell": "Sino\u0007",
     "A number": 5,
-    "Not translated yet": ""
+    "Not translated yet": "",
+    "i18n test": "teste de i18n",
+    "Test app: zg:i18n and the checks on catalogs (tests/i18n.txt).": "Aplicativo de teste‮"
   },
   "notes": {
     "Send {amount}": "Refused on purpose: it drops {amount}."

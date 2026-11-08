@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "i18n.h"
 #include "appstore.h"
 #include "../crypto/sha256.h"
 #include <circle/memorymap.h>
@@ -334,9 +335,10 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 {
 	JSValue Obj = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Obj, "id", JS_NewString (ctx, pApp->id));
-	JS_SetPropertyStr (ctx, Obj, "name", JS_NewString (ctx, pApp->name));
+	// in the language (the app's catalog), as everything the person reads
+	JS_SetPropertyStr (ctx, Obj, "name", JS_NewString (ctx, CZgI18n::GetAppName (ctx, pApp)));
 	JS_SetPropertyStr (ctx, Obj, "version", JS_NewString (ctx, pApp->version));
-	JS_SetPropertyStr (ctx, Obj, "description", JS_NewString (ctx, pApp->description));
+	JS_SetPropertyStr (ctx, Obj, "description", JS_NewString (ctx, CZgI18n::GetAppDescription (ctx, pApp)));
 	JS_SetPropertyStr (ctx, Obj, "icon", JS_NewString (ctx, pApp->icon));
 	JS_SetPropertyStr (ctx, Obj, "source",
 			   JS_NewString (ctx, pApp->source == ZG_APP_SDCARD ? "sdcard" : "builtin"));
