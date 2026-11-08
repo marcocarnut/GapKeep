@@ -48,6 +48,10 @@ for t in $SCENARIOS; do
 	else
 		sim=sim/build/zgsim; card=$OUT/card-apps
 	fi
+	# "# Card: empty": an SD card without apps (a screen that depends on nothing else)
+	if grep -q "^# Card: empty" "$t"; then
+		card=$OUT/card-empty; mkdir -p "$card"
+	fi
 	if python3 tools/qemu_harness.py --sim "$sim" --card "$card" --out "$OUT/$name" "$t" \
 		> "$OUT/$name.log" 2>&1; then
 		echo "PASS  sim:$name"
@@ -89,6 +93,32 @@ if [ -f "$OUT/dice39_import/12-zpub.png" ]; then
 	fi
 fi
 
+# the launcher in the pseudo-language, as recorded (tests/i18n/check_shot.py)
+if [ -f "$OUT/i18n_qps/launcher-qps.png" ]; then
+	if python3 tests/i18n/check_shot.py tests/i18n/launcher-qps.png "$OUT/i18n_qps/launcher-qps.png" \
+		> "$OUT/i18n_qps_shot.log" 2>&1; then
+		echo "PASS  sim:i18n_qps_shot"
+	else
+		echo "FAIL  sim:i18n_qps_shot   (see $OUT/i18n_qps_shot.log)"; FAILED=1
+	fi
+fi
+
+# every app's translations (tools/i18n.py), and the tool on the test app's
+for a in apps/*/; do
+	[ -d "$a/lang" ] || continue
+	name=i18n_$(basename "$a")
+	if python3 tools/i18n.py check "$a" > "$OUT/$name.log" 2>&1; then
+		echo "PASS  sim:$name"
+	else
+		echo "FAIL  sim:$name   (see $OUT/$name.log)"; FAILED=1
+	fi
+done
+if python3 tests/i18n/check_tool.py > "$OUT/i18n_tool.log" 2>&1; then
+	echo "PASS  sim:i18n_tool"
+else
+	echo "FAIL  sim:i18n_tool   (see $OUT/i18n_tool.log)"; FAILED=1
+fi
+
 # the API description (docs/api/zerogap-api.yaml) against the real runtime
 if python3 tools/check_api.py sim/build/zgsim-test > "$OUT/check_api.log" 2>&1; then
 	echo "PASS  sim:check_api"
@@ -105,6 +135,11 @@ fi
 
 # libraries outside apps (lib/js), under Node
 if command -v node >/dev/null; then
+	if node --experimental-default-type=module tests/i18n/run_node.mjs > "$OUT/i18n_node.log" 2>&1; then
+		echo "PASS  sim:i18n_node"
+	else
+		echo "FAIL  sim:i18n_node   (see $OUT/i18n_node.log)"; FAILED=1
+	fi
 	if node --experimental-default-type=module tests/bbqr/run_node.mjs > "$OUT/bbqr.log" 2>&1 \
 		&& python3 tests/bbqr/check_capacity.py >> "$OUT/bbqr.log" 2>&1; then
 		echo "PASS  sim:bbqr"
