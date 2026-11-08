@@ -80,7 +80,7 @@ export const S = {
   codex32Warning: "These shares split the entropy of your phrase, not a BIP-32 seed. Recovering them with a generic " +
     "BIP-93 tool gives back the entropy, and handing that to a wallet as a raw seed opens a different, empty wallet, " +
     "silently. Recover with dice39's codex32_recover page, which turns the entropy back into your words.",
-  deviceEntropy: "The device words come from zerogap's hardware random generator (health-checked, SHA-256 " +
+  deviceEntropy: "The device words come from ZeroGap's hardware random generator (health-checked, SHA-256 " +
     "conditioned) mixed with what you did on the entropy pad and the timing of every key you pressed, hashed " +
     "together with SHA-256.",
 
