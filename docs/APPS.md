@@ -235,7 +235,9 @@ if (choice === 1) eraseAll();
 ## Languages
 
 An app can show its text in the person's language. Write it in English,
-where it is used, through `t()`: the English is the key.
+where it is used, through `t()`: the English is the key. Translators
+follow each language's glossary, [i18n/pt-BR.md](i18n/pt-BR.md) for
+Brazilian Portuguese, so a term has one name in every app.
 
 ```js
 import { t, plural, formatBtc } from "zg:i18n";
