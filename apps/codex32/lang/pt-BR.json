@@ -2,6 +2,7 @@
   "$language": "pt-BR",
   "$app": "codex32",
   "messages": {
+    "Recombine codex32 (BIP-93) shares into the seed phrase, by keyboard or camera.": "Recombina partições codex32 (BIP-93) na frase-semente, pelo teclado ou pela câmera.",
     "About": "Sobre",
     "Valid: the secret itself (index S), identifier {id}, {bytes}-byte seed.": "Válida: o próprio segredo (índice S), identificador {id}, semente de {bytes} bytes.",
     "Valid: share {index}, identifier {id}, threshold {k}, {bytes}-byte seed.": "Válida: partição {index}, identificador {id}, limiar {k}, semente de {bytes} bytes.",

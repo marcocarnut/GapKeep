@@ -2,6 +2,7 @@
   "$language": "pt-BR",
   "$app": "signer",
   "messages": {
+    "Shows what a Bitcoin transaction does, then signs it.": "Mostra o que uma transação Bitcoin faz, e depois a assina.",
     "Descriptor": "Descritor",
     "zpub/xpub": "zpub/xpub",
     "A seed phrase has 12, 15, 18, 21 or 24 words, not {n}.": "Uma frase-semente tem 12, 15, 18, 21 ou 24 palavras, não {n}.",

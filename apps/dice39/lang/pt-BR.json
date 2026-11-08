@@ -2,6 +2,7 @@
   "$language": "pt-BR",
   "$app": "dice39",
   "messages": {
+    "Entropy you see: dice and a coin to a BIP-39 seed phrase.": "Entropia que se vê: dados e uma moeda viram uma frase-semente BIP-39.",
     "Cancel": "Cancelar",
     "Phrase length": "Tamanho da frase",
     "24 words (recommended)": "24 palavras (recomendado)",
