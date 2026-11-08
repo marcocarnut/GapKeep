@@ -1,0 +1,108 @@
+# Needs a test build (make TEST=1) and the test SD card (experimental = yes,
+# for colorqr). Simulator only ("launch"). The apps converted to zg:i18n,
+# in pt-BR and in the pseudo-language qps (text that missed t() stays
+# plain, text cut off shows): each starts without an error, and the
+# screenshots are for looking at.
+expect launcher ready 30
+language pt-BR
+launch launcher
+expect launcher ready
+wait 1
+shot pt-BR-launcher
+mark
+launch hello
+expect hello ready 10
+wait 1
+shot pt-BR-hello
+mark
+launch gallery
+expect gallery ready 10
+wait 1
+shot pt-BR-gallery
+mark
+launch qrscan
+expect qrscan ready 10
+wait 1
+shot pt-BR-qrscan
+mark
+launch colorqr
+expect colorqr ready 10
+wait 1
+shot pt-BR-colorqr
+mark
+launch totp
+expect totp ready 10
+wait 1
+shot pt-BR-totp
+mark
+launch settings
+expect settings ready 10
+wait 1
+shot pt-BR-settings
+mark
+launch totp
+expect totp ready 10
+key tab
+key ret
+wait 1
+shot pt-BR-totp-type
+# a refusal: on screen in the language, in the log in English (never the key)
+type Exemplo
+key tab
+key tab
+type abcd
+key ret
+expect totp: typed key refused: The key is 4 characters long 5
+wait 1
+shot pt-BR-totp-refused
+language qps
+launch launcher
+expect launcher ready
+wait 1
+shot qps-launcher
+mark
+launch hello
+expect hello ready 10
+wait 1
+shot qps-hello
+mark
+launch gallery
+expect gallery ready 10
+wait 1
+shot qps-gallery
+mark
+launch qrscan
+expect qrscan ready 10
+wait 1
+shot qps-qrscan
+mark
+launch colorqr
+expect colorqr ready 10
+wait 1
+shot qps-colorqr
+mark
+launch totp
+expect totp ready 10
+wait 1
+shot qps-totp
+mark
+launch settings
+expect settings ready 10
+wait 1
+shot qps-settings
+mark
+launch totp
+expect totp ready 10
+key tab
+key ret
+wait 1
+shot qps-totp-type
+# a refusal: on screen in the language, in the log in English (never the key)
+type Exemplo
+key tab
+key tab
+type abcd
+key ret
+expect totp: typed key refused: The key is 4 characters long 5
+wait 1
+shot qps-totp-refused

@@ -2,6 +2,8 @@
   "$language": "pt-BR",
   "$app": "clock",
   "messages": {
+    "Clock": "Relógio",
+    "Sets the system clock, its UTC offset and its drift trim.": "Acerta o relógio do sistema, o fuso (UTC) e o ajuste de desvio.",
     "weekday\u0004Sun": "dom",
     "weekday\u0004Mon": "seg",
     "weekday\u0004Tue": "ter",

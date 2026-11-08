@@ -13,10 +13,10 @@
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import { sha256 } from "zg:crypto";
+import { t, plural } from "zg:i18n";
 
 const hex = (bytes, sep = " ") => Array.from (bytes, (b) => b.toString (16).padStart (2, "0")).join (sep);
 const digest = (bytes) => hex (sha256 (bytes).subarray (0, 8), "");
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 // the bytes as text if they are valid UTF-8 (decodeURIComponent checks it
 // strictly), else null
 function utf8 (bytes) {
@@ -37,27 +37,29 @@ const scanner = new ui.Scanner ({
   height: wide ? 300 : 210,
   onDetect: (ev) => (ev.kind === "qr" ? showBase (ev) : showColour (ev)),
   onError: ({ reason }) => {
-    status.text = "The camera stopped: " + reason;
-    toggle.text = ui.symbols.play + " Start";
+    status.text = t ("The camera stopped: {reason}", { reason });
+    toggle.text = ui.symbols.play + " " + t ("Start");
     console.log (`colorqr: error: ${reason}`);
   },
 });
 
 const side = new ui.Container (wide ? { layout: "column", gap: 10, grow: 1, scrollable: true, height: "100%" }
                                     : { layout: "column", gap: 6, width: "100%" });
-new ui.Label (side, { text: "Color QR (experimental)", font: wide ? 22 : 16 });
-const status = new ui.Label (side, { text: "Show a colour QR code to the camera", width: "100%", overflow: "wrap" });
+new ui.Label (side, { text: t ("Color QR (experimental)"), font: wide ? 22 : 16 });
+const status = new ui.Label (side, { text: t ("Show a colour QR code to the camera"), width: "100%", overflow: "wrap" });
 
-new ui.Label (side, { text: "What any QR reader sees", font: wide ? 18 : 14, color: MUTED });
+new ui.Label (side, { text: t ("What any QR reader sees"), font: wide ? 18 : 14, color: MUTED });
 const base = new ui.Label (side, { text: "-", width: "100%", overflow: "wrap" });
-new ui.Label (side, { text: "What only the colours hold", font: wide ? 18 : 14, color: MUTED });
+new ui.Label (side, { text: t ("What only the colours hold"), font: wide ? 18 : 14, color: MUTED });
 const colour = new ui.Label (side, { text: "-", width: "100%", overflow: "wrap" });
 
 let count = 0;
 
 function describe (bytes, text) {
   const what = text !== null ? text : hex (bytes.subarray (0, 256)) + (bytes.length > 256 ? " ..." : "");
-  return `${plural (bytes.length, "byte")}${text === null ? ", binary" : ""}\n${what}`;
+  const size = text === null ? plural (bytes.length, "{n} byte, binary", "{n} bytes, binary")
+    : plural (bytes.length, "{n} byte", "{n} bytes");
+  return `${size}\n${what}`;
 }
 
 // The scanner reports a colour layer it could not read after a second of
@@ -68,14 +70,14 @@ let waiting = null;
 function showBase ({ bytes, text }) {
   count++;
   base.text = describe (bytes, text);
-  colour.text = "Reading the colours...";
+  colour.text = t ("Reading the colours...");
   colour.color = MUTED;
   clearTimeout (waiting);
   waiting = setTimeout (() => {
-    colour.text = "Not read: the code went out of view (hold it steady, closer)";
+    colour.text = t ("Not read: the code went out of view (hold it steady, closer)");
     colour.color = AMBER;
   }, 3000);
-  status.text = `Code ${count}`;
+  status.text = t ("Code {count}", { count });
   console.log (`colorqr: code ${count}, ${bytes.length} bytes, sha256 ${digest (bytes)}`);
 }
 
@@ -86,7 +88,7 @@ function showColour ({ status: result, colour: data }) {
     colour.color = GREEN;
     console.log (`colorqr: colour layer of code ${count}, ${data.length} bytes, sha256 ${digest (data)}`);
   } else {
-    colour.text = result === "plain" ? "None: a plain QR code" : "Not read (hold the code steady, closer, without glare)";
+    colour.text = result === "plain" ? t ("None: a plain QR code") : t ("Not read (hold the code steady, closer, without glare)");
     colour.color = AMBER;
     console.log (`colorqr: colour layer of code ${count}: ${result}`);
   }
@@ -94,26 +96,26 @@ function showColour ({ status: result, colour: data }) {
 
 const buttons = new ui.Container (side, { layout: "row", gap: 8 });
 const toggle = new ui.Button (buttons, {
-  text: ui.symbols.pause + " Stop",
+  text: ui.symbols.pause + " " + t ("Stop"),
   onClick: () => {
     if (scanner.scanning) {
       scanner.stop ();
-      toggle.text = ui.symbols.play + " Start";
+      toggle.text = ui.symbols.play + " " + t ("Start");
     } else {
       scanner.start ();
-      toggle.text = ui.symbols.pause + " Stop";
+      toggle.text = ui.symbols.pause + " " + t ("Stop");
     }
   },
 });
 new ui.Button (buttons, {
-  text: ui.symbols.trash + " Clear",
+  text: ui.symbols.trash + " " + t ("Clear"),
   onClick: () => {
     clearTimeout (waiting);
     base.text = colour.text = "-";
-    status.text = "Show a colour QR code to the camera";
+    status.text = t ("Show a colour QR code to the camera");
   },
 });
-new ui.Button (buttons, { text: ui.symbols.home + " Back", onClick: () => sys.exit () });
+new ui.Button (buttons, { text: ui.symbols.home + " " + t ("Back"), onClick: () => sys.exit () });
 
 toggle.focus ();
 console.log ("colorqr ready");

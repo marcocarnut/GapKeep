@@ -3,12 +3,16 @@
 // and the rest of the module, logged for tests/i18n.txt. Test builds only.
 import * as ui from "zg:ui";
 import * as i from "zg:i18n";
+import * as sys from "zg:sys";
 
 const show = (s) => JSON.stringify(s);
 const log = (what, value) => console.log(`i18ntest ${what}: ${show(value)}`);
 
 log("language", i.language());
 log("marks", i.marks());
+// the manifest's name and description, through the catalog
+log("name", sys.app.name);
+log("description", sys.app.description);
 // taken
 log("Both", i.t("Both"));
 log("Only in pt", i.t("Only in pt"));

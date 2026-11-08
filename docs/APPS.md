@@ -272,7 +272,11 @@ apps/myapp/
 }
 ```
 
-`notes` is for translators; the runtime ignores it. `tools/i18n.py` keeps
+`notes` is for translators; the runtime ignores it. The manifest's `name`
+and `description` are keys too: their translations go in the catalog, not
+in manifest.json, and the launcher (`zg:apps`' `list()`) and `sys.app` show
+them in the language, with the same checks (and no line breaks). Leave out
+a name that is a product's (`dice39`): it stays as it is. `tools/i18n.py` keeps
 catalogs in step with the code:
 
 ```sh
@@ -280,11 +284,18 @@ python3 tools/i18n.py extract apps/myapp --lang pt-BR   # adds new keys, empty
 python3 tools/i18n.py check apps/myapp                  # what is missing or wrong
 ```
 
+`check --lang pt-BR` also reads the language's glossary,
+[docs/i18n/pt-BR.md](i18n/pt-BR.md): the terms every app uses, and words
+to avoid, which it reports as warnings.
+
 A key with an empty translation shows in English. `check` lists keys with
 no translation, translations no longer used, and those the runtime would
 refuse; `tools/run_sim_tests.sh` runs it for every app with a `lang/`
 folder. Keys must be string literals (or literals joined with `+`):
-`t(variable)` works, but `check` can't see it and says so.
+`t(variable)` works, but `check` can't see it and says so. Code that can't import
+`zg:i18n` (a library also run under Node) marks its text with a no-op
+`N_("...")` (`const N_ = (s) => s;`), and the app passes it to `t()`
+later: `check` finds those keys too (`apps/totp/lib/parse.js`).
 
 What a translation may not do (the runtime checks each one when the app
 starts, logs those it refuses and shows the English instead):

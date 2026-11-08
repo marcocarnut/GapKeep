@@ -1,0 +1,23 @@
+{
+  "$language": "pt-BR",
+  "$app": "qrscan",
+  "messages": {
+    "QR Scanner": "Leitor de QR code",
+    "Reads QR codes with the camera and shows what they hold.": "Lê QR codes com a câmera e mostra o que eles contêm.",
+    "Code {count}: {n} byte, binary": "Código {count}: {n} byte, binário",
+    "Code {count}: {n} bytes, binary": "Código {count}: {n} bytes, binário",
+    "Code {count}: {n} byte": "Código {count}: {n} byte",
+    "Code {count}: {n} bytes": "Código {count}: {n} bytes",
+    "The camera stopped": "A câmera parou",
+    "Start": "Iniciar",
+    "Show a QR code to the camera": "Mostre um QR code para a câmera",
+    "Stop": "Parar",
+    "Clear": "Limpar",
+    "Wide view": "Visão ampla",
+    "Detail": "Detalhe",
+    "Back": "Voltar"
+  },
+  "notes": {
+    "Wide view": "Switches the camera to all of its view (less detail); \"Detail\" switches back to its middle."
+  }
+}

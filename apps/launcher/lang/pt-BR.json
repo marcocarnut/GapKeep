@@ -3,6 +3,8 @@
   "$app": "launcher",
   "$name": "Português (Brasil)",
   "messages": {
+    "Launcher": "Inicializador",
+    "Starts apps.": "Abre os aplicativos.",
     "SD card": "Cartão SD",
     "no SD card": "sem cartão SD",
     "SD card not readable": "cartão SD ilegível",

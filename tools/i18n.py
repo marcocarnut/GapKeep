@@ -9,7 +9,9 @@ An app's translations: apps/<app>/lang/<language>.json (docs/APPS.md,
       {names} differ from their key's, control and bidi characters, and a
       catalog the runtime would refuse. Keys that aren't string literals
       are listed as "dynamic, not checked". Exit status 1 on any problem
-      but those.
+      but those. With a glossary for the language (docs/i18n/<language>.md),
+      a translation using a word from its "Avoid" column is a warning, not
+      a failure: some of those words are right in other senses.
 
   i18n.py extract apps/x --lang pt-BR [--prune]
       Creates or updates lang/pt-BR.json: adds the keys the code uses with
@@ -20,8 +22,13 @@ An app's translations: apps/<app>/lang/<language>.json (docs/APPS.md,
   i18n.py keys apps/x
       The keys, one JSON string a line, in the order the code uses them.
 
+The manifest's name and description are keys too, optional ones (a
+product's name stays as it is): the runtime shows the launcher and
+sys.app those translations (docs/APPS.md, "Languages").
+
 The keys are the first argument of t() and the second and third of
-plural() (or i18n.t(), ...), string literals (or literals joined with +), with t()'s
+plural() (or i18n.t(), ...), and of N_(), which marks text for t()
+in code that can't import zg:i18n (const N_ = (s) => s; apps/totp), string literals (or literals joined with +), with t()'s
 { $context: "..." } if it has one ("verb\\u0004Open"). The launcher's
 catalogs are also the system's: its keys include those of the runtime's
 own JavaScript (src/runtime/*.js, ts()).
@@ -233,13 +240,71 @@ def sources(appdir):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
         for f in sorted(files):
             if f.endswith('.js'):
-                out.append((os.path.join(root, f), ('t', 'plural')))
+                out.append((os.path.join(root, f), ('t', 'plural', 'N_')))
     if os.path.basename(os.path.normpath(appdir)) == 'launcher':
         rt = os.path.join(ROOT, 'src', 'runtime')
         for f in sorted(os.listdir(rt)):
             if f.endswith('.js'):
                 out.append((os.path.join(rt, f), ('ts',)))
     return out
+
+
+def manifest_keys(appdir):
+    """The manifest's name and description: keys that may stay untranslated."""
+    try:
+        with open(os.path.join(appdir, 'manifest.json'), encoding='utf-8') as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return []
+    out = []
+    for k in ('name', 'description'):
+        if isinstance(m.get(k), str) and m[k] and m[k] not in out:
+            out.append(m[k])
+    return out
+
+
+# --- the glossary (docs/i18n/<language>.md) ------------------------------------------
+
+def glossary(tag):
+    """[(phrase to avoid, English, translation)] from the glossary's table
+    with an "Avoid" column; [] if the language has none."""
+    path = os.path.join(ROOT, 'docs', 'i18n', tag + '.md')
+    if not os.path.exists(path):
+        return []
+    rules, header = [], None
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith('|'):
+                header = None
+                continue
+            cells = [c.strip() for c in line.strip('|').split('|')]
+            if header is None:
+                header = [c.lower() for c in cells]
+                continue
+            if set(''.join(cells)) <= set('-: '):
+                continue        # the |---|---| line
+            if 'avoid' not in header:
+                continue
+            row = dict(zip(header, cells))
+            english = row.get('english', '')
+            wanted = row.get(tag.lower(), '')
+            for phrase in row.get('avoid', '').split(','):
+                phrase = phrase.strip().strip('`"“”')
+                if phrase:
+                    rules.append((phrase, english, wanted))
+    return rules
+
+
+def avoid_pattern(phrase):
+    # whole words, a hyphenated word being one: "frase-senha" is not "senha"
+    return re.compile(r'(?<![\w-])' + r'\s+'.join(re.escape(w) for w in phrase.split()) + r'(?![\w-])',
+                      re.IGNORECASE)
+
+
+def glossary_warnings(text, rules):
+    return ['uses "%s" (glossary: %s is "%s")' % (phrase, english, wanted)
+            for phrase, english, wanted in rules if avoid_pattern(phrase).search(text)]
 
 
 def app_keys(appdir):
@@ -310,6 +375,7 @@ def check(appdir, only=None):
     app_id = os.path.basename(appdir)
     langdir = os.path.join(appdir, 'lang')
     keys, dynamic = app_keys(appdir)
+    optional = [k for k in manifest_keys(appdir) if k not in keys]
     tags = sorted(f[:-5] for f in os.listdir(langdir) if f.endswith('.json')) if os.path.isdir(langdir) else []
     if only:
         tags = [only] if only in tags else []
@@ -321,7 +387,8 @@ def check(appdir, only=None):
         print('%s: dynamic, not checked: %s' % (app_id, d))
     for tag in tags:
         where = '%s lang/%s.json' % (app_id, tag)
-        problems = []
+        problems, warnings = [], []
+        rules = glossary(tag)
         if not TAG.match(tag):
             problems.append('%s is not a language tag like pt-BR' % tag)
         cat, errors = read_catalog(os.path.join(langdir, tag + '.json'), app_id, tag)
@@ -346,21 +413,28 @@ def check(appdir, only=None):
                 if not isinstance(v, str):
                     problems.append('%s: not a string' % show(k))
                     continue
-                if k not in keys:
+                if k not in keys and k not in optional:
                     problems.append('not used any more: %s' % show(k))
                 if v:
                     why = problem_of(k, v)
                     if why:
                         problems.append('%s: the translation %s' % (show(k), why))
+                    for w in glossary_warnings(v, rules):
+                        warnings.append('%s: %s' % (show(k), w))
             notes = cat.get('notes', {})
             if not isinstance(notes, dict):
                 problems.append('"notes" must be an object')
         for p in problems:
             print('%s: %s' % (where, p))
+        for w in warnings:
+            print('%s: warning: %s' % (where, w))
         if problems:
             failed = 1
         else:
-            print('%s: %d keys, all translated' % (where, len(keys)))
+            names_done = sum(1 for k in optional if msgs.get(k))
+            print('%s: %d keys, all translated; name and description: %d of %d%s' % (
+                where, len(keys), names_done, len(optional),
+                ', %d glossary warnings' % len(warnings) if warnings else ''))
     if not tags:
         print('%s: %d keys, no catalogs' % (app_id, len(keys)))
     return failed
@@ -373,6 +447,7 @@ def extract(appdir, tag, prune=False):
         sys.exit('i18n: %s is not a language tag like pt-BR' % tag)
     path = os.path.join(appdir, 'lang', tag + '.json')
     keys, dynamic = app_keys(appdir)
+    keys = [k for k in manifest_keys(appdir) if k not in keys] + keys
     cat = {}
     if os.path.exists(path):
         cat, errors = read_catalog(path, app_id, tag)

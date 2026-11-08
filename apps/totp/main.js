@@ -9,7 +9,9 @@
 // boot; until then (clock.status().set false) no code is shown.
 //
 // The log never holds a secret or a code: codes are logged as tags only
-// the account's key can check, for the tests (tests/totp.txt).
+// the account's key can check, for the tests (tests/totp.txt). Its text is
+// translated (zg:i18n, lang/), but the log stays in English; neither a
+// secret nor a code is ever a param of a translated text.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -19,7 +21,8 @@ import * as clock from "zg:clock";
 import * as session from "zg:session";
 import { sha256, hmac } from "zg:crypto";
 import { setHmac, makeHmac, totpCounter, hotp, groupCode, ALGORITHMS } from "./lib/hotp.js";
-import { parseCode, base32Decode, ParseError, MAX_PERIOD } from "./lib/parse.js";
+import { parseCode, base32Decode, ParseError, Message, MAX_PERIOD } from "./lib/parse.js";
+import { t, plural, formatDateTime } from "zg:i18n";
 import { runSelfTest } from "./lib/selftest.js";
 
 setHmac(hmac);
@@ -27,7 +30,16 @@ setHmac(hmac);
 const MUTED = "#8a9199", RED = "#ef5350", AMBER = "#ffb300", GREEN = "#66bb6a";
 const wide = ui.width >= 1000;
 const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const N_ = (s) => s;     // text for t() later (tools/i18n.py finds it)
+
+// A message of lib/parse.js (English with {names}, marked with N_ there) in
+// the language. The log gets its English (e.message).
+function explain(m) {
+  const params = {};
+  for (const [k, v] of Object.entries(m.params)) params[k] = v instanceof Message ? explain(v) : v;
+  return t(m.key, params);
+}
 
 const state = {
   accounts: [],     // { n, issuer, name, algorithm, digits, period, key, hmac, fingerprint, counter, code, ui }
@@ -127,7 +139,7 @@ function restore() {
     a.key.fill(0);
   }
   for (const [id, size, seen] of saved.batches) state.batches.set(id, { size, seen: new Set(seen) });
-  console.log(`totp: restored ${plural(state.accounts.length, "account")} kept from before`);
+  console.log(`totp: restored ${state.accounts.length} account${state.accounts.length === 1 ? "" : "s"} kept from before`);
 }
 
 // Codes are shown only when they can be right: the clock set, the self-test
@@ -136,18 +148,13 @@ const codesShown = () => state.clockSet && !(state.selftest && state.selftest.fa
 
 // --- the clock: one tick a second, on the second ------------------------------
 
-const pad2 = (n) => String(n).padStart(2, "0");
-function utcText(ms) {
-  const d = new Date(ms);
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ` +
-    `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())} UTC`;
-}
+const utcText = (ms) => formatDateTime(ms / 1000, { utc: true });
 
 // Brings the list up to date for `ms`: a new code when an account's period
 // has turned (two hash compressions), else only the countdown.
 function update(ms) {
   if (state.page !== "list") return;
-  page.clock.text = state.clockSet ? utcText(ms) : "Clock not set";
+  page.clock.text = state.clockSet ? utcText(ms) : t("Clock not set");
   if (!codesShown()) return;
   const seconds = Math.floor(ms / 1000);
   for (const a of state.accounts) {
@@ -164,7 +171,7 @@ function update(ms) {
     }
     const left = a.period - (seconds % a.period);
     a.ui.bar.value = left;
-    a.ui.left.set({ text: `${left} s`, color: left <= 5 ? AMBER : MUTED });
+    a.ui.left.set({ text: t("{s} s", { s: left }), color: left <= 5 ? AMBER : MUTED });
   }
 }
 
@@ -207,49 +214,51 @@ function paragraph(parent, text, props = {}) {
 
 function showList() {
   const col = newPage("list");
-  const head = header(col, ui.symbols.refresh + " Authenticator");
+  const head = header(col, ui.symbols.refresh + " " + t("Authenticator"));
   page.clock = new ui.Label(head, { text: "", font: wide ? 18 : 14, color: MUTED });
 
   if (!state.clockSet) {
-    paragraph(col, ui.symbols.warning + " The clock is not set, so codes would be wrong and none are shown. " +
-      "Set it first in the Clock app, then open the Authenticator again.", { color: AMBER, font: wide ? 18 : 16 });
+    paragraph(col, ui.symbols.warning + " " + t("The clock is not set, so codes would be wrong and none are shown. " +
+      "Set it first in the Clock app, then open the Authenticator again."), { color: AMBER, font: wide ? 18 : 16 });
   }
   if (state.selftest && state.selftest.failed.length) {
-    paragraph(col, ui.symbols.warning + " The self-test failed: this system computes codes wrongly, so none are shown.",
+    paragraph(col, ui.symbols.warning + " " + t("The self-test failed: this system computes codes wrongly, so none are shown."),
       { color: RED, font: wide ? 18 : 16 });
   }
 
   const buttons = new ui.Container(col, { layout: "row-wrap", gap: 8, width: "100%" });
-  const scan = new ui.Button(buttons, { text: ui.symbols.plus + " Scan QR code", onClick: showScan });
-  new ui.Button(buttons, { text: ui.symbols.keyboard + " Type a key", onClick: showType });
+  const scan = new ui.Button(buttons, { text: ui.symbols.plus + " " + t("Scan QR code"), onClick: showScan });
+  new ui.Button(buttons, { text: ui.symbols.keyboard + " " + t("Type a key"), onClick: showType });
   new ui.Button(buttons, {
-    text: ui.symbols.trash + " Forget all",
+    text: ui.symbols.trash + " " + t("Forget all"),
     disabled: state.accounts.length === 0,
     onClick: async () => {
-      const choice = await ui.alert(`Forget ${plural(state.accounts.length, "account")}? ` +
-        "To get them back you will need their QR codes or keys.", { title: "Forget all", buttons: ["Cancel", "Forget all"] });
+      const choice = await ui.alert(plural(state.accounts.length,
+        "Forget {n} account? To get it back you will need its QR code or key.",
+        "Forget {n} accounts? To get them back you will need their QR codes or keys."),
+        { title: t("Forget all"), buttons: [t("Cancel"), t("Forget all")] });
       if (choice !== 1) return;
       forgetAll();
-      state.notice = { text: "All accounts forgotten.", color: MUTED };
+      state.notice = { text: t("All accounts forgotten."), color: MUTED };
       showList();
     },
   });
-  new ui.Button(buttons, { text: ui.symbols.home + " Leave", onClick: () => sys.exit() });
+  new ui.Button(buttons, { text: ui.symbols.home + " " + t("Leave"), onClick: () => sys.exit() });
 
   if (state.notice) paragraph(col, state.notice.text, { color: state.notice.color });
   if (state.unkept) {
-    paragraph(col, ui.symbols.warning + " Too many accounts to keep: leaving this app will forget them.", { color: AMBER });
+    paragraph(col, ui.symbols.warning + " " + t("Too many accounts to keep: leaving this app will forget them."), { color: AMBER });
   }
 
   const list = new ui.Container(col, { layout: "column", gap: 8, width: "100%", grow: 1, scrollable: true });
   if (state.accounts.length === 0) {
-    paragraph(list, "No accounts yet. Scan a QR code (an otpauth:// key, or Google Authenticator's " +
-      "\"Transfer accounts\" export), or type a key.", { color: MUTED });
+    paragraph(list, t("No accounts yet. Scan a QR code (an otpauth:// key, or Google Authenticator's " +
+      "\"Transfer accounts\" export), or type a key."), { color: MUTED });
   }
   for (const a of state.accounts) accountRow(list, a);
 
-  paragraph(col, "Accounts are kept in memory only, until you switch off (using other apps meanwhile is fine): " +
-    "nothing is written to the card. Keep the QR codes (or keys) safe: they are your backup.", { color: MUTED, font: wide ? 14 : 12 });
+  paragraph(col, t("Accounts are kept in memory only, until you switch off (using other apps meanwhile is fine): " +
+    "nothing is written to the card. Keep the QR codes (or keys) safe: they are your backup."), { color: MUTED, font: wide ? 14 : 12 });
 
   scan.focus();
   update(clock.now());
@@ -277,19 +286,20 @@ function accountRow(parent, a) {
 }
 
 async function details(a) {
+  // the fingerprint is a hash of the key, not the key
   const text = [
-    a.issuer ? `Issuer: ${a.issuer}` : null,
-    `Account: ${a.name || "(none)"}`,
-    `${a.algorithm}, ${a.digits} digits, every ${a.period} s`,
-    `Key fingerprint: ${a.fingerprint.slice(0, 16)}`,
+    a.issuer ? t("Issuer: {issuer}", { issuer: a.issuer }) : null,
+    a.name ? t("Account: {name}", { name: a.name }) : t("Account: (none)"),
+    t("{algorithm}, {digits} digits, every {period} s", { algorithm: a.algorithm, digits: a.digits, period: a.period }),
+    t("Key fingerprint: {fingerprint}", { fingerprint: a.fingerprint.slice(0, 16) }),
   ].filter((x) => x !== null).join("\n");
-  const choice = await ui.alert(text, { title: title(a), buttons: ["Close", ui.symbols.trash + " Remove"] });
+  const choice = await ui.alert(text, { title: title(a), buttons: [t("Close"), ui.symbols.trash + " " + t("Remove")] });
   if (choice !== 1) return;
-  const sure = await ui.alert(`Remove ${title(a)}? You will need its QR code or key to add it again.`,
-    { title: "Remove", buttons: ["Cancel", "Remove"] });
+  const sure = await ui.alert(t("Remove {account}? You will need its QR code or key to add it again.", { account: title(a) }),
+    { title: t("Remove"), buttons: [t("Cancel"), t("Remove")] });
   if (sure !== 1) return;
   removeAccount(a);
-  state.notice = { text: `Removed ${title(a)}.`, color: MUTED };
+  state.notice = { text: t("Removed {account}.", { account: title(a) }), color: MUTED };
   if (state.page === "list") showList();
 }
 
@@ -297,7 +307,7 @@ async function details(a) {
 
 function showScan() {
   const col = newPage("scan");
-  header(col, ui.symbols.plus + " Scan QR code");
+  header(col, ui.symbols.plus + " " + t("Scan QR code"));
   const body = new ui.Container(col, { layout: wide ? "row" : "column", gap: wide ? 20 : 8, width: "100%" });
   const scanner = new ui.Scanner(body, {
     detect: ["qr"],
@@ -305,14 +315,14 @@ function showScan() {
     height: wide ? 360 : 210,
     onDetect: ({ text }) => scanned(text),
     onError: ({ reason }) => {
-      say(`The camera stopped: ${reason}.`, RED);
+      say(t("The camera stopped: {reason}.", { reason }), RED);
       console.log(`totp: camera error: ${reason}`);
     },
   });
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1, width: wide ? "content" : "100%" });
-  page.status = paragraph(side, "Show the QR code of an account (otpauth://totp/...), or Google " +
-    "Authenticator's export (Transfer accounts, Export: each part in turn).", { font: wide ? 18 : 14 });
-  page.done = new ui.Button(side, { text: ui.symbols.ok + " Done", onClick: showList });
+  page.status = paragraph(side, t("Show the QR code of an account (otpauth://totp/...), or Google " +
+    "Authenticator's export (Transfer accounts, Export: each part in turn)."), { font: wide ? 18 : 14 });
+  page.done = new ui.Button(side, { text: ui.symbols.ok + " " + t("Done"), onClick: showList });
   page.done.focus();
   page.scanner = scanner;
 }
@@ -327,15 +337,15 @@ function scanned(content) {
     r = parseCode(content);
   } catch (e) {
     if (!(e instanceof ParseError)) throw e;
-    say(ui.symbols.warning + " " + e.message, RED);
+    say(ui.symbols.warning + " " + explain(e), RED);
     console.log(`totp: refused a code: ${e.message}`);
     return;
   }
   if (r.kind === "totp") {
     const added = addAccount(r.account);
     save();
-    state.notice = added ? { text: `Added ${title(r.account)}.`, color: GREEN }
-                         : { text: `${title(r.account)} is already in the list.`, color: MUTED };
+    state.notice = added ? { text: t("Added {account}.", { account: title(r.account) }), color: GREEN }
+                         : { text: t("{account} is already in the list.", { account: title(r.account) }), color: MUTED };
     showList();
     return;
   }
@@ -350,12 +360,13 @@ function scanned(content) {
   save();
   const missing = [];
   for (let i = 0; i < size; i++) if (!batch.seen.has(i)) missing.push(i + 1);
-  let text = (size > 1 ? `Part ${index + 1} of ${size}: ` : "") +
-    `${plural(added, "account")} added` + (again ? `, ${again} already in the list` : "") + ".";
-  if (r.refused.length) text += ` Not added: ${r.refused.join(" ")}`;
+  let text = (size > 1 ? t("Part {part} of {size}:", { part: index + 1, size }) + " " : "") +
+    (again ? plural(added, "{n} account added, {again} already in the list.", "{n} accounts added, {again} already in the list.", { again })
+           : plural(added, "{n} account added.", "{n} accounts added."));
+  if (r.refused.length) text += " " + t("Not added: {reasons}", { reasons: r.refused.map(explain).join(" ") });
   console.log(`totp: export part ${index + 1} of ${size}: ${added} added, ${again} already there, ${r.refused.length} refused`);
   if (missing.length) {
-    say(text + ` Now show part${missing.length > 1 ? "s" : ""} ${missing.join(", ")}.`, r.refused.length ? AMBER : GREEN);
+    say(text + " " + plural(missing.length, "Now show part {parts}.", "Now show parts {parts}.", { parts: missing.join(", ") }), r.refused.length ? AMBER : GREEN);
   } else {
     state.notice = { text, color: r.refused.length ? AMBER : GREEN };
     showList();
@@ -366,62 +377,63 @@ function scanned(content) {
 
 function showType() {
   const col = newPage("type");
-  header(col, ui.symbols.keyboard + " Type a key");
+  header(col, ui.symbols.keyboard + " " + t("Type a key"));
   const form = new ui.Container(col, { layout: "column", gap: 6, width: "100%", grow: 1, scrollable: true });
   const field = (label, props) => {
     const row = new ui.Container(form, { layout: "row", alignItems: "center", gap: 10, width: "100%" });
     new ui.Label(row, { text: label, width: wide ? 200 : 130, font: wide ? 18 : 14 });
     return props.options ? new ui.Dropdown(row, { grow: 1, ...props }) : new ui.TextArea(row, { oneLine: true, grow: 1, ...props });
   };
-  const issuer = field("Issuer", { placeholder: "optional, e.g. Example Inc", maxLength: 64 });
-  const name = field("Account", { placeholder: "e.g. alice@example.com", maxLength: 64 });
-  const key = field("Key (Base32)", {
-    placeholder: "e.g. JBSW Y3DP EHPK 3PXP",
+  const issuer = field(t("Issuer"), { placeholder: t("optional, e.g. Example Inc"), maxLength: 64 });
+  const name = field(t("Account"), { placeholder: t("e.g. alice@example.com"), maxLength: 64 });
+  const key = field(t("Key (Base32)"), {
+    placeholder: t("e.g. {key}", { key: "JBSW Y3DP EHPK 3PXP" }),
     accept: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz234567= ",
     maxLength: 256,
   });
-  const algorithm = field("Algorithm", { options: ["SHA1 (usual)", "SHA256", "SHA512"] });
-  const digits = field("Digits", { options: ["6 (usual)", "8"] });
-  const period = field("Period (s)", { text: "30", accept: "0123456789", maxLength: 5 });
-  const error = paragraph(form, "Most services use SHA1, 6 digits and 30 s: change those only if the service says so.",
+  const algorithm = field(t("Algorithm"), { options: [t("{algorithm} (usual)", { algorithm: "SHA1" }), "SHA256", "SHA512"] });
+  const digits = field(t("Digits"), { options: [t("{digits} (usual)", { digits: 6 }), "8"] });
+  const period = field(t("Period (s)"), { text: "30", accept: "0123456789", maxLength: 5 });
+  const error = paragraph(form, t("Most services use SHA1, 6 digits and 30 s: change those only if the service says so."),
     { color: MUTED });
   const buttons = new ui.Container(form, { layout: "row", gap: 8 });
   const add = () => {
-    const fail = (text) => {
-      error.set({ text: ui.symbols.warning + " " + text, color: RED });
-      console.log(`totp: typed key refused: ${text}`);
+    // shown in the language, logged in English (never the key)
+    const fail = (key, params = {}) => {
+      error.set({ text: ui.symbols.warning + " " + explain(new Message(key, params)), color: RED });
+      console.log(`totp: typed key refused: ${new Message(key, params)}`);
     };
     const account = { issuer: issuer.text.trim(), name: name.text.trim() };
-    if (!account.issuer && !account.name) return fail("Give the account a name (or an issuer).");
-    if (/:/.test(account.issuer)) return fail("The issuer can't contain a colon.");
+    if (!account.issuer && !account.name) return fail(N_("Give the account a name (or an issuer)."));
+    if (/:/.test(account.issuer)) return fail(N_("The issuer can't contain a colon."));
     const compact = key.text.replace(/\s/g, "").replace(/=+$/, "");
-    if (compact.length === 0) return fail("Type the key.");
+    if (compact.length === 0) return fail(N_("Type the key."));
     if (compact.length < 16) {
-      return fail(`The key is ${compact.length} characters long: keys have at least 16 (80 bits). Is part of it missing?`);
+      return fail(N_("The key is {n} characters long: keys have at least 16 (80 bits). Is part of it missing?"), { n: compact.length });
     }
     try {
       account.secret = base32Decode(key.text);
     } catch (e) {
       if (!(e instanceof ParseError)) throw e;
-      return fail(e.message);
+      return fail(e.key, e.params);
     }
     account.algorithm = ALGORITHMS[algorithm.selected];
     account.digits = digits.selected === 1 ? 8 : 6;
     const p = Number(period.text);
     if (!(p >= 1 && p <= MAX_PERIOD)) {
       account.secret.fill(0);
-      return fail(`The period must be from 1 to ${MAX_PERIOD} seconds.`);
+      return fail(N_("The period must be from 1 to {max} seconds."), { max: MAX_PERIOD });
     }
     account.period = p;
     const added = addAccount(account);
     save();
-    state.notice = added ? { text: `Added ${title(account)}.`, color: GREEN }
-                         : { text: `${title(account)} is already in the list.`, color: MUTED };
+    state.notice = added ? { text: t("Added {account}.", { account: title(account) }), color: GREEN }
+                         : { text: t("{account} is already in the list.", { account: title(account) }), color: MUTED };
     showList();
   };
   for (const f of [issuer, name, key, period]) f.on("submit", add);
-  new ui.Button(buttons, { text: ui.symbols.plus + " Add", onClick: add });
-  new ui.Button(buttons, { text: ui.symbols.close + " Cancel", onClick: showList });
+  new ui.Button(buttons, { text: ui.symbols.plus + " " + t("Add"), onClick: add });
+  new ui.Button(buttons, { text: ui.symbols.close + " " + t("Cancel"), onClick: showList });
   issuer.focus();
 }
 

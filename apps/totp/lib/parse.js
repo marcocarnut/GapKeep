@@ -18,9 +18,32 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export class ParseError extends Error {}
-const fail = (message) => {
-  throw new ParseError(message);
+// Messages are English with {names}, translated by main.js (zg:i18n's t();
+// this file runs under Node too, where there is no zg:i18n). N_ marks a
+// message for tools/i18n.py. A message's English, its toString(), is what
+// the log gets.
+const N_ = (s) => s;
+const fill = (key, params) => key.replace(/\{(\w+)\}/g, (m, k) => (Object.hasOwn(params, k) ? String(params[k]) : m));
+
+export class Message {
+  constructor(key, params = {}) {
+    this.key = key;
+    this.params = params;
+  }
+  toString() {
+    return fill(this.key, this.params);
+  }
+}
+
+export class ParseError extends Error {
+  constructor(key, params = {}) {
+    super(fill(key, params));
+    this.key = key;
+    this.params = params;
+  }
+}
+const fail = (key, params) => {
+  throw new ParseError(key, params);
 };
 
 export const MAX_PERIOD = 86400;
@@ -38,15 +61,15 @@ export function base32Decode(text) {
   let s = text.replace(/[\s]/g, "").toUpperCase();
   const pad = s.indexOf("=");
   if (pad >= 0) {
-    if (!/^=+$/.test(s.slice(pad))) fail("Padding (=) may only come at the end of the key.");
+    if (!/^=+$/.test(s.slice(pad))) fail(N_("Padding (=) may only come at the end of the key."));
     s = s.slice(0, pad);
   }
-  if (s.length === 0) fail("The key is empty.");
+  if (s.length === 0) fail(N_("The key is empty."));
   const out = new Uint8Array(Math.floor((s.length * 5) / 8));
   let bits = 0, value = 0, n = 0;
   for (let i = 0; i < s.length; i++) {
     const v = B32.indexOf(s[i]);
-    if (v < 0) fail(`Character ${i + 1} of the key is not Base32 (only A-Z and 2-7: no 0, 1, 8 or 9).`);
+    if (v < 0) fail(N_("Character {i} of the key is not Base32 (only A-Z and 2-7: no 0, 1, 8 or 9)."), { i: i + 1 });
     value = ((value << 5) | v) & 0xfff;
     bits += 5;
     if (bits >= 8) {
@@ -56,7 +79,7 @@ export function base32Decode(text) {
   }
   if ([1, 3, 6].includes(s.length % 8)) {
     out.fill(0);
-    fail(`A Base32 key can't be ${s.length} characters long: is one missing, or one too many?`);
+    fail(N_("A Base32 key can't be {n} characters long: is one missing, or one too many?"), { n: s.length });
   }
   return out;
 }
@@ -68,12 +91,12 @@ const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 export function base64Decode(text) {
   let s = text.replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
   s = s.replace(/=+$/, "");
-  if (s.length % 4 === 1) fail("The export's data is not valid Base64.");
+  if (s.length % 4 === 1) fail(N_("The export's data is not valid Base64."));
   const out = new Uint8Array(Math.floor((s.length * 6) / 8));
   let bits = 0, value = 0, n = 0;
   for (let i = 0; i < s.length; i++) {
     const v = B64.indexOf(s[i]);
-    if (v < 0) fail("The export's data is not valid Base64.");
+    if (v < 0) fail(N_("The export's data is not valid Base64."));
     value = ((value << 6) | v) & 0x1fff;
     bits += 6;
     if (bits >= 8) {
@@ -95,15 +118,15 @@ export function utf8Decode(bytes) {
       continue;
     }
     const n = b >= 0xf0 && b <= 0xf4 ? 3 : b >= 0xe0 && b < 0xf0 ? 2 : b >= 0xc2 && b < 0xe0 ? 1 : -1;
-    if (n < 0 || i + n > bytes.length) fail("A name in the code is not valid UTF-8.");
+    if (n < 0 || i + n > bytes.length) fail(N_("A name in the code is not valid UTF-8."));
     let c = b & (0x3f >> n);
     for (let k = 0; k < n; k++) {
       const x = bytes[i++];
-      if ((x & 0xc0) !== 0x80) fail("A name in the code is not valid UTF-8.");
+      if ((x & 0xc0) !== 0x80) fail(N_("A name in the code is not valid UTF-8."));
       c = (c << 6) | (x & 0x3f);
     }
     if ((n === 2 && (c < 0x800 || (c >= 0xd800 && c < 0xe000))) || (n === 3 && (c < 0x10000 || c > 0x10ffff))) {
-      fail("A name in the code is not valid UTF-8.");
+      fail(N_("A name in the code is not valid UTF-8."));
     }
     s += String.fromCodePoint(c);
   }
@@ -116,7 +139,7 @@ function percentDecode(s, what) {
   try {
     return decodeURIComponent(s);
   } catch (e) {
-    fail(`The ${what} has a broken %-escape.`);
+    fail(what);
   }
 }
 
@@ -130,7 +153,7 @@ function parseQuery(query) {
     const eq = part.indexOf("=");
     const key = (eq < 0 ? part : part.slice(0, eq)).toLowerCase();
     const raw = eq < 0 ? "" : part.slice(eq + 1);
-    if (params.has(key)) fail(`The parameter "${key}" is given twice.`);
+    if (params.has(key)) fail(N_("The parameter \"{key}\" is given twice."), { key });
     params.set(key, key === "secret" || key === "data" ? raw : raw.replace(/\+/g, " "));
   }
   return params;
@@ -140,19 +163,19 @@ const cleanName = (s) => s.replace(/[\u0000-\u001f\u007f]/g, "").trim();
 
 export function parseOtpauth(text) {
   const m = /^otpauth:\/\/([^/?#]*)\/?([^?#]*)(?:\?([^#]*))?(?:#.*)?$/i.exec(text.trim());
-  if (!m) fail("This is not an otpauth:// address.");
+  if (!m) fail(N_("This is not an otpauth:// address."));
   const type = m[1].toLowerCase();
-  if (type === "hotp") fail("This is an HOTP (counter-based) key. Only time-based (TOTP) keys are supported.");
-  if (type !== "totp") fail(`Unknown kind of key "${m[1]}": only TOTP is supported.`);
-  const label = cleanName(percentDecode(m[2], "label"));
+  if (type === "hotp") fail(N_("This is an HOTP (counter-based) key. Only time-based (TOTP) keys are supported."));
+  if (type !== "totp") fail(N_("Unknown kind of key \"{kind}\": only TOTP is supported."), { kind: m[1] });
+  const label = cleanName(percentDecode(m[2], N_("The label has a broken %-escape.")));
   const params = parseQuery(m[3] || "");
 
-  if (!params.has("secret") || params.get("secret") === "") fail("The code has no secret.");
+  if (!params.has("secret") || params.get("secret") === "") fail(N_("The code has no secret."));
   let secret;
   try {
-    secret = base32Decode(percentDecode(params.get("secret"), "secret"));
+    secret = base32Decode(percentDecode(params.get("secret"), N_("The secret has a broken %-escape.")));
   } catch (e) {
-    if (e instanceof ParseError) fail("The secret is not valid Base32. " + e.message);
+    if (e instanceof ParseError) fail(N_("The secret is not valid Base32. {reason}"), { reason: new Message(e.key, e.params) });
     throw e;
   }
 
@@ -160,20 +183,20 @@ export function parseOtpauth(text) {
   if (params.has("algorithm")) {
     algorithm = params.get("algorithm").toUpperCase().replace("-", "");
     if (!["SHA1", "SHA256", "SHA512"].includes(algorithm)) {
-      fail(`Unknown algorithm "${params.get("algorithm").slice(0, 16)}": SHA1, SHA256 or SHA512 expected.`);
+      fail(N_("Unknown algorithm \"{algorithm}\": SHA1, SHA256 or SHA512 expected."), { algorithm: params.get("algorithm").slice(0, 16) });
     }
   }
   let digits = 6;
   if (params.has("digits")) {
     const d = params.get("digits");
-    if (d !== "6" && d !== "8") fail(`Codes of ${d.slice(0, 8)} digits are not supported: 6 or 8.`);
+    if (d !== "6" && d !== "8") fail(N_("Codes of {digits} digits are not supported: 6 or 8."), { digits: d.slice(0, 8) });
     digits = Number(d);
   }
   let period = 30;
   if (params.has("period")) {
     const p = params.get("period");
     if (!/^[0-9]{1,6}$/.test(p) || Number(p) < 1 || Number(p) > MAX_PERIOD) {
-      fail(`Bad period "${p.slice(0, 8)}": a whole number of seconds from 1 to ${MAX_PERIOD} expected.`);
+      fail(N_("Bad period \"{period}\": a whole number of seconds from 1 to {max} expected."), { period: p.slice(0, 8), max: MAX_PERIOD });
     }
     period = Number(p);
   }
@@ -186,7 +209,7 @@ export function parseOtpauth(text) {
     issuer = cleanName(label.slice(0, colon));
     name = cleanName(label.slice(colon + 1));
   }
-  if (params.has("issuer")) issuer = cleanName(percentDecode(params.get("issuer"), "issuer"));
+  if (params.has("issuer")) issuer = cleanName(percentDecode(params.get("issuer"), N_("The issuer has a broken %-escape.")));
   if (!issuer && !name) name = "(no name)";
   return { issuer, name, secret, algorithm, digits, period };
 }
@@ -204,7 +227,7 @@ class Reader {
     return this.pos >= this.end;
   }
   byte() {
-    if (this.pos >= this.end) fail("The export's data is cut short.");
+    if (this.pos >= this.end) fail(N_("The export's data is cut short."));
     return this.buf[this.pos++];
   }
   // a varint as { lo, hi }: two unsigned 32-bit halves
@@ -219,17 +242,17 @@ class Reader {
       } else hi |= v << (shift - 32);
       if (!(b & 0x80)) return { lo: lo >>> 0, hi: hi >>> 0 };
     }
-    fail("The export's data is malformed (a number is too long).");
+    fail(N_("The export's data is malformed (a number is too long)."));
   }
   // a field's tag: [field number, wire type]
   tag() {
     const { lo, hi } = this.varint();
-    if (hi !== 0 || lo >>> 3 === 0) fail("The export's data is malformed (a bad field).");
+    if (hi !== 0 || lo >>> 3 === 0) fail(N_("The export's data is malformed (a bad field)."));
     return [lo >>> 3, lo & 7];
   }
   bytes() {
     const { lo, hi } = this.varint();
-    if (hi !== 0 || lo > this.end - this.pos) fail("The export's data is cut short.");
+    if (hi !== 0 || lo > this.end - this.pos) fail(N_("The export's data is cut short."));
     const out = this.buf.subarray(this.pos, this.pos + lo);
     this.pos += lo;
     return out;
@@ -239,16 +262,16 @@ class Reader {
     else if (wire === 1) this.advance(8);
     else if (wire === 2) this.bytes();
     else if (wire === 5) this.advance(4);
-    else fail("The export's data is malformed (an unknown kind of field).");
+    else fail(N_("The export's data is malformed (an unknown kind of field)."));
   }
   advance(n) {
-    if (n > this.end - this.pos) fail("The export's data is cut short.");
+    if (n > this.end - this.pos) fail(N_("The export's data is cut short."));
     this.pos += n;
   }
 }
 
 function expectWire(wire, want) {
-  if (wire !== want) fail("The export's data is malformed (a field of the wrong kind).");
+  if (wire !== want) fail(N_("The export's data is malformed (a field of the wrong kind)."));
 }
 
 // OtpParameters: 1 secret (bytes), 2 name, 3 issuer (strings), 4 algorithm
@@ -285,13 +308,17 @@ function migrationAccount(p) {
   }
   const title = (issuer ? issuer + ": " : "") + (name || "(no name)");
   const type = enumValue(p.type);
-  if (type === 1) return { refused: `${title}: an HOTP (counter-based) key, not supported.` };
-  if (type !== 2) return { refused: `${title}: not a TOTP key.` };
+  const refuse = (key, params) => ({ refused: new Message(key, { title, ...params }) });
+  if (type === 1) return refuse(N_("{title}: an HOTP (counter-based) key, not supported."));
+  if (type !== 2) return refuse(N_("{title}: not a TOTP key."));
   const algorithm = [null, "SHA1", "SHA256", "SHA512"][enumValue(p.algorithm) || 1];
-  if (!algorithm) return { refused: `${title}: its algorithm (${enumValue(p.algorithm) === 4 ? "MD5" : "unknown"}) is not supported.` };
+  if (!algorithm) {
+    return enumValue(p.algorithm) === 4 ? refuse(N_("{title}: its algorithm (MD5) is not supported."))
+      : refuse(N_("{title}: its algorithm (unknown) is not supported."));
+  }
   const digits = [null, 6, 8][enumValue(p.digits) || 1];
-  if (!digits) return { refused: `${title}: an unknown number of digits.` };
-  if (!p.secret || p.secret.length === 0) return { refused: `${title}: no secret.` };
+  if (!digits) return refuse(N_("{title}: an unknown number of digits."));
+  if (!p.secret || p.secret.length === 0) return refuse(N_("{title}: no secret."));
   return {
     account: { issuer, name: name || (issuer ? "" : "(no name)"), secret: p.secret.slice(), algorithm, digits, period: 30 },
   };
@@ -301,10 +328,10 @@ function migrationAccount(p) {
 // 4 batch_index, 5 batch_id (int32s).
 export function parseMigration(text) {
   const m = /^otpauth-migration:\/\/offline\/?\?(.*)$/i.exec(text.trim());
-  if (!m) fail("This is not a Google Authenticator export (otpauth-migration://offline?data=...).");
+  if (!m) fail(N_("This is not a Google Authenticator export (otpauth-migration://offline?data=...)."));
   const params = parseQuery(m[1]);
-  if (!params.has("data") || !params.get("data")) fail("The export has no data.");
-  const bytes = base64Decode(percentDecode(params.get("data"), "export's data"));
+  if (!params.has("data") || !params.get("data")) fail(N_("The export has no data."));
+  const bytes = base64Decode(percentDecode(params.get("data"), N_("The export's data has a broken %-escape.")));
   const r = new Reader(bytes);
   const accounts = [], refused = [];
   const batch = { size: 1, index: 0, id: 0 };
@@ -326,17 +353,17 @@ export function parseMigration(text) {
   }
   bytes.fill(0);
   if (batch.size < 1 || batch.size > 1000 || batch.index < 0 || batch.index >= batch.size) {
-    fail("The export's part number is wrong.");
+    fail(N_("The export's part number is wrong."));
   }
-  if (accounts.length === 0 && refused.length === 0) fail("The export holds no accounts.");
+  if (accounts.length === 0 && refused.length === 0) fail(N_("The export holds no accounts."));
   return { accounts, refused, batch };
 }
 
 // Anything scanned: { kind: "totp", account } or { kind: "migration", ... }
 export function parseCode(text) {
-  if (text === null) fail("This QR code holds binary data, not an authenticator key.");
+  if (text === null) fail(N_("This QR code holds binary data, not an authenticator key."));
   const t = text.trim();
   if (/^otpauth-migration:/i.test(t)) return { kind: "migration", ...parseMigration(t) };
   if (/^otpauth:/i.test(t)) return { kind: "totp", account: parseOtpauth(t) };
-  fail("This QR code is not an authenticator key (otpauth://totp/...) or a Google Authenticator export.");
+  fail(N_("This QR code is not an authenticator key (otpauth://totp/...) or a Google Authenticator export."));
 }
