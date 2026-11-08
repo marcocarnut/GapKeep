@@ -519,12 +519,12 @@ void CAppHost::ShowError (const char *pTitle, const char *pText)
 	lv_label_set_text (pLabel, pText);
 	lv_label_set_long_mode (pLabel, LV_LABEL_LONG_MODE_WRAP);
 	lv_obj_set_width (pLabel, lv_pct (100));
-	lv_obj_set_style_text_font (pLabel, &lv_font_montserrat_12, 0);
+	lv_obj_set_style_text_font (pLabel, &zg_montserrat_12, 0);
 	lv_obj_set_style_text_color (pLabel, lv_color_white (), 0);
 
 	pLabel = lv_label_create (pBanner);
 	lv_label_set_text (pLabel, "Click to dismiss. Press the Windows key to return to the launcher.");
-	lv_obj_set_style_text_font (pLabel, &lv_font_montserrat_12, 0);
+	lv_obj_set_style_text_font (pLabel, &zg_montserrat_12, 0);
 	lv_obj_set_style_text_color (pLabel, lv_palette_lighten (LV_PALETTE_RED, 3), 0);
 
 	m_pErrorBanner = pBanner;

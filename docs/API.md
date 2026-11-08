@@ -38,7 +38,7 @@ import * as ui from "zg:ui";
 | `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `Scanner`, `TabView` | classes | [Widgets](#widgets) |
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
-| `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. |
+| `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. |
 | `symbols` | object | Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List](#symbols). |
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |

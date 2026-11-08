@@ -618,25 +618,27 @@
  *   FONT USAGE
  *===================*/
 
-/* Montserrat fonts with ASCII range and some symbols using bpp = 4
- * https://fonts.google.com/specimen/Montserrat */
+/* LVGL's built-in Montserrat fonts (ASCII and the icons) are off: zerogap
+ * has its own, with Latin-1, Latin Extended-A, some punctuation, the euro
+ * and bitcoin signs and the same icons (src/runtime/fonts/, made by
+ * tools/make_fonts.py), declared below as zg_montserrat_<size>. */
 #define LV_FONT_MONTSERRAT_8  0
 #define LV_FONT_MONTSERRAT_10 0
-#define LV_FONT_MONTSERRAT_12 1
-#define LV_FONT_MONTSERRAT_14 1
-#define LV_FONT_MONTSERRAT_16 1
-#define LV_FONT_MONTSERRAT_18 1
-#define LV_FONT_MONTSERRAT_20 1
-#define LV_FONT_MONTSERRAT_22 1
-#define LV_FONT_MONTSERRAT_24 1
+#define LV_FONT_MONTSERRAT_12 0
+#define LV_FONT_MONTSERRAT_14 0
+#define LV_FONT_MONTSERRAT_16 0
+#define LV_FONT_MONTSERRAT_18 0
+#define LV_FONT_MONTSERRAT_20 0
+#define LV_FONT_MONTSERRAT_22 0
+#define LV_FONT_MONTSERRAT_24 0
 #define LV_FONT_MONTSERRAT_26 0
-#define LV_FONT_MONTSERRAT_28 1
+#define LV_FONT_MONTSERRAT_28 0
 #define LV_FONT_MONTSERRAT_30 0
-#define LV_FONT_MONTSERRAT_32 1
+#define LV_FONT_MONTSERRAT_32 0
 #define LV_FONT_MONTSERRAT_34 0
 #define LV_FONT_MONTSERRAT_36 0
 #define LV_FONT_MONTSERRAT_38 0
-#define LV_FONT_MONTSERRAT_40 1
+#define LV_FONT_MONTSERRAT_40 0
 #define LV_FONT_MONTSERRAT_42 0
 #define LV_FONT_MONTSERRAT_44 0
 #define LV_FONT_MONTSERRAT_46 0
@@ -661,10 +663,20 @@
  *  #define LV_FONT_CUSTOM_DECLARE   LV_FONT_DECLARE(my_font_1) LV_FONT_DECLARE(my_font_2)
  *  @endcode
  */
-#define LV_FONT_CUSTOM_DECLARE
+#define LV_FONT_CUSTOM_DECLARE \
+    LV_FONT_DECLARE(zg_montserrat_12) \
+    LV_FONT_DECLARE(zg_montserrat_14) \
+    LV_FONT_DECLARE(zg_montserrat_16) \
+    LV_FONT_DECLARE(zg_montserrat_18) \
+    LV_FONT_DECLARE(zg_montserrat_20) \
+    LV_FONT_DECLARE(zg_montserrat_22) \
+    LV_FONT_DECLARE(zg_montserrat_24) \
+    LV_FONT_DECLARE(zg_montserrat_28) \
+    LV_FONT_DECLARE(zg_montserrat_32) \
+    LV_FONT_DECLARE(zg_montserrat_40)
 
 /** Always set a default font */
-#define LV_FONT_DEFAULT &lv_font_montserrat_14
+#define LV_FONT_DEFAULT &zg_montserrat_14
 
 /** Enable handling large font and/or fonts with a lot of characters.
  *  The limit depends on the font size, font face and bpp.

@@ -38,6 +38,9 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 
+# the fonts (tools/make_fonts.py)
+OBJS	+= $(patsubst %,runtime/fonts/zg_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
+
 ifeq ($(strip $(TEST)),1)
 BUNDLE	= ../apps ../tests/apps
 OBJS	+= testshot.o testcrash.o runtime/synthcam.o generated/testpictures.o
@@ -122,7 +125,7 @@ FORCE:
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
 main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o: .buildmode
 
-EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d crypto/*.o crypto/*.d \
+EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/*.o runtime/fonts/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
 
 -include $(DEPS)

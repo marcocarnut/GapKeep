@@ -79,7 +79,11 @@ ui:
       hidden_in_table: true
     - name: fonts
       ts: number[]
-      md: 'Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40.'
+      md: >-
+        Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size
+        has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the
+        dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the
+        `ui.symbols` icons. Other characters are drawn as an empty box.
     - name: symbols
       kind: object
       ts: SymbolTable

@@ -529,7 +529,7 @@ declare module "zg:ui" {
   export const width: number;
   /** Display size in pixels. */
   export const height: number;
-  /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. */
+  /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
   export const fonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
   export const symbols: SymbolTable;

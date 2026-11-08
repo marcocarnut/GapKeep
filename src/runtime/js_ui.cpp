@@ -647,10 +647,10 @@ static int ToEnum (JSContext *ctx, JSValueConst v, const char *pProp,
 static const int FontSizes[] = {12, 14, 16, 18, 20, 22, 24, 28, 32, 40};
 static const lv_font_t *Fonts[] =
 {
-	&lv_font_montserrat_12, &lv_font_montserrat_14, &lv_font_montserrat_16,
-	&lv_font_montserrat_18, &lv_font_montserrat_20, &lv_font_montserrat_22,
-	&lv_font_montserrat_24, &lv_font_montserrat_28, &lv_font_montserrat_32,
-	&lv_font_montserrat_40
+	&zg_montserrat_12, &zg_montserrat_14, &zg_montserrat_16,
+	&zg_montserrat_18, &zg_montserrat_20, &zg_montserrat_22,
+	&zg_montserrat_24, &zg_montserrat_28, &zg_montserrat_32,
+	&zg_montserrat_40
 };
 static const unsigned FontCount = sizeof FontSizes / sizeof FontSizes[0];
 
@@ -2614,7 +2614,7 @@ static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSV
 		const char *s = JS_ToCString (ctx, Title);
 		lv_obj_t *pLabel = lv_label_create (pPanel);
 		lv_label_set_text (pLabel, s ? s : "");
-		lv_obj_set_style_text_font (pLabel, &lv_font_montserrat_20, 0);
+		lv_obj_set_style_text_font (pLabel, &zg_montserrat_20, 0);
 		if (s) JS_FreeCString (ctx, s);
 	}
 
@@ -2727,7 +2727,7 @@ static void FocusThemeApply (lv_theme_t *pTheme, lv_obj_t *pObj)
 static void ApplyTheme (boolean bDark, lv_color_t Primary, lv_color_t Secondary)
 {
 	lv_display_t *pDisplay = lv_display_get_default ();
-	lv_theme_t *pBase = lv_theme_default_init (pDisplay, Primary, Secondary, bDark, &lv_font_montserrat_16);
+	lv_theme_t *pBase = lv_theme_default_init (pDisplay, Primary, Secondary, bDark, &zg_montserrat_16);
 
 	static boolean bStyleInit = FALSE;
 	if (!bStyleInit)
