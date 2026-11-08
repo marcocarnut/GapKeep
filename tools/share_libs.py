@@ -21,6 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # (home, copy), relative to the repository
 COPIES = (
     [("apps/codex32/lib/codex32.js", "apps/signer/lib/codex32.js"),
+       ("apps/codex32/lib/messages.js", "apps/signer/lib/codex32messages.js"),
        ("apps/codex32/vendor/codex32.js", "apps/signer/vendor/codex32.js"),
        ("apps/codex32/vendor/recover.js", "apps/signer/vendor/recover.js"),
        ("apps/codex32/vendor/wordlist.js", "apps/signer/vendor/wordlist.js"),

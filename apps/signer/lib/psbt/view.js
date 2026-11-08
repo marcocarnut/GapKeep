@@ -5,20 +5,51 @@
 //   const rows = new Rows(page);          // rows that Tab, arrows, Enter reach
 //   showAnalysis(list, rows, a, { encoding, chars, size }, options)
 //
+// Its text is translated (zg:i18n): amounts, addresses, paths and
+// fingerprints are always {placeholders}, written the language's way, and
+// the libraries' Messages (../text.js) through tr().
+//
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "zg:ui";
-import { formatBtc, typeName, sighashName } from "./analyze.js";
+import { t, plural, formatBtc, formatSats, formatNumber } from "zg:i18n";
+import { typeName, sighashName } from "./analyze.js";
 import { NETWORKS, disassemble } from "./script.js";
+import { Message } from "../text.js";
 
 export const MUTED = "#8a9199", RED = "#ef5350", AMBER = "#ffb300", GREEN = "#66bb6a", BLUE = "#64b5f6";
 export const LEVEL = { danger: { color: RED, symbol: ui.symbols.warning }, warn: { color: AMBER, symbol: ui.symbols.warning },
   info: { color: BLUE, symbol: ui.symbols.bell } };
 export const wide = ui.width >= 1000;
 export const FONT = wide ? { title: 28, big: 24, text: 18, small: 16 } : { title: 22, big: 18, text: 14, small: 12 };
-export const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-export const btc = (sats) => (sats === null || sats === undefined ? "unknown" : `${formatBtc(Number(sats))} BTC`);
 export const group4 = (s) => s.replace(/(.{4})(?=.)/g, "$1 ");
+
+// An amount in satoshis as BTC with its unit, the language's way
+export const btc = (sats) => (sats === null || sats === undefined ? t("unknown", { $context: "amount" })
+  : t("{amount} BTC", { amount: formatBtc(sats) }));
+
+// A library's Message (../text.js) in the person's language; other text as it is.
+export function tr(m) {
+  if (!(m instanceof Message)) return m === null || m === undefined ? m : String(m);
+  const p = {};
+  for (const [k, v] of Object.entries(m.params)) p[k] = value(v);
+  return m.forms ? plural(m.forms.n, m.forms.one, m.forms.other, p) : t(m.key, p);
+}
+
+function value(v) {
+  if (v instanceof Message) return tr(v);
+  if (v && typeof v === "object") {
+    if ("$btc" in v) return formatBtc(v.$btc);
+    if ("$sats" in v) return formatSats(v.$sats);
+    if ("$number" in v) return formatNumber(v.$number, v.decimals === undefined ? undefined : { decimals: v.decimals });
+  }
+  return v;
+}
+
+// A network's name, as the person reads it
+export function networkName(network) {
+  return { mainnet: t("Mainnet"), testnet: t("Testnet / Signet"), regtest: t("Regtest") }[network] || NETWORKS[network].name;
+}
 
 // Rows a person moves through with Tab, the arrow keys and Page Up/Down;
 // Enter opens a row's details. keys(ev) handles the keys: call it from
@@ -52,7 +83,7 @@ export class Rows {
 
   // a dialog, then the focus back where it was
   async details(title, text) {
-    await ui.alert(text, { title });
+    await ui.alert(text, { title, buttons: [t("OK")] });
     if (this.rows[this.focused]) this.rows[this.focused].focus();
   }
 }
@@ -70,9 +101,11 @@ export function section(parent, text) {
 }
 
 export function roleText(o) {
-  return { change: "Change, back to your wallet", receive: "To your own wallet (a receiving address)",
-    mine: "To your own wallet" }[o.role] || null;
+  return { change: t("Change, back to your wallet"), receive: t("To your own wallet (a receiving address)"),
+    mine: t("To your own wallet") }[o.role] || null;
 }
+
+const feeIsBad = (a) => a.warnings.some((w) => /fee is high|more than the inputs/.test(w.text));
 
 // The analysis `a` (analyze() or analyzeTx()) into `list`, a column.
 // `source`: { encoding, chars, size } of the QR code it came from.
@@ -84,124 +117,158 @@ export function roleText(o) {
 //                 whether it will be signed)
 export function showAnalysis(list, rows, a, source, options = {}) {
   const external = a.outputs.filter((o) => !o.mine);
-  const top = rows.add(list, { gap: 4 }, () => rows.details("Summary", summaryText(a, source)));
+  const top = rows.add(list, { gap: 4 }, () => rows.details(t("Summary"), summaryText(a, source)));
   if (a.complete) {
-    line(top, `Pays ${plural(a.outputs.length, "output")}`, btc(a.totalOut), { font: FONT.big });
+    line(top, plural(a.outputs.length, "Pays {n} output", "Pays {n} outputs"), btc(a.totalOut), { font: FONT.big });
   } else {
-    line(top, `Sends to ${external.length} ${external.length === 1 ? "address" : "addresses"}`, btc(a.sent), { font: FONT.big });
+    line(top, plural(external.length, "Sends to {n} address", "Sends to {n} addresses"), btc(a.sent), { font: FONT.big });
     if (a.toSelf) {
-      if (options.changeClaimed) line(top, "Claimed change (not checked yet)", btc(a.toSelf), { color: AMBER });
-      else line(top, "Change back to your wallet", btc(a.toSelf), { color: a.outputs.some((o) => o.mine && o.far) ? AMBER : GREEN });
+      if (options.changeClaimed) line(top, t("Claimed change (not checked yet)"), btc(a.toSelf), { color: AMBER });
+      else line(top, t("Change back to your wallet"), btc(a.toSelf), { color: a.outputs.some((o) => o.mine && o.far) ? AMBER : GREEN });
     }
   }
-  const rate = a.feeRate !== null ? ` (${a.feeRate.toFixed(1)} sat/vB)` : "";
   if (!a.complete) {
-    line(top, "Fee" + rate, a.fee === null ? "unknown" : btc(a.fee),
-      { color: a.warnings.some((w) => /fee is high|more than the inputs/.test(w.text)) ? RED : undefined });
-    line(top, `Spends ${plural(a.inputs.length, "coin")}`, btc(a.totalIn), { color: MUTED });
+    line(top, a.feeRate !== null ? t("Fee ({feeRate} sat/vB)", { feeRate: formatNumber(a.feeRate, { decimals: 1 }) }) : t("Fee"),
+      btc(a.fee), { color: feeIsBad(a) ? RED : undefined });
+    line(top, plural(a.inputs.length, "Spends {n} coin", "Spends {n} coins"), btc(a.totalIn), { color: MUTED });
   }
   new ui.Label(top, {
-    text: `${NETWORKS[a.network].name} (${options.networkNote || a.networkGuess.why})`, font: FONT.small, color: MUTED,
-    width: "100%", overflow: "wrap",
+    text: t("{network} ({why})", { network: networkName(a.network), why: tr(options.networkNote || a.networkGuess.why) }),
+    font: FONT.small, color: MUTED, width: "100%", overflow: "wrap",
   });
 
   for (const w of a.warnings) {
-    const r = rows.add(list, { borderColor: LEVEL[w.level].color }, () => rows.details("Warning", w.text));
-    new ui.Label(r, { text: LEVEL[w.level].symbol + " " + w.text, color: LEVEL[w.level].color, width: "100%",
+    const text = tr(w.text);
+    const r = rows.add(list, { borderColor: LEVEL[w.level].color }, () => rows.details(t("Warning"), text));
+    new ui.Label(r, { text: LEVEL[w.level].symbol + " " + text, color: LEVEL[w.level].color, width: "100%",
       overflow: "wrap", font: FONT.text });
   }
 
-  section(list, `Outputs (${a.outputs.length})`);
+  section(list, t("Outputs ({n})", { n: a.outputs.length }));
   for (const o of a.outputs) {
-    const r = rows.add(list, {}, () => rows.details(`Output ${o.index + 1}`, outputText(o)));
-    const where = o.address ? group4(o.address) : o.type === "op_return" ? "OP_RETURN (data, unspendable)" : typeName(o.type) + " script";
+    const r = rows.add(list, {}, () => rows.details(t("Output {n}", { n: o.index + 1 }), outputText(o)));
+    const where = o.address ? group4(o.address) : o.type === "op_return" ? t("OP_RETURN (data, unspendable)")
+      : t("{type} script", { type: typeName(o.type) });
     const claimed = options.changeClaimed && o.mine;
-    line(r, `${o.index + 1}. ${where}`, btc(o.amount), { color: claimed || o.far ? AMBER : o.mine ? GREEN : undefined });
+    line(r, t("{n}. {where}", { n: o.index + 1, where }), btc(o.amount),
+      { color: claimed || o.far ? AMBER : o.mine ? GREEN : undefined });
+    const note = (text, color) => new ui.Label(r, { text, color, font: FONT.small, width: "100%", overflow: "wrap" });
     if (claimed) {
-      new ui.Label(r, { text: `${ui.symbols.warning} Claimed change (not checked yet): ${o.derivations[0].path}`,
-        color: AMBER, font: FONT.small });
+      note(ui.symbols.warning + " " + t("Claimed change (not checked yet): {path}", { path: o.derivations[0].path }), AMBER);
     } else if (o.mine && o.far) {
-      new ui.Label(r, { text: `${ui.symbols.warning} ${roleText(o)}: ${o.checkedPath}. Index ${o.far}: found only if the wallet looks that far ahead`,
-        color: AMBER, font: FONT.small, width: "100%", overflow: "wrap" });
+      note(ui.symbols.warning + " " + t("{role}: {path}. Index {index}: found only if the wallet looks that far ahead",
+        { role: roleText(o), path: o.checkedPath, index: String(o.far) }), AMBER);
     } else if (o.mine) {
       const path = o.checkedPath !== undefined ? o.checkedPath : o.derivations[0].path;
-      new ui.Label(r, { text: `${ui.symbols.ok} ${roleText(o)}${path ? ": " + path : ""}` +
-        (o.unchecked ? " (key not checked against the script)" : ""), color: GREEN, font: FONT.small });
+      const role = path ? t("{role}: {path}", { role: roleText(o), path }) : roleText(o);
+      note(ui.symbols.ok + " " + (o.unchecked ? t("{role} (key not checked against the script)", { role }) : role), GREEN);
     } else if (o.stray !== undefined) {
-      new ui.Label(r, { text: `${ui.symbols.warning} Yours${o.stray ? `, but at ${o.stray}` : ""}: the wallet may not see it`,
-        color: AMBER, font: FONT.small, width: "100%", overflow: "wrap" });
+      note(ui.symbols.warning + " " + (o.stray ? t("Yours, but at {path}: the wallet may not see it", { path: o.stray })
+        : t("Yours: the wallet may not see it")), AMBER);
     } else if (o.unverified) {
-      new ui.Label(r, { text: `${ui.symbols.warning} Claims to be change: not proved, see above`, color: AMBER, font: FONT.small });
+      note(ui.symbols.warning + " " + t("Claims to be change: not proved, see above"), AMBER);
     }
   }
 
-  section(list, `Inputs (${a.inputs.length})`);
+  section(list, t("Inputs ({n})", { n: a.inputs.length }));
   for (const i of a.inputs) {
-    const r = rows.add(list, {}, () => rows.details(`Input ${i.index + 1}`, inputText(i)));
-    line(r, `${i.index + 1}. ${i.address ? group4(i.address) : i.prevTxid.slice(0, 16) + "...:" + i.vout}`,
-      i.amount === null ? "amount unknown" : btc(i.amount), { color: i.problems.length ? RED : undefined });
+    const r = rows.add(list, {}, () => rows.details(t("Input {n}", { n: i.index + 1 }), inputText(i)));
+    const where = i.address ? group4(i.address) : i.prevTxid.slice(0, 16) + "...:" + i.vout;
+    line(r, t("{n}. {where}", { n: i.index + 1, where }), i.amount === null ? t("amount unknown") : btc(i.amount),
+      { color: i.problems.length ? RED : undefined });
     const bits = [typeName(i.type)];
-    if (i.multisig) bits.push(`${i.multisig.m}-of-${i.multisig.n}`, `keys ${[...new Set(i.derivations.map((d) => d.fingerprint))].join(", ")}`);
-    else if (i.derivations.length) bits.push(`${i.derivations[0].path} [${i.derivations[0].fingerprint}]`);
-    bits.push(i.final ? "signed, final" : i.signatures ? `${plural(i.signatures, "signature")}` : "not signed");
+    if (i.multisig) {
+      bits.push(t("{m}-of-{n}", { m: i.multisig.m, n: i.multisig.n }),
+        t("keys {fingerprints}", { fingerprints: [...new Set(i.derivations.map((d) => d.fingerprint))].join(", ") }));
+    } else if (i.derivations.length) {
+      bits.push(t("{path} [{fingerprint}]", { path: i.derivations[0].path, fingerprint: i.derivations[0].fingerprint }));
+    }
+    bits.push(i.final ? t("signed, final") : i.signatures ? plural(i.signatures, "{n} signature", "{n} signatures")
+      : t("not signed"));
     new ui.Label(r, { text: bits.join(", "), font: FONT.small, color: MUTED, width: "100%", overflow: "wrap" });
     const note = options.inputNote ? options.inputNote(i) : null;
     if (note) new ui.Label(r, { text: note.text, font: FONT.small, color: note.color, width: "100%", overflow: "wrap" });
   }
 
-  section(list, "Details");
-  const d = rows.add(list, {}, () => rows.details("Details", detailText(a)));
+  section(list, t("Details"));
+  const d = rows.add(list, {}, () => rows.details(t("Details"), detailText(a)));
   new ui.Label(d, { text: detailText(a), font: FONT.small, width: "100%", overflow: "wrap" });
 }
 
 export function summaryText(a, source) {
-  return [
-    a.complete ? `Pays ${btc(a.totalOut)} in all.` : `Spends ${btc(a.totalIn)} from ${plural(a.inputs.length, "coin")}.`,
-    a.complete ? null : `Sends ${btc(a.sent)} to others, ${btc(a.toSelf)} back to your wallet.`,
-    a.complete ? null : `Fee: ${a.fee === null ? "unknown" : `${a.fee} sat`}` +
-      (a.feeRate !== null ? `, ${a.feeRate.toFixed(2)} sat/vB` : "") + (a.vsize ? ` over ${a.vsize} vB` : "") +
-      (a.sizeExact ? "." : " (size estimated for when it is signed)."),
-    `Read from a ${source.encoding} QR code: ${source.chars} characters, ${source.size} bytes.`,
-  ].filter((x) => x !== null).join("\n");
+  const lines = [];
+  if (a.complete) lines.push(t("Pays {total} in all.", { total: btc(a.totalOut) }));
+  else {
+    lines.push(plural(a.inputs.length, "Spends {spent} from {n} coin.", "Spends {spent} from {n} coins.",
+      { spent: btc(a.totalIn) }));
+    lines.push(t("Sends {sent} to others, {change} back to your wallet.", { sent: btc(a.sent), change: btc(a.toSelf) }));
+    if (a.fee !== null && a.feeRate !== null) {
+      const p = { fee: formatSats(a.fee), feeRate: formatNumber(a.feeRate, { decimals: 2 }), vsize: a.vsize };
+      lines.push(a.sizeExact ? t("Fee: {fee} sat, {feeRate} sat/vB over {vsize} vB.", p)
+        : t("Fee: {fee} sat, {feeRate} sat/vB over {vsize} vB (size estimated for when it is signed).", p));
+    } else if (a.fee !== null) {
+      lines.push(t("Fee: {fee} sat.", { fee: formatSats(a.fee) }));
+    } else if (a.vsize) {
+      lines.push(a.sizeExact ? t("Fee: unknown. Size: {vsize} vB.", { vsize: a.vsize })
+        : t("Fee: unknown. Size: {vsize} vB once signed (estimated).", { vsize: a.vsize }));
+    } else {
+      lines.push(t("Fee: unknown."));
+    }
+  }
+  lines.push(t("Read from a {encoding} QR code: {chars} characters, {bytes} bytes.",
+    { encoding: source.encoding, chars: source.chars, bytes: source.size }));
+  return lines.join("\n");
 }
+
+const keyLine = (d) => (d.taproot ? t("Key {path} [{fingerprint}] (taproot)", { path: d.path, fingerprint: d.fingerprint })
+  : t("Key {path} [{fingerprint}]", { path: d.path, fingerprint: d.fingerprint }));
 
 export function outputText(o) {
   return [
-    o.address ? `Address: ${o.address}` : `No address (${typeName(o.type)})`,
-    `Amount: ${btc(o.amount)} (${o.amount} sat)`,
-    `Type: ${typeName(o.type)}`,
-    `Script: ${disassemble(o.script).slice(0, 300)}`,
-    ...o.derivations.map((d) => `Key ${d.path} [${d.fingerprint}]${d.taproot ? " (taproot)" : ""}`),
-    o.mine ? roleText(o) + (o.unchecked ? ": the key could not be checked against the script here." : ".") : null,
-    o.far ? `Your wallet finds it only if it looks as far ahead as index ${o.far} (gap limit).` : null,
-    ...o.problems.map((p) => "Problem: " + p),
+    o.address ? t("Address: {address}", { address: o.address }) : t("No address ({type})", { type: typeName(o.type) }),
+    t("Amount: {amount} ({sats} sat)", { amount: btc(o.amount), sats: formatSats(o.amount) }),
+    t("Type: {type}", { type: typeName(o.type) }),
+    t("Script: {script}", { script: disassemble(o.script).slice(0, 300) }),
+    ...o.derivations.map(keyLine),
+    o.mine ? (o.unchecked ? t("{role}: the key could not be checked against the script here.", { role: roleText(o) })
+      : t("{role}.", { role: roleText(o) })) : null,
+    o.far ? t("Your wallet finds it only if it looks as far ahead as index {index} (gap limit).", { index: String(o.far) })
+      : null,
+    ...o.problems.map((p) => t("Problem: {problem}", { problem: tr(p) })),
   ].filter((x) => x !== null).join("\n");
 }
 
 export function inputText(i) {
+  const described = { full: t("its previous transaction"), witness: t("the spent output only"), both: t("both"),
+    none: t("nothing") }[i.utxo];
   return [
-    `Spends: ${i.prevTxid}:${i.vout}`,
-    i.address ? `From: ${i.address}` : null,
-    `Amount: ${i.amount === null ? "unknown" : `${btc(i.amount)} (${i.amount} sat)`}`,
-    `Type: ${typeName(i.type)}${i.multisig ? `, ${i.multisig.m}-of-${i.multisig.n} multisig` : ""}`,
-    `Described by: ${{ full: "its previous transaction", witness: "the spent output only", both: "both",
-      none: "nothing" }[i.utxo]}`,
-    ...i.derivations.map((d) => `Key ${d.path} [${d.fingerprint}]${d.taproot ? " (taproot)" : ""}`),
-    `Signatures: ${i.final ? "final" : `${i.signatures}${i.signaturesNeeded ? " of " + i.signaturesNeeded : ""}`}`,
-    i.sighash !== null ? `Sighash: ${sighashName(i.sighash)}` : null,
-    `Sequence: 0x${i.sequence.toString(16)}`,
-    ...i.problems.map((p) => "Problem: " + p),
+    t("Spends: {txid}:{vout}", { txid: i.prevTxid, vout: String(i.vout) }),
+    i.address ? t("From: {address}", { address: i.address }) : null,
+    i.amount === null ? t("Amount: unknown") : t("Amount: {amount} ({sats} sat)", { amount: btc(i.amount), sats: formatSats(i.amount) }),
+    i.multisig ? t("Type: {type}, {m}-of-{n} multisig", { type: typeName(i.type), m: i.multisig.m, n: i.multisig.n })
+      : t("Type: {type}", { type: typeName(i.type) }),
+    t("Described by: {what}", { what: described }),
+    ...i.derivations.map(keyLine),
+    i.final ? t("Signatures: final") : i.signaturesNeeded ? t("Signatures: {have} of {need}", { have: i.signatures, need: i.signaturesNeeded })
+      : t("Signatures: {have}", { have: i.signatures }),
+    i.sighash !== null ? t("Sighash: {sighash}", { sighash: sighashName(i.sighash) }) : null,
+    t("Sequence: {sequence}", { sequence: "0x" + i.sequence.toString(16) }),
+    ...i.problems.map((p) => t("Problem: {problem}", { problem: tr(p) })),
   ].filter((x) => x !== null).join("\n");
 }
 
 export function detailText(a) {
-  const lt = a.locktimeKind === "none" ? "none" : a.locktimeKind === "height" ? `block ${a.locktime}`
-    : a.locktime === null ? "can't be met" : new Date(a.locktime * 1000).toISOString().slice(0, 19).replace("T", " ") + " UTC";
+  const lt = a.locktimeKind === "none" ? t("none", { $context: "locktime" })
+    : a.locktimeKind === "height" ? t("block {height}", { height: String(a.locktime) })
+      : a.locktime === null ? t("can't be met")
+        : new Date(a.locktime * 1000).toISOString().slice(0, 19).replace("T", " ") + " UTC";
   return [
-    `Transaction ID: ${a.txid ?? "known only once signed"}`,
-    `Version ${a.txVersion}, locktime ${lt}, ${a.rbf ? "replaceable (RBF)" : "not replaceable"}`,
-    `Size: ${a.vsize ?? "?"} vB${a.sizeExact ? "" : " once signed (estimated)"}`,
-    `Signed inputs: ${a.signed.inputs} of ${a.inputs.length}`,
-    a.fingerprints.length ? `Wallets (key fingerprints): ${a.fingerprints.join(", ")}` : null,
+    a.txid ? t("Transaction ID: {txid}", { txid: a.txid }) : t("Transaction ID: known only once signed"),
+    a.rbf ? t("Version {version}, locktime {locktime}, replaceable (RBF)", { version: String(a.txVersion), locktime: lt })
+      : t("Version {version}, locktime {locktime}, not replaceable", { version: String(a.txVersion), locktime: lt }),
+    a.vsize === null ? t("Size: unknown") : a.sizeExact ? t("Size: {vsize} vB", { vsize: a.vsize })
+      : t("Size: {vsize} vB once signed (estimated)", { vsize: a.vsize }),
+    t("Signed inputs: {signed} of {total}", { signed: a.signed.inputs, total: a.inputs.length }),
+    a.fingerprints.length ? t("Wallets (key fingerprints): {fingerprints}", { fingerprints: a.fingerprints.join(", ") }) : null,
   ].filter((x) => x !== null).join("\n");
 }

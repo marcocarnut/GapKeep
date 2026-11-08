@@ -16,6 +16,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { t } from "../text.js";
 import { DecodeError, fromHex, isHex, fromBase64, toHex, equal } from "./bytes.js";
 import { base43Encode, base43Decode, isBase43 } from "./basen.js";
 import { isPsbt } from "./psbt.js";
@@ -31,15 +32,17 @@ const OLD_ELECTRUM = Uint8Array.of(0x45, 0x50, 0x54, 0x46, 0xff); // "EPTF" 0xff
 // Throws DecodeError with a message for people.
 export function readPayload(text, bytes = null) {
   if (text === null || text === undefined) {
-    if (!bytes || bytes.length === 0) throw new DecodeError("The code is empty.");
+    if (!bytes || bytes.length === 0) throw new DecodeError(t("The code is empty."));
     if (isPsbt(bytes)) return { encoding: "binary", bytes, kind: "psbt" };
-    throw new DecodeError("This code holds binary data, not a transaction in a form Electrum uses.");
+    throw new DecodeError(t("This code holds binary data, not a transaction in a form Electrum uses."));
   }
   const s = text.replace(/\s/g, "");
-  if (s.length === 0) throw new DecodeError("The code is empty.");
+  if (s.length === 0) throw new DecodeError(t("The code is empty."));
   const lower = s.slice(0, 16).toLowerCase();
-  if (lower.startsWith("bitcoin:")) throw new DecodeError("This is a payment request (a bitcoin: link), not a transaction.");
-  if (lower.startsWith("ur:")) throw new DecodeError("This is a UR code (ur:...). Only Electrum's single QR codes are read for now.");
+  if (lower.startsWith("bitcoin:")) throw new DecodeError(t("This is a payment request (a bitcoin: link), not a transaction."));
+  if (lower.startsWith("ur:")) {
+    throw new DecodeError(t("This is a UR code (ur:...). Only Electrum's single QR codes are read for now."));
+  }
 
   let encoding = null, out = null;
   if (isHex(s)) {
@@ -54,13 +57,16 @@ export function readPayload(text, bytes = null) {
     }
   }
   if (encoding === null && isBase43(s)) {
-    if (s.length > MAX_BASE43) throw new DecodeError(`The code is too long (${s.length} characters): Electrum reads at most ${MAX_BASE43}.`);
+    if (s.length > MAX_BASE43) {
+      throw new DecodeError(t("The code is too long ({length} characters): Electrum reads at most {max}.",
+        { length: s.length, max: MAX_BASE43 }));
+    }
     encoding = "base43";
     out = base43Decode(s);
   }
-  if (encoding === null) throw new DecodeError("This code is not a transaction: it is not hex, a PSBT in Base64, or Base43.");
+  if (encoding === null) throw new DecodeError(t("This code is not a transaction: it is not hex, a PSBT in Base64, or Base43."));
   if (out.length >= 5 && equal(out.subarray(0, 5), OLD_ELECTRUM)) {
-    throw new DecodeError("This is a partial transaction from Electrum before 4.0, which is not supported.");
+    throw new DecodeError(t("This is a partial transaction from Electrum before 4.0, which is not supported."));
   }
   const kind = isPsbt(out) ? "psbt" : "tx";
   // BBQr ("B$" and a header) is also Base43's alphabet: it is BBQr when it
@@ -70,7 +76,7 @@ export function readPayload(text, bytes = null) {
       parseTx(out);
     } catch (e) {
       if (!(e instanceof DecodeError)) throw e;
-      throw new DecodeError("This is a BBQr code (B$...) with a damaged header.");
+      throw new DecodeError(t("This is a BBQr code (B$...) with a damaged header."));
     }
   }
   return { encoding, bytes: out, kind };

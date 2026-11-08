@@ -9,6 +9,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { t } from "./text.js";
 import { cr, zero } from "./crypto.js";
 import { decodeExtendedKey, wipe, VERSIONS, Bip32Error } from "./bip32.js";
 import { DecodeError } from "./psbt/bytes.js";
@@ -16,7 +17,8 @@ import { base58CheckDecode } from "./psbt/basen.js";
 
 export class KeyError extends Error {
   constructor(message) {
-    super(message);
+    super(String(message));
+    this.text = message;   // a Message (text.js) where it is one: the app translates it
     this.name = "KeyError";
   }
 }
@@ -32,17 +34,17 @@ export function parseWif(text) {
     raw = base58CheckDecode(text);
   } catch (e) {
     if (!(e instanceof DecodeError)) throw e;
-    throw new KeyError("That is not a WIF key: mistyped? Its checksum or its characters are wrong.");
+    throw new KeyError(t("That is not a WIF key: mistyped? Its checksum or its characters are wrong."));
   }
   try {
     const network = WIF_PREFIX[raw[0]];
-    if (!network) throw new KeyError("That is not a WIF key: it doesn't start as one does.");
+    if (!network) throw new KeyError(t("That is not a WIF key: it doesn't start as one does."));
     const compressed = raw.length === 34 && raw[33] === 1;
-    if (!compressed && raw.length !== 33) throw new KeyError("That is not a WIF key: wrong length.");
+    if (!compressed && raw.length !== 33) throw new KeyError(t("That is not a WIF key: wrong length."));
     const privateKey = raw.slice(1, 33);
     if (!cr().isPrivateKey(privateKey)) {
       zero(privateKey);
-      throw new KeyError("That WIF key is outside the range of private keys.");
+      throw new KeyError(t("That WIF key is outside the range of private keys."));
     }
     return { key: { single: true, privateKey, publicKey: cr().publicKey(privateKey, compressed) }, kind: "wif", network, script: null, compressed };
   } finally {
@@ -56,11 +58,11 @@ export function parseExtendedPrivateKey(text) {
     d = decodeExtendedKey(text);
   } catch (e) {
     if (!(e instanceof Bip32Error)) throw e;
-    throw new KeyError("That is not an extended private key: mistyped? Its checksum or its contents are wrong.");
+    throw new KeyError(t("That is not an extended private key: mistyped? Its checksum or its contents are wrong."));
   }
   if (!d.private) {
     wipe(d.node);
-    throw new KeyError("That is a public key (xpub): it can't sign. This needs the private one (xprv).");
+    throw new KeyError(t("That is a public key (xpub): it can't sign. This needs the private one (xprv)."));
   }
   const v = VERSIONS[d.version];
   return { key: d.node, kind: "xprv", network: v.network === "mainnet" ? "mainnet" : "test", script: v.script };
@@ -69,6 +71,6 @@ export function parseExtendedPrivateKey(text) {
 // By its first letters: xprv, yprv, zprv, tprv, uprv, vprv; else a WIF.
 export function parsePrivateKey(input) {
   const text = String(input).replace(/\s/g, "");
-  if (!text) throw new KeyError("Type the key first.");
+  if (!text) throw new KeyError(t("Type the key first."));
   return /^[a-z]prv/i.test(text) ? parseExtendedPrivateKey(text) : parseWif(text);
 }

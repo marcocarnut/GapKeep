@@ -5,8 +5,12 @@
 //   analyze(psbt, { network })   // psbt from parsePsbt(); network: a key of
 //                                // NETWORKS, or omitted to guess it
 //
+// Warnings, problems and the network's reason are Messages (../text.js): the
+// English the tests read, which the app translates.
+//
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { t, plural, btcValue, satsValue, numberValue, numbers } from "../text.js";
 import { toHex, toHexReversed, equal, compactSizeLength } from "./bytes.js";
 import { sha256, hash160, haveRipemd160 } from "./hashes.js";
 import { txid as txidOf, inputBaseSize, outputSize, witnessSize } from "./tx.js";
@@ -30,7 +34,7 @@ export function formatBtc(sats) {
 
 export const SIGHASH_NAMES = { 0: "DEFAULT", 1: "ALL", 2: "NONE", 3: "SINGLE", 0x81: "ALL|ANYONECANPAY",
   0x82: "NONE|ANYONECANPAY", 0x83: "SINGLE|ANYONECANPAY" };
-export const sighashName = (t) => SIGHASH_NAMES[t] || "0x" + t.toString(16);
+export const sighashName = (x) => SIGHASH_NAMES[x] || "0x" + x.toString(16);
 
 // The network, from what the PSBT says about keys: BIP-44-style paths
 // (m/purpose'/coin'/...: coin 0' is mainnet, 1' the test networks) and
@@ -52,10 +56,10 @@ export function guessNetwork(psbt) {
       else if (p[1] === HARDENED + 1) test++;
     }
   }
-  if (main && !test) return { network: "mainnet", why: "key paths and xpubs are for mainnet" };
-  if (test && !main) return { network: "testnet", why: "key paths and xpubs are for a test network" };
-  if (main && test) return { network: "mainnet", why: "key paths disagree: some mainnet, some test" };
-  return { network: "mainnet", why: "nothing in the PSBT says: mainnet assumed" };
+  if (main && !test) return { network: "mainnet", why: t("key paths and xpubs are for mainnet") };
+  if (test && !main) return { network: "testnet", why: t("key paths and xpubs are for a test network") };
+  if (main && test) return { network: "mainnet", why: t("key paths disagree: some mainnet, some test") };
+  return { network: "mainnet", why: t("nothing in the PSBT says: mainnet assumed") };
 }
 
 const fpHex = (d) => toHex(d.fingerprint);
@@ -108,7 +112,7 @@ function effectiveType(script, redeemScript) {
   return c.type;
 }
 
-export const typeName = (t) => (t.startsWith("p2sh-") ? "P2SH-" + TYPE_NAMES[t.slice(5)] : TYPE_NAMES[t] || t);
+export const typeName = (x) => (x.startsWith("p2sh-") ? "P2SH-" + TYPE_NAMES[x.slice(5)] : TYPE_NAMES[x] || x);
 
 // Checks that a P2SH output's or input's redeemScript and witnessScript
 // are the ones its script commits to. -> list of problems ([] if fine);
@@ -120,11 +124,11 @@ function checkScripts(script, redeemScript, witnessScript, res) {
   if (c.type === "p2sh" && redeemScript) {
     const h = hash160(redeemScript);
     if (h === null) res.unchecked = true;
-    else if (!equal(h, c.hash)) problems.push("its redeemScript doesn't match the script");
+    else if (!equal(h, c.hash)) problems.push(t("its redeemScript doesn't match the script"));
     inner = classify(redeemScript);
   }
   if (inner.type === "p2wsh" && witnessScript && !equal(sha256(witnessScript), inner.program)) {
-    problems.push("its witnessScript doesn't match the script");
+    problems.push(t("its witnessScript doesn't match the script"));
   }
   return problems;
 }
@@ -173,11 +177,11 @@ function analyzeInput(psbt, i, network, warn) {
   if (f.nonWitnessUtxo) {
     const prev = f.nonWitnessUtxo;
     if (toHexReversed(txin.txid) !== txidOf(prev)) {
-      a.problems.push("its previous transaction is not the one it spends");
-      warn("danger", `Input ${n}: the previous transaction given is not the one it spends (wrong txid).`);
+      a.problems.push(t("its previous transaction is not the one it spends"));
+      warn("danger", t("Input {n}: the previous transaction given is not the one it spends (wrong txid).", { n }));
     } else if (txin.vout >= prev.outputs.length) {
-      a.problems.push("its previous transaction has no such output");
-      warn("danger", `Input ${n}: the previous transaction has no output ${txin.vout}.`);
+      a.problems.push(t("its previous transaction has no such output"));
+      warn("danger", t("Input {n}: the previous transaction has no output {vout}.", { n, vout: txin.vout }));
     } else {
       a.amount = prev.outputs[txin.vout].value;
       a.script = prev.outputs[txin.vout].script;
@@ -187,8 +191,8 @@ function analyzeInput(psbt, i, network, warn) {
   if (f.witnessUtxo) {
     if (a.utxo === "full") {
       if (f.witnessUtxo.value !== a.amount || !equal(f.witnessUtxo.script, a.script)) {
-        a.problems.push("its two descriptions of the coin disagree");
-        warn("danger", `Input ${n}: the previous transaction and the witness UTXO disagree about the coin spent.`);
+        a.problems.push(t("its two descriptions of the coin disagree"));
+        warn("danger", t("Input {n}: the previous transaction and the witness UTXO disagree about the coin spent.", { n }));
       }
       a.utxo = "both";
     } else if (!a.problems.length) {
@@ -198,8 +202,8 @@ function analyzeInput(psbt, i, network, warn) {
     }
   }
   if (typeof a.amount === "bigint") {
-    a.problems.push("its amount is impossible");
-    warn("danger", `Input ${n}: the amount is larger than all bitcoin there can be.`);
+    a.problems.push(t("its amount is impossible"));
+    warn("danger", t("Input {n}: the amount is larger than all bitcoin there can be.", { n }));
     a.amount = null;
   }
   if (a.script) {
@@ -207,7 +211,7 @@ function analyzeInput(psbt, i, network, warn) {
     a.address = scriptToAddress(a.script, network);
     for (const p of checkScripts(a.script, f.redeemScript, f.witnessScript, a)) {
       a.problems.push(p);
-      warn("danger", `Input ${n}: ${p}.`);
+      warn("danger", t("Input {n}: {problem}.", { n, problem: p }));
     }
   }
   const segwitV0 = a.type === "p2wpkh" || a.type === "p2wsh" || a.type === "p2sh-p2wpkh" || a.type === "p2sh-p2wsh";
@@ -230,8 +234,8 @@ function analyzeInput(psbt, i, network, warn) {
       const m = keyMatchesScript(d.pubkey, a.script, f.redeemScript, f.witnessScript);
       if (m === null) a.unchecked = true;
       else if (!m) {
-        a.problems.push(`its key ${formatPath(d.path)} is not in its script`);
-        warn("warn", `Input ${n}: the key at ${formatPath(d.path)} is not one its script uses.`);
+        a.problems.push(t("its key {path} is not in its script", { path: formatPath(d.path) }));
+        warn("warn", t("Input {n}: the key at {path} is not one its script uses.", { n, path: formatPath(d.path) }));
       }
     }
   }
@@ -243,8 +247,8 @@ function analyzeInput(psbt, i, network, warn) {
   a.signaturesNeeded = ms ? ms.m : ["p2pkh", "p2wpkh", "p2sh-p2wpkh", "p2tr"].includes(a.type) ? 1 : null;
   if (ms) a.multisig = { m: ms.m, n: ms.n };
   if (a.sighash !== null && !(a.sighash === 1 || (a.sighash === 0 && a.type === "p2tr"))) {
-    warn("warn", `Input ${n}: signs with sighash ${sighashName(a.sighash)}, not ALL: parts of the transaction could ` +
-      "be changed after signing.");
+    warn("warn", t("Input {n}: signs with sighash {sighash}, not ALL: parts of the transaction could " +
+      "be changed after signing.", { n, sighash: sighashName(a.sighash) }));
   }
   a.size = estimateInput(a, f);
   return a;
@@ -261,7 +265,7 @@ function analyzeOutput(psbt, i, network, inputFingerprints, warn) {
     problems: [], unchecked: false,
   };
   if (typeof o.amount === "bigint" || o.amount > 2100000000000000) {
-    warn("danger", `Output ${n}: the amount is larger than all bitcoin there can be.`);
+    warn("danger", t("Output {n}: the amount is larger than all bitcoin there can be.", { n }));
   }
   for (const d of f.bip32) o.derivations.push({ key: toHex(d.pubkey), fingerprint: fpHex(d), path: formatPath(d.path), raw: d });
   for (const d of f.tapBip32) {
@@ -281,11 +285,12 @@ function analyzeOutput(psbt, i, network, inputFingerprints, warn) {
       }
       const m = keyMatchesScript(d.raw.pubkey, txout.script, f.redeemScript, f.witnessScript);
       if (m === null) o.unchecked = true;
-      else if (!m) bad = bad.concat(`the key at ${d.path} doesn't pay to this script`);
+      else if (!m) bad = bad.concat(t("the key at {path} doesn't pay to this script", { path: d.path }));
     }
     if (bad.length) {
       o.problems = bad;
-      warn("danger", `Output ${n} says it goes back to your wallet, but ${bad[0]}: treat it as someone else's.`);
+      warn("danger", t("Output {n} says it goes back to your wallet, but {problem}: treat it as someone else's.",
+        { n, problem: bad[0] }));
     } else {
       o.mine = true;
       const p = ours[0].raw.path;
@@ -294,12 +299,16 @@ function analyzeOutput(psbt, i, network, inputFingerprints, warn) {
     }
   }
   if (c.type === "op_return") {
-    if (o.amount > 0) warn("warn", `Output ${n}: ${formatBtc(Number(o.amount))} BTC sent to OP_RETURN is burned (no one can spend it).`);
+    if (o.amount > 0) {
+      warn("warn", t("Output {n}: {burned} BTC sent to OP_RETURN is burned (no one can spend it).",
+        { n, burned: btcValue(o.amount) }));
+    }
   } else if (typeof o.amount === "number" && o.amount < DUST && c.type !== "anchor") {
-    warn("warn", `Output ${n}: ${o.amount} sat is below the dust limit (${DUST} sat): the network may not relay it.`);
+    warn("warn", t("Output {n}: {amount} sat is below the dust limit ({dust} sat): the network may not relay it.",
+      { n, amount: satsValue(o.amount), dust: satsValue(DUST) }));
   }
   if (o.address === null && c.type !== "op_return") {
-    warn("warn", `Output ${n} pays to a ${typeName(o.type)} script, which has no address.`);
+    warn("warn", t("Output {n} pays to a {type} script, which has no address.", { n, type: typeName(o.type) }));
   }
   return o;
 }
@@ -337,36 +346,45 @@ export function analyze(psbt, { network = null, complete = false } = {}) {
 
   // amounts the PSBT asserts but no signature commits to
   const which = (caveat) => inputs.filter((a) => a.caveat === caveat).map((a) => a.index + 1);
-  const list = (ns) => (ns.length > 1 ? "Inputs " : "Input ") + (ns.length > 6 ? ns.slice(0, 6).join(", ") + "..." : ns.join(", "));
+  const list = (ns) => (ns.length > 6 ? numbers(ns.slice(0, 6)) + "..." : numbers(ns));
   const unknown = which("unknown"), legacy = which("legacy"), v0 = which("segwit-v0");
   if (unknown.length && !complete) {
-    warn("warn", `${list(unknown)}: the coin spent is not described, so the amount (and the fee) are unknown.`);
+    warn("warn", plural(unknown.length, "Input {list}: the coin spent is not described, so the amount (and the fee) " +
+      "are unknown.", "Inputs {list}: the coin spent is not described, so the amount (and the fee) are unknown.",
+    { list: list(unknown) }));
   }
   if (legacy.length) {
-    warn("warn", `${list(legacy)}: only the spent output is given, not its transaction (as Electrum's QR codes do). ` +
-      "For a non-segwit coin the amount can't be checked, and signing needs that transaction.");
+    warn("warn", plural(legacy.length, "Input {list}: only the spent output is given, not its transaction (as " +
+      "Electrum's QR codes do). For a non-segwit coin the amount can't be checked, and signing needs that " +
+      "transaction.", "Inputs {list}: only the spent output is given, not its transaction (as Electrum's QR codes " +
+      "do). For a non-segwit coin the amount can't be checked, and signing needs that transaction.",
+    { list: list(legacy) }));
   }
   if (v0.length && inputs.length > 1) {
-    warn("info", `${list(v0)}: amounts as the PSBT states them (as in Electrum's QR codes). A segwit v0 signature ` +
-      "covers its own input's amount only: if asked to sign a changed version of this transaction again, refuse " +
-      "(two such signatures can make a transaction with a much larger fee).");
+    warn("info", plural(v0.length, "Input {list}: amounts as the PSBT states them (as in Electrum's QR codes). A " +
+      "segwit v0 signature covers its own input's amount only: if asked to sign a changed version of this " +
+      "transaction again, refuse (two such signatures can make a transaction with a much larger fee).",
+    "Inputs {list}: amounts as the PSBT states them (as in Electrum's QR codes). A segwit v0 signature covers its " +
+      "own input's amount only: if asked to sign a changed version of this transaction again, refuse (two such " +
+      "signatures can make a transaction with a much larger fee).", { list: list(v0) }));
   }
 
   // wallets: whose keys sign
   const sets = inputs.map((a) => a.fingerprints.join(","));
   const fingerprints = [...inputFingerprints].sort();
   if (complete) {
-    warn("info", "This transaction is signed and complete. It doesn't say what the coins it spends were worth, " +
-      "so the fee isn't known here.");
+    warn("info", t("This transaction is signed and complete. It doesn't say what the coins it spends were worth, " +
+      "so the fee isn't known here."));
   } else if (inputs.length && inputs.every((a) => a.fingerprints.length === 0)) {
-    warn("warn", "No input says which wallet (key fingerprint) it is from: change can't be recognised.");
+    warn("warn", t("No input says which wallet (key fingerprint) it is from: change can't be recognised."));
   } else if (sets.some((s) => s === "")) {
     const which = inputs.filter((a) => !a.fingerprints.length).map((a) => a.index + 1);
-    warn("warn", `Input${which.length > 1 ? "s" : ""} ${which.join(", ")} say${which.length > 1 ? "" : "s"} nothing about ` +
-      "their keys: maybe not from your wallet.");
+    warn("warn", plural(which.length, "Input {list} says nothing about their keys: maybe not from your wallet.",
+      "Inputs {list} say nothing about their keys: maybe not from your wallet.", { list: numbers(which) }));
   }
   if (new Set(sets.filter((s) => s !== "")).size > 1) {
-    warn("warn", `The inputs come from different sets of wallets (${fingerprints.join(", ")}).`);
+    warn("warn", t("The inputs come from different sets of wallets ({fingerprints}).",
+      { fingerprints: fingerprints.join(", ") }));
   }
 
   // amounts
@@ -396,16 +414,20 @@ export function analyze(psbt, { network = null, complete = false } = {}) {
   const feeRate = fee !== null && vsize ? fee / vsize : null;
 
   if (fee !== null && fee < 0) {
-    warn("danger", `The outputs add up to more than the inputs (by ${formatBtc(-fee)} BTC): this transaction is invalid.`);
+    warn("danger", t("The outputs add up to more than the inputs (by {excess} BTC): this transaction is invalid.",
+      { excess: btcValue(-fee) }));
   } else if (fee !== null && ((feeRate !== null && feeRate > HIGH_FEE_RATE) || fee > HIGH_FEE_SHARE * totalIn)) {
-    warn("danger", `The fee is high: ${formatBtc(fee)} BTC` +
-      (feeRate !== null ? ` (${feeRate.toFixed(1)} sat/vB)` : "") + `, ${(100 * fee / totalIn).toFixed(1)}% of what is spent.`);
+    const share = numberValue(100 * fee / totalIn, 1);
+    warn("danger", feeRate !== null
+      ? t("The fee is high: {fee} BTC ({feeRate} sat/vB), {share}% of what is spent.",
+        { fee: btcValue(fee), feeRate: numberValue(feeRate, 1), share })
+      : t("The fee is high: {fee} BTC, {share}% of what is spent.", { fee: btcValue(fee), share }));
   }
-  if (!sizeKnown) warn("info", "Some inputs are of a kind whose signed size isn't known: no fee rate.");
+  if (!sizeKnown) warn("info", t("Some inputs are of a kind whose signed size isn't known: no fee rate."));
   if (!haveRipemd160() && (inputs.some((a) => a.unchecked) || outputs.some((o) => o.unchecked))) {
-    warn("info", "Some keys couldn't be checked against their scripts (this system has no RIPEMD-160).");
+    warn("info", t("Some keys couldn't be checked against their scripts (this system has no RIPEMD-160)."));
   }
-  if (psbt.tx.locktime === null) warn("danger", "The inputs' locktime requirements can't all be met.");
+  if (psbt.tx.locktime === null) warn("danger", t("The inputs' locktime requirements can't all be met."));
 
   const locktime = psbt.tx.locktime;
   return {
