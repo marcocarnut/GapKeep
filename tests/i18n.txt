@@ -33,7 +33,14 @@ expect i18ntest lang/pt-BR.json: "Fee \{fee\}": the translation hasn't the same 
 expect i18ntest lang/pt-BR.json: "Pay \{to\}": the translation has a control or bidi character
 expect i18ntest lang/pt-BR.json: "Bell": the translation has a control or bidi character
 expect i18ntest lang/pt-BR.json: "A number": the translation is not a string
-expect i18ntest lang/pt-BR.json: 7 translations, 6 ignored
+expect i18ntest lang/pt-BR.json: 8 translations, 9 ignored
+expect i18ntest lang/pt-BR.json: "Send <span color='#ffb300'>\{amount\}</spa\.\.\.": the translation hasn't the same tags as its key
+expect i18ntest lang/pt-BR.json: "Just text": the translation has a tag, and its key has none
+expect i18ntest lang/pt-BR.json: "Keep <tt>this</tt>": the translation is not valid markup
+expect i18ntest markup kept: "<u>Agora</u>, pague <tt>&lt;s&gt;bc1q&lt;/s&gt;</tt>"
+expect i18ntest markup dropped: "Send <span color='#ffb300'>1 BTC</span>"
+expect i18ntest markup added: "Just text"
+expect i18ntest markup broken: "Keep <tt>this</tt>"
 expect i18ntest Drops: "Send 1,5"
 expect i18ntest Invents: "Fee 2"
 expect i18ntest Bidi: "Pay x"

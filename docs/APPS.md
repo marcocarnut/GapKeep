@@ -188,6 +188,41 @@ parent (`"50%"`) or `"content"`.
 Use **Container** for invisible layout boxes and **Panel** for the "card"
 look (background, border, padding).
 
+## Markup
+
+A Label made with `markup: true` takes Pango-style markup, for a few
+words in another style:
+
+```js
+import { tm } from "zg:i18n";
+
+new ui.Label({
+  markup: true,
+  width: "100%",
+  text: tm("Send <span color='#ffb300'>{amount} BTC</span> to <tt>{address}</tt>?",
+           { amount: formatBtc(sats), address }),
+});
+```
+
+Tags: `<tt>` (monospaced), `<big>`, `<small>`, `<u>`, `<s>`, and `<span>`
+with `color`, `size` (one of `ui.fonts`), `font_family="monospace"`,
+`underline="single"`, `strikethrough="true"`. Entities: `&lt; &gt; &amp;
+&quot; &apos; &#N; &#xN;`. There is no bold or italic font, so `<b>` and
+`<i>` are errors. Anything the parser doesn't know throws a `TypeError`
+naming the problem and the character where it is: markup is never shown
+half-parsed.
+
+**Data is never markup.** A name, an address or a scanned text could hold
+`<` or `&`: put it in with `ui.escapeMarkup(s)`, or through `tm()` (as `t()`,
+but every param is escaped). A translation of a key with tags must keep the
+same tags (`tools/i18n.py check` and the runtime check it), and a key
+without tags stays without, so a translator can't add one either.
+
+`markup` is set when the Label is created, not later. `font`, `mono`,
+`color` and `textAlign` work as for any Label; `overflow` takes `"wrap"`,
+`"clip"` or `"dots"`. A markup label costs more memory than a plain one
+(see `sys.memory().ui`): use it where the styles matter.
+
 ## Reacting to input
 
 Pass handlers as `on...` properties or with `widget.on(event, fn)`:

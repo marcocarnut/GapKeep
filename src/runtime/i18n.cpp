@@ -7,6 +7,7 @@
 #include "apphost.h"
 #include "appstore.h"
 #include "clock.h"
+#include "markup.h"
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/string.h>
@@ -357,7 +358,14 @@ static const char *CheckTranslation (const char *pKey, size_t nKey, const char *
 	{
 		bSame = Contains (TextNames, KeyNames.pName[i], KeyNames.nLength[i]);
 	}
-	return bSame ? 0 : "hasn't the same {names} as its key";
+	if (!bSame)
+	{
+		return "hasn't the same {names} as its key";
+	}
+
+	// tags (markup.h): a key's tags kept, as a multiset, in a valid nesting;
+	// a key without tags stays without
+	return ZgMarkupCheckTranslation (pKey, nKey, pText, nText);
 }
 
 // --- loading catalogs -----------------------------------------------------------

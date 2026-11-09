@@ -3,6 +3,7 @@
 // and the rest of the module, logged for tests/i18n.txt. Test builds only.
 import * as ui from "zg:ui";
 import * as i from "zg:i18n";
+import { tm } from "zg:i18n";
 import * as sys from "zg:sys";
 
 const show = (s) => JSON.stringify(s);
@@ -29,6 +30,12 @@ log("Control", i.t("Bell"));
 log("Number", i.t("A number"));
 log("Empty", i.t("Not translated yet"));
 log("Unknown", i.t("Not in any catalog"));
+// markup: tags kept (reordered) taken; dropped, added or broken refused;
+// params escaped
+log("markup kept", tm("Pay <tt>{address}</tt> <u>now</u>", { address: "<s>bc1q</s>" }));
+log("markup dropped", tm("Send <span color='#ffb300'>{amount}</span>", { amount: "1 BTC" }));
+log("markup added", tm("Just text"));
+log("markup broken", tm("Keep <tt>this</tt>"));
 // the rest
 log("plural", [0, 1, 2].map((n) => i.plural(n, "{n} code", "{n} codes")));
 log("numbers", [i.formatNumber(1234567.5), i.formatSats(2100000000000000n), i.formatBtc(123456789)]);

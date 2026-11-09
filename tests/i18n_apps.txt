@@ -19,6 +19,11 @@ launch gallery
 expect gallery ready 10
 wait 1
 shot pt-BR-gallery
+# the Table tab (2nd of 5): markup, translated, with data escaped
+moveto 30% 32
+click
+wait 1
+shot pt-BR-gallery-markup
 mark
 launch qrscan
 expect qrscan ready 10
@@ -70,6 +75,11 @@ launch gallery
 expect gallery ready 10
 wait 1
 shot qps-gallery
+# the Table tab (2nd of 5): markup, translated, with data escaped
+moveto 30% 32
+click
+wait 1
+shot qps-gallery-markup
 mark
 launch qrscan
 expect qrscan ready 10

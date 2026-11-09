@@ -24,6 +24,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "markup.h"
 #include "scanner.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
 #include <lvgl/lvgl/src/libs/qrcode/qrcodegen.h>
@@ -126,6 +127,8 @@ struct TZgNode
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
 	int nFontSize;			// "font", 0 if not set
 	boolean bMono;			// "mono"
+	boolean bMarkup;		// Label with "markup": an LVGL spangroup
+	char *pMarkup;			// its text as set (the markup)
 };
 
 struct TZgQR
@@ -257,7 +260,7 @@ static TWidgetType GuessType (lv_obj_t *pObj)
 {
 	static const struct { const lv_obj_class_t *pClass; TWidgetType Type; } Map[] =
 	{
-		{&lv_label_class, WLabel}, {&lv_button_class, WButton},
+		{&lv_label_class, WLabel}, {&lv_spangroup_class, WLabel}, {&lv_button_class, WButton},
 		{&lv_textarea_class, WTextArea}, {&lv_checkbox_class, WCheckbox},
 		{&lv_switch_class, WSwitch}, {&lv_dropdown_class, WDropdown},
 		{&lv_slider_class, WSlider}, {&lv_bar_class, WBar},
@@ -304,6 +307,7 @@ static void WidgetFinalizer (JSRuntime *rt, JSValue Val)
 	// only reachable once the LVGL object is gone (it holds a reference)
 	assert (pNode->pObj == 0);
 	delete [] pNode->pAccepted;
+	delete [] pNode->pMarkup;
 	if (pNode->pQR != 0)
 	{
 		delete [] pNode->pQR->pData;
@@ -669,6 +673,54 @@ static const lv_font_t *MonoFonts[] =
 };
 static const unsigned MonoCount = sizeof MonoSizes / sizeof MonoSizes[0];
 
+// The monospaced font of a size, or the next smaller one there is
+static const lv_font_t *MonoFont (int nSize)
+{
+	unsigned nChosen = 0;
+	for (unsigned i = 0; i < MonoCount; i++)
+	{
+		if (MonoSizes[i] <= nSize)
+		{
+			nChosen = i;
+		}
+	}
+	return MonoFonts[nChosen];
+}
+
+static const lv_font_t *NormalFont (int nSize)
+{
+	for (unsigned i = 0; i < FontCount; i++)
+	{
+		if (FontSizes[i] == nSize)
+		{
+			return Fonts[i];
+		}
+	}
+	return Fonts[2];
+}
+
+// The size and kind of a font of ours (16, not mono, if it isn't one)
+static void FontInfo (const lv_font_t *pFont, int *pSize, boolean *pMono)
+{
+	*pSize = 16;
+	*pMono = FALSE;
+	for (unsigned i = 0; i < FontCount; i++)
+	{
+		if (Fonts[i] == pFont)
+		{
+			*pSize = FontSizes[i];
+		}
+	}
+	for (unsigned i = 0; i < MonoCount; i++)
+	{
+		if (MonoFonts[i] == pFont)
+		{
+			*pSize = MonoSizes[i];
+			*pMono = TRUE;
+		}
+	}
+}
+
 // --- properties -------------------------------------------------------------
 
 typedef int TSetter (JSContext *ctx, TZgNode *pNode, JSValueConst v, const char *pProp);
@@ -837,10 +889,76 @@ SETTER (SetOpacity)
 	return 0;
 }
 
+// --- markup (markup.h) ----------------------------------------------------------
+//
+// A Label with "markup" is an LVGL spangroup: one span for each run of
+// text in one style. The runs are worked out again whenever the text or
+// the label's font changes (<big>, <tt> are relative to it).
+
+static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, size_t nLength, const char *pProp)
+{
+	int nSize;
+	boolean bMono;
+	FontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
+
+	static TZgMarkup Markup;	// big for the stack (one at a time)
+	char Error[200];
+	if (!ZgMarkupParse (pSource, nLength, FontSizes, FontCount, nSize, bMono, &Markup, Error, sizeof Error))
+	{
+		ZgMarkupFree (&Markup);
+		JS_ThrowTypeError (ctx, "%s: %s", pProp, Error);
+		return -1;
+	}
+
+	while (lv_spangroup_get_span_count (OBJ) > 0)
+	{
+		lv_spangroup_delete_span (OBJ, lv_spangroup_get_child (OBJ, 0));
+	}
+	for (unsigned i = 0; i < Markup.nRuns; i++)
+	{
+		const TZgMarkupRun &Run = Markup.Runs[i];
+		lv_span_t *pSpan = lv_spangroup_add_span (OBJ);
+		char *pEnd = Markup.pText + Run.nStart + Run.nLength;
+		char cSaved = *pEnd;
+		*pEnd = '\0';
+		lv_span_set_text (pSpan, Markup.pText + Run.nStart);
+		*pEnd = cSaved;
+
+		lv_style_t *pStyle = lv_span_get_style (pSpan);
+		if (Run.Style.nSize != nSize || Run.Style.bMono != bMono)
+		{
+			lv_style_set_text_font (pStyle, Run.Style.bMono ? MonoFont (Run.Style.nSize)
+									: NormalFont (Run.Style.nSize));
+		}
+		if (Run.Style.bColor)
+		{
+			lv_style_set_text_color (pStyle, lv_color_hex (Run.Style.nColor));
+		}
+		if (Run.Style.nDecor != 0)
+		{
+			lv_style_set_text_decor (pStyle, (lv_text_decor_t)
+				(  (Run.Style.nDecor & ZG_MARKUP_UNDERLINE ? LV_TEXT_DECOR_UNDERLINE : 0)
+				 | (Run.Style.nDecor & ZG_MARKUP_STRIKE ? LV_TEXT_DECOR_STRIKETHROUGH : 0)));
+		}
+	}
+	ZgMarkupFree (&Markup);
+	lv_spangroup_refresh (OBJ);
+
+	if (pSource != pNode->pMarkup)
+	{
+		char *pCopy = new char[nLength + 1];
+		memcpy (pCopy, pSource, nLength);
+		pCopy[nLength] = '\0';
+		delete [] pNode->pMarkup;
+		pNode->pMarkup = pCopy;
+	}
+	return 0;
+}
+
 // The font from "font" and "mono", whichever came first: the size is
 // "font", else the one the widget has (inherited); mono takes the mono
 // font of that size, or, for an inherited size it lacks, the next smaller.
-static int ApplyFont (JSContext *ctx, TZgNode *pNode, const char *pProp)
+static int ApplyFontOnly (JSContext *ctx, TZgNode *pNode, const char *pProp)
 {
 	if (!pNode->bMono)
 	{
@@ -908,6 +1026,16 @@ static int ApplyFont (JSContext *ctx, TZgNode *pNode, const char *pProp)
 	}
 	lv_obj_set_style_text_font (OBJ, MonoFonts[nChosen], 0);
 	return 0;
+}
+
+static int ApplyFont (JSContext *ctx, TZgNode *pNode, const char *pProp)
+{
+	if (ApplyFontOnly (ctx, pNode, pProp))
+	{
+		return -1;
+	}
+	return pNode->bMarkup && pNode->pMarkup != 0
+		? RenderMarkup (ctx, pNode, pNode->pMarkup, strlen (pNode->pMarkup), pProp) : 0;
 }
 
 SETTER (SetFont)
@@ -1163,6 +1291,19 @@ GETTER (GetDisabled) { return JS_NewBool (ctx, lv_obj_has_state (OBJ, LV_STATE_D
 // text: Label, Button, TextArea, Checkbox
 SETTER (SetText)
 {
+	if (pNode->bMarkup)
+	{
+		size_t n;
+		const char *s = JS_IsString (v) ? JS_ToCStringLen (ctx, &n, v) : 0;
+		if (s == 0)
+		{
+			JS_ThrowTypeError (ctx, "%s: string expected", pProp);
+			return -1;
+		}
+		int nResult = RenderMarkup (ctx, pNode, s, n, pProp);
+		JS_FreeCString (ctx, s);
+		return nResult;
+	}
 	const char *s = ToString (ctx, v, pProp);
 	if (s == 0) return -1;
 	switch (pNode->Type)
@@ -1182,7 +1323,7 @@ GETTER (GetText)
 	const char *s = "";
 	switch (pNode->Type)
 	{
-	case WLabel:	s = lv_label_get_text (OBJ);		break;
+	case WLabel:	s = pNode->bMarkup ? pNode->pMarkup : lv_label_get_text (OBJ);	break;
 	case WButton:	{ lv_obj_t *l = ButtonLabel (OBJ, FALSE); s = l ? lv_label_get_text (l) : ""; } break;
 	case WTextArea:	s = lv_textarea_get_text (OBJ);		break;
 	case WCheckbox:	s = lv_checkbox_get_text (OBJ);		break;
@@ -1198,9 +1339,36 @@ SETTER (SetOverflow)
 		LV_LABEL_LONG_MODE_SCROLL, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR};
 	int n;
 	if (ToEnum (ctx, v, pProp, Names, Values, 5, &n)) return -1;
+	if (pNode->bMarkup)
+	{
+		// a spangroup wraps at its width; "clip" keeps the first line
+		if (n == LV_LABEL_LONG_MODE_SCROLL || n == LV_LABEL_LONG_MODE_SCROLL_CIRCULAR)
+		{
+			JS_ThrowTypeError (ctx, "%s: \"wrap\", \"clip\" or \"dots\" with markup", pProp);
+			return -1;
+		}
+		lv_spangroup_set_overflow (OBJ, n == LV_LABEL_LONG_MODE_DOTS ? LV_SPAN_OVERFLOW_ELLIPSIS
+									      : LV_SPAN_OVERFLOW_CLIP);
+		lv_spangroup_set_max_lines (OBJ, n == LV_LABEL_LONG_MODE_CLIP ? 1 : -1);
+		return 0;
+	}
 	lv_label_set_long_mode (OBJ, (lv_label_long_mode_t) n);
 	return 0;
 }
+
+// fixed when the Label is created (it is another kind of LVGL object)
+SETTER (SetMarkup)
+{
+	boolean b;
+	if (ToBool (ctx, v, pProp, &b)) return -1;
+	if (b != pNode->bMarkup)
+	{
+		JS_ThrowTypeError (ctx, "%s: set it when the Label is created: new ui.Label({ markup: true, ... })", pProp);
+		return -1;
+	}
+	return 0;
+}
+GETTER (GetMarkup) { return JS_NewBool (ctx, pNode->bMarkup); }
 
 SETTER (SetPlaceholder)
 {
@@ -1778,6 +1946,7 @@ static const TProp Props[] =
 	// widget specific
 	{"text",        TEXTUAL, SetText, GetText},
 	{"overflow",    T (WLabel), SetOverflow, 0},
+	{"markup",      T (WLabel), SetMarkup, GetMarkup},
 	{"placeholder", T (WTextArea), SetPlaceholder, 0},
 	{"oneLine",     T (WTextArea), SetOneLine, 0},
 	{"password",    T (WTextArea), SetPassword, 0},
@@ -2509,7 +2678,7 @@ static JSValue js_scanner_get_scanning (JSContext *ctx, JSValueConst this_val, i
 
 // --- constructors -----------------------------------------------------------
 
-static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent)
+static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent, boolean bMarkup)
 {
 	lv_obj_t *p = 0;
 	switch (Type)
@@ -2523,7 +2692,16 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent)
 		break;
 	case WPanel:	p = lv_obj_create (pParent);
 			lv_obj_set_size (p, LV_SIZE_CONTENT, LV_SIZE_CONTENT);	break;
-	case WLabel:	p = lv_label_create (pParent); lv_label_set_text (p, "");	break;
+	case WLabel:
+		if (bMarkup)
+		{
+			p = lv_spangroup_create (pParent);
+			lv_spangroup_set_overflow (p, LV_SPAN_OVERFLOW_CLIP);
+			break;
+		}
+		p = lv_label_create (pParent);
+		lv_label_set_text (p, "");
+		break;
 	case WButton:	p = lv_button_create (pParent);			break;
 	case WTextArea:	p = lv_textarea_create (pParent);		break;
 	case WCheckbox:	p = lv_checkbox_create (pParent); lv_checkbox_set_text (p, "");	break;
@@ -2599,7 +2777,16 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 	JSValue Proto = JS_GetPropertyStr (ctx, new_target, "prototype");
 	if (JS_IsException (Proto)) return Proto;
 
-	lv_obj_t *pObj = CreateObject (Type, pParent);
+	// a Label with markup: true is a spangroup (markup.h)
+	boolean bMarkup = FALSE;
+	if (Type == WLabel && JS_IsObject (Props))
+	{
+		JSValue Markup = JS_GetPropertyStr (ctx, Props, "markup");
+		bMarkup = JS_IsBool (Markup) && JS_ToBool (ctx, Markup);
+		JS_FreeValue (ctx, Markup);
+	}
+
+	lv_obj_t *pObj = CreateObject (Type, pParent, bMarkup);
 	JSValue Obj = Wrap (ctx, pObj, Type, JS_IsObject (Proto) ? (JSValueConst) Proto : JS_UNDEFINED);
 	JS_FreeValue (ctx, Proto);
 	if (JS_IsException (Obj))
@@ -2609,6 +2796,7 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 	}
 
 	TZgNode *pNode = (TZgNode *) JS_GetOpaque (Obj, s_WidgetClass);
+	pNode->bMarkup = bMarkup;
 	if (Type == WScanner)
 	{
 		CreateScan (pNode);
@@ -2800,6 +2988,32 @@ static void AlertFree (TZgAlert *pAlert, boolean bResolve)
 
 // --- module -----------------------------------------------------------------
 
+// Text as markup that shows it as it is: & < > " ' as entities
+static JSValue js_ui_escape_markup (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	size_t n;
+	const char *s = JS_ToCStringLen (ctx, &n, argv[0]);	// any value, as String() would
+	if (s == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	CString Out;
+	for (size_t i = 0; i < n; i++)
+	{
+		switch (s[i])
+		{
+		case '&':	Out.Append ("&amp;");	break;
+		case '<':	Out.Append ("&lt;");	break;
+		case '>':	Out.Append ("&gt;");	break;
+		case '"':	Out.Append ("&quot;");	break;
+		case '\'':	Out.Append ("&apos;");	break;
+		default:	Out.Append (s[i]);	break;
+		}
+	}
+	JS_FreeCString (ctx, s);
+	return JS_NewStringLen (ctx, Out, Out.GetLength ());
+}
+
 static JSValue js_ui_on_key (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	TZgApp *pApp = CAppHost::GetApp (ctx);
@@ -2944,7 +3158,8 @@ static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
 	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
-	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme"
+	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme",
+	"escapeMarkup"
 };
 
 static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
@@ -3076,6 +3291,7 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 
 	JS_SetModuleExport (ctx, m, "alert", JS_NewCFunction (ctx, js_ui_alert, "alert", 2));
 	JS_SetModuleExport (ctx, m, "onKey", JS_NewCFunction (ctx, js_ui_on_key, "onKey", 1));
+	JS_SetModuleExport (ctx, m, "escapeMarkup", JS_NewCFunction (ctx, js_ui_escape_markup, "escapeMarkup", 1));
 	JS_SetModuleExport (ctx, m, "theme", JS_NewCFunction (ctx, js_ui_theme, "theme", 1));
 
 	return 0;

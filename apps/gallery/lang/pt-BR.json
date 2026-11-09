@@ -14,6 +14,8 @@
     "Die": "Dado",
     "Value": "Valor",
     "Word": "Palavra",
+    "Markup: <tt>monospaced</tt>, <big>big</big>, <small>small</small>, <u>underlined</u>, <s>struck</s>, <span color='#ffb300'>in colour</span> &amp; &#x20BF;": "Marcação: <tt>monoespaçado</tt>, <big>grande</big>, <small>pequeno</small>, <u>sublinhado</u>, <s>riscado</s>, <span color='#ffb300'>em cor</span> &amp; &#x20BF;",
+    "Data stays text: <tt>{data}</tt>": "Dados continuam texto: <tt>{data}</tt>",
     "QR": "QR",
     "Alerts": "Alertas",
     "No answer yet.": "Nenhuma resposta ainda.",
@@ -28,6 +30,7 @@
     "{passed} passed, {failed} failed": "{passed} passaram, {failed} falharam"
   },
   "notes": {
-    "Letters only (accept)": "\"accept\" is the TextArea property it shows: not translated."
+    "Letters only (accept)": "\"accept\" is the TextArea property it shows: not translated.",
+    "Data stays text: <tt>{data}</tt>": "Markup (docs/APPS.md, \"Markup\"): keep the tags; {data} is shown as text, whatever it holds."
   }
 }

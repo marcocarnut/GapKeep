@@ -1,0 +1,7 @@
+{
+  "id": "markuptest",
+  "name": "Markup test",
+  "version": "1.0.0",
+  "description": "Test app: Label markup (tests/markup.txt).",
+  "icon": "edit"
+}

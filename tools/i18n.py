@@ -240,7 +240,7 @@ def sources(appdir):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
         for f in sorted(files):
             if f.endswith('.js'):
-                out.append((os.path.join(root, f), ('t', 'plural', 'N_')))
+                out.append((os.path.join(root, f), ('t', 'tm', 'plural', 'N_')))
     if os.path.basename(os.path.normpath(appdir)) == 'launcher':
         rt = os.path.join(ROOT, 'src', 'runtime')
         for f in sorted(os.listdir(rt)):
@@ -331,6 +331,107 @@ def names(text):
     return {m.group(1) for m in PLACEHOLDER.finditer(text) if m.group(1)}
 
 
+# --- markup (src/runtime/markup.cpp: the same rules) -------------------------------
+
+MARKUP_TAGS = ('tt', 'big', 'small', 'u', 's', 'span')
+FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 40)
+ENTITY = re.compile(r'&(lt|gt|amp|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);')
+
+
+def markup_tags(text):
+    """The normalized start tags of valid markup, or raises ValueError."""
+    tags, stack, i = [], [], 0
+
+    def entity(at):
+        return entity_in(text, at)
+
+    while i < len(text):
+        c = text[i]
+        if c == '&':
+            i, _ = entity(i)
+        elif c != '<':
+            i += 1
+        else:
+            m = re.compile(r'<(/?)([a-z_]+)').match(text, i)
+            if not m or m.group(2) not in MARKUP_TAGS:
+                raise ValueError('bad tag at %d' % i)
+            name, i = m.group(2), m.end()
+            if m.group(1):
+                m = re.compile(r'\s*>').match(text, i)
+                if not m or not stack or stack[-1] != name:
+                    raise ValueError('bad end tag at %d' % i)
+                stack.pop()
+                i = m.end()
+                continue
+            attrs = {}
+            while True:
+                m = re.compile(r'\s*>').match(text, i)
+                if m:
+                    i = m.end()
+                    break
+                m = re.compile(r'\s+([a-z_]+)=("[^"<]*"|\'[^\'<]*\')').match(text, i)
+                if not m or name != 'span' or m.group(1) in attrs:
+                    raise ValueError('bad attribute at %d' % i)
+                raw, value, j = m.group(2)[1:-1], '', 0
+                while j < len(raw):
+                    if raw[j] == '&':
+                        j, ch = entity_in(raw, j)
+                        value += ch
+                    else:
+                        value += raw[j]
+                        j += 1
+                attr = m.group(1)
+                ok = {'color': re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', value),
+                      'foreground': re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', value),
+                      'fgcolor': re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', value),
+                      'size': value.isdigit() and int(value) in FONT_SIZES,
+                      'font_family': value == 'monospace', 'face': value == 'monospace',
+                      'underline': value in ('single', 'none'),
+                      'strikethrough': value in ('true', 'false')}.get(attr)
+                if not ok:
+                    raise ValueError('bad attribute %s at %d' % (attr, i))
+                attrs[attr] = value
+                i = m.end()
+            if len(stack) == 16:
+                raise ValueError('nested too deep')
+            stack.append(name)
+            tags.append(' '.join([name] + sorted('%s=%s' % kv for kv in attrs.items())))
+    if stack:
+        raise ValueError('<%s> never closed' % stack[-1])
+    return tags
+
+
+def entity_in(raw, j):
+    """(the index after the entity at raw[j], its character), or ValueError"""
+    m = ENTITY.match(raw, j)
+    if not m:
+        raise ValueError('bad "&" at %d' % j)
+    name = m.group(1)
+    if not name.startswith('#'):
+        return m.end(), {'lt': '<', 'gt': '>', 'amp': '&', 'quot': '"', 'apos': "'"}[name]
+    n = int(name[2:], 16) if name[1:2] in 'xX' else int(name[1:])
+    if n == 0 or n > 0x10FFFF or 0xD800 <= n <= 0xDFFF:
+        raise ValueError('bad character number at %d' % j)
+    return m.end(), chr(n)
+
+
+def markup_problem(key, text):
+    if '<' not in key and '&' not in key:
+        return 'has a tag, and its key has none' if '<' in text else None
+    try:
+        key_tags = markup_tags(key)
+    except ValueError:
+        try:
+            return 'has a tag, and its key has none' if markup_tags(text) else None
+        except ValueError:
+            return None
+    try:
+        text_tags = markup_tags(text)
+    except ValueError:
+        return 'is not valid markup'
+    return None if sorted(key_tags) == sorted(text_tags) else "hasn't the same tags as its key"
+
+
 def problem_of(key, text):
     if FORBIDDEN.search(text):
         return 'has a control or bidi character'
@@ -341,7 +442,7 @@ def problem_of(key, text):
         return "hasn't the same {names} as its key (%s, not %s)" % (
             ' '.join(sorted('{%s}' % n for n in names(text))) or 'none',
             ' '.join(sorted('{%s}' % n for n in names(bare))) or 'none')
-    return None
+    return markup_problem(bare, text)
 
 
 def show(key):

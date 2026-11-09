@@ -152,10 +152,12 @@ declare module "zg:ui" {
   export interface PanelProps extends CommonProps {
   }
   export interface LabelProps extends CommonProps {
-    /** *Readable*. May contain `\n` and `ui.symbols`. */
+    /** *Readable*. May contain `\n` and `ui.symbols`. With `markup`, it is markup (below), and reads back as it was set. */
     text?: string;
-    /** What happens when text is wider than the label (set a `width` for this to matter). */
+    /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow?: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, `<b>` and `<i>` (no bold or italic font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    markup?: boolean;
   }
   export interface ButtonProps extends CommonProps {
     /** *Readable*. Creates a centered label inside the button. */
@@ -359,15 +361,17 @@ declare module "zg:ui" {
     constructor(parent: Widget, props?: PanelProps);
     set(props: PanelProps): this;
   }
-  /** Text: one line or wrapped. */
+  /** Text: one line or wrapped; with `markup: true`, in several styles. */
   export class Label extends Widget {
     constructor(props?: LabelProps);
     constructor(parent: Widget, props?: LabelProps);
     set(props: LabelProps): this;
-    /** *Readable*. May contain `\n` and `ui.symbols`. */
+    /** *Readable*. May contain `\n` and `ui.symbols`. With `markup`, it is markup (below), and reads back as it was set. */
     text: string;
-    /** What happens when text is wider than the label (set a `width` for this to matter). */
+    /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, `<b>` and `<i>` (no bold or italic font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    markup: boolean;
   }
   /** A button: clicked with the mouse, or Enter or Space while focused. */
   export class Button extends Widget {
@@ -545,6 +549,8 @@ declare module "zg:ui" {
   export function onKey(handler: ((ev: KeyEvent) => boolean | void) | null): void;
   /** Change colors. [Details]. */
   export function theme(options: { dark?: boolean; primary?: Color; secondary?: Color }): void;
+  /** The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `zg:i18n`'s `tm()`. */
+  export function escapeMarkup(text: string): string;
 }
 
 declare module "zg:sys" {
@@ -558,8 +564,8 @@ declare module "zg:sys" {
   export function log(...args: any[]): void;
   /** Milliseconds since boot, as a float with microsecond resolution. */
   export function uptime(): number;
-  /** `{ used, limit, objects }`: this app's JS heap in bytes and its object count. */
-  export function memory(): { used: number; limit: number; objects: number };
+  /** `{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's). */
+  export function memory(): { used: number; limit: number; objects: number; ui: number };
   /** Run the garbage collector now. */
   export function gc(): void;
   /** Leave the app and return to the launcher (after the current handler returns). */
@@ -650,6 +656,8 @@ declare module "zg:session" {
 declare module "zg:i18n" {
   /** The translation of `text`, or `text` itself. `{name}` is replaced by `params.name`: numbers as `formatNumber` writes them, other values as strings; a BigInt throws a `TypeError` (format amounts first). A `{name}` not in `params` stays as written; `{{` and `}}` are braces. `$context` tells apart the same English in two meanings: `t("Open", { $context: "verb" })` is the catalog key `"verb\u0004Open"`. Keys should be string literals, so `tools/i18n.py` finds them. */
   export function t(text: string, params?: { [name: string]: string | number | boolean; $context?: string }): string;
+  /** As `t`, for a Label with `markup: true`: every param is escaped (`ui.escapeMarkup`), so a name, an address or a scanned text never becomes a tag. If `text` has a tag or an entity it is markup (its translation keeps the same tags: checked on load), else plain text, escaped too. */
+  export function tm(text: string, params?: { [name: string]: string | number | boolean; $context?: string }): string;
   /** `t(one)` or `t(other)` by the language's plural rule (English and Portuguese: one for 1, other otherwise, 0 too), with `n` added to `params`. */
   export function plural(n: number, one: string, other: string, params?: { [name: string]: string | number | boolean; $context?: string }): string;
   /** The language, a BCP 47 tag: `"en"`, `"pt-BR"`, or `"qps"` (a pseudo-language for testing: every translated text accented, about 40% longer and in brackets). */

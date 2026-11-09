@@ -58,6 +58,9 @@ expect('refused', refused, sorted([
     '"Bell": the translation has a control or bidi character',
     '"A number": not a string',
     '"Test app: zg:i18n and the checks on catalogs (tests/i18n.txt).": the translation has a control or bidi character',
+    '"Send <span color=\'#ffb300\'>{amount}</span>": the translation hasn\'t the same tags as its key',
+    '"Just text": the translation has a tag, and its key has none',
+    '"Keep <tt>this</tt>": the translation is not valid markup',
 ]))
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -111,6 +114,26 @@ with tempfile.TemporaryDirectory() as tmp:
                        capture_output=True, text=True)
     expect('a warning, not a failure', (r.returncode, [l for l in r.stdout.splitlines() if 'warning:' in l]),
            (0, ['clock lang/pt-BR.json: warning: "Back": uses "senha" (glossary: passphrase (BIP-39) is "frase-senha")']))
+
+# markup: the cases the runtime checks too (tests/apps/markuptest/cases.js)
+src = open(os.path.join(ROOT, 'tests', 'apps', 'markuptest', 'cases.js'), encoding='utf-8').read()
+cases = json.loads(src[src.index('['):src.rindex(']') + 1])
+def valid(text):
+    try:
+        i18n.markup_tags(text)
+        return True
+    except ValueError:
+        return False
+expect('markup cases', [c for c, v in cases if valid(c) != v], [])
+mp = i18n.markup_problem
+expect('tags kept, reordered', mp("<tt>a</tt> <u>b</u>", "<u>b</u> <tt>a</tt>"), None)
+expect('tag dropped', mp("<tt>a</tt>", "a"), "hasn't the same tags as its key")
+expect('tag changed', mp("<span color='#f00'>a</span>", "<span color='#0f0'>a</span>"), "hasn't the same tags as its key")
+expect('attributes reordered', mp("<span size='20' color='#f00'>a</span>", '<span color="#f00" size="20">a</span>'), None)
+expect('tag added', mp("plain", "<u>plain</u>"), 'has a tag, and its key has none')
+expect('crossed', mp("<tt>a</tt><u>b</u>", "<tt>a<u></tt>b</u>"), 'is not valid markup')
+expect('entity kept', mp("Tom &amp; Jerry", "Tom e Jerry"), None)
+expect('not markup', mp("a < b", "a < b"), None)
 
 for f in failed:
     print('FAIL', f)

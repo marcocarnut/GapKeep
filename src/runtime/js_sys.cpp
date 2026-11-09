@@ -258,6 +258,8 @@ static JSValue js_sys_uptime (JSContext *ctx, JSValueConst this_val, int argc, J
 	return JS_NewFloat64 (ctx, nSec * 1000.0 + nUsec / 1000.0);	// microsecond resolution
 }
 
+extern "C" size_t zg_lv_mem_used (void);	// lv_mem_wipe.c
+
 static JSValue js_sys_memory (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	JSMemoryUsage Usage;
@@ -267,6 +269,7 @@ static JSValue js_sys_memory (JSContext *ctx, JSValueConst this_val, int argc, J
 	JS_SetPropertyStr (ctx, Obj, "used", JS_NewInt64 (ctx, Usage.malloc_size));
 	JS_SetPropertyStr (ctx, Obj, "limit", JS_NewInt64 (ctx, Usage.malloc_limit));
 	JS_SetPropertyStr (ctx, Obj, "objects", JS_NewInt64 (ctx, Usage.obj_count));
+	JS_SetPropertyStr (ctx, Obj, "ui", JS_NewInt64 (ctx, zg_lv_mem_used ()));
 
 	return Obj;
 }

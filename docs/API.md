@@ -44,6 +44,7 @@ import * as ui from "zg:ui";
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |
 | `theme(options)` | function | Change colors. [Details](#uitheme). |
+| `escapeMarkup(text)` | function | The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `zg:i18n`'s `tm()`. |
 
 ### Creating widgets
 
@@ -189,12 +190,13 @@ padding, scrollbars when content overflows.
 
 #### Label
 
-Text: one line or wrapped.
+Text: one line or wrapped; with `markup: true`, in several styles.
 
 | Property | Value | Notes |
 | --- | --- | --- |
-| `text` | string | *Readable*. May contain `\n` and `ui.symbols`. |
-| `overflow` | `"wrap"`, `"clip"`, `"dots"`, `"scroll"`, `"scroll-circular"` | What happens when text is wider than the label (set a `width` for this to matter). |
+| `text` | string | *Readable*. May contain `\n` and `ui.symbols`. With `markup`, it is markup (below), and reads back as it was set. |
+| `overflow` | `"wrap"`, `"clip"`, `"dots"`, `"scroll"`, `"scroll-circular"` | What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). |
+| `markup` | boolean | *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, `<b>` and `<i>` (no bold or italic font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`'s `tm()`. [Markup](APPS.md#markup). |
 
 #### Button
 
@@ -421,7 +423,7 @@ import * as sys from "zg:sys";
 | `version` | `{ zerogap, quickjs, lvgl, circle }` version strings. |
 | `log(...args)` | Same as `console.log`. |
 | `uptime()` | Milliseconds since boot, as a float with microsecond resolution. |
-| `memory()` | `{ used, limit, objects }`: this app's JS heap in bytes and its object count. |
+| `memory()` | `{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's). |
 | `gc()` | Run the garbage collector now. |
 | `exit()` | Leave the app and return to the launcher (after the current handler returns). |
 
@@ -607,6 +609,7 @@ the change, and at once to the app that made it, through
 | Name | Description |
 | --- | --- |
 | `t(text, params?)` | The translation of `text`, or `text` itself. `{name}` is replaced by `params.name`: numbers as `formatNumber` writes them, other values as strings; a BigInt throws a `TypeError` (format amounts first). A `{name}` not in `params` stays as written; `{{` and `}}` are braces. `$context` tells apart the same English in two meanings: `t("Open", { $context: "verb" })` is the catalog key `"verb\u0004Open"`. Keys should be string literals, so `tools/i18n.py` finds them. |
+| `tm(text, params?)` | As `t`, for a Label with `markup: true`: every param is escaped (`ui.escapeMarkup`), so a name, an address or a scanned text never becomes a tag. If `text` has a tag or an entity it is markup (its translation keeps the same tags: checked on load), else plain text, escaped too. |
 | `plural(n, one, other, params?)` | `t(one)` or `t(other)` by the language's plural rule (English and Portuguese: one for 1, other otherwise, 0 too), with `n` added to `params`. |
 | `language()` | The language, a BCP 47 tag: `"en"`, `"pt-BR"`, or `"qps"` (a pseudo-language for testing: every translated text accented, about 40% longer and in brackets). |
 | `languages()` | The languages the system has (English and those the launcher has a catalog for), each named in itself: `[{ tag: "en", name: "English" }, { tag: "pt-BR", name: "Português (Brasil)" }]`. |

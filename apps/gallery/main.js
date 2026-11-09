@@ -4,7 +4,7 @@
 import * as ui from "zg:ui";
 import * as sys from "zg:sys";
 import { runSelfTest } from "./selftest.js";
-import { t, plural } from "zg:i18n";
+import { t, tm, plural } from "zg:i18n";
 
 ui.screen.set({ padding: 0, gap: 0 });
 
@@ -67,6 +67,20 @@ const table = new ui.Table(tablePage, {
   ],
 });
 table.setColumnWidth(2, 160);
+
+// markup (markup: true): styles in the text, and data escaped by tm()
+tablePage.set({ layout: "column", gap: 12 });
+new ui.Label(tablePage, {
+  markup: true,
+  width: "100%",
+  text: tm("Markup: <tt>monospaced</tt>, <big>big</big>, <small>small</small>, <u>underlined</u>, " +
+    "<s>struck</s>, <span color='#ffb300'>in colour</span> &amp; &#x20BF;"),
+});
+new ui.Label(tablePage, {
+  markup: true,
+  width: "100%",
+  text: tm("Data stays text: <tt>{data}</tt>", { data: "<u>not a tag</u> & more" }),
+});
 
 // --- QR code ------------------------------------------------------------
 const qrPage = tabs.addTab(t("QR"));

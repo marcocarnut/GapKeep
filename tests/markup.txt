@@ -1,0 +1,22 @@
+# Needs a test build (make TEST=1): ui.Label's markup (src/runtime/markup.h),
+# with tests/apps/markuptest: every case of its cases.js accepted or refused
+# as expected (tests/i18n/check_tool.py checks tools/i18n.py against the same
+# cases), the errors as a developer sees them, hostile data escaped by
+# escapeMarkup and tm(), what a markup label costs, and the styles on screen.
+expect Keyboard attached 60
+expect launcher ready 60
+tile markuptest
+expect markuptest ready 30
+expect markuptest cases: \d+, 0 wrong
+expect markuptest error: text: markup: unsupported tag <b>: there is no bold font at character 1
+expect markuptest error: text: markup: never closed: <tt> at character 2
+expect markuptest error: text: markup: crossed tags: </u> where <s> \(at character 4\) should close first at character 8
+expect markuptest error: text: markup: unknown entity .* at character 1
+expect markuptest error: text: markup: unsupported attribute bgcolor
+expect markuptest error: markup: set it when the Label is created
+expect markuptest hostile: \["Name: <tt>&lt;span color=&apos;red&apos;&gt;</tt>","Name: <tt>&amp;</tt>","Name: <tt>&lt;/tt&gt;</tt>"\]
+expect markuptest cost plain:
+expect markuptest cost markup, 3 styles:
+expect markuptest text back: "Sizes: <small>small<" markup: true
+wait 1
+shot 01-markup

@@ -116,6 +116,10 @@ apps/myapp --lang pt-BR`, fill them in, `python3 tools/i18n.py check
 apps/myapp`. Look at the app with `tools/zgsim --lang pt-BR` and `--lang qps`
 (text that missed `t()` stays plain; text that overflows shows). Example:
 `apps/clock`. Details: [APPS.md](APPS.md#languages).
+Styled words in a label (`<tt>`, `<span color=...>`): `new ui.Label({
+markup: true, text: tm("Pay <tt>{address}</tt>", { address }) })`; data goes
+in through `tm()` or `ui.escapeMarkup`, never pasted into markup
+([APPS.md](APPS.md#markup)).
 
 ## Rules that are easy to get wrong
 

@@ -91,6 +91,12 @@ void *lv_realloc_core (void *ptr, size_t new_size)
 	return p;
 }
 
+/* bytes LVGL holds now (sys.memory().ui) */
+size_t zg_lv_mem_used (void)
+{
+	return s_used;
+}
+
 void lv_mem_monitor_core (lv_mem_monitor_t *mon_p)
 {
 	memset (mon_p, 0, sizeof *mon_p);
