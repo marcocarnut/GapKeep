@@ -1,0 +1,7 @@
+{
+  "id": "ttftest",
+  "name": "Bold and italic (test)",
+  "version": "1.0.0",
+  "description": "Test builds only: what bold and italic cost (tests/ttf.txt).",
+  "icon": "edit"
+}

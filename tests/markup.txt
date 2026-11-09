@@ -8,7 +8,7 @@ expect launcher ready 60
 tile markuptest
 expect markuptest ready 30
 expect markuptest cases: \d+, 0 wrong
-expect markuptest error: text: markup: unsupported tag <b>: there is no bold font at character 1
+expect markuptest error: text: markup: unsupported style: <b>: there is no bold monospaced font at character 5
 expect markuptest error: text: markup: never closed: <tt> at character 2
 expect markuptest error: text: markup: crossed tags: </u> where <s> \(at character 4\) should close first at character 8
 expect markuptest error: text: markup: unknown entity .* at character 1

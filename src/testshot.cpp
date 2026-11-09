@@ -8,9 +8,11 @@
 #include "runtime/settings.h"
 #include "runtime/i18n.h"
 #include "runtime/keylayout.h"
+#include "runtime/ttfstyles.h"
 #include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
+#include <circle/timer.h>
 #include <circle/string.h>
 #include <circle/util.h>
 
@@ -52,6 +54,19 @@ void CTestShot::Update (void)
 				else if (strcmp (m_Line, "#experimental on") == 0)
 				{
 					CZgSettings::SetExperimental (TRUE, "serial line, test build");
+				}
+				else if (strcmp (m_Line, "#fonts") == 0)
+				{
+					ZgStyledFontStats ();
+				}
+				else if (strcmp (m_Line, "#redraw") == 0)
+				{
+					// the whole screen drawn again, now: what a frame costs
+					lv_obj_invalidate (lv_screen_active ());
+					unsigned nStart = CTimer::GetClockTicks ();
+					lv_refr_now (0);
+					CLogger::Get ()->Write ("testshot", LogNotice, "redraw: %u us",
+								CTimer::GetClockTicks () - nStart);
 				}
 				else if (strncmp (m_Line, "#keyboard ", 10) == 0)
 				{

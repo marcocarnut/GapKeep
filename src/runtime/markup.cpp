@@ -62,7 +62,8 @@ boolean Fail (TParser &r, unsigned nPos, const char *pWhat, const char *pDetail 
 
 boolean SameStyle (const TZgMarkupStyle &a, const TZgMarkupStyle &b)
 {
-	return    a.nSize == b.nSize && a.bMono == b.bMono && a.bColor == b.bColor
+	return    a.nSize == b.nSize && a.bMono == b.bMono && a.bBold == b.bBold && a.bItalic == b.bItalic
+	       && a.bColor == b.bColor
 	       && (!a.bColor || a.nColor == b.nColor) && a.nDecor == b.nDecor;
 }
 
@@ -271,12 +272,24 @@ boolean SpanAttribute (TParser &r, unsigned nPos, const char *pName, const char 
 		Detail.Format (" %s=\"%.16s\": \"%s\" or \"%s\" expected", pName, pValue, pOn, pOff);
 		return Fail (r, nPos, "bad attribute", Detail);
 	}
+	if (strcmp (pName, "weight") == 0 || strcmp (pName, "style") == 0)
+	{
+		boolean bWeight = pName[0] == 'w';
+		const char *pOn = bWeight ? "bold" : "italic";
+		if (strcmp (pValue, pOn) != 0 && strcmp (pValue, "normal") != 0)
+		{
+			Detail.Format (" %s=\"%.16s\": \"%s\" or \"normal\" expected", pName, pValue, pOn);
+			return Fail (r, nPos, "bad attribute", Detail);
+		}
+		(bWeight ? pStyle->bBold : pStyle->bItalic) = strcmp (pValue, pOn) == 0;
+		return TRUE;
+	}
 	if (strcmp (pName, "bgcolor") == 0 || strcmp (pName, "background") == 0)
 	{
 		Detail.Format (" %s: text has no background color here", pName);
 		return Fail (r, nPos, "unsupported attribute", Detail);
 	}
-	Detail.Format (" %.16s (color, size, font_family, underline, strikethrough)", pName);
+	Detail.Format (" %.16s (color, size, font_family, weight, style, underline, strikethrough)", pName);
 	return Fail (r, nPos, "unknown attribute", Detail);
 }
 
@@ -314,7 +327,7 @@ boolean Tag (TParser &r)
 		return Fail (r, nStart, "\"<\" starts no tag (write &lt; for \"<\")");
 	}
 
-	static const char *const Known[] = {"tt", "big", "small", "u", "s", "span"};
+	static const char *const Known[] = {"b", "i", "tt", "big", "small", "u", "s", "span"};
 	boolean bKnown = FALSE;
 	for (unsigned i = 0; i < sizeof Known / sizeof Known[0]; i++)
 	{
@@ -323,13 +336,7 @@ boolean Tag (TParser &r)
 	CString Detail;
 	if (!bKnown)
 	{
-		Detail.Format (" <%s>", Name);
-		if (strcmp (Name, "b") == 0 || strcmp (Name, "i") == 0)
-		{
-			Detail.Append (strcmp (Name, "b") == 0 ? ": there is no bold font" : ": there is no italic font");
-			return Fail (r, nStart, "unsupported tag", Detail);
-		}
-		Detail.Append (" (tt, big, small, u, s, span)");
+		Detail.Format (" <%s> (b, i, tt, big, small, u, s, span)", Name);
 		return Fail (r, nStart, "unknown tag", Detail);
 	}
 
@@ -481,10 +488,19 @@ boolean Tag (TParser &r)
 
 	int nIndex = SizeIndex (r, Style.nSize);
 	if (strcmp (Name, "tt") == 0)		Style.bMono = TRUE;
+	else if (strcmp (Name, "b") == 0)	Style.bBold = TRUE;
+	else if (strcmp (Name, "i") == 0)	Style.bItalic = TRUE;
 	else if (strcmp (Name, "big") == 0)	Style.nSize = r.pSizes[nIndex + 1 < (int) r.nSizes ? nIndex + 1 : nIndex];
 	else if (strcmp (Name, "small") == 0)	Style.nSize = r.pSizes[nIndex > 0 ? nIndex - 1 : 0];
 	else if (strcmp (Name, "u") == 0)	Style.nDecor |= ZG_MARKUP_UNDERLINE;
 	else if (strcmp (Name, "s") == 0)	Style.nDecor |= ZG_MARKUP_STRIKE;
+
+	if (Style.bMono && (Style.bBold || Style.bItalic))
+	{
+		Detail.Format (" <%s>: there is no %s monospaced font", Name,
+			       Style.bBold && Style.bItalic ? "bold italic" : Style.bBold ? "bold" : "italic");
+		return Fail (r, nStart, "unsupported style:", Detail);
+	}
 
 	r.nDepth++;
 	strcpy (r.Stack[r.nDepth].Name, Name);

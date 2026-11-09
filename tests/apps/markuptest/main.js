@@ -21,7 +21,7 @@ for (const [text, valid] of CASES) {
   }
 }
 log(`cases: ${CASES.length}, ${wrong} wrong`);
-for (const text of ["<b>x</b>", "x<tt>y", "<u><s>x</u></s>", "&bogus;", "<span bgcolor='#000'>x</span>"]) {
+for (const text of ["<tt><b>x</b></tt>", "x<tt>y", "<u><s>x</u></s>", "&bogus;", "<span bgcolor='#000'>x</span>"]) {
   try {
     new ui.Label({ markup: true, text });
   } catch (e) {
@@ -68,6 +68,7 @@ const sizes = new ui.Label({ markup: true, width: "100%", text:
   "Sizes: <small>small</small> normal <big>big</big> <span size='28'>28</span> <tt>tt mono</tt> <tt><small>tt small</small></tt>" });
 new ui.Label({ markup: true, width: "100%", font: 20, text:
   "Send <span color='#ffb300'>0.001 BTC</span> to <tt>bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</tt>" });
+new ui.Label({ markup: true, width: "100%", text: "Medium, <b>bold</b>, <i>italic</i>, <b><i>bold italic</i></b>, <b>0.001 &#x20BF;</b> <big><b>big bold</b></big>" });
 new ui.Label({ markup: true, text: "<u>underlined</u>, <s>struck</s>, <span underline='single' color='#66bb6a'>both styles</span> &lt;tags&gt; &amp; &#x20BF;" });
 new ui.Label({ markup: true, width: 300, overflow: "dots", maxHeight: 44, text: "<tt>dots:</tt> " + "a long line of text ".repeat(8) });
 const mono = new ui.Label({ markup: true, mono: true, text: "A mono label, <big>big</big>" });

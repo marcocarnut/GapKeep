@@ -63,11 +63,11 @@ true
 ],
 [
 "<b>bold</b>",
-false
+true
 ],
 [
 "<i>italic</i>",
-false
+true
 ],
 [
 "<foo>x</foo>",
@@ -139,7 +139,7 @@ false
 ],
 [
 "<span weight='bold'>x</span>",
-false
+true
 ],
 [
 "<span color='#f00' color='#0f0'>x</span>",
@@ -179,6 +179,58 @@ false
 ],
 [
 "<span><span><span><span><span><span><span><span><span><span><span><span><span><span><span><span>x</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>",
+true
+],
+[
+"<span style='italic'>x</span>",
+true
+],
+[
+"<b><i>both</i></b>",
+true
+],
+[
+"<span weight='bold' style='italic'>both</span>",
+true
+],
+[
+"<b>x <span weight='normal'>y</span></b>",
+true
+],
+[
+"<b><big>x</big></b>",
+true
+],
+[
+"<i>&#x20BF; &#xF00C;</i>",
+true
+],
+[
+"<tt><b>x</b></tt>",
+false
+],
+[
+"<b><tt>x</tt></b>",
+false
+],
+[
+"<i><span font_family='monospace'>x</span></i>",
+false
+],
+[
+"<span weight='heavy'>x</span>",
+false
+],
+[
+"<span style='oblique'>x</span>",
+false
+],
+[
+"<b weight='bold'>x</b>",
+false
+],
+[
+"<b><span weight='normal'><tt>x</tt></span></b>",
 true
 ]
 ];

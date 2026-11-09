@@ -25,6 +25,7 @@
 //
 #include "apphost.h"
 #include "markup.h"
+#include "ttfstyles.h"
 #include "scanner.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
 #include <lvgl/lvgl/src/libs/qrcode/qrcodegen.h>
@@ -925,7 +926,12 @@ static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, si
 		*pEnd = cSaved;
 
 		lv_style_t *pStyle = lv_span_get_style (pSpan);
-		if (Run.Style.nSize != nSize || Run.Style.bMono != bMono)
+		if (Run.Style.bBold || Run.Style.bItalic)	// never mono (markup.h)
+		{
+			lv_style_set_text_font (pStyle, ZgStyledFont (NormalFont (Run.Style.nSize), Run.Style.nSize,
+								      Run.Style.bBold, Run.Style.bItalic));
+		}
+		else if (Run.Style.nSize != nSize || Run.Style.bMono != bMono)
 		{
 			lv_style_set_text_font (pStyle, Run.Style.bMono ? MonoFont (Run.Style.nSize)
 									: NormalFont (Run.Style.nSize));

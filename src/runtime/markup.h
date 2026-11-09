@@ -5,17 +5,22 @@
 // with a style each, for an LVGL spangroup (js_ui.cpp). Also checks the
 // tags of translations (i18n.cpp). No LVGL here: sizes come from ui.fonts.
 //
+//   <b> <i>              bold, italic (and both): Montserrat Bold, Medium
+//                        Italic, Bold Italic, drawn by TinyTTF (ttfstyles.h)
 //   <tt>                 the monospaced font, at the size or the next smaller
 //   <big> <small>        one step up or down in ui.fonts
 //   <u> <s>              underline, strikethrough
 //   <span ...>           color (or foreground, fgcolor) = "#RGB" | "#RRGGBB",
 //                        size = one of ui.fonts, font_family = "monospace",
+//                        weight = "bold" | "normal",
+//                        style = "italic" | "normal",
 //                        underline = "single" | "none",
 //                        strikethrough = "true" | "false"
 //   &lt; &gt; &amp; &quot; &apos; &#N; &#xN;
 //
 // Anything else is an error, with its position: an unknown tag or
-// attribute, <b> and <i> (no bold or italic font), bgcolor (spans have no
+// attribute, bold or italic monospaced text (there is no such font: <b>
+// in <tt> or in a mono label, <tt> in <b>), bgcolor (spans have no
 // background), unclosed or crossed tags, a bad value, a stray "&". Never a
 // half-parsed text.
 //
@@ -39,6 +44,8 @@ struct TZgMarkupStyle
 {
 	int nSize;		// one of the sizes given
 	boolean bMono;
+	boolean bBold;
+	boolean bItalic;
 	boolean bColor;		// else the label's
 	u32 nColor;		// 0xRRGGBB
 	unsigned nDecor;	// ZG_MARKUP_*
