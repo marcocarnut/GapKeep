@@ -16,6 +16,7 @@
 #include "runtime/version.h"
 #include "runtime/appstore.h"
 #include "runtime/cursor.h"
+#include "runtime/wheel.h"
 
 // same rate as the serial bootloader (FLASHBAUD), so one terminal setting
 // covers both
@@ -176,6 +177,11 @@ TShutdownMode CKernel::Run (void)
 
 		m_Keyboard.Update (bUpdated);
 		m_GUI.Update (bUpdated);		// runs LVGL: input, timers, drawing
+		int nWheel = m_GUI.TakeWheelMove ();	// USB: > 0 is up (patches/circle/0006)
+		if (nWheel != 0)
+		{
+			ZgWheel (-nWheel);		// scrolls what is under the pointer
+		}
 		if (bUpdated)
 		{
 			ZgInstallCursor ();		// a mouse may have turned up

@@ -34,6 +34,7 @@ on stdin, one per line:
 | `key <name>` | Press and release a key. Names as QEMU's: `a`, `shift-a`, `ctrl-c`, `ret`, `tab`, `shift-tab`, `spc`, `backspace`, `esc`, `up`, `down`, `left`, `right`, `home`, `end`, `delete`, `f1`, `minus`, `dot`, ..., and `meta_l` (the Windows key: back to the launcher). |
 | `keydown <name>`, `keyup` | Hold a key (it auto-repeats after 400 ms, every 80 ms, as on the device), release it. |
 | `pointer <x> <y> <0\|1>` | The mouse at (x, y), left button up or down. |
+| `wheel <notches>` | The mouse wheel where the pointer is: > 0 scrolls down, < 0 up, three lines a notch. In the browser, the wheel over the screen. |
 | `shot <file.png>` | Screenshot; answers `#shot <file.png>`. |
 | `launch [<id>]` | Start that app, or the launcher. |
 | `camera <what>` | What the camera films: see [The camera](#the-camera). |

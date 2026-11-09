@@ -139,7 +139,9 @@ apps/myapp`. Look at the app with `tools/zgsim --lang pt-BR` and `--lang qps`
   running).
 - **Containers don't scroll** unless `scrollable: true`. The screen and
   Panels do. A scrollable Container clips its content and needs 5 px of
-  padding for focus rings (it gets that by default).
+  padding for focus rings (it gets that by default). The mouse wheel
+  scrolls the scrollable widget under the pointer (`wheel <n>` in
+  scenarios); focusing a widget with Tab scrolls it into view.
 - **Rebuilding a screen:** `ui.screen.clear()` deletes every widget; then
   create the new ones. Deleting a widget inside its own handler is safe.
 - **Log lines are at most 2 KB.** Split big dumps.

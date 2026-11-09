@@ -11,6 +11,7 @@
 //   keydown <name>          press a key and hold it (it auto-repeats)
 //   keyup                   release it
 //   pointer <x> <y> <0|1>   mouse at (x, y), left button up (0) or down (1)
+//   wheel <notches>         the mouse wheel where the pointer is: > 0 down
 //   shot <file.png>         screenshot; answers "#shot <file.png>"
 //   launch [<id>]           start that app (or the launcher), as the
 //                           launcher would
@@ -190,6 +191,18 @@ static int Command (char *pLine)
 		else
 		{
 			printf ("#error pointer <x> <y> <0|1>\n");
+		}
+	}
+	else if (strcmp (pLine, "wheel") == 0)
+	{
+		int n;
+		if (sscanf (pArgs, "%d", &n) == 1)
+		{
+			zg_sim_wheel (n);
+		}
+		else
+		{
+			printf ("#error wheel <notches>\n");
 		}
 	}
 	else if (strcmp (pLine, "shot") == 0)

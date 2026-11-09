@@ -79,6 +79,10 @@ int zg_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height)
 /* The mouse: absolute position in screen pixels, left button state. */
 void zg_sim_pointer (int x, int y, int pressed);
 
+/* The mouse wheel, where the pointer is: notches > 0 scroll down (show
+ * what is below), < 0 up, as src/runtime/wheel.h. */
+void zg_sim_wheel (int notches);
+
 /* The screen: RGB565 pixels, width * height, rows top to bottom. */
 const uint16_t *zg_sim_frame (int *width, int *height);
 /* Bumped whenever LVGL drew something. */

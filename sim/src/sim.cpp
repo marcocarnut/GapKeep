@@ -9,6 +9,7 @@
 #include "../../src/runtime/apphost.h"
 #include "../../src/runtime/appstore.h"
 #include "../../src/runtime/cursor.h"
+#include "../../src/runtime/wheel.h"
 #include "../../src/runtime/i18n.h"
 #include "../../src/runtime/synthcam.h"
 #include "../../src/runtime/version.h"
@@ -478,6 +479,11 @@ void zg_sim_pointer (int x, int y, int pressed)
 	s_Pointer.point.x = x < 0 ? 0 : x >= s_nWidth ? s_nWidth - 1 : x;
 	s_Pointer.point.y = y < 0 ? 0 : y >= s_nHeight ? s_nHeight - 1 : y;
 	s_Pointer.state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+void zg_sim_wheel (int nNotches)
+{
+	ZgWheelAt (s_Pointer.point.x, s_Pointer.point.y, nNotches);
 }
 
 // --- main loop ----------------------------------------------------------------

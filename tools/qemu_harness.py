@@ -25,6 +25,9 @@ Scenario file: one command per line, '#' starts a comment.
     click [left|right]          press and release a mouse button
     mousedown [left|right]      press a mouse button (moves then drag)
     mouseup                     release the mouse buttons
+    wheel <notches>             turn the mouse wheel where the pointer is:
+                                > 0 scrolls down, < 0 up (QEMU and the
+                                simulator; the rig's mouse has none)
     shot <name>                 save a screenshot as <outdir>/<name>.png
     serialshot <name>           same, but fetched over the serial line from a
                                 test build (as on real hardware)
@@ -271,6 +274,13 @@ class Machine:
         self.monitor('mouse_button 0')
         time.sleep(0.15)
 
+    def wheel(self, notches):
+        # one notch a report; the monitor's dz > 0 is the wheel turned up
+        for _ in range(abs(notches)):
+            self.monitor('mouse_move 0 0 %d' % (-1 if notches > 0 else 1))
+            time.sleep(0.05)
+        time.sleep(0.1)
+
     def shot(self, png_path):
         ppm = png_path[:-4] + '.ppm'
         if os.path.exists(ppm):
@@ -476,6 +486,12 @@ class SimMachine:
         self._cmd('launch %s' % app_id)
         time.sleep(0.1)
 
+    def wheel(self, notches):
+        # one notch a command, as a USB mouse (and QEMU) reports them
+        for _ in range(abs(notches)):
+            self._cmd('wheel %d' % (1 if notches > 0 else -1))
+        time.sleep(0.05)
+
     def keyboard(self, layout):
         self._cmd('keyboard %s' % layout)
         time.sleep(0.05)
@@ -571,6 +587,10 @@ def run_scenario(m, path, outdir):
                 m.mousedown(rest.strip() or 'left')
             elif cmd == 'mouseup':
                 m.mouseup()
+            elif cmd == 'wheel':
+                if not hasattr(m, 'wheel'):
+                    raise SystemExit('%s: wheel: this machine\'s mouse has no wheel' % where)
+                m.wheel(int(rest))
             elif cmd == 'serialshot':
                 p = m.serialshot(os.path.join(outdir, rest.strip() + '.png'))
                 print('[%s] serial screenshot %s' % (where, p))
