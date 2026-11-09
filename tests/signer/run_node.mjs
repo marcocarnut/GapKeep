@@ -16,7 +16,7 @@ import {
   wipe, VERSIONS, versionFor, Bip32Error, HARDENED,
 } from "../../apps/signer/lib/bip32.js";
 import { legacySighash, segwitV0Sighash, taprootSighash, taprootSigMsg, p2wpkhScriptCode } from "../../apps/signer/lib/sighash.js";
-import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, SignError, CHANGE_NEAR, CHANGE_GAP } from "../../apps/signer/lib/sign.js";
+import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, partialSigGood, SignError, CHANGE_NEAR, CHANGE_GAP } from "../../apps/signer/lib/sign.js";
 import { parsePrivateKey, parseWif, KeyError } from "../../apps/signer/lib/keys.js";
 import { combine, CombineError } from "../../apps/signer/lib/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
@@ -1790,6 +1790,42 @@ check("multisig", "Electrum's 2-of-3, as its QR code carries it: signed, and its
   claimed.forEach((o) => eq([o.ours, o.noXpubs], [false, true]));
   const r = signKeys(p, [abandon], { network: "testnet" });
   eq([r.signed.length, r.plan.inputs[0].multisig.have], [1, 1]);
+});
+// The same transaction as Electrum's desktop exports it with "For hardware
+// device; include xpubs" ticked (tests/psbt/make_electrum_psbts.py): the
+// global xpubs prove the change, and two cosigners finish it to Electrum's
+// own txid. The other cosigners are BIP-39's public test phrases.
+check("multisig", "Electrum's 2-of-3 with its xpubs: change proved, signed by two cosigners to Electrum's txid", () => {
+  const c = PSBT_V.electrum_made.made.find((x) => x.name === "testnet-2of3-p2wsh-xpubs");
+  const p = parsePsbt(readPayload(c.qr).bytes);
+  eq(p.global.fields.xpubs.length, 3, "global xpubs");
+  const options = { network: "testnet" };
+  const pl = planKeys(p, [abandon], options);
+  eq([pl.inputs[0].sign, pl.inputs[0].multisig.m, pl.inputs[0].multisig.n, pl.complete], [true, 2, 3, false]);
+  const ci = c.outputs.findIndex((o) => o.change), ei = c.outputs.findIndex((o) => !o.change);
+  const ch = pl.outputs[ci];
+  eq([ch.ours, ch.role, ch.unproved ?? null, ch.problem, ch.stray, ch.far, ch.noXpubs ?? false],
+    [true, "change", null, null, null, null, false], "the change, proved");
+  eq(pl.outputs[ei].ours, false, "the payment is not ours");
+  // the review says so: change back to the wallet, the payment sent, no warning about either
+  const a = applyPlan(analyze(p, options), pl);
+  eq([a.toSelf, a.sent, a.fee], [c.outputs[ci].value, c.outputs[ei].value, c.fee], "totals");
+  const about = a.warnings.filter((w) => /^Output \d/.test(String(w.text)));
+  eq(about.map((w) => String(w.text)), [], "warnings about the outputs");
+  // signed by this key, its signature good; then a second cosigner completes it
+  const one = signKeys(p, [abandon], options);
+  eq([one.signed.length, one.plan.inputs[0].multisig.have, one.plan.complete], [1, 1, false]);
+  const sig = one.psbt.inputs[0].fields.partialSigs;
+  eq(sig.length, 1, "one signature");
+  eq(partialSigGood(one.psbt, 0, sig[0].pubkey, sig[0].signature), true, "it verifies");
+  for (const words of ["legal winner thank year wave sausage worth useful legal winner thank yellow",
+    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above"]) {
+    const other = fromSeed(seedFromMnemonic(words));
+    const two = signKeys(one.psbt, [other], options);
+    eq([two.signed.length, two.plan.complete], [1, true], "the second cosigner");
+    eq(finalize(two.psbt).txid, c.txid, "Electrum's txid");
+  }
+  return true;
 });
 check("descriptor", "BIP-48: the cosigner's key expression, and Electrum's Zpub", () => {
   const xpub = serializeXpub(neuter(derive(abandon, "m/48'/0'/0'/2'")), "xpub");

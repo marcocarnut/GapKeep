@@ -15,6 +15,7 @@ real funds), funded by made-up transactions the wallets take on trust (as
 Electrum's own tests do), so every value here is reproducible.
 """
 import asyncio
+import copy
 import json
 import os
 import tempfile
@@ -134,6 +135,13 @@ async def make():
                                      fee_policy=FixedFeePolicy(2000), rbf=True)
     tx.locktime = 2_500_000
     out.append(describe(w, tx, "testnet-2of3-p2wsh", "testnet", "2-of-3 P2WSH multisig"))
+
+    # the same, as the desktop's export menu makes it with "For hardware
+    # device; include xpubs" ticked: prepare_for_export_for_hardware_device()
+    # is this call, and then fetching data from the network
+    ticked = copy.deepcopy(tx)
+    ticked.add_info_from_wallet(w, include_xpubs=True)
+    out.append(describe(w, ticked, "testnet-2of3-p2wsh-xpubs", "testnet", "2-of-3 P2WSH multisig, with its global xpubs"))
 
     # many inputs: near the largest QR code Electrum makes (alphanumeric mode,
     # 4296 characters), for timing Base43; and one the simulator's camera can

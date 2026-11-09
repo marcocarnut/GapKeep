@@ -36,7 +36,8 @@ developers).
 
 `make_electrum_psbts.py` makes PSBTs the way Electrum's QR codes carry
 them: P2WPKH with change, signed (a complete transaction), P2SH-P2WPKH,
-P2PKH (the QR code drops the previous transaction), 2-of-3 P2WSH multisig,
+P2PKH (the QR code drops the previous transaction), 2-of-3 P2WSH multisig
+(as it comes, and with the global xpubs of "For hardware device; include xpubs"),
 13 and 18 inputs (large codes), and mainnet with two payments. The wallets
 come from the BIP-39 test mnemonics ("abandon ... about" and two others):
 public, test coins only. Funding transactions are made up, as in
