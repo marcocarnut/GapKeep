@@ -19,4 +19,9 @@ void GkWheel (int nNotches);		// where LVGL's pointer last was
 // the same at a point of the screen
 void GkWheelAt (int x, int y, int nNotches);
 
+// Shift+PageUp (nPages < 0) / Shift+PageDown (> 0): scrolls the nearest
+// scrollable ancestor of pFocused (0: the screen) by a page less a line.
+struct _lv_obj_t;
+void GkScrollPage (struct _lv_obj_t *pFocused, int nPages);
+
 #endif

@@ -32,9 +32,10 @@ disabled until the entropy pad's bar is full (128 bits at 24 words, 96 at
 are in `lib/entropypad.js`. A mouse press scores 4 bits and a drag point 1,
 and only drags that really moved count. Two additions:
 
-- Without a mouse, Space or Enter on the focused pad is a press without a
-  position and scores 3 bits, the clock part of a tap. Holding the key down
-  counts once: GapKeep never delivers auto-repeated Enter to widgets.
+- Without a mouse, any key typed on the focused pad (Space and Enter too;
+  not Tab, Escape, the arrows or other navigation keys) is a press without
+  a position and scores 3 bits, the clock part of a tap. Holding a key down
+  counts once.
 - The timing of every key pressed in the app is hashed in after the pad
   samples. It is not credited on the bar.
 

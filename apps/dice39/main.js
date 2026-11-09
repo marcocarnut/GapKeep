@@ -91,6 +91,16 @@ function entropyPad(parent, target, onUpdate) {
     onUpdate();
   };
   pad.onPress = (ev) => { if (addPadSample(state.pad, ev, "tap")) update(); };
+  // Without a mouse, any key typed on the focused pad is a tap without a
+  // position (Space and Enter already arrive as presses, above). Held keys
+  // count once; Tab, Escape and the arrows keep moving the focus.
+  const NAVIGATION = new Set([" ", "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+    "Home", "End", "PageUp", "PageDown"]);
+  pad.onKey = (ev) => {
+    if (ev.repeat || ev.ctrl || ev.alt || NAVIGATION.has(ev.key)) return false;
+    if (addPadSample(state.pad, { pointer: false, time: sys.uptime() }, "tap")) update();
+    return true;
+  };
   pad.onDrag = (ev) => { if (addPadSample(state.pad, ev, "drag")) update(); };
   update();
   return pad;
