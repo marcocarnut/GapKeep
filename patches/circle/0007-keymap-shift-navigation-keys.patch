@@ -1,0 +1,31 @@
+From: gapkeep
+Subject: keymap: Shift with a navigation key that has no shifted entry
+
+The keymaps leave the Shift column empty for PageUp, PageDown, Home,
+End, Insert, Delete and the arrows, so Translate() returned KeyNone and
+the key was lost. With no shifted entry, such a key is now its unshifted
+self; the modifier still reaches the handler (gapkeep: Shift+PageUp and
+Shift+PageDown scroll a page). Keypad keys are left alone (Num Lock).
+
+diff --git a/lib/input/keymap.cpp b/lib/input/keymap.cpp
+--- a/lib/input/keymap.cpp
++++ b/lib/input/keymap.cpp
+@@ -254,6 +254,18 @@
+ 
+ 	u16 nLogCode = m_KeyMap[nPhyCode][nTable];
+ 
++	// gapkeep: Shift with a navigation key that has no shifted entry
++	// (PageUp, PageDown, Home, End, Insert, Delete, the arrows) is that key:
++	// the modifier still reaches the handler, which may use it (Shift+PageUp
++	// scrolls a page)
++	if (   nLogCode == KeyNone
++	    && nTable == K_SHIFTTAB
++	    && KeyInsert <= nLogCodeNorm && nLogCodeNorm <= KeyRight
++	    && !(KEYPAD_FIRST <= nPhyCode && nPhyCode <= KEYPAD_LAST))
++	{
++		nLogCode = nLogCodeNorm;
++	}
++
+ 	switch (nLogCode)
+ 	{
+ 	case KeyCapsLock:
