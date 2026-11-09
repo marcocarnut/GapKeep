@@ -204,13 +204,24 @@ new ui.Label({
 });
 ```
 
-Tags: `<tt>` (monospaced), `<big>`, `<small>`, `<u>`, `<s>`, and `<span>`
-with `color`, `size` (one of `ui.fonts`), `font_family="monospace"`,
-`underline="single"`, `strikethrough="true"`. Entities: `&lt; &gt; &amp;
-&quot; &apos; &#N; &#xN;`. There is no bold or italic font, so `<b>` and
-`<i>` are errors. Anything the parser doesn't know throws a `TypeError`
-naming the problem and the character where it is: markup is never shown
-half-parsed.
+Tags: `<b>` (bold), `<i>` (italic), both for bold italic, `<tt>`
+(monospaced), `<big>`, `<small>`, `<u>`, `<s>`, and `<span>` with `color`,
+`size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`,
+`style="italic"`, `underline="single"`, `strikethrough="true"`. Entities:
+`&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Bold and italic come at every
+size of `ui.fonts`, on the same line and baseline as the normal text; there
+is no bold or italic monospaced font, so `<b>` inside `<tt>` (or in a
+`mono` label, or `<tt>` inside `<b>`) is an error. Anything the parser
+doesn't know throws a `TypeError` naming the problem and the character
+where it is: markup is never shown half-parsed.
+
+Bold and italic are drawn from TrueType outlines (LVGL's TinyTTF), not
+from bitmaps: the first label to use a style at a size makes its font
+(about a millisecond on a Pi Zero, logged as `fonts: bold 16 px: made`),
+and each glyph is drawn once and then kept (up to 96 per style and size).
+So a style costs nothing until it is used, and its first screen is a
+little slower than the next. They lack the bitmap fonts' hinting: at 12
+and 14 px they look a little softer.
 
 **Data is never markup.** A name, an address or a scanned text could hold
 `<` or `&`: put it in with `ui.escapeMarkup(s)`, or through `tm()` (as `t()`,

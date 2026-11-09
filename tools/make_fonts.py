@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates zerogap's fonts, src/runtime/fonts/zg_montserrat_*.c and zg_mono_*.c.
+"""Regenerates zerogap's fonts, src/runtime/fonts/zg_montserrat_*.c, zg_mono_*.c and zg_ttf_*.c.
 
 The ten sizes zg:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
 Montserrat Medium for text and Font Awesome Free for LVGL's icons
@@ -48,6 +48,13 @@ baseline as Montserrat of the same size, so the two mix on a row, and
 falls back to it (LVGL's font fallback) for everything else: the icons,
 Latin Extended-A, € and ₿.
 
+Bold, italic and bold italic (markup's <b> and <i>): Montserrat Bold,
+Medium Italic and Bold Italic, from the same zip, as TrueType files for
+LVGL's TinyTTF, which draws them at run time, at any size, when a label
+first uses them (src/runtime/ttfstyles.cpp): zg_ttf_<style>.c, one C array
+each. The same characters as the bitmap fonts, the kerning unwrapped as
+above, and no hinting, which TinyTTF's rasterizer (stb_truetype) ignores.
+
 The fonts' licences are copied next to them (LICENCE.montserrat, the
 SIL OFL 1.1; LICENCE.fontawesome, Font Awesome Free's, whose fonts are
 under the OFL too; LICENCE.jetbrainsmono, the OFL).
@@ -91,6 +98,16 @@ MONO_TTF = ("fonts/ttf/JetBrainsMono-Medium.ttf",        # version 2.304
 MONO_LICENCE = ("OFL.txt",
                 "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad")
 MONO_RANGES = ["0x20-0x7E", "0xA0-0xFF"]
+
+# markup's bold and italic, for TinyTTF (see above): (style, member, sha256)
+STYLE_TTFS = [
+    ("bold", "static/Montserrat-Bold.ttf",
+     "7fa93d7daa5c2f881a6727229c211782de6b76008fbd6346b3d7664e8fc83f43"),
+    ("italic", "static/Montserrat-MediumItalic.ttf",
+     "6fff5b96f46799dd903d5cbf99f0901d3077e5b99843e5a92b6a3a324b6dd99f"),
+    ("bolditalic", "static/Montserrat-BoldItalic.ttf",
+     "001a59b0f2c541080033b83ca6dfacce03095d99caa3594835f51b7c6d9ce758"),
+]
 
 TEXT_RANGES = ["0x20-0x7E", "0xA0-0xAC", "0xAE-0xFF", "0x100-0x17F"]
 TEXT_EXTRA = [0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D,  # – — ‘ ’ “ ”
@@ -137,8 +154,10 @@ def metrics(path):
             int(re.search(r"\.base_line = (\d+),", src).group(1)))
 
 
-def unwrap_kerning(ttf, out, codepoints):
-    """ttf subset to codepoints, GPOS Extension lookups unwrapped (see above)."""
+def unwrap_kerning(ttf, out, codepoints, hinting=True):
+    """ttf subset to codepoints, GPOS Extension lookups unwrapped (see above).
+    Without hinting: only what TinyTTF reads (outlines, metrics, cmap, GPOS),
+    and the same bytes every run (the file's dates kept)."""
     try:
         import fontTools
         from fontTools.ttLib import TTFont
@@ -147,12 +166,14 @@ def unwrap_kerning(ttf, out, codepoints):
         sys.exit("make_fonts: needs fontTools (pip install fonttools==%s)" % FONTTOOLS_VERSION)
     if fontTools.version != FONTTOOLS_VERSION:
         sys.exit(f"make_fonts: fontTools {fontTools.version}, expected {FONTTOOLS_VERSION}")
-    font = TTFont(ttf)
+    font = TTFont(ttf, recalcTimestamp=False)
     opts = subset.Options()
     opts.layout_features = ["kern"]
-    opts.name_IDs = ["*"]
+    opts.name_IDs = ["*"] if hinting else [0, 1, 2, 3, 4, 5, 6]	# 0: the copyright notice
     opts.notdef_outline = True
-    opts.hinting = True
+    opts.hinting = hinting
+    if not hinting:
+        opts.drop_tables += ["GSUB", "GDEF", "STAT", "DSIG"]
     sub = subset.Subsetter(opts)
     sub.populate(unicodes=codepoints)
     sub.subset(font)
@@ -282,6 +303,24 @@ def main():
                 sys.exit(f"make_fonts: {name}: line_height or base_line not found")
             open(os.path.join(OUT, name + ".c"), "w").write(src)
             print(f"make_fonts: {name}.c")
+        # markup's bold and italic: subset TTFs as C arrays
+        for style, member, want in STYLE_TTFS:
+            path = extract(mzip, member, tmp)
+            check(path, want)
+            out = os.path.join(tmp, f"{style}.ttf")
+            unwrap_kerning(path, out, codepoints(text_r), hinting=False)
+            data = open(out, "rb").read()
+            name = f"zg_ttf_{style}"
+            lines_c = [", ".join(f"0x{b:02x}" for b in data[i:i + 16]) + "," for i in range(0, len(data), 16)]
+            with open(os.path.join(OUT, name + ".c"), "w") as f:
+                f.write(f"/* {os.path.basename(member)}, subset by tools/make_fonts.py (sha256 of the\n"
+                        f" * original {want[:16]}...), for TinyTTF: {len(data)} bytes. */\n"
+                        f"#include <stddef.h>\n\n"
+                        f"const unsigned char {name}[] __attribute__ ((aligned (4))) =\n{{\n")
+                f.write("\n".join("\t" + l for l in lines_c))
+                f.write(f"\n}};\nconst size_t {name}_size = sizeof {name};\n")
+            print(f"make_fonts: {name}.c ({len(data)} bytes)")
+
         # tools/make_sdcard.sh puts these on the cards, with kernel.img
         for path, name in licences:
             shutil.copy(path, os.path.join(OUT, name))

@@ -333,7 +333,7 @@ def names(text):
 
 # --- markup (src/runtime/markup.cpp: the same rules) -------------------------------
 
-MARKUP_TAGS = ('tt', 'big', 'small', 'u', 's', 'span')
+MARKUP_TAGS = ('b', 'i', 'tt', 'big', 'small', 'u', 's', 'span')
 FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 40)
 ENTITY = re.compile(r'&(lt|gt|amp|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);')
 
@@ -341,6 +341,7 @@ ENTITY = re.compile(r'&(lt|gt|amp|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);')
 def markup_tags(text):
     """The normalized start tags of valid markup, or raises ValueError."""
     tags, stack, i = [], [], 0
+    styles = [(False, False, False)]    # (monospaced, bold, italic), as the tags nest
 
     def entity(at):
         return entity_in(text, at)
@@ -361,6 +362,7 @@ def markup_tags(text):
                 if not m or not stack or stack[-1] != name:
                     raise ValueError('bad end tag at %d' % i)
                 stack.pop()
+                styles.pop()
                 i = m.end()
                 continue
             attrs = {}
@@ -387,14 +389,23 @@ def markup_tags(text):
                       'size': value.isdigit() and int(value) in FONT_SIZES,
                       'font_family': value == 'monospace', 'face': value == 'monospace',
                       'underline': value in ('single', 'none'),
-                      'strikethrough': value in ('true', 'false')}.get(attr)
+                      'strikethrough': value in ('true', 'false'),
+                      'weight': value in ('bold', 'normal'),
+                      'style': value in ('italic', 'normal')}.get(attr)
                 if not ok:
                     raise ValueError('bad attribute %s at %d' % (attr, i))
                 attrs[attr] = value
                 i = m.end()
             if len(stack) == 16:
                 raise ValueError('nested too deep')
+            mono, bold, italic = styles[-1]
+            mono = mono or name == 'tt' or attrs.get('font_family') == 'monospace' or attrs.get('face') == 'monospace'
+            bold = name == 'b' or (attrs['weight'] == 'bold' if 'weight' in attrs else bold)
+            italic = name == 'i' or (attrs['style'] == 'italic' if 'style' in attrs else italic)
+            if mono and (bold or italic):
+                raise ValueError('bold or italic monospaced text at %d: there is no such font' % i)
             stack.append(name)
+            styles.append((mono, bold, italic))
             tags.append(' '.join([name] + sorted('%s=%s' % kv for kv in attrs.items())))
     if stack:
         raise ValueError('<%s> never closed' % stack[-1])
