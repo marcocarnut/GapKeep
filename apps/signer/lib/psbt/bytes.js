@@ -1,7 +1,7 @@
 // Bytes: hex, Base64, comparison, and a reader and writer for Bitcoin's
 // serialization (little-endian integers, CompactSize lengths).
 //
-// Pure: no zerogap imports, so Node and other apps (a signer) use it too.
+// Pure: no GapKeep imports, so Node and other apps (a signer) use it too.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 

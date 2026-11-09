@@ -1,10 +1,10 @@
-// Widget Gallery: shows every zg:ui widget and runs the runtime self-test.
+// Widget Gallery: shows every gk:ui widget and runs the runtime self-test.
 // Every interaction is logged, so tests/*.txt scenarios can check it.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
 import { runSelfTest } from "./selftest.js";
-import { t, tm, plural } from "zg:i18n";
+import { t, tm, plural } from "gk:i18n";
 
 ui.screen.set({ padding: 0, gap: 0 });
 
@@ -85,9 +85,9 @@ new ui.Label(tablePage, {
 // --- QR code ------------------------------------------------------------
 const qrPage = tabs.addTab(t("QR"));
 qrPage.set({ layout: "row", gap: 16 });
-const qr = new ui.QRCode(qrPage, { size: 180, data: "zerogap" });
+const qr = new ui.QRCode(qrPage, { size: 180, data: "gapkeep" });
 const qrText = new ui.TextArea(qrPage, {
-  text: "zerogap",
+  text: "gapkeep",
   width: 280,
   height: 120,
   onChange: (ev) => {

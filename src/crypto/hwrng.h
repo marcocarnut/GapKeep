@@ -3,7 +3,7 @@
 //
 // Health-checked random bytes from the BCM2835 hardware RNG.
 //
-// The BCM2835 RNG is undocumented hardware, so zerogap treats it as a noise
+// The BCM2835 RNG is undocumented hardware, so GapKeep treats it as a noise
 // source of unknown quality, not as a finished random number generator:
 //
 //  - Every raw byte passes the two continuous health tests of NIST SP 800-90B
@@ -19,16 +19,16 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-#ifndef _zg_hwrng_h
-#define _zg_hwrng_h
+#ifndef _gk_hwrng_h
+#define _gk_hwrng_h
 
 #include <circle/bcmrandom.h>
 #include <circle/types.h>
 
-class CZgRandom
+class CGkRandom
 {
 public:
-	CZgRandom (void);
+	CGkRandom (void);
 
 	// Runs the SHA-256 self-test and the startup health test.
 	boolean Initialize (void);
@@ -41,7 +41,7 @@ public:
 	const char *GetFailure (void) const	{ return m_pFailure; }
 	u64 GetRawBytes (void) const		{ return m_nRawBytes; }
 
-	static CZgRandom *Instance (void)	{ return s_pThis; }
+	static CGkRandom *Instance (void)	{ return s_pThis; }
 
 private:
 	boolean RawByte (u8 *pByte);
@@ -67,7 +67,7 @@ private:
 	u64 m_nRawBytes;
 	u64 m_nBlocks;
 
-	static CZgRandom *s_pThis;
+	static CGkRandom *s_pThis;
 };
 
 #endif

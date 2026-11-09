@@ -1,4 +1,4 @@
-# dice39 on ZeroGap
+# dice39 on GapKeep
 
 [dice39](https://bip39.postcogito.org) turns physical dice rolls into a
 BIP-39 seed phrase: you supply most of the words with dice and a coin, the
@@ -23,7 +23,7 @@ already have a seed phrase stay disabled until it has passed.
 The launcher icon is the favicon of `bip39_generator.html`, converted with
 `python3 tools/make_icon.py favicon.png --manifest apps/dice39/manifest.json`.
 `lib/cryptoshim.js` gives the browser code the two WebCrypto calls it uses,
-backed by `zg:crypto`. `main.js` is the LVGL interface.
+backed by `gk:crypto`. `main.js` is the LVGL interface.
 
 **Device entropy** works as in dice39: the device words come from
 `SHA256(32 random bytes ‖ entropy pad samples)`, and Generate stays
@@ -34,12 +34,12 @@ and only drags that really moved count. Two additions:
 
 - Without a mouse, Space or Enter on the focused pad is a press without a
   position and scores 3 bits, the clock part of a tap. Holding the key down
-  counts once: ZeroGap never delivers auto-repeated Enter to widgets.
+  counts once: GapKeep never delivers auto-repeated Enter to widgets.
 - The timing of every key pressed in the app is hashed in after the pad
   samples. It is not credited on the bar.
 
-The 32 random bytes come from ZeroGap's hardware random generator
-(`zg:crypto`, health-checked and SHA-256 conditioned) instead of
+The 32 random bytes come from GapKeep's hardware random generator
+(`gk:crypto`, health-checked and SHA-256 conditioned) instead of
 `crypto.getRandomValues`.
 
 **A phrase you already have** ("I already have a seed phrase"; the page's
@@ -76,7 +76,7 @@ first.
 Not ported: printing the dice tables (print them from the web page on any
 computer; they hold no secret), the clipboard export, the network probe
 (there is no network), and the page's language button: languages are
-ZeroGap's (`language` in `zerogap.txt`, or the Settings app). The Brazilian
+GapKeep's (`language` in `gapkeep.txt`, or the Settings app). The Brazilian
 Portuguese catalog (`lang/pt-BR.json`) follows the page's own Portuguese
 where the text is the same.
 

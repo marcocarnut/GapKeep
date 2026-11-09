@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Regenerates zerogap's fonts, src/runtime/fonts/zg_montserrat_*.c, zg_mono_*.c and zg_ttf_*.c.
+"""Regenerates GapKeep's fonts, src/runtime/fonts/gk_montserrat_*.c, gk_mono_*.c and gk_ttf_*.c.
 
-The ten sizes zg:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
+The ten sizes gk:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
 Montserrat Medium for text and Font Awesome Free for LVGL's icons
 (lv_symbol_def.h), converted by lv_font_conv 1.5.3 the way LVGL converts
 its own built-in fonts (4 bpp, uncompressed, kerning by classes).
@@ -40,7 +40,7 @@ FONTTOOLS_VERSION; Debian's python3-fonttools), which makes its tables
 small enough for plain lookups, and the Extension lookups are unwrapped.
 The outlines and hinting are kept: the glyphs are the same.
 
-The monospaced font (zg:ui's "mono", for addresses, keys, hex and code):
+The monospaced font (gk:ui's "mono", for addresses, keys, hex and code):
 JetBrains Mono 2.304 Medium, the weight whose stems match Montserrat
 Medium's (1.57 px against 1.60 at 16 px; Regular's are 1.43), in
 MONO_SIZES, with Basic Latin and Latin-1. It has the same line height and
@@ -51,7 +51,7 @@ Latin Extended-A, € and ₿.
 Bold, italic and bold italic (markup's <b> and <i>): Montserrat Bold,
 Medium Italic and Bold Italic, from the same zip, as TrueType files for
 LVGL's TinyTTF, which draws them at run time, at any size, when a label
-first uses them (src/runtime/ttfstyles.cpp): zg_ttf_<style>.c, one C array
+first uses them (src/runtime/ttfstyles.cpp): gk_ttf_<style>.c, one C array
 each. The same characters as the bitmap fonts, the kerning unwrapped as
 above, and no hinting, which TinyTTF's rasterizer (stb_truetype) ignores.
 
@@ -216,7 +216,7 @@ def main():
     check(fzip, FA_ZIP[1])
     check(jzip, MONO_ZIP[1])
 
-    tmp = tempfile.mkdtemp(prefix="zg-fonts-")
+    tmp = tempfile.mkdtemp(prefix="gk-fonts-")
     try:
         ttf = extract(mzip, MONTSERRAT_TTF[0], tmp)
         solid = extract(fzip, FA_SOLID[0], tmp)
@@ -250,7 +250,7 @@ def main():
         os.makedirs(OUT, exist_ok=True)
         lines = {}			# size: (line_height, base_line), for the mono font
         for size in SIZES:
-            name = f"zg_montserrat_{size}"
+            name = f"gk_montserrat_{size}"
             # Relative paths, run from tmp: the command line lands in the
             # file, and must not depend on where the fonts were extracted.
             def conv(text, out):
@@ -283,11 +283,11 @@ def main():
             lines[size] = (top + base, base)
 
         for size in MONO_SIZES:
-            name = f"zg_mono_{size}"
+            name = f"gk_mono_{size}"
             cmd = ["lv_font_conv", "--no-compress", "--no-prefilter", "--bpp", "4",
                    "--size", str(size), "--format", "lvgl",
                    "--lv-include", "lvgl/lvgl/lvgl.h", "--lv-font-name", name,
-                   "--lv-fallback", f"zg_montserrat_{size}",
+                   "--lv-fallback", f"gk_montserrat_{size}",
                    "--font", os.path.basename(mono), "-r", ",".join(MONO_RANGES),
                    "-o", name + ".c"]
             run(cmd, tmp)
@@ -296,7 +296,7 @@ def main():
             # Montserrat's line, so they mix on a row (see above)
             lh, base = lines[size]
             src, n1 = re.subn(r"\.line_height = \d+,.*", f".line_height = {lh},          "
-                              f"/*zg_montserrat_{size}'s: tools/make_fonts.py*/", src)
+                              f"/*gk_montserrat_{size}'s: tools/make_fonts.py*/", src)
             src, n2 = re.subn(r"\.base_line = \d+,.*", f".base_line = {base},             "
                               "/*Baseline measured from the bottom of the line*/", src)
             if n1 != 1 or n2 != 1:
@@ -310,7 +310,7 @@ def main():
             out = os.path.join(tmp, f"{style}.ttf")
             unwrap_kerning(path, out, codepoints(text_r), hinting=False)
             data = open(out, "rb").read()
-            name = f"zg_ttf_{style}"
+            name = f"gk_ttf_{style}"
             lines_c = [", ".join(f"0x{b:02x}" for b in data[i:i + 16]) + "," for i in range(0, len(data), 16)]
             with open(os.path.join(OUT, name + ".c"), "w") as f:
                 f.write(f"/* {os.path.basename(member)}, subset by tools/make_fonts.py (sha256 of the\n"

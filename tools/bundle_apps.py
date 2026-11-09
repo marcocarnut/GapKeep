@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bundle zerogap apps into the kernel image.
+Bundle GapKeep apps into the kernel image.
 
 Reads every apps/<id>/manifest.json, validates it, and writes a C file
 holding each app's metadata, hash and the contents of its files (.js, .json,
@@ -21,8 +21,8 @@ import os
 import re
 import sys
 
-PERMISSIONS = {'apps': 'ZG_PERM_APPS', 'camera': 'ZG_PERM_CAMERA', 'rtc': 'ZG_PERM_RTC',
-               'settings': 'ZG_PERM_SETTINGS'}
+PERMISSIONS = {'apps': 'GK_PERM_APPS', 'camera': 'GK_PERM_CAMERA', 'rtc': 'GK_PERM_RTC',
+               'settings': 'GK_PERM_SETTINGS'}
 FILE_EXTENSIONS = ('.js', '.json', '.txt')
 ID_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,31}$')
 NAME_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')     # loaded files and folders
@@ -30,7 +30,7 @@ MAX_FILES = 256
 MAX_FILE_SIZE = 4 << 20
 MAX_APP_SIZE = 16 << 20
 MAX_DEPTH = 8
-ICON_MAX_SIDE = 128     # ZG_ICON_MAX_SIDE in src/runtime/bundle.h
+ICON_MAX_SIDE = 128     # GK_ICON_MAX_SIDE in src/runtime/bundle.h
 
 # Keep in sync with the symbol table in src/runtime/js_ui.cpp (ui.symbols).
 SYMBOLS = {
@@ -257,7 +257,7 @@ def main():
     for n, a in enumerate(apps):
         for k, (path, data) in enumerate(a['files']):
             lines.append('static const char app%d_file%d[] =\n\t%s;' % (n, k, c_string(data)))
-        lines.append('static const zg_file_t app%d_files[] = {' % n)
+        lines.append('static const gk_file_t app%d_files[] = {' % n)
         for k, (path, data) in enumerate(a['files']):
             lines.append('\t{ %s, app%d_file%d, %d },' % (c_string(path.encode()), n, k, len(data)))
         lines.append('};')
@@ -268,17 +268,17 @@ def main():
                 lines.append('\t' + ','.join(str(b) for b in pixels[i:i + 16]) + ',')
             lines.append('};')
         lines.append('')
-    lines.append('const zg_app_t zg_builtin_apps[] = {')
+    lines.append('const gk_app_t gk_builtin_apps[] = {')
     for n, a in enumerate(apps):
         w, h, _ = a['picture'] or (0, 0, None)
-        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", ZG_APP_BUILTIN, %s, %d, %d },' % (
+        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", GK_APP_BUILTIN, %s, %d, %d },' % (
             c_string(a['id'].encode()), c_string(a['name'].encode()),
             c_string(a['version'].encode()), c_string(a['description'].encode()),
             c_string(a['icon']), c_string(a['entry'].encode()),
             a['permissions'], a['hidden'], a['experimental'], n, len(a['files']), a['hash'],
             'app%d_icon' % n if a['picture'] else '0', w, h))
     lines.append('};')
-    lines.append('const unsigned zg_builtin_app_count = %d;' % len(apps))
+    lines.append('const unsigned gk_builtin_app_count = %d;' % len(apps))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     data = '\n'.join(lines) + '\n'
     try:

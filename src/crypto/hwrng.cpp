@@ -21,9 +21,9 @@ static const unsigned APTCutoff = 410;
 static const unsigned StartupBytes = 4096;
 static const unsigned RawPerBlock = 256;	// 8:1 conditioning
 
-CZgRandom *CZgRandom::s_pThis = 0;
+CGkRandom *CGkRandom::s_pThis = 0;
 
-CZgRandom::CZgRandom (void)
+CGkRandom::CGkRandom (void)
 :	m_bHealthy (FALSE),
 	m_pFailure ("not initialized"),
 	m_nWord (0),
@@ -40,9 +40,9 @@ CZgRandom::CZgRandom (void)
 	s_pThis = this;
 }
 
-boolean CZgRandom::Initialize (void)
+boolean CGkRandom::Initialize (void)
 {
-	int nResult = zg_sha256_selftest ();
+	int nResult = gk_sha256_selftest ();
 	if (nResult != 0)
 	{
 		CLogger::Get ()->Write (FromRNG, LogError, "SHA-256 self-test failed (%d)", nResult);
@@ -72,7 +72,7 @@ boolean CZgRandom::Initialize (void)
 	return m_bHealthy;
 }
 
-void CZgRandom::Fail (const char *pReason)
+void CGkRandom::Fail (const char *pReason)
 {
 	if (m_bHealthy)
 	{
@@ -82,7 +82,7 @@ void CZgRandom::Fail (const char *pReason)
 	m_pFailure = pReason;
 }
 
-boolean CZgRandom::RawByte (u8 *pByte)
+boolean CGkRandom::RawByte (u8 *pByte)
 {
 	if (m_nWordBytes == 0)
 	{
@@ -134,7 +134,7 @@ boolean CZgRandom::RawByte (u8 *pByte)
 	return TRUE;
 }
 
-boolean CZgRandom::FillRaw (u8 *pBuffer, unsigned nLength)
+boolean CGkRandom::FillRaw (u8 *pBuffer, unsigned nLength)
 {
 	for (unsigned i = 0; i < nLength; i++)
 	{
@@ -147,11 +147,11 @@ boolean CZgRandom::FillRaw (u8 *pBuffer, unsigned nLength)
 	return TRUE;
 }
 
-boolean CZgRandom::Get (void *pBuffer, unsigned nLength)
+boolean CGkRandom::Get (void *pBuffer, unsigned nLength)
 {
 	u8 *pOut = (u8 *) pBuffer;
 	u8 Raw[RawPerBlock];
-	u8 Digest[ZG_SHA256_DIGEST_SIZE];
+	u8 Digest[GK_SHA256_DIGEST_SIZE];
 	boolean bOK = m_bHealthy;
 
 	while (bOK && nLength > 0)
@@ -162,13 +162,13 @@ boolean CZgRandom::Get (void *pBuffer, unsigned nLength)
 			break;
 		}
 
-		zg_sha256_t Ctx;
-		static const char Label[] = "zerogap hwrng v1";
-		zg_sha256_init (&Ctx);
-		zg_sha256_update (&Ctx, Label, sizeof Label);
-		zg_sha256_update (&Ctx, &m_nBlocks, sizeof m_nBlocks);
-		zg_sha256_update (&Ctx, Raw, sizeof Raw);
-		zg_sha256_final (&Ctx, Digest);
+		gk_sha256_t Ctx;
+		static const char Label[] = "gapkeep hwrng v1";
+		gk_sha256_init (&Ctx);
+		gk_sha256_update (&Ctx, Label, sizeof Label);
+		gk_sha256_update (&Ctx, &m_nBlocks, sizeof m_nBlocks);
+		gk_sha256_update (&Ctx, Raw, sizeof Raw);
+		gk_sha256_final (&Ctx, Digest);
 		m_nBlocks++;
 
 		unsigned n = nLength < sizeof Digest ? nLength : sizeof Digest;

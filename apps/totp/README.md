@@ -64,9 +64,9 @@ the last whole byte are ignored, as other authenticators do.
 
 ## Security notes
 
-- **Nothing is written to the card.** zerogap never writes to the SD card.
+- **Nothing is written to the card.** GapKeep never writes to the SD card.
   The accounts are kept in RAM, in the app's session store
-  ([`zg:session`](../../docs/API.md#zgsession)): they are still there when
+  ([`gk:session`](../../docs/API.md#gksession)): they are still there when
   you come back after using other apps, and gone when you switch off. No
   other app can read them. **Your QR codes (or keys) are the backup**: keep
   them, on paper, somewhere safe. Anyone who has them can make your codes.
@@ -87,7 +87,7 @@ the last whole byte are ignored, as other authenticators do.
 
 ## How it works
 
-- `lib/hotp.js`: HOTP (RFC 4226) and TOTP (RFC 6238), on zg:crypto's HMAC
+- `lib/hotp.js`: HOTP (RFC 4226) and TOTP (RFC 6238), on gk:crypto's HMAC
   (native: SHA-1, SHA-256 and SHA-512 in the kernel).
 - `lib/parse.js`: Base32, Base64, UTF-8, the two URI formats and the
   protocol buffer.
@@ -99,7 +99,7 @@ the last whole byte are ignored, as other authenticators do.
   shown. Under Node, with Node's HMAC:
   `node --experimental-default-type=module tests/totp/run_node.mjs`.
 - `main.js`: the screens, and the accounts saved to the session store
-  after each change (restored at start). `zg:clock`'s `every(1, ...)` ticks on each
+  after each change (restored at start). `gk:clock`'s `every(1, ...)` ticks on each
   second: it moves the countdowns, and computes an account's code only when
   its period turns; when the clock is set or changed, every code is
   recomputed at once.

@@ -9,26 +9,26 @@
 #include "keylayout.h"
 #include <circle/logger.h>
 #include <circle/util.h>
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 #include <ff.h>
 #endif
 
 static const char From[] = "settings";
 
-boolean CZgSettings::s_bExperimental = FALSE;
+boolean CGkSettings::s_bExperimental = FALSE;
 
-void CZgSettings::SetExperimental (boolean bOn, const char *pFrom)
+void CGkSettings::SetExperimental (boolean bOn, const char *pFrom)
 {
 	s_bExperimental = bOn;
 	CLogger::Get ()->Write (From, bOn ? LogWarning : LogNotice, "experimental features %s (%s)",
 				bOn ? "on" : "off", pFrom);
 }
 
-void CZgSettings::Load (void)
+void CGkSettings::Load (void)
 {
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 	FIL File;
-	if (f_open (&File, "SD:/zerogap.txt", FA_READ) != FR_OK)
+	if (f_open (&File, "SD:/gapkeep.txt", FA_READ) != FR_OK)
 	{
 		return;
 	}
@@ -42,7 +42,7 @@ void CZgSettings::Load (void)
 	f_close (&File);
 	if (Result != FR_OK || !bWhole)
 	{
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt: unreadable or larger than %u bytes",
+		CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt: unreadable or larger than %u bytes",
 					(unsigned) sizeof Text - 1);
 		return;
 	}
@@ -78,20 +78,20 @@ void CZgSettings::Load (void)
 		char *pValue = strchr (Clean, '=');
 		if (pValue == 0)
 		{
-			CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: \"key = value\" expected", nLine);
+			CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt:%u: \"key = value\" expected", nLine);
 			continue;
 		}
 		*pValue++ = '\0';
 
-		if (CZgClock::Configure (Clean, pValue, nLine))
+		if (CGkClock::Configure (Clean, pValue, nLine))
 		{
 			continue;
 		}
-		if (CZgI18n::Configure (Clean, pValue, nLine))	// language, decimal_mark, group_mark
+		if (CGkI18n::Configure (Clean, pValue, nLine))	// language, decimal_mark, group_mark
 		{
 			continue;
 		}
-		if (ZgKeyLayoutConfigure (Clean, pValue, nLine))
+		if (GkKeyLayoutConfigure (Clean, pValue, nLine))
 		{
 			continue;
 		}
@@ -99,16 +99,16 @@ void CZgSettings::Load (void)
 		{
 			if (strcmp (pValue, "yes") == 0 || strcmp (pValue, "no") == 0)
 			{
-				SetExperimental (strcmp (pValue, "yes") == 0, "zerogap.txt");
+				SetExperimental (strcmp (pValue, "yes") == 0, "gapkeep.txt");
 			}
 			else
 			{
 				CLogger::Get ()->Write (From, LogWarning,
-					"zerogap.txt:%u: experimental: yes or no expected", nLine);
+					"gapkeep.txt:%u: experimental: yes or no expected", nLine);
 			}
 			continue;
 		}
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: unknown key \"%s\"", nLine, Clean);
+		CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt:%u: unknown key \"%s\"", nLine, Clean);
 	}
 #endif
 }

@@ -3,13 +3,13 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#ifndef ZG_HEXCHECK_H
-#define ZG_HEXCHECK_H
+#ifndef GK_HEXCHECK_H
+#define GK_HEXCHECK_H
 
 #include <stddef.h>
 #include <stdint.h>
 
-static inline int zg_hex_equal (const uint8_t *digest, size_t len, const char *hex)
+static inline int gk_hex_equal (const uint8_t *digest, size_t len, const char *hex)
 {
 	static const char digits[] = "0123456789abcdef";
 	for (size_t i = 0; i < len; i++)

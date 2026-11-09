@@ -2,7 +2,7 @@
   "id": "sessiontest",
   "name": "Session test",
   "version": "1.0.0",
-  "description": "Test builds only: zg:session across runs, and zg:crypto's hashes (tests/session.txt).",
+  "description": "Test builds only: gk:session across runs, and gk:crypto's hashes (tests/session.txt).",
   "icon": "settings",
   "hidden": true
 }

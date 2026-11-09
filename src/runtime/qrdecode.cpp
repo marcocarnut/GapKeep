@@ -1,7 +1,7 @@
 //
 // qrdecode.cpp
 //
-// zxing-cpp's QR code reader behind ZgDecodeQR. zxing-cpp is C++20 and uses
+// zxing-cpp's QR code reader behind GkDecodeQR. zxing-cpp is C++20 and uses
 // the C++ standard library, so this file is compiled as zxing-cpp is
 // (lib/zxing/Makefile, sim/Makefile, tools/fuzz_qr.sh): C++20, without
 // exceptions or RTTI.
@@ -9,10 +9,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "qrdecode.h"
-#include "zg_bridge.h"
+#include "gk_bridge.h"
 #include <string.h>
 
-#ifdef ZG_HAVE_ZXING
+#ifdef GK_HAVE_ZXING
 
 #include <ReadBarcode.h>
 
@@ -21,8 +21,8 @@ static const unsigned MaxCodes = 4;
 // give at most 1640x1232)
 static const unsigned MaxSide = 4096;
 
-static u8 s_Payload[MaxCodes][ZG_QR_MAX_PAYLOAD];
-static u8 s_DataCodewords[MaxCodes][ZG_QR_MAX_DATA_CODEWORDS];
+static u8 s_Payload[MaxCodes][GK_QR_MAX_PAYLOAD];
+static u8 s_DataCodewords[MaxCodes][GK_QR_MAX_DATA_CODEWORDS];
 
 // The reader's settings, chosen by measurement (docs/CAMERA.md, "The QR
 // decoder") for the Pi camera's 320x240 frames on a 1 GHz ARM1176 without
@@ -77,7 +77,7 @@ static int HexDigit (char c)
 // The symbol's version, level, mask and corrected data codewords (patches/
 // zxing-cpp/0005 keeps those as the extra "DataCodewords"), checked: what
 // is missing or malformed is reported as unknown.
-static void Describe (const ZXing::Barcode &rResult, TZgQRCode *pCode, u8 *pBuffer)
+static void Describe (const ZXing::Barcode &rResult, TGkQRCode *pCode, u8 *pBuffer)
 {
 	int nVersion = SmallNumber (rResult.extra (ZXing::BarcodeExtra::Version), 40);
 	pCode->nVersion = nVersion > 0 ? (unsigned) nVersion : 0;
@@ -90,7 +90,7 @@ static void Describe (const ZXing::Barcode &rResult, TZgQRCode *pCode, u8 *pBuff
 	pCode->pDataCodewords = pBuffer;
 	pCode->nDataCodewords = 0;
 	std::string Hex = rResult.extra ("DataCodewords");
-	if (Hex.size () % 2 != 0 || Hex.size () / 2 > ZG_QR_MAX_DATA_CODEWORDS)
+	if (Hex.size () % 2 != 0 || Hex.size () / 2 > GK_QR_MAX_DATA_CODEWORDS)
 	{
 		return;
 	}
@@ -106,8 +106,8 @@ static void Describe (const ZXing::Barcode &rResult, TZgQRCode *pCode, u8 *pBuff
 	pCode->nDataCodewords = (unsigned) (Hex.size () / 2);
 }
 
-int ZgDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
-		TZgQRCode *pCodes, unsigned nMax)
+int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
+		TGkQRCode *pCodes, unsigned nMax)
 {
 	if (nMax > MaxCodes)
 	{
@@ -137,7 +137,7 @@ int ZgDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 		const std::vector<uint8_t> &rBytes = rResult.bytes ();
 		if (   !rResult.isValid ()
 		    || rResult.format () != ZXing::BarcodeFormat::QRCode
-		    || rBytes.size () > ZG_QR_MAX_PAYLOAD)
+		    || rBytes.size () > GK_QR_MAX_PAYLOAD)
 		{
 			continue;
 		}
@@ -165,13 +165,13 @@ void ZXing::Fatal (const char *pWhat)
 {
 	static char Message[200] = "QR decoder (zxing-cpp): ";
 	strncat (Message, pWhat, sizeof Message - strlen (Message) - 1);
-	zg_fatal (Message);
+	gk_fatal (Message);
 }
 
 #else
 
-int ZgDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
-		TZgQRCode *pCodes, unsigned nMax)
+int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
+		TGkQRCode *pCodes, unsigned nMax)
 {
 	(void) pGrey; (void) nWidth; (void) nHeight; (void) pCodes; (void) nMax;
 	return -1;

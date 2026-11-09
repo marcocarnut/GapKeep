@@ -1,4 +1,4 @@
-// The Authenticator's self-test: published vectors for HMAC (zg:crypto's),
+// The Authenticator's self-test: published vectors for HMAC (gk:crypto's),
 // HOTP and TOTP, and the parsers on known inputs. Runs in the app at start
 // (after the first screen is up, yielding between tests) and under Node
 // (tests/totp/run_node.mjs).

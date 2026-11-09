@@ -1,10 +1,10 @@
-// Test builds only: zg:session across runs, and zg:crypto's SHA-1,
+// Test builds only: gk:session across runs, and gk:crypto's SHA-1,
 // SHA-512 and HMAC (tests/session.txt). Each run counts itself in the
 // session store and checks what the run before left there.
 
-import * as ui from "zg:ui";
-import * as session from "zg:session";
-import * as crypto from "zg:crypto";
+import * as ui from "gk:ui";
+import * as session from "gk:session";
+import * as crypto from "gk:crypto";
 
 let passed = 0, failed = 0;
 function check(name, ok) {

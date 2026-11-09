@@ -32,7 +32,7 @@ static u64 NowUsec (void)
 	return (u64) ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
-void ZgSimClockStart (void)
+void GkSimClockStart (void)
 {
 	s_nStartUsec = NowUsec ();
 }
@@ -71,7 +71,7 @@ boolean CTimer::GetUptime (unsigned *pSeconds, unsigned *pMicroSeconds)
 	return TRUE;
 }
 
-// The Pi has no real-time clock, and zerogap sets none: like the device,
+// The Pi has no real-time clock, and GapKeep sets none: like the device,
 // the simulator has no time of day (Date counts from 1970 + uptime).
 boolean CTimer::GetUniversalTime (unsigned *pSeconds, unsigned *pMicroSeconds)
 {
@@ -112,7 +112,7 @@ void CLogger::WriteV (const char *pSource, TLogSeverity Severity, const char *pM
 	snprintf (Line, sizeof Line, "%02u:%02u:%02u.%02u %s: %s",
 		  nCenti / 360000, nCenti / 6000 % 60, nCenti / 100 % 60, nCenti % 100,
 		  pSource, Message);
-	ZgSimLogLine (Line);
+	GkSimLogLine (Line);
 
 	if (Severity == LogPanic)
 	{
@@ -135,7 +135,7 @@ u32 CBcmRandomNumberGenerator::GetNumber (void)
 
 static CUSBKeyboardDevice s_Keyboard;
 
-CUSBKeyboardDevice *ZgSimKeyboard (void)
+CUSBKeyboardDevice *GkSimKeyboard (void)
 {
 	return &s_Keyboard;
 }
@@ -156,26 +156,26 @@ CDevice *CDeviceNameService::GetDevice (const char *pName, boolean bBlockDevice)
 
 void halt (void)
 {
-	ZgSimLogLine ("(system halted)");
-	ZgSimHalted ();
+	GkSimLogLine ("(system halted)");
+	GkSimHalted ();
 	exit (3);
 }
 
-// QuickJS's time (sim/Makefile renames its calls): zerogap's clock, as on
+// QuickJS's time (sim/Makefile renames its calls): GapKeep's clock, as on
 // the device, rather than the host's.
-extern "C" int zg_gettimeofday (struct timeval *tv, void *tz)
+extern "C" int gk_gettimeofday (struct timeval *tv, void *tz)
 {
 	(void) tz;
 	unsigned sec, usec;
-	zg_time_now (&sec, &usec);
+	gk_time_now (&sec, &usec);
 	tv->tv_sec = sec;
 	tv->tv_usec = usec;
 	return 0;
 }
 
-extern "C" struct tm *zg_localtime_r (const time_t *t, struct tm *tm)
+extern "C" struct tm *gk_localtime_r (const time_t *t, struct tm *tm)
 {
-	long nOffset = (long) zg_utc_offset_minutes () * 60;
+	long nOffset = (long) gk_utc_offset_minutes () * 60;
 	time_t nLocal = *t + nOffset;
 	gmtime_r (&nLocal, tm);
 	tm->tm_gmtoff = nOffset;

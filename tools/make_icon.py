@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Turn an image (PNG, JPEG, ...) into a zerogap picture icon: the value of
+Turn an image (PNG, JPEG, ...) into a GapKeep picture icon: the value of
 "icon" in an app's manifest.json (docs/APPS.md):
 
     { "width": 64, "height": 64, "rgba": "<base64 of width*height*4 bytes>" }
 
-zerogap does not decode PNG or any other compressed format on the device:
+GapKeep does not decode PNG or any other compressed format on the device:
 the manifest carries plain pixels, which the device only has to base64-decode
 and check for length.
 
@@ -21,7 +21,7 @@ import base64
 import json
 import sys
 
-MAX_SIDE = 128      # ZG_ICON_MAX_SIDE in src/runtime/bundle.h
+MAX_SIDE = 128      # GK_ICON_MAX_SIDE in src/runtime/bundle.h
 
 
 def main():

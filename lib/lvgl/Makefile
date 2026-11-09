@@ -1,6 +1,6 @@
 #
 # Builds LVGL (from Circle's addon submodule) plus Circle's CLVGL glue with
-# zerogap's own configuration (zg_lv_conf.h). Every file that includes LVGL
+# GapKeep's own configuration (gk_lv_conf.h). Every file that includes LVGL
 # headers must be compiled with the same LV_CONF_PATH: see ../../src/Makefile.
 #
 
@@ -12,7 +12,7 @@ CSRCS  := $(shell find $(LVGL_PATH)/src -type f -name '*.c')
 OBJDIR  = obj
 OBJS    = $(OBJDIR)/lvgl_glue.o $(patsubst $(LVGL_PATH)/%.c,$(OBJDIR)/%.o,$(CSRCS))
 
-DEFINE += -DLV_CONF_PATH="<zg_lv_conf.h>"
+DEFINE += -DLV_CONF_PATH="<gk_lv_conf.h>"
 EXTRAINCLUDE = -I $(CURDIR) -I $(LVGL_PATH)
 
 liblvgl.a: $(OBJS)
@@ -34,4 +34,4 @@ $(OBJDIR)/lvgl_glue.o: $(ADDON)/lvgl.cpp
 EXTRACLEAN += -r $(OBJDIR)
 
 # every object depends on the configuration (which fonts are built in, ...)
-$(OBJS): zg_lv_conf.h
+$(OBJS): gk_lv_conf.h

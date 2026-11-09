@@ -3,7 +3,7 @@
 // for series of codes such as BBQr's), and values refused without changing
 // the code.
 
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 let failed = 0;
 function check(name, ok) {

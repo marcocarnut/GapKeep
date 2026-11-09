@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#ifndef ZG_SHA512_H
-#define ZG_SHA512_H
+#ifndef GK_SHA512_H
+#define GK_SHA512_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -13,8 +13,8 @@
 extern "C" {
 #endif
 
-#define ZG_SHA512_DIGEST_SIZE	64
-#define ZG_SHA512_BLOCK_SIZE	128
+#define GK_SHA512_DIGEST_SIZE	64
+#define GK_SHA512_BLOCK_SIZE	128
 
 typedef struct
 {
@@ -24,16 +24,16 @@ typedef struct
 	uint8_t block[128];
 	size_t fill;			/* bytes in block */
 }
-zg_sha512_t;
+gk_sha512_t;
 
-void zg_sha512_init (zg_sha512_t *ctx);
-void zg_sha512_update (zg_sha512_t *ctx, const void *data, size_t len);
-void zg_sha512_final (zg_sha512_t *ctx, uint8_t digest[ZG_SHA512_DIGEST_SIZE]);
+void gk_sha512_init (gk_sha512_t *ctx);
+void gk_sha512_update (gk_sha512_t *ctx, const void *data, size_t len);
+void gk_sha512_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA512_DIGEST_SIZE]);
 
-void zg_sha512 (const void *data, size_t len, uint8_t digest[ZG_SHA512_DIGEST_SIZE]);
+void gk_sha512 (const void *data, size_t len, uint8_t digest[GK_SHA512_DIGEST_SIZE]);
 
 /* Checks the implementation against FIPS 180-4 test vectors. 0: OK. */
-int zg_sha512_selftest (void);
+int gk_sha512_selftest (void);
 
 #ifdef __cplusplus
 }

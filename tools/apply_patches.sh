@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Applies zerogap's fixes to third-party code: patches/<name>/*.patch to
+# Applies GapKeep's fixes to third-party code: patches/<name>/*.patch to
 # the submodule, each once (already applied: skipped). Called by
 # tools/build.sh, sim/Makefile and tools/fuzz_qr.sh.
 # The patches are in order (0001-..., 0002-...): each applies on top of

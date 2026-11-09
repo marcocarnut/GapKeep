@@ -11,15 +11,15 @@
 
 static const char From[] = "clock";
 
-boolean CZgClock::s_bSet = FALSE;
-s64 CZgClock::s_nBase = 0;
-u64 CZgClock::s_nBaseTicks = 0;
-double CZgClock::s_fTrim = 0;
-int CZgClock::s_nUtcOffset = 0;
-unsigned CZgClock::s_nSerial = 0;
-s64 CZgClock::s_nLastSet = 0;
-u64 CZgClock::s_nLastSetTicks = 0;
-TZgDrift CZgClock::s_Drift = {FALSE, 0, 0, 0, 0};
+boolean CGkClock::s_bSet = FALSE;
+s64 CGkClock::s_nBase = 0;
+u64 CGkClock::s_nBaseTicks = 0;
+double CGkClock::s_fTrim = 0;
+int CGkClock::s_nUtcOffset = 0;
+unsigned CGkClock::s_nSerial = 0;
+s64 CGkClock::s_nLastSet = 0;
+u64 CGkClock::s_nLastSetTicks = 0;
+TGkDrift CGkClock::s_Drift = {FALSE, 0, 0, 0, 0};
 
 // Below this, a measured drift says more about the hand that set the time
 // than about the crystal: setting it by hand is right to about half a
@@ -28,7 +28,7 @@ TZgDrift CZgClock::s_Drift = {FALSE, 0, 0, 0, 0};
 static const double MinDriftSeconds = 3600;
 static const double SettingError = 0.5;		// s, each setting
 
-s64 CZgClock::Now (void)
+s64 CGkClock::Now (void)
 {
 	u64 nElapsed = CTimer::GetClockTicks64 () - s_nBaseTicks;	// µs (CLOCKHZ = 1 MHz)
 	return s_nBase + (s64) nElapsed + (s64) ((double) nElapsed * s_fTrim * 1e-6);
@@ -36,14 +36,14 @@ s64 CZgClock::Now (void)
 
 // The time so far becomes the base: what follows is counted with the
 // current trim (so a new trim never makes the time jump).
-void CZgClock::Rebase (void)
+void CGkClock::Rebase (void)
 {
 	s64 nNow = Now ();
 	s_nBaseTicks = CTimer::GetClockTicks64 ();
 	s_nBase = nNow;
 }
 
-void CZgClock::Set (s64 nUnixMicros)
+void CGkClock::Set (s64 nUnixMicros)
 {
 	u64 nTicks = CTimer::GetClockTicks64 ();
 
@@ -74,7 +74,7 @@ void CZgClock::Set (s64 nUnixMicros)
 	CLogger::Get ()->Write (From, LogNotice, "set%s", s_Drift.bValid ? "; drift measured" : "");
 }
 
-boolean CZgClock::SetTrim (double fPPM)
+boolean CGkClock::SetTrim (double fPPM)
 {
 	if (!(fPPM >= -MaxTrim && fPPM <= MaxTrim))	// also NaN
 	{
@@ -92,7 +92,7 @@ boolean CZgClock::SetTrim (double fPPM)
 	return TRUE;
 }
 
-boolean CZgClock::SetUtcOffset (int nMinutes)
+boolean CGkClock::SetUtcOffset (int nMinutes)
 {
 	if (nMinutes < MinUtcOffset || nMinutes > MaxUtcOffset)
 	{
@@ -108,7 +108,7 @@ boolean CZgClock::SetUtcOffset (int nMinutes)
 	return TRUE;
 }
 
-// --- zerogap.txt --------------------------------------------------------------
+// --- gapkeep.txt --------------------------------------------------------------
 
 // "[+-]HH:MM" -> minutes. FALSE if malformed.
 static boolean ParseOffset (const char *p, int *pMinutes)
@@ -159,9 +159,9 @@ static boolean ParseDecimal (const char *p, double *pValue)
 	return TRUE;
 }
 
-// A clock setting from zerogap.txt (settings.cpp): FALSE if the key is not
+// A clock setting from gapkeep.txt (settings.cpp): FALSE if the key is not
 // the clock's. Logs what it refuses.
-boolean CZgClock::Configure (const char *pKey, const char *pValue, unsigned nLine)
+boolean CGkClock::Configure (const char *pKey, const char *pValue, unsigned nLine)
 {
 	double fTrim;
 	int nOffset;
@@ -170,7 +170,7 @@ boolean CZgClock::Configure (const char *pKey, const char *pValue, unsigned nLin
 		if (!ParseDecimal (pValue, &fTrim) || !SetTrim (fTrim))
 		{
 			CLogger::Get ()->Write (From, LogWarning,
-				"zerogap.txt:%u: clock_trim_ppm: a number from -%d to %d expected",
+				"gapkeep.txt:%u: clock_trim_ppm: a number from -%d to %d expected",
 				nLine, MaxTrim, MaxTrim);
 		}
 		return TRUE;
@@ -180,7 +180,7 @@ boolean CZgClock::Configure (const char *pKey, const char *pValue, unsigned nLin
 		if (!ParseOffset (pValue, &nOffset) || !SetUtcOffset (nOffset))
 		{
 			CLogger::Get ()->Write (From, LogWarning,
-				"zerogap.txt:%u: utc_offset: -12:00 to +14:00 expected", nLine);
+				"gapkeep.txt:%u: utc_offset: -12:00 to +14:00 expected", nLine);
 		}
 		return TRUE;
 	}
@@ -189,9 +189,9 @@ boolean CZgClock::Configure (const char *pKey, const char *pValue, unsigned nLin
 
 // --- for the C library ----------------------------------------------------------
 
-void zg_time_now (unsigned *sec, unsigned *usec)
+void gk_time_now (unsigned *sec, unsigned *usec)
 {
-	s64 nNow = CZgClock::Now ();
+	s64 nNow = CGkClock::Now ();
 	if (nNow < 0)
 	{
 		nNow = 0;
@@ -200,7 +200,7 @@ void zg_time_now (unsigned *sec, unsigned *usec)
 	*usec = (unsigned) (nNow % 1000000);
 }
 
-int zg_utc_offset_minutes (void)
+int gk_utc_offset_minutes (void)
 {
-	return CZgClock::GetUtcOffset ();
+	return CGkClock::GetUtcOffset ();
 }

@@ -86,23 +86,23 @@ void CKeyboardIndev::Update (boolean bPlugAndPlayUpdated)
 			m_pKeyboard->RegisterKeyPressedHandler (KeyPressedHandler);
 			m_pKeyboard->RegisterKeyStatusHandlerRaw (KeyStatusHandlerRaw, TRUE);	// mixed mode
 
-			m_nLayoutGeneration = ZgKeyLayoutGeneration () - 1;	// load it below
+			m_nLayoutGeneration = GkKeyLayoutGeneration () - 1;	// load it below
 			CLogger::Get ()->Write (FromKbd, LogNotice, "Keyboard attached (layout %s)",
-						ZgKeyLayoutGet ());
+						GkKeyLayoutGet ());
 		}
 	}
 
 	if (m_pKeyboard != 0)
 	{
 		// the layout, when the keyboard comes and when it changes
-		unsigned nGeneration = ZgKeyLayoutGeneration ();
+		unsigned nGeneration = GkKeyLayoutGeneration ();
 		if (nGeneration != m_nLayoutGeneration)
 		{
 			m_nLayoutGeneration = nGeneration;
-			if (!m_pKeyboard->SetKeyMap (ZgKeyLayoutCircleMap ()))
+			if (!m_pKeyboard->SetKeyMap (GkKeyLayoutCircleMap ()))
 			{
 				CLogger::Get ()->Write (FromKbd, LogError, "no keymap %s",
-							ZgKeyLayoutCircleMap ());
+							GkKeyLayoutCircleMap ());
 			}
 			m_DeadKeys.Reset ();
 		}
@@ -158,7 +158,7 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 	assert (s_pThis != 0);
 
 	CKeyboardIndev *pThis = s_pThis;
-	TZgKey Key;
+	TGkKey Key;
 	Key.bRepeat = !pThis->m_bNewPress;
 	pThis->m_bNewPress = FALSE;
 	u32 nChar = 0;
@@ -170,7 +170,7 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 	// Alt+key and Ctrl+letter are for apps, never typed: no dead keys
 	u32 Out[2];
 	boolean bConsumed;
-	if (nChar != 0 && !(Key.nMods & ZG_MOD_ALT) && !pThis->m_bComposed)
+	if (nChar != 0 && !(Key.nMods & GK_MOD_ALT) && !pThis->m_bComposed)
 	{
 		unsigned n = pThis->m_DeadKeys.Feed (nChar, Key.bRepeat, FALSE, Out, &bConsumed);
 		for (unsigned i = 0; i < n; i++)
@@ -194,12 +194,12 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 	}
 }
 
-void CKeyboardIndev::EnqueueChar (u32 nChar, const TZgKey &rTemplate)
+void CKeyboardIndev::EnqueueChar (u32 nChar, const TGkKey &rTemplate)
 {
-	TZgKey Key = rTemplate;
-	unsigned n = ZgUtf8Encode (nChar, Key.Name);
+	TGkKey Key = rTemplate;
+	unsigned n = GkUtf8Encode (nChar, Key.Name);
 	Key.nLVKey = 0;
-	if (!(Key.nMods & ZG_MOD_ALT))		// Alt+key: for apps only, don't type it
+	if (!(Key.nMods & GK_MOD_ALT))		// Alt+key: for apps only, don't type it
 	{
 		for (unsigned i = 0; i < n; i++)
 		{
@@ -217,7 +217,7 @@ void CKeyboardIndev::KeyboardRemovedHandler (CDevice *pDevice, void *pContext)
 	CLogger::Get ()->Write (FromKbd, LogNotice, "Keyboard removed");
 }
 
-void CKeyboardIndev::Enqueue (const TZgKey &rKey)
+void CKeyboardIndev::Enqueue (const TGkKey &rKey)
 {
 	unsigned nNext = (m_nHead + 1) & (QueueSize-1);
 	if (nNext == m_nTail)
@@ -263,7 +263,7 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 	while (pThis->m_nTail != pThis->m_nHead)
 	{
 		DataMemBarrier ();
-		TZgKey Key = pThis->m_Queue[pThis->m_nTail];
+		TGkKey Key = pThis->m_Queue[pThis->m_nTail];
 		pThis->m_nTail = (pThis->m_nTail + 1) & (QueueSize-1);
 
 		if (   pThis->m_pKeyHook != 0
@@ -309,7 +309,7 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 	pData->state = LV_INDEV_STATE_RELEASED;
 }
 
-boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey, u32 *pChar) const
+boolean CKeyboardIndev::Translate (const char *pString, TGkKey *pKey, u32 *pChar) const
 {
 	assert (pString != 0);
 	assert (pKey != 0);
@@ -317,9 +317,9 @@ boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey, u32 *pChar
 	*pChar = 0;
 
 	u8 nRaw = m_nRawModifiers;
-	pKey->nMods =   ((nRaw & (LSHIFT | RSHIFT)) ? ZG_MOD_SHIFT : 0)
-		      | ((nRaw & (LCTRL | RCTRL)) ? ZG_MOD_CTRL : 0)
-		      | ((nRaw & ALT) ? ZG_MOD_ALT : 0);	// not AltGr: it types characters on many layouts
+	pKey->nMods =   ((nRaw & (LSHIFT | RSHIFT)) ? GK_MOD_SHIFT : 0)
+		      | ((nRaw & (LCTRL | RCTRL)) ? GK_MOD_CTRL : 0)
+		      | ((nRaw & ALT) ? GK_MOD_ALT : 0);	// not AltGr: it types characters on many layouts
 	pKey->nLVKey = 0;
 	pKey->Name[0] = '\0';
 
@@ -337,7 +337,7 @@ boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey, u32 *pChar
 		case '\x7f':	pKey->nLVKey = LV_KEY_BACKSPACE; strcpy (pKey->Name, "Backspace"); return TRUE;
 		case '\n':	pKey->nLVKey = LV_KEY_ENTER;	 strcpy (pKey->Name, "Enter");     return TRUE;
 		case '\t':
-			pKey->nLVKey = (pKey->nMods & ZG_MOD_SHIFT) ? LV_KEY_PREV : LV_KEY_NEXT;
+			pKey->nLVKey = (pKey->nMods & GK_MOD_SHIFT) ? LV_KEY_PREV : LV_KEY_NEXT;
 			strcpy (pKey->Name, "Tab");
 			return TRUE;
 		default:
@@ -348,7 +348,7 @@ boolean CKeyboardIndev::Translate (const char *pString, TZgKey *pKey, u32 *pChar
 		{
 			pKey->Name[0] = 'a' + c - 1;
 			pKey->Name[1] = '\0';
-			pKey->nMods |= ZG_MOD_CTRL;
+			pKey->nMods |= GK_MOD_CTRL;
 			return TRUE;
 		}
 

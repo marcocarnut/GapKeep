@@ -4,7 +4,7 @@
 
 int main (void)
 {
-	int r = zg_sha256_selftest ();
+	int r = gk_sha256_selftest ();
 	printf ("sha256 selftest: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	return r != 0;
 }

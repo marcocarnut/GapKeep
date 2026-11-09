@@ -1,7 +1,7 @@
 //
-// Version.h - zxing-cpp's build configuration, for zerogap's QR-only
+// Version.h - zxing-cpp's build configuration, for GapKeep's QR-only
 // reader (zxing-cpp generates this file from core/Version.h.in with CMake;
-// zerogap's builds don't use CMake). Used by lib/zxing/Makefile,
+// GapKeep's builds don't use CMake). Used by lib/zxing/Makefile,
 // sim/Makefile and tools/fuzz_qr.sh.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -17,7 +17,7 @@
 #define ZXING_ENABLE_MAXICODE 0
 #define ZXING_ENABLE_PDF417 0
 #define ZXING_ENABLE_QRCODE 1
-// no character-set conversion: zerogap takes the payload's raw bytes
+// no character-set conversion: GapKeep takes the payload's raw bytes
 #define ZXING_ENABLE_UNICODE 0
 
 #define ZXING_VERSION_MAJOR 3

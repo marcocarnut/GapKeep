@@ -1,9 +1,9 @@
 // Label markup (markup.h): every case of cases.js accepted or refused as
 // it says, the errors, escapeMarkup and tm() with hostile params, and a
 // screen of styles for the screenshot. Test builds only.
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import { tm } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import { tm } from "gk:i18n";
 import { CASES } from "./cases.js";
 
 const log = (...a) => console.log("markuptest", ...a);

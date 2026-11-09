@@ -7,7 +7,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import * as crypto from "zg:crypto";
+import * as crypto from "gk:crypto";
 import { setCrypto } from "./crypto.js";
 import { t } from "./text.js";
 import { ENTROPY_LENGTHS, mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic } from "./bip39.js";

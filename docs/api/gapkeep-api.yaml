@@ -1,19 +1,19 @@
-# zerogap's JavaScript API: the single description of it.
+# GapKeep's JavaScript API: the single description of it.
 #
 # tools/gen_api.py generates from this file:
 #   docs/API.md                    the reference (humans and agents)
-#   sim/web/types/zerogap.d.ts     TypeScript declarations (editor completions)
+#   sim/web/types/gapkeep.d.ts     TypeScript declarations (editor completions)
 # tools/check_api.py compares it with the API the runtime really has (an
 # introspection app run on the simulator), so the two cannot drift apart.
 #
 # Edit this file, then run: python3 tools/gen_api.py
 #
 # Conventions: `md` fields are Markdown. `ts` fields are TypeScript types
-# or signatures, as they go into zerogap.d.ts. A property is `readable` if
+# or signatures, as they go into gapkeep.d.ts. A property is `readable` if
 # reading it returns its current value; others are write-only (they can only
 # be set), except `readonly` ones, which can only be read.
 
-title: zerogap JavaScript API reference
+title: GapKeep JavaScript API reference
 
 intro: |
   Apps are ES modules running on QuickJS. They reach the system through the
@@ -21,13 +21,13 @@ intro: |
 
   | Module | Available to | Purpose |
   | --- | --- | --- |
-  | [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
-  | [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
-  | [`zg:crypto`](#zgcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
-  | [`zg:clock`](#zgclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
-  | [`zg:session`](#zgsession) | every app | Values kept across the app's runs, in RAM, until power-off |
-  | [`zg:i18n`](#zgi18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
-  | [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
+  | [`gk:ui`](#gkui) | every app | Widgets, layout, input, alerts |
+  | [`gk:sys`](#gksys) | every app | App info, versions, uptime, memory, exit |
+  | [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
+  | [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
+  | [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
+  | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
+  | [`gk:apps`](#gkapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
   Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
   `clearTimeout` and `clearInterval`, and the standard JavaScript library
@@ -36,10 +36,10 @@ intro: |
   An app's own modules are imported with relative paths (`"./lib/x.js"`).
   Paths are resolved inside the app's directory; `..` cannot leave it.
 
-# --- zg:ui ----------------------------------------------------------------------
+# --- gk:ui ----------------------------------------------------------------------
 
 ui:
-  import: 'import * as ui from "zg:ui";'
+  import: 'import * as ui from "gk:ui";'
 
   types:
     - name: Size
@@ -109,7 +109,7 @@ ui:
     - name: escapeMarkup
       ts: '(text: string) => string'
       signature: escapeMarkup(text)
-      md: 'The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `''` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `zg:i18n`''s `tm()`.'
+      md: 'The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `''` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`''s `tm()`.'
 
   creating: |
     ```js
@@ -309,7 +309,7 @@ ui:
         - name: markup
           ts: boolean
           readable: true
-          md: '*Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`''s `tm()`. [Markup](APPS.md#markup).'
+          md: '*Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`''s `tm()`. [Markup](APPS.md#markup).'
 
     - name: Button
       md: 'A button: clicked with the mouse, or Enter or Space while focused.'
@@ -387,7 +387,7 @@ ui:
         a Compact SeedQR (32 bytes at `"L"`) is 25×25.
 
     - name: Image
-      md: A picture from pixels the app supplies (zerogap decodes no image formats).
+      md: A picture from pixels the app supplies (GapKeep decodes no image formats).
       props:
         - name: src
           ts: ImageSource
@@ -413,7 +413,7 @@ ui:
           ts: 'Detector[]'
           readable: true
           value: 'list of detector names'
-          md: '*Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code''s colour layer, only with `experimental = yes` in the card''s `zerogap.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
+          md: '*Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code''s colour layer, only with `experimental = yes` in the card''s `gapkeep.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
         - name: field
           ts: '"center" | "full"'
           readable: true
@@ -484,7 +484,7 @@ ui:
         #### Key names
 
         Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`, `"ç"`), as
-        the keyboard layout types them (`keyboard` in `zerogap.txt`: `us` or
+        the keyboard layout types them (`keyboard` in `gapkeep.txt`: `us` or
         `br-abnt2`); an accent typed with a dead key arrives once, composed with
         the letter (`"á"`). Others:
         `"Enter"`, `"Escape"`, `"Backspace"`, `"Delete"`, `"Tab"` (check `shift`
@@ -522,7 +522,7 @@ ui:
 # --- other modules --------------------------------------------------------------
 
 modules:
-  - name: zg:sys
+  - name: gk:sys
     var: sys
     exports:
       - name: kernel
@@ -532,15 +532,15 @@ modules:
         ts: AppInfo
         md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `name` and `description` are in the language (the app''s catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)).'
       - name: version
-        ts: '{ readonly zerogap: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
-        md: '`{ zerogap, quickjs, lvgl, circle }` version strings.'
+        ts: '{ readonly gapkeep: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
+        md: '`{ gapkeep, quickjs, lvgl, circle }` version strings.'
       - {name: log, signature: log(...args), ts: '(...args: any[]) => void', md: Same as `console.log`.}
       - {name: uptime, signature: uptime(), ts: '() => number', md: 'Milliseconds since boot, as a float with microsecond resolution.'}
       - {name: memory, signature: memory(), ts: '() => { used: number; limit: number; objects: number; ui: number }', md: "`{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's)."}
       - {name: gc, signature: gc(), ts: '() => void', md: Run the garbage collector now.}
       - {name: exit, signature: exit(), ts: '() => void', md: Leave the app and return to the launcher (after the current handler returns).}
 
-  - name: zg:crypto
+  - name: gk:crypto
     var: crypto
     exports:
       - {name: sha1, signature: sha1(data), ts: '(data: BytesLike) => Uint8Array', md: 'SHA-1, a `Uint8Array(20)`. Broken for collisions: for HMAC-SHA1 (TOTP) and protocols that require it, not to identify data.'}
@@ -608,19 +608,19 @@ modules:
       To run code written for WebCrypto unchanged, give it a small adapter:
 
       ```js
-      import * as zgcrypto from "zg:crypto";
+      import * as gkcrypto from "gk:crypto";
       globalThis.crypto = {
-        getRandomValues: zgcrypto.getRandomValues,
-        subtle: { digest: async (alg, data) => ({ "SHA-1": zgcrypto.sha1, "SHA-256": zgcrypto.sha256,
-                                                   "SHA-512": zgcrypto.sha512 })[alg](data).buffer },
+        getRandomValues: gkcrypto.getRandomValues,
+        subtle: { digest: async (alg, data) => ({ "SHA-1": gkcrypto.sha1, "SHA-256": gkcrypto.sha256,
+                                                   "SHA-512": gkcrypto.sha512 })[alg](data).buffer },
       };
       ```
 
-  - name: zg:clock
+  - name: gk:clock
     var: clock
     intro_md: |
       ```js
-      import * as clock from "zg:clock";
+      import * as clock from "gk:clock";
       ```
 
       The wall clock, kept by the system whatever app runs. A Pi Zero has no
@@ -638,16 +638,16 @@ modules:
         ts: '() => ClockStatus'
         md: '`{ set, time, trimPpm, utcOffset, drift }`: whether the time was set since boot; the time (ms, as `now()`); the trim correcting the crystal, in parts per million (+ runs faster); local time''s offset from UTC in minutes (-180 for UTC-03:00); and `drift`, `null` or what the last `set()` measured: `{ correction, over, trimPpm, uncertaintyPpm }`: the clock was `correction` seconds off (+: fast) after `over` seconds, so `trimPpm` would have kept it right, give or take `uncertaintyPpm` (half a second''s error in each setting). Measured only when the sets are at least an hour apart.'
       - {name: set, signature: set(time), ts: '(time: number | Date) => ClockStatus', md: '*Needs "rtc".* Sets the time (ms since 1970, or a `Date`; from 2000 to 2099) and returns `status()`, with the drift measured since the last `set()`.'}
-      - {name: setTrim, signature: setTrim(ppm), ts: '(ppm: number) => void', md: '*Needs "rtc".* The trim, -500 to 500 ppm. Takes effect from now, without changing the time. At boot it comes from `clock_trim_ppm` in the card''s `zerogap.txt`.'}
-      - {name: setUtcOffset, signature: setUtcOffset(minutes), ts: '(minutes: number) => void', md: '*Needs "rtc".* Local time''s offset, -720 to 840 minutes (UTC-12:00 to UTC+14:00). At boot it comes from `utc_offset` in `zerogap.txt`.'}
+      - {name: setTrim, signature: setTrim(ppm), ts: '(ppm: number) => void', md: '*Needs "rtc".* The trim, -500 to 500 ppm. Takes effect from now, without changing the time. At boot it comes from `clock_trim_ppm` in the card''s `gapkeep.txt`.'}
+      - {name: setUtcOffset, signature: setUtcOffset(minutes), ts: '(minutes: number) => void', md: '*Needs "rtc".* Local time''s offset, -720 to 840 minutes (UTC-12:00 to UTC+14:00). At boot it comes from `utc_offset` in `gapkeep.txt`.'}
       - {name: every, signature: 'every(seconds, fn)', ts: '(seconds: number, fn: (ev: { time: number; changed: boolean }) => void) => number', md: 'Calls `fn` on the clock''s marks: whenever the UTC time is a multiple of `seconds` (whole, 1 to 86400), e.g. at :00 and :30 for 30, and at once (`changed: true`) whenever the clock is set or its trim or offset change. `fn` gets `{ time, changed }`. Returns an id for `cancel`. Ends with the app.'}
       - {name: cancel, signature: cancel(id), ts: '(id: number) => void', md: 'Stops an `every`.'}
 
-  - name: zg:session
+  - name: gk:session
     var: session
     intro_md: |
       ```js
-      import * as session from "zg:session";
+      import * as session from "gk:session";
       ```
 
       Values an app keeps across its runs: leave it, use other apps, come back,
@@ -682,11 +682,11 @@ modules:
       - {name: clear, signature: clear(), ts: '() => void', md: 'Removes all of the app''s values.'}
       - {name: usage, signature: usage(), ts: '() => { used: number; limit: number }', md: 'Bytes the app''s keys and values take, and its limit (65536).'}
 
-  - name: zg:i18n
+  - name: gk:i18n
     var: i18n
     intro_md: |
       ```js
-      import { t, plural } from "zg:i18n";
+      import { t, plural } from "gk:i18n";
 
       new ui.Label({ text: t("Sign this transaction?") });
       ui.alert(t("Signed {n} of {total} inputs.", { n, total }));
@@ -701,7 +701,7 @@ modules:
       build (QuickJS has no `Intl`).
 
       The language, the number marks and the keyboard layout come from
-      `zerogap.txt` at boot (`language = pt-BR`, `decimal_mark`, `group_mark`)
+      `gapkeep.txt` at boot (`language = pt-BR`, `decimal_mark`, `group_mark`)
       and can be changed until power-off by an app with
       `"permissions": ["settings"]` (the Settings app); without it the setters
       throw a `TypeError`. A new language applies to the apps started after
@@ -717,7 +717,7 @@ modules:
       - {name: onLanguageChange, signature: onLanguageChange(fn), ts: '(fn: (ev: { language: string; marks: { decimal: string; group: string } }) => void) => () => void', md: 'Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it.'}
       - {name: marks, signature: marks(), ts: '() => { decimal: string; group: string }', md: 'The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves.'}
       - {name: setMarks, signature: setMarks(marks), ts: '(marks: { decimal?: "." | ","; group?: "." | "," | "" } | null) => void', md: '*Needs "settings".* The marks, until power-off; `null` or a mark left out: the language''s own. If only one is given and the language''s other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same.'}
-      - {name: keyboard, signature: keyboard(), ts: '() => string', md: 'The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `zerogap.txt`).'}
+      - {name: keyboard, signature: keyboard(), ts: '() => string', md: 'The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `gapkeep.txt`).'}
       - {name: keyboards, signature: keyboards(), ts: '() => string[]', md: 'The layouts there are: `["us", "br-abnt2"]`.'}
       - {name: setKeyboard, signature: setKeyboard(layout), ts: '(layout: string) => void', md: '*Needs "settings".* The layout, from `keyboards()`, at once for every app, until power-off. A dead key pending is dropped. `RangeError` for a layout not in `keyboards()`.'}
       - {name: formatNumber, signature: 'formatNumber(x, { decimals }?)', ts: '(x: number | bigint, options?: { decimals?: number }) => string', md: 'Thousands grouped, the language''s decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent.'}
@@ -725,24 +725,24 @@ modules:
       - {name: formatBtc, signature: 'formatBtc(sats, { decimals = 8 }?)', ts: '(sats: number | bigint, options?: { decimals?: number }) => string', md: 'Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it.'}
       - {name: parseNumber, signature: parseNumber(text), ts: '(text: string) => number', md: 'A number as typed, with a sign if any. What could be read two ways is refused (`"1.000"` in Portuguese, `"1,000"` in English: one or a thousand?); a lone mark that can''t be a thousands separator (`0.001`, `1,5`) is the decimal mark in any language; several marks must be the language''s thousands, properly grouped. Refusals are a `RangeError` whose message, translated, says what to type.'}
       - {name: parseBtc, signature: parseBtc(text), ts: '(text: string) => number', md: 'An amount in BTC as typed, in whole satoshis (a Number: 21 million BTC fit exactly), with the rules of `parseNumber`; no sign, at most 8 decimals, at most 21,000,000 BTC.'}
-      - {name: formatDateTime, signature: 'formatDateTime(seconds, { utc }?)', ts: '(seconds: number, options?: { utc?: boolean }) => string', md: 'ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock''s local time ([`zg:clock`](#zgclock)''s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped.'}
+      - {name: formatDateTime, signature: 'formatDateTime(seconds, { utc }?)', ts: '(seconds: number, options?: { utc?: boolean }) => string', md: 'ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock''s local time ([`gk:clock`](#gkclock)''s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped.'}
       - {name: formatDate, signature: 'formatDate(seconds, { utc }?)', ts: '(seconds: number, options?: { utc?: boolean }) => string', md: '`2026-11-08`, as `formatDateTime`.'}
       - {name: formatTime, signature: 'formatTime(seconds, { utc }?)', ts: '(seconds: number, options?: { utc?: boolean }) => string', md: '`14:03:05`, as `formatDateTime`.'}
 
-  - name: zg:apps
+  - name: gk:apps
     var: apps
     intro_md: |
       Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
       throws a `ReferenceError`. Used by the launcher.
     exports:
-      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app''s own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card''s `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
+      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app''s own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card''s `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
       - {name: launch, signature: launch(id), ts: '(id: string) => void', md: 'Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off.'}
       - name: card
         signature: card()
         ts: '() => { status: "ok" | "none" | "unreadable" | "no-apps" | "disabled"; problems: { folder: string; error: string }[] }'
         md: 'The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16.'
 
-# shared types for zerogap.d.ts
+# shared types for gapkeep.d.ts
 shared_ts:
   BytesLike: |
     ArrayBufferView | ArrayBuffer | string
@@ -784,9 +784,9 @@ globals:
 
 globals_after: |
   Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage` (see
-  [`zg:session`](#zgsession)),
+  [`gk:session`](#gksession)),
   `require`, `process`, the DOM, and the global `crypto` object (use
-  [`zg:crypto`](#zgcrypto)).
+  [`gk:crypto`](#gkcrypto)).
 
 globals_ts: |
   declare var console: {

@@ -1,6 +1,6 @@
 # The simulator
 
-`sim/` runs zerogap on a development machine: the same runtime as on the Pi
+`sim/` runs GapKeep on a development machine: the same runtime as on the Pi
 (`src/runtime`, the keyboard device, LVGL, QuickJS), compiled for the host,
 with a folder standing in for the SD card. Apps behave as on the device:
 same widgets, fonts, focus rings, checks on the card's apps, hashes, error
@@ -10,22 +10,22 @@ It comes in two forms:
 
 | | Build | For |
 | --- | --- | --- |
-| `sim/build/zgsim` | `make -C sim` (needs gcc) | Scripts, tests and agents: runs an app, takes commands on stdin, writes PNG screenshots. |
-| `sim/build/web/zgsim.{js,wasm}` | `make -C sim web` (needs [Emscripten](https://emscripten.org), e.g. `source ~/emsdk/emsdk_env.sh`) | The browser IDE ([IDE.md](IDE.md)), through `sim/web/zerogap.js`. |
+| `sim/build/gksim` | `make -C sim` (needs gcc) | Scripts, tests and agents: runs an app, takes commands on stdin, writes PNG screenshots. |
+| `sim/build/web/gksim.{js,wasm}` | `make -C sim web` (needs [Emscripten](https://emscripten.org), e.g. `source ~/emsdk/emsdk_env.sh`) | The browser IDE ([IDE.md](IDE.md)), through `sim/web/gapkeep.js`. |
 
-Add `TEST=1` for the test app set (`zgsim-test`: every app in `apps/` and
+Add `TEST=1` for the test app set (`gksim-test`: every app in `apps/` and
 `tests/apps/` built in), as with the kernel.
 
 ## Running an app
 
 ```sh
-tools/zgsim apps/hello                               # run; the log on stdout
-tools/zgsim --for 3 --shot /tmp/hello.png apps/hello # run 3 s, screenshot, exit
-tools/zgsim --size 1824x984 path/to/myapp            # another screen size
-tools/zgsim --lang pt-BR apps/clock                  # another language (or qps)
+tools/gksim apps/hello                               # run; the log on stdout
+tools/gksim --for 3 --shot /tmp/hello.png apps/hello # run 3 s, screenshot, exit
+tools/gksim --size 1824x984 path/to/myapp            # another screen size
+tools/gksim --lang pt-BR apps/clock                  # another language (or qps)
 ```
 
-`tools/zgsim` builds the simulator if needed, copies the app folders onto a
+`tools/gksim` builds the simulator if needed, copies the app folders onto a
 temporary card and starts the first one. While it runs, it reads commands
 on stdin, one per line:
 
@@ -44,9 +44,9 @@ on stdin, one per line:
 Answers to commands start with `#`; everything else on stdout is the log,
 formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 
-`sim/build/zgsim` itself takes `--card DIR` (DIR plays the SD card: apps in
+`sim/build/gksim` itself takes `--card DIR` (DIR plays the SD card: apps in
 `DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`, `--lang TAG` (the
-language, over the card's `zerogap.txt`; `qps` is the pseudo-language of
+language, over the card's `gapkeep.txt`; `qps` is the pseudo-language of
 [APPS.md](APPS.md#languages)),
 `--for SECONDS` and `--shot FILE`.
 
@@ -74,11 +74,11 @@ simulator can replace it without rebuilding: with `--builtin DIR`, a
 folder `DIR/launcher` replaces the built-in launcher, with its rights, and
 the log says so (`appstore: builtin/launcher replaces the built-in
 launcher (simulator only)`). If the folder fails the checks, the log says
-why and the built-in launcher stays. `tools/zgsim` does this for a folder
+why and the built-in launcher stays. `tools/gksim` does this for a folder
 named `launcher`:
 
 ```sh
-tools/zgsim apps/launcher apps/hello     # your launcher, with hello on the card
+tools/gksim apps/launcher apps/hello     # your launcher, with hello on the card
 ```
 
 The Pi has no such folder: there, change `apps/launcher` and rebuild.
@@ -89,7 +89,7 @@ The test scenarios (`tests/*.txt`, see the top of `tools/qemu_harness.py`)
 run on the simulator too:
 
 ```sh
-python3 tools/qemu_harness.py --sim sim/build/zgsim --card DIR scenario.txt
+python3 tools/qemu_harness.py --sim sim/build/gksim --card DIR scenario.txt
 tools/run_sim_tests.sh          # every scenario, plus the API check
 ```
 
@@ -123,7 +123,7 @@ before the first screen. The device logs the work too, without the estimate.
   (`#shot`, `#crash`) are unavailable.
 - **No USB events**: the keyboard and mouse are always there.
 - **The clock** runs on the host's timer but otherwise as on the device:
-  `Date` counts from 1970 until the Clock app sets it, and `zerogap.txt` on
+  `Date` counts from 1970 until the Clock app sets it, and `gapkeep.txt` on
   the card is read at boot ([CLOCK.md](CLOCK.md)).
 - **The camera** is synthetic (above); the Pi's has no driver yet
   ([CAMERA.md](CAMERA.md#status)).

@@ -3,19 +3,19 @@
 # after every rig reboot, before resetting the Zero: a bound USB controller
 # without a gadget hangs Circle's USB enumeration.
 #
-#   sudo install -d /opt/zerogap-rig
-#   sudo install -m 755 gadget.sh /opt/zerogap-rig/
-#   sudo install -m 644 zerogap-gadget.service /etc/systemd/system/
-#   sudo systemctl enable --now zerogap-gadget.service
+#   sudo install -d /opt/gapkeep-rig
+#   sudo install -m 755 gadget.sh /opt/gapkeep-rig/
+#   sudo install -m 644 gapkeep-gadget.service /etc/systemd/system/
+#   sudo systemctl enable --now gapkeep-gadget.service
 [Unit]
-Description=zerogap rig: USB keyboard + mouse gadget for the Pi Zero
+Description=GapKeep rig: USB keyboard + mouse gadget for the Pi Zero
 After=sys-kernel-config.mount
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/opt/zerogap-rig/gadget.sh up
-ExecStop=/opt/zerogap-rig/gadget.sh down
+ExecStart=/opt/gapkeep-rig/gadget.sh up
+ExecStop=/opt/gapkeep-rig/gadget.sh down
 
 [Install]
 WantedBy=multi-user.target

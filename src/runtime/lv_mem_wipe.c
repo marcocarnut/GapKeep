@@ -1,5 +1,5 @@
 /*
- * lv_mem_wipe.c - LVGL's memory allocator for zerogap (LV_STDLIB_CUSTOM).
+ * lv_mem_wipe.c - LVGL's memory allocator for GapKeep (LV_STDLIB_CUSTOM).
  *
  * LVGL keeps copies of everything it shows: a label holding a seed word
  * keeps that word in a heap buffer. Circle's free() does not clear memory,
@@ -92,7 +92,7 @@ void *lv_realloc_core (void *ptr, size_t new_size)
 }
 
 /* bytes LVGL holds now (sys.memory().ui) */
-size_t zg_lv_mem_used (void)
+size_t gk_lv_mem_used (void)
 {
 	return s_used;
 }

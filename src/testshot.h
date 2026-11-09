@@ -44,10 +44,10 @@
 // screen drawn again at once, logged with the time it took.
 //
 // "#keyboard <layout>": the keyboard layout (runtime/keylayout.h), as
-// "keyboard = <layout>" in zerogap.txt would, or a settings app.
+// "keyboard = <layout>" in gapkeep.txt would, or a settings app.
 //
 // "#experimental on": experimental features on (runtime/settings.h), as
-// "experimental = yes" in zerogap.txt would, for the rig, whose card never
+// "experimental = yes" in gapkeep.txt would, for the rig, whose card never
 // changes. The launcher lists the experimental apps from its next start.
 //
 // "#camera grey": the grey frame the running Pi Camera made last, at once, for
@@ -78,7 +78,7 @@
 class CTestShot
 {
 public:
-	CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial, CZgPiCamera *pPiCamera);
+	CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial, CGkPiCamera *pPiCamera);
 
 	// Call from the main loop: looks for a command on the serial line.
 	void Update (void);
@@ -93,8 +93,8 @@ private:
 private:
 	CScreenDevice *m_pScreen;
 	CSerialDevice *m_pSerial;
-	CZgSynthCamera m_Camera;
-	CZgPiCamera *m_pPiCamera;
+	CGkSynthCamera m_Camera;
+	CGkPiCamera *m_pPiCamera;
 	char m_Line[1024];
 	unsigned m_nLine;
 	boolean m_bRawPending;

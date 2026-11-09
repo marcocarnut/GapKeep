@@ -39,7 +39,7 @@ def main():
         name = os.path.splitext(os.path.basename(path))[0]
         table.append('\t{ "%s", %d, %d, picture%d, sizeof picture%d },' % (name, w, h, n, n))
     lines.append('')
-    lines.append('const TZgTestPicture zg_test_pictures[] = {')
+    lines.append('const TGkTestPicture gk_test_pictures[] = {')
     lines += table
     lines.append('\t{ 0, 0, 0, 0, 0 }')
     lines.append('};')

@@ -1,16 +1,16 @@
-// dice39 for zerogap: physical dice and a coin to a BIP-39 seed phrase.
+// dice39 for GapKeep: physical dice and a coin to a BIP-39 seed phrase.
 //
 // The algorithm is dice39's own code, copied verbatim into ./vendor by
 // tools/extract_dice39.py; this file is only the user interface. See
 // ./vendor/*.js for the provenance header (source file and its SHA-256).
 //
-// The text is translated (zg:i18n, lang/<language>.json; most of it in
+// The text is translated (gk:i18n, lang/<language>.json; most of it in
 // lib/strings.js). The log stays in English, and holds no secret.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as zgcrypto from "zg:crypto";
-import { t, plural } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as gkcrypto from "gk:crypto";
+import { t, plural } from "gk:i18n";
 import "./lib/cryptoshim.js";
 import { BIP39_WORDS } from "./vendor/wordlist.js";
 import { buildMnemonic, importMnemonic, PHRASE_SIZES, concatBytes, sha256 } from "./vendor/bip39core.js";
@@ -25,7 +25,7 @@ import { S } from "./lib/strings.js";
 import { setCrypto } from "./lib/crypto.js";
 import { accountKey, MAX_ACCOUNT } from "./lib/pubkey.js";
 
-setCrypto(zgcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
+setCrypto(gkcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
 
 const GREEN = "#66bb6a", AMBER = "#ffb300", RED = "#ef5350", MUTED = "#8a9199";
 const WORDS = new Set(BIP39_WORDS);
@@ -453,8 +453,8 @@ async function onGenerate() {
   const n = countWords();
   const userWords = state.fields.slice(0, n).map((f) => f.word);
   try {
-    const baseline = zgcrypto.randomBytes(32);
-    // dice39 hashes the CSPRNG baseline with the pad samples; zerogap adds
+    const baseline = gkcrypto.randomBytes(32);
+    // dice39 hashes the CSPRNG baseline with the pad samples; GapKeep adds
     // the key timings after them
     const seed = await sha256(concatBytes(baseline, samplesToBytes(state.pad.samples),
       samplesToBytes(state.samples)));
@@ -727,7 +727,7 @@ const SCHEMES = [[2, 3], [2, 4], [3, 5]];
 
 function randomIdentifier() {
   // 4 symbols from the bech32 alphabet; 256 is a multiple of 32, so & 31 is uniform
-  return Array.from(zgcrypto.randomBytes(4), (b) => CODEX32.CX_CHARSET[b & 31]).join("");
+  return Array.from(gkcrypto.randomBytes(4), (b) => CODEX32.CX_CHARSET[b & 31]).join("");
 }
 
 // The last split stays (state.split) while the phrase does: coming back
@@ -810,7 +810,7 @@ function showShareQR(i) {
 function showAbout() {
   page(t("About"));
   paragraph(ui.screen, t(
-    "This is dice39 running on ZeroGap. You supply most of the words with dice and a coin; this device " +
+    "This is dice39 running on GapKeep. You supply most of the words with dice and a coin; this device " +
     "supplies the rest and the checksum, and checks that every word you typed was kept as it was. Or you " +
     "type a phrase you already have, to split it into codex32 shares. Either way, it shows the account's " +
     "public key for a watch-only wallet."));
@@ -822,10 +822,10 @@ function showAbout() {
     "Different from the web page: there is no printing (print the dice tables from the web page on any " +
     "computer), no clipboard, and no network check, because this device has no network. The entropy pad " +
     "also takes Space presses, for use without a mouse, and your key timing is mixed in too. The public key " +
-    "(BIP-84, a zpub) is ZeroGap's, from the signer's BIP-39 and BIP-32 code: dice39's page has none."),
+    "(BIP-84, a zpub) is GapKeep's, from the signer's BIP-39 and BIP-32 code: dice39's page has none."),
     { color: MUTED });
-  paragraph(ui.screen, t("dice39 is licensed under the GNU AGPL v3. ZeroGap {zerogap}, QuickJS {quickjs}, " +
-    "LVGL {lvgl}.", { zerogap: sys.version.zerogap, quickjs: sys.version.quickjs, lvgl: sys.version.lvgl }),
+  paragraph(ui.screen, t("dice39 is licensed under the GNU AGPL v3. GapKeep {gapkeep}, QuickJS {quickjs}, " +
+    "LVGL {lvgl}.", { gapkeep: sys.version.gapkeep, quickjs: sys.version.quickjs, lvgl: sys.version.lvgl }),
   { color: MUTED, font: 12 });
   new ui.Button({ text: t("Back"), onClick: showStart }).focus();
 }

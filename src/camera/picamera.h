@@ -2,7 +2,7 @@
 // picamera.h
 //
 // The Raspberry Pi Camera Module v2.1 (Sony IMX219) on the Pi Zero v1.3's
-// camera connector, as a CZgCamera (src/runtime/camera.h): power (GPIO 41),
+// camera connector, as a CGkCamera (src/runtime/camera.h): power (GPIO 41),
 // the sensor over I2C 0 on GPIO 28/29 (imx219.h), the CSI-2 receiver
 // Unicam1 (unicam.h), and what the scanner needs from them: 8-bit grey
 // frames, the average of each 2x2 Bayer tile of the sensor's RAW8 (640x480
@@ -18,8 +18,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-#ifndef _zg_picamera_h
-#define _zg_picamera_h
+#ifndef _gk_picamera_h
+#define _gk_picamera_h
 
 #include "../runtime/camera.h"
 #include "imx219.h"
@@ -28,11 +28,11 @@
 #include <circle/i2cmaster.h>
 #include <circle/types.h>
 
-class CZgPiCamera : public CZgCamera
+class CGkPiCamera : public CGkCamera
 {
 public:
-	CZgPiCamera (void);
-	~CZgPiCamera (void);
+	CGkPiCamera (void);
+	~CGkPiCamera (void);
 
 	// Is a camera there? Powers it for about 20 ms, reads the chip ID
 	// (logged), powers it down again.
@@ -46,11 +46,11 @@ public:
 	// What frames show, from the next Start(): the centre at full detail
 	// ("detail": 1280x960 unbinned, 640x480 grey) or the whole view
 	// ("full": 3280x2464 binned, 820x616 grey). The scanner sets it.
-	void SetField (TZgCameraField Field)		{ m_Field = Field; }
+	void SetField (TGkCameraField Field)		{ m_Field = Field; }
 
 	// A mode (imx219.h) that overrides the field, for tests; 0: the
 	// field decides again. The grey frame is half its size each way.
-	void SetMode (const TZgIMX219Mode *pMode)	{ m_pForcedMode = pMode; }
+	void SetMode (const TGkIMX219Mode *pMode)	{ m_pForcedMode = pMode; }
 
 	boolean Start (void);
 	void Stop (void);
@@ -90,16 +90,16 @@ private:
 	CGPIOPin m_Power;		// GPIO 41: the module's regulators
 	CGPIOPin m_LED;			// GPIO 32: a v1 module's LED (a v2 has none)
 	CI2CMaster *m_pI2C;		// only while powered
-	CZgIMX219 *m_pSensor;
-	CZgUnicam m_Unicam;
+	CGkIMX219 *m_pSensor;
+	CGkUnicam m_Unicam;
 
 	boolean m_bPowered;
 	boolean m_bStreaming;
 	const char *m_pError;
 	unsigned m_nTestPattern;
-	TZgCameraField m_Field;
-	const TZgIMX219Mode *m_pForcedMode;	// or 0
-	const TZgIMX219Mode *m_pMode;		// of the current or last Start()
+	TGkCameraField m_Field;
+	const TGkIMX219Mode *m_pForcedMode;	// or 0
+	const TGkIMX219Mode *m_pMode;		// of the current or last Start()
 
 	unsigned m_nStride;		// of the raw frames
 	unsigned m_nWidth;		// of the grey frames: half the sensor's

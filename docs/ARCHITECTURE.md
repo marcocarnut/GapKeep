@@ -1,6 +1,6 @@
-# zerogap architecture
+# GapKeep architecture
 
-zerogap is a single-purpose, bare-metal system for the Raspberry Pi Zero
+GapKeep is a single-purpose, bare-metal system for the Raspberry Pi Zero
 (BCM2835, one ARM1176 core, 512 MB). It boots straight into a JavaScript app
 runtime with a graphical interface. There is no Linux, no network stack and
 no radio; the SD card is read once at boot, for the apps, and never written.
@@ -9,7 +9,7 @@ no radio; the SD card is read once at boot, for the apps, and never written.
  ┌──────────────────────────────────────────────────────────────┐
  │  apps/*            JavaScript apps (launcher, dice39, ...)   │
  ├──────────────────────────────────────────────────────────────┤
- │  src/runtime       app host · zg:ui · zg:sys · zg:apps        │
+ │  src/runtime       app host · gk:ui · gk:sys · gk:apps        │
  │                    QuickJS (third_party/quickjs)              │
  │                    LVGL (circle/addon/lvgl, lib/lvgl config)  │
  ├──────────────────────────────────────────────────────────────┤
@@ -27,7 +27,7 @@ no radio; the SD card is read once at boot, for the apps, and never written.
    `start.elf`. Both are Broadcom's closed firmware; every OS on the Pi
    depends on them.
 2. `start.elf` sets up HDMI, reads `config.txt`, and loads `kernel.img`
-   (zerogap) to 0x8000 on the ARM core.
+   (GapKeep) to 0x8000 on the ARM core.
 3. Circle's startup code sets up the stack (1 MB), MMU and caches, and calls
    `main()` → `CKernel` (`src/kernel.cpp`).
 4. The kernel brings up the screen, the serial log, interrupts, the timer and
@@ -59,7 +59,7 @@ Runs one app at a time. Starting an app:
 1. A new **QuickJS runtime** with a 96 MB heap limit, a 512 KB stack limit, a
    module loader and an interrupt handler (watchdog and Home key).
 2. A new **LVGL screen** and **focus group**; the keyboard is pointed at it.
-3. The app's entry module is evaluated. It imports `zg:*` modules (created
+3. The app's entry module is evaluated. It imports `gk:*` modules (created
    on demand, permission-checked) and its own files (from memory).
 
 Stopping an app (exit, Home, or launching another) deletes its screen, which
@@ -69,7 +69,7 @@ freed, so a leak in the runtime shows up as a crash in testing rather than
 slow memory loss.
 
 Apps come from two places (`src/runtime/appstore.*`), with the same checks
-and the same description (`zg_app_t`):
+and the same description (`gk_app_t`):
 
 - **Built in**, at build time (`tools/bundle_apps.py` →
   `src/generated/apps_bundle.c`): the launcher always; every app in sealed
@@ -86,7 +86,7 @@ other than their own modules, which are already in memory.
 
 ### Widgets (`src/runtime/js_ui.cpp`)
 
-Each widget is a JS object linked to an LVGL object through a `TZgNode`.
+Each widget is a JS object linked to an LVGL object through a `TGkNode`.
 While the LVGL object exists, the node keeps the JS object alive, so the same
 JS object is returned every time (`label.parent === container`). LVGL's
 delete event releases it. JS never deletes LVGL objects directly:
@@ -97,25 +97,25 @@ handler" safe.
 All properties are described by one table; constructors, `set()` and the
 per-type property accessors all go through it, with strict validation.
 
-The wall clock (`clock.cpp`, `zg:clock` in `js_clock.cpp`) is kept by the
+The wall clock (`clock.cpp`, `gk:clock` in `js_clock.cpp`) is kept by the
 kernel from the system timer, with a trim and a UTC offset; see
 [CLOCK.md](CLOCK.md).
 
-The session store (`session.cpp`, `zg:session` in `js_session.cpp`) keeps
+The session store (`session.cpp`, `gk:session` in `js_session.cpp`) keeps
 values for each app across its runs, in the kernel's heap, until power-off.
 Entries are filed under the app's id and hash; values are serialized by
 QuickJS's object writer (plain data only: no bytecode, no references) and
 copied in and out. Every byte is overwritten before it is freed.
 
-Languages (`i18n.cpp`, `zg:i18n`): the language and number marks are the
-system's (`zerogap.txt`, or the Settings app until power-off). When an app
+Languages (`i18n.cpp`, `gk:i18n`): the language and number marks are the
+system's (`gapkeep.txt`, or the Settings app until power-off). When an app
 starts, its catalog (`lang/<language>.json`, with `lang/pt.json` under
 `lang/pt-BR.json`) is parsed with `JSON.parse`, never evaluated, and each
 translation checked (the same `{names}` as its key, no control or bidi
 characters); what passes is kept in a null-prototype object. The module
 itself is JavaScript, `src/runtime/i18n.js`, embedded by
 `tools/embed_js.py` and compiled when an app imports it; its native half,
-`zg:i18n-native`, can be imported by it alone. The launcher's catalogs are
+`gk:i18n-native`, can be imported by it alone. The launcher's catalogs are
 the system's: they translate the module's own messages.
 
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
@@ -128,7 +128,7 @@ frames and automatic exposure). See [CAMERA.md](CAMERA.md).
 ### Cryptography (`src/crypto/`)
 
 SHA-1, SHA-256 and SHA-512 written from FIPS 180-4, and HMAC from RFC 2104
-(`hmac.*`, generic over the three through `zg_hash_t`), all plain C that
+(`hmac.*`, generic over the three through `gk_hash_t`), all plain C that
 also builds on the development machine: `tests/native/test_sha256.c`, and
 `tools/check_hashes.py`, which runs every self-test and compares thousands
 of random inputs with Python's `hashlib`. SHA-256's self-test runs at boot;
@@ -136,16 +136,16 @@ HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1 and
 SHA-512) run before their first use, and disable them if they fail. Every
 context and buffer that held key material is overwritten after use. The
 hardware RNG wrapper (`hwrng.*`) applies NIST SP 800-90B health tests to
-every raw byte and conditions output through SHA-256; see `zg:crypto` in
+every raw byte and conditions output through SHA-256; see `gk:crypto` in
 [API.md](API.md).
 
 RIPEMD-160 (`ripemd160.*`, from its authors' paper, with HASH160) and
-PBKDF2 (`pbkdf2.*`, RFC 8018, over `zg_hash_t`) are checked the same way
+PBKDF2 (`pbkdf2.*`, RFC 8018, over `gk_hash_t`) are checked the same way
 (`tools/check_hashes.py`). secp256k1 is Bitcoin Core's libsecp256k1
 (`third_party/secp256k1`, pinned to a release; built by
 `lib/secp256k1/secp256k1.mk` with the extrakeys and schnorrsig modules and
 a 16 KiB verification table, about 100 KiB of code and tables in all).
-`secp.*` turns its opaque structures into bytes for `zg:crypto`: ECDSA
+`secp.*` turns its opaque structures into bytes for `gk:crypto`: ECDSA
 with RFC 6979 nonces, low S and Bitcoin Core's low-R grinding, BIP-340,
 and the BIP-32 and Taproot tweaks. Its context lives in a static buffer
 (no allocation), is blinded with random bytes, and halts the system on an
@@ -161,7 +161,7 @@ left to apps, in JavaScript on these primitives.
 
 ### C runtime
 
-QuickJS is a hosted C program. zerogap provides only what it needs:
+QuickJS is a hosted C program. GapKeep provides only what it needs:
 
 - Circle: `malloc`/`free`/`realloc`, `mem*`, `str*` basics.
 - newlib (from the toolchain): `libm` math functions and headers.
@@ -195,7 +195,7 @@ for them to leave, other than what a person reads off the screen.
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at boot, then by zerogap, once, for `/apps` and `zerogap.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
+| SD card | Read by the firmware at boot, then by GapKeep, once, for `/apps` and `gapkeep.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **What is absent by design:** network stack, Wi-Fi and Bluetooth (the
@@ -225,7 +225,7 @@ kernel is mapped with 4 KB pages, so that
 - the unused memory below the kernel stack is unmapped, so a stack
   overflow faults instead of running into the data below it.
 
-Every C and C++ file (Circle, LVGL, QuickJS, zerogap) is compiled with
+Every C and C++ file (Circle, LVGL, QuickJS, GapKeep) is compiled with
 `-fstack-protector-strong`, with the canary taken from the hardware RNG at
 boot (`src/runtime/stackguard.cpp`). A violation of any of these stops the
 system; `tests/memprotect.txt` makes each one happen on purpose
@@ -255,11 +255,11 @@ build.
 | `apps/` | The apps: built in (the launcher, or all in sealed builds) or copied to the card's `/apps`. |
 | `circle/` | Circle (submodule) plus the fixes in `patches/circle/`, applied by `tools/build.sh`. Its LVGL submodule supplies the LVGL sources. |
 | `third_party/quickjs/` | QuickJS (submodule, unmodified). |
-| `lib/lvgl/` | Builds LVGL with `zg_lv_conf.h`. |
+| `lib/lvgl/` | Builds LVGL with `gk_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
 | `src/` | Kernel and runtime. `src/generated/` is build output. `src/runtime/` is also compiled into the simulator. |
 | `sim/` | The simulator ([SIMULATOR.md](SIMULATOR.md)): stand-ins for the Circle headers the runtime uses, its main loop, and the browser IDE (`sim/web/`). |
 | `tests/` | QEMU scenarios; `tests/apps/` holds test-only apps (`make TEST=1`); `tests/sdcard/` the test SD card; `tests/native`, `tests/dice39` host tests. |
 | `tools/` | App bundler, QEMU harness, test runner. |
-| `docs/` | This file, the guides, and the API reference generated from `docs/api/zerogap-api.yaml`. |
+| `docs/` | This file, the guides, and the API reference generated from `docs/api/gapkeep-api.yaml`. |

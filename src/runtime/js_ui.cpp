@@ -1,13 +1,13 @@
 //
 // js_ui.cpp
 //
-// The "zg:ui" module: a small, generic JavaScript widget API on top of LVGL.
+// The "gk:ui" module: a small, generic JavaScript widget API on top of LVGL.
 // See docs/API.md for the JavaScript-side documentation; keep the two in sync.
 //
 // Design
 // ------
 // Every widget is a JS object of class "Widget" whose opaque pointer is a
-// TZgNode. The node links the JS object to its LVGL object:
+// TGkNode. The node links the JS object to its LVGL object:
 //
 //  - While the LVGL object exists, the node holds a strong reference to the
 //    JS wrapper (so the same JS object is returned every time, and event
@@ -84,14 +84,14 @@ enum TEventSlot
 	EvCount
 };
 
-// zerogap's own events, fired by the widget rather than by LVGL
-#define ZG_EVENT	LV_EVENT_LAST
+// GapKeep's own events, fired by the widget rather than by LVGL
+#define GK_EVENT	LV_EVENT_LAST
 
 static const struct
 {
 	const char *pName;		// for widget.on()
 	const char *pProp;		// constructor / set() property
-	lv_event_code_t Code;		// ZG_EVENT: not an LVGL event
+	lv_event_code_t Code;		// GK_EVENT: not an LVGL event
 	u32 nTypes;			// widgets that have it (T (...) bits, see below)
 }
 Events[EvCount] =
@@ -106,25 +106,25 @@ Events[EvCount] =
 	{"press",     "onPress",     LV_EVENT_PRESSED, 0xFFFFFFFFu},
 	{"drag",      "onDrag",      LV_EVENT_PRESSING, 0xFFFFFFFFu},
 	{"release",   "onRelease",   LV_EVENT_RELEASED, 0xFFFFFFFFu},
-	{"detect",    "onDetect",    ZG_EVENT, 1u << WScanner},
-	{"error",     "onError",     ZG_EVENT, 1u << WScanner},
+	{"detect",    "onDetect",    GK_EVENT, 1u << WScanner},
+	{"error",     "onError",     GK_EVENT, 1u << WScanner},
 };
 
-struct TZgNode
+struct TGkNode
 {
 	lv_obj_t *pObj;			// 0 once LVGL deleted the object
-	TZgApp *pApp;
+	TGkApp *pApp;
 	TWidgetType Type;
 	JSValue Wrapper;		// strong while pObj != 0
 	JSValue Handlers[EvCount];
 	u32 nRegistered;		// event slots with an LVGL callback
 	boolean bDeleting;		// widget.delete() called
 	JSValue DeferredRef;		// keeps the wrapper alive while queued
-	TZgNode *pNextDeferred;
+	TGkNode *pNextDeferred;
 	char *pAccepted;		// TextArea accepted chars (LVGL keeps the pointer)
-	struct TZgQR *pQR;		// QRCode settings
+	struct TGkQR *pQR;		// QRCode settings
 	lv_image_dsc_t *pImage;		// Image: the picture (pixels follow the descriptor)
-	struct TZgScan *pScan;		// Scanner
+	struct TGkScan *pScan;		// Scanner
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
 	int nFontSize;			// "font", 0 if not set
 	boolean bMono;			// "mono"
@@ -132,7 +132,7 @@ struct TZgNode
 	char *pMarkup;			// its text as set (the markup)
 };
 
-struct TZgQR
+struct TGkQR
 {
 	u8 *pData;			// content (copy)
 	size_t nLength;
@@ -146,9 +146,9 @@ struct TZgQR
 
 // Scanner: the scanner (scanner.h), polled by an LVGL timer, and its
 // preview, drawn by the widget's draw callback. Freed with the LVGL object.
-struct TZgScan
+struct TGkScan
 {
-	CZgScanner *pScanner;
+	CGkScanner *pScanner;
 	boolean bDetectSet;		// "detect" given (it is required)
 	lv_timer_t *pTimer;
 	boolean bErrorPending;		// Start() failed: report it from the timer
@@ -156,20 +156,20 @@ struct TZgScan
 	u16 *pPixels;			// 0: no preview yet
 };
 
-struct TZgAlert;
+struct TGkAlert;
 
-struct TZgUIState
+struct TGkUIState
 {
 	JSValue Protos[WTypeCount];
 	JSValue BaseProto;
 	boolean bStopping;
-	TZgAlert *pAlerts;		// open alerts, innermost first
+	TGkAlert *pAlerts;		// open alerts, innermost first
 };
 
-struct TZgAlert
+struct TGkAlert
 {
-	TZgAlert *pNext;
-	TZgApp *pApp;
+	TGkAlert *pNext;
+	TGkApp *pApp;
 	lv_obj_t *pOverlay;
 	lv_group_t *pGroup;
 	lv_group_t *pPrevGroup;
@@ -182,7 +182,7 @@ static JSClassID s_WidgetClass;
 
 static void NodeDeleteCallback (lv_event_t *e);
 static void NodeEventCallback (lv_event_t *e);
-static void FreeScan (TZgNode *pNode);
+static void FreeScan (TGkNode *pNode);
 
 // --- helpers ----------------------------------------------------------------
 
@@ -212,13 +212,13 @@ static lv_obj_t *ButtonLabel (lv_obj_t *pButton, boolean bCreate)
 // node on first use (e.g. for objects LVGL created internally).
 static JSValue Wrap (JSContext *ctx, lv_obj_t *pObj, TWidgetType Type, JSValueConst Proto)
 {
-	TZgNode *pNode = (TZgNode *) lv_obj_get_user_data (pObj);
+	TGkNode *pNode = (TGkNode *) lv_obj_get_user_data (pObj);
 	if (pNode != 0)
 	{
 		return JS_DupValue (ctx, pNode->Wrapper);
 	}
 
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 
 	JSValue Obj = JS_NewObjectProtoClass (ctx,
 		JS_IsUndefined (Proto) ? pApp->pUI->Protos[Type] : Proto, s_WidgetClass);
@@ -227,7 +227,7 @@ static JSValue Wrap (JSContext *ctx, lv_obj_t *pObj, TWidgetType Type, JSValueCo
 		return Obj;
 	}
 
-	pNode = new TZgNode;
+	pNode = new TGkNode;
 	memset (pNode, 0, sizeof *pNode);
 	pNode->pObj = pObj;
 	pNode->pApp = pApp;
@@ -241,7 +241,7 @@ static JSValue Wrap (JSContext *ctx, lv_obj_t *pObj, TWidgetType Type, JSValueCo
 
 	if (Type == WQRCode)
 	{
-		pNode->pQR = new TZgQR;
+		pNode->pQR = new TGkQR;
 		memset (pNode->pQR, 0, sizeof *pNode->pQR);
 		pNode->pQR->nECC = qrcodegen_Ecc_MEDIUM;
 		pNode->pQR->nMinVersion = qrcodegen_VERSION_MIN;
@@ -279,9 +279,9 @@ static TWidgetType GuessType (lv_obj_t *pObj)
 	return WContainer;
 }
 
-static TZgNode *GetNode (JSContext *ctx, JSValueConst Val, boolean bMustBeAlive = TRUE)
+static TGkNode *GetNode (JSContext *ctx, JSValueConst Val, boolean bMustBeAlive = TRUE)
 {
-	TZgNode *pNode = (TZgNode *) JS_GetOpaque (Val, s_WidgetClass);
+	TGkNode *pNode = (TGkNode *) JS_GetOpaque (Val, s_WidgetClass);
 	if (pNode == 0)
 	{
 		JS_ThrowTypeError (ctx, "not a widget");
@@ -299,7 +299,7 @@ static TZgNode *GetNode (JSContext *ctx, JSValueConst Val, boolean bMustBeAlive 
 
 static void WidgetFinalizer (JSRuntime *rt, JSValue Val)
 {
-	TZgNode *pNode = (TZgNode *) JS_GetOpaque (Val, s_WidgetClass);
+	TGkNode *pNode = (TGkNode *) JS_GetOpaque (Val, s_WidgetClass);
 	if (pNode == 0)
 	{
 		return;
@@ -324,7 +324,7 @@ static void WidgetFinalizer (JSRuntime *rt, JSValue Val)
 
 static void NodeDeleteCallback (lv_event_t *e)
 {
-	TZgNode *pNode = (TZgNode *) lv_event_get_user_data (e);
+	TGkNode *pNode = (TGkNode *) lv_event_get_user_data (e);
 	JSContext *ctx = pNode->pApp->pContext;
 
 	lv_obj_set_user_data (pNode->pObj, 0);
@@ -369,12 +369,12 @@ static const char *KeyName (u32 nKey, char *pBuf)
 	}
 }
 
-static JSValue GetValueProp (JSContext *ctx, TZgNode *pNode);
+static JSValue GetValueProp (JSContext *ctx, TGkNode *pNode);
 
 static void NodeEventCallback (lv_event_t *e)
 {
-	TZgNode *pNode = (TZgNode *) lv_event_get_user_data (e);
-	TZgApp *pApp = pNode->pApp;
+	TGkNode *pNode = (TGkNode *) lv_event_get_user_data (e);
+	TGkApp *pApp = pNode->pApp;
 	if (pApp->pUI == 0 || pApp->pUI->bStopping || pNode->pObj == 0 || pNode->bDeleting)
 	{
 		return;
@@ -464,7 +464,7 @@ static void NodeEventCallback (lv_event_t *e)
 	}
 }
 
-static int SetHandler (JSContext *ctx, TZgNode *pNode, unsigned nSlot, JSValueConst Func)
+static int SetHandler (JSContext *ctx, TGkNode *pNode, unsigned nSlot, JSValueConst Func)
 {
 	if (!JS_IsFunction (ctx, Func) && !JS_IsNull (Func) && !JS_IsUndefined (Func))
 	{
@@ -476,7 +476,7 @@ static int SetHandler (JSContext *ctx, TZgNode *pNode, unsigned nSlot, JSValueCo
 	pNode->Handlers[nSlot] = JS_IsFunction (ctx, Func) ? JS_DupValue (ctx, Func) : JS_UNDEFINED;
 
 	if (   JS_IsFunction (ctx, Func)
-	    && Events[nSlot].Code != ZG_EVENT
+	    && Events[nSlot].Code != GK_EVENT
 	    && !(pNode->nRegistered & (1u << nSlot)))
 	{
 		lv_obj_add_event_cb (pNode->pObj, NodeEventCallback, Events[nSlot].Code, pNode);
@@ -657,10 +657,10 @@ static int ToEnum (JSContext *ctx, JSValueConst v, const char *pProp,
 static const int FontSizes[] = {12, 14, 16, 18, 20, 22, 24, 28, 32, 40};
 static const lv_font_t *Fonts[] =
 {
-	&zg_montserrat_12, &zg_montserrat_14, &zg_montserrat_16,
-	&zg_montserrat_18, &zg_montserrat_20, &zg_montserrat_22,
-	&zg_montserrat_24, &zg_montserrat_28, &zg_montserrat_32,
-	&zg_montserrat_40
+	&gk_montserrat_12, &gk_montserrat_14, &gk_montserrat_16,
+	&gk_montserrat_18, &gk_montserrat_20, &gk_montserrat_22,
+	&gk_montserrat_24, &gk_montserrat_28, &gk_montserrat_32,
+	&gk_montserrat_40
 };
 static const unsigned FontCount = sizeof FontSizes / sizeof FontSizes[0];
 
@@ -669,8 +669,8 @@ static const unsigned FontCount = sizeof FontSizes / sizeof FontSizes[0];
 static const int MonoSizes[] = {12, 14, 16, 18, 20, 24, 28};
 static const lv_font_t *MonoFonts[] =
 {
-	&zg_mono_12, &zg_mono_14, &zg_mono_16, &zg_mono_18, &zg_mono_20,
-	&zg_mono_24, &zg_mono_28
+	&gk_mono_12, &gk_mono_14, &gk_mono_16, &gk_mono_18, &gk_mono_20,
+	&gk_mono_24, &gk_mono_28
 };
 static const unsigned MonoCount = sizeof MonoSizes / sizeof MonoSizes[0];
 
@@ -724,11 +724,11 @@ static void FontInfo (const lv_font_t *pFont, int *pSize, boolean *pMono)
 
 // --- properties -------------------------------------------------------------
 
-typedef int TSetter (JSContext *ctx, TZgNode *pNode, JSValueConst v, const char *pProp);
-typedef JSValue TGetter (JSContext *ctx, TZgNode *pNode);
+typedef int TSetter (JSContext *ctx, TGkNode *pNode, JSValueConst v, const char *pProp);
+typedef JSValue TGetter (JSContext *ctx, TGkNode *pNode);
 
-#define SETTER(name)	static int name (JSContext *ctx, TZgNode *pNode, JSValueConst v, const char *pProp)
-#define GETTER(name)	static JSValue name (JSContext *ctx, TZgNode *pNode)
+#define SETTER(name)	static int name (JSContext *ctx, TGkNode *pNode, JSValueConst v, const char *pProp)
+#define GETTER(name)	static JSValue name (JSContext *ctx, TGkNode *pNode)
 #define OBJ		(pNode->pObj)
 
 SETTER (SetX)      { int32_t n; if (ToSize (ctx, v, pProp, &n)) return -1; lv_obj_set_x (OBJ, n); return 0; }
@@ -896,17 +896,17 @@ SETTER (SetOpacity)
 // text in one style. The runs are worked out again whenever the text or
 // the label's font changes (<big>, <tt> are relative to it).
 
-static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, size_t nLength, const char *pProp)
+static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, size_t nLength, const char *pProp)
 {
 	int nSize;
 	boolean bMono;
 	FontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
 
-	static TZgMarkup Markup;	// big for the stack (one at a time)
+	static TGkMarkup Markup;	// big for the stack (one at a time)
 	char Error[200];
-	if (!ZgMarkupParse (pSource, nLength, FontSizes, FontCount, nSize, bMono, &Markup, Error, sizeof Error))
+	if (!GkMarkupParse (pSource, nLength, FontSizes, FontCount, nSize, bMono, &Markup, Error, sizeof Error))
 	{
-		ZgMarkupFree (&Markup);
+		GkMarkupFree (&Markup);
 		JS_ThrowTypeError (ctx, "%s: %s", pProp, Error);
 		return -1;
 	}
@@ -917,7 +917,7 @@ static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, si
 	}
 	for (unsigned i = 0; i < Markup.nRuns; i++)
 	{
-		const TZgMarkupRun &Run = Markup.Runs[i];
+		const TGkMarkupRun &Run = Markup.Runs[i];
 		lv_span_t *pSpan = lv_spangroup_add_span (OBJ);
 		char *pEnd = Markup.pText + Run.nStart + Run.nLength;
 		char cSaved = *pEnd;
@@ -928,7 +928,7 @@ static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, si
 		lv_style_t *pStyle = lv_span_get_style (pSpan);
 		if (Run.Style.bBold || Run.Style.bItalic)	// never mono (markup.h)
 		{
-			lv_style_set_text_font (pStyle, ZgStyledFont (NormalFont (Run.Style.nSize), Run.Style.nSize,
+			lv_style_set_text_font (pStyle, GkStyledFont (NormalFont (Run.Style.nSize), Run.Style.nSize,
 								      Run.Style.bBold, Run.Style.bItalic));
 		}
 		else if (Run.Style.nSize != nSize || Run.Style.bMono != bMono)
@@ -943,11 +943,11 @@ static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, si
 		if (Run.Style.nDecor != 0)
 		{
 			lv_style_set_text_decor (pStyle, (lv_text_decor_t)
-				(  (Run.Style.nDecor & ZG_MARKUP_UNDERLINE ? LV_TEXT_DECOR_UNDERLINE : 0)
-				 | (Run.Style.nDecor & ZG_MARKUP_STRIKE ? LV_TEXT_DECOR_STRIKETHROUGH : 0)));
+				(  (Run.Style.nDecor & GK_MARKUP_UNDERLINE ? LV_TEXT_DECOR_UNDERLINE : 0)
+				 | (Run.Style.nDecor & GK_MARKUP_STRIKE ? LV_TEXT_DECOR_STRIKETHROUGH : 0)));
 		}
 	}
-	ZgMarkupFree (&Markup);
+	GkMarkupFree (&Markup);
 	lv_spangroup_refresh (OBJ);
 
 	if (pSource != pNode->pMarkup)
@@ -964,7 +964,7 @@ static int RenderMarkup (JSContext *ctx, TZgNode *pNode, const char *pSource, si
 // The font from "font" and "mono", whichever came first: the size is
 // "font", else the one the widget has (inherited); mono takes the mono
 // font of that size, or, for an inherited size it lacks, the next smaller.
-static int ApplyFontOnly (JSContext *ctx, TZgNode *pNode, const char *pProp)
+static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 {
 	if (!pNode->bMono)
 	{
@@ -1034,7 +1034,7 @@ static int ApplyFontOnly (JSContext *ctx, TZgNode *pNode, const char *pProp)
 	return 0;
 }
 
-static int ApplyFont (JSContext *ctx, TZgNode *pNode, const char *pProp)
+static int ApplyFont (JSContext *ctx, TGkNode *pNode, const char *pProp)
 {
 	if (ApplyFontOnly (ctx, pNode, pProp))
 	{
@@ -1084,7 +1084,7 @@ SETTER (SetTextAlign)
 	return 0;
 }
 
-static int SetFlag (JSContext *ctx, TZgNode *pNode, JSValueConst v, const char *pProp, lv_obj_flag_t Flag, boolean bInvert)
+static int SetFlag (JSContext *ctx, TGkNode *pNode, JSValueConst v, const char *pProp, lv_obj_flag_t Flag, boolean bInvert)
 {
 	boolean b;
 	if (ToBool (ctx, v, pProp, &b)) return -1;
@@ -1107,10 +1107,10 @@ GETTER (GetHidden)     { return JS_NewBool (ctx, lv_obj_has_flag (OBJ, LV_OBJ_FL
 SETTER (SetDetect)
 {
 	CString Known;
-	for (unsigned i = 0; CZgScanner::GetDetectorName (i) != 0; i++)
+	for (unsigned i = 0; CGkScanner::GetDetectorName (i) != 0; i++)
 	{
 		Known.Append (i ? ", \"" : "\"");
-		Known.Append (CZgScanner::GetDetectorName (i));
+		Known.Append (CGkScanner::GetDetectorName (i));
 		Known.Append ("\"");
 	}
 
@@ -1132,7 +1132,7 @@ SETTER (SetDetect)
 	{
 		JSValue Item = JS_GetPropertyUint32 (ctx, v, i);
 		const char *pName = JS_IsString (Item) ? JS_ToCString (ctx, Item) : 0;
-		unsigned nBit = pName != 0 ? CZgScanner::GetDetector (pName) : 0;
+		unsigned nBit = pName != 0 ? CGkScanner::GetDetector (pName) : 0;
 		if (nBit == 0)
 		{
 			JS_ThrowTypeError (ctx, "%s: unknown detector \"%s\" (this system has %s)",
@@ -1152,7 +1152,7 @@ SETTER (SetDetect)
 	return 0;
 }
 
-static void StartScan (TZgNode *pNode);
+static void StartScan (TGkNode *pNode);
 
 // Scanner "field": "center" (the middle of the camera's view, at full
 // detail) or "full" (all of it, less detailed). A running scanner restarts
@@ -1160,11 +1160,11 @@ static void StartScan (TZgNode *pNode);
 SETTER (SetField)
 {
 	const char *p = JS_IsString (v) ? JS_ToCString (ctx, v) : 0;
-	TZgCameraField Field = ZgFieldCenter;
+	TGkCameraField Field = GkFieldCenter;
 	boolean bOK = p != 0 && (strcmp (p, "center") == 0 || strcmp (p, "full") == 0);
 	if (bOK && strcmp (p, "full") == 0)
 	{
-		Field = ZgFieldFull;
+		Field = GkFieldFull;
 	}
 	JS_FreeCString (ctx, p);
 	if (!bOK)
@@ -1173,7 +1173,7 @@ SETTER (SetField)
 		return -1;
 	}
 
-	CZgScanner *pScanner = pNode->pScan->pScanner;
+	CGkScanner *pScanner = pNode->pScan->pScanner;
 	if (Field != pScanner->GetField ())
 	{
 		pScanner->SetField (Field);
@@ -1188,7 +1188,7 @@ SETTER (SetField)
 
 GETTER (GetField)
 {
-	return JS_NewString (ctx, pNode->pScan->pScanner->GetField () == ZgFieldFull ? "full" : "center");
+	return JS_NewString (ctx, pNode->pScan->pScanner->GetField () == GkFieldFull ? "full" : "center");
 }
 
 GETTER (GetDetect)
@@ -1196,11 +1196,11 @@ GETTER (GetDetect)
 	unsigned nDetectors = pNode->pScan->pScanner->GetDetectors ();
 	JSValue List = JS_NewArray (ctx);
 	unsigned nBit, n = 0;
-	for (unsigned i = 0; CZgScanner::GetDetectorName (i, &nBit) != 0; i++)
+	for (unsigned i = 0; CGkScanner::GetDetectorName (i, &nBit) != 0; i++)
 	{
 		if (nDetectors & nBit)
 		{
-			JS_SetPropertyUint32 (ctx, List, n++, JS_NewString (ctx, CZgScanner::GetDetectorName (i)));
+			JS_SetPropertyUint32 (ctx, List, n++, JS_NewString (ctx, CGkScanner::GetDetectorName (i)));
 		}
 	}
 	return List;
@@ -1578,9 +1578,9 @@ SETTER (SetData)
 // with no automatic ECC boost - what SeedQR and codex32 QR codes expect.
 // Drawn into lv_qrcode's 1-bit canvas with a 4-module quiet zone.
 
-static int QRRender (JSContext *ctx, TZgNode *pNode)
+static int QRRender (JSContext *ctx, TGkNode *pNode)
 {
-	TZgQR *pQR = pNode->pQR;
+	TGkQR *pQR = pNode->pQR;
 	lv_obj_t *pObj = pNode->pObj;
 
 	lv_draw_buf_t *pBuf = lv_canvas_get_draw_buf (pObj);
@@ -1778,7 +1778,7 @@ SETTER (SetImageSrc)
 
 SETTER (SetQRData)
 {
-	TZgQR *pQR = pNode->pQR;
+	TGkQR *pQR = pNode->pQR;
 	u8 *pCopy;
 	size_t nLength;
 	boolean bBinary = FALSE;
@@ -1818,7 +1818,7 @@ SETTER (SetQRData)
 	JS_FreeValue (ctx, Hold);
 
 	// commit only if it encodes: a rejected value leaves the widget as it was
-	TZgQR Old = *pQR;
+	TGkQR Old = *pQR;
 	pQR->pData = pCopy;
 	pQR->nLength = nLength;
 	pQR->bBinary = bBinary;
@@ -1837,7 +1837,7 @@ SETTER (SetQRData)
 }
 
 // Applies a change to the QR settings; reverts it if the result does not encode.
-static int QRChange (JSContext *ctx, TZgNode *pNode, const TZgQR &rOld)
+static int QRChange (JSContext *ctx, TGkNode *pNode, const TGkQR &rOld)
 {
 	if (QRRender (ctx, pNode) == 0)
 	{
@@ -1866,7 +1866,7 @@ SETTER (SetQRSize)
 		JS_ThrowRangeError (ctx, "%s: 21 to 1024 px expected", pProp);
 		return -1;
 	}
-	TZgQR Old = *pNode->pQR;
+	TGkQR Old = *pNode->pQR;
 	pNode->pQR->nSize = n;
 	lv_qrcode_set_size (OBJ, n);
 	return QRChange (ctx, pNode, Old);
@@ -1881,7 +1881,7 @@ SETTER (SetQRECC)
 	static const int Values[] = {qrcodegen_Ecc_LOW, qrcodegen_Ecc_MEDIUM, qrcodegen_Ecc_QUARTILE, qrcodegen_Ecc_HIGH};
 	int n;
 	if (ToEnum (ctx, v, pProp, Names, Values, 4, &n)) return -1;
-	TZgQR Old = *pNode->pQR;
+	TGkQR Old = *pNode->pQR;
 	pNode->pQR->nECC = n;
 	return QRChange (ctx, pNode, Old);
 }
@@ -1897,7 +1897,7 @@ SETTER (SetQRVersion)
 		JS_ThrowRangeError (ctx, "%s: 1 to 40 expected", pProp);
 		return -1;
 	}
-	TZgQR Old = *pNode->pQR;
+	TGkQR Old = *pNode->pQR;
 	pNode->pQR->nMinVersion = n;
 	return QRChange (ctx, pNode, Old);
 }
@@ -1981,7 +1981,7 @@ static const TProp Props[] =
 static const unsigned PropCount = sizeof Props / sizeof Props[0];
 
 // the "value" carried by change events
-static JSValue GetValueProp (JSContext *ctx, TZgNode *pNode)
+static JSValue GetValueProp (JSContext *ctx, TGkNode *pNode)
 {
 	switch (pNode->Type)
 	{
@@ -1996,7 +1996,7 @@ static JSValue GetValueProp (JSContext *ctx, TZgNode *pNode)
 	}
 }
 
-static int ApplyProp (JSContext *ctx, TZgNode *pNode, const char *pName, JSValueConst v)
+static int ApplyProp (JSContext *ctx, TGkNode *pNode, const char *pName, JSValueConst v)
 {
 	for (unsigned i = 0; i < EvCount; i++)
 	{
@@ -2027,7 +2027,7 @@ static int ApplyProp (JSContext *ctx, TZgNode *pNode, const char *pName, JSValue
 	return -1;
 }
 
-static int ApplyProps (JSContext *ctx, TZgNode *pNode, JSValueConst Obj)
+static int ApplyProps (JSContext *ctx, TGkNode *pNode, JSValueConst Obj)
 {
 	if (JS_IsUndefined (Obj) || JS_IsNull (Obj))
 	{
@@ -2077,7 +2077,7 @@ static int ApplyProps (JSContext *ctx, TZgNode *pNode, JSValueConst Obj)
 
 static JSValue js_widget_set (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	if (ApplyProps (ctx, pNode, argc > 0 ? argv[0] : JS_UNDEFINED))
@@ -2088,7 +2088,7 @@ static JSValue js_widget_set (JSContext *ctx, JSValueConst this_val, int argc, J
 	return JS_DupValue (ctx, this_val);	// chainable
 }
 
-static int EventSlot (JSContext *ctx, TZgNode *pNode, JSValueConst Name)
+static int EventSlot (JSContext *ctx, TGkNode *pNode, JSValueConst Name)
 {
 	const char *s = JS_ToCString (ctx, Name);
 	if (s != 0)
@@ -2110,7 +2110,7 @@ static int EventSlot (JSContext *ctx, TZgNode *pNode, JSValueConst Name)
 
 static JSValue js_widget_on (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	int nSlot = EventSlot (ctx, pNode, argc > 0 ? argv[0] : JS_UNDEFINED);
@@ -2128,7 +2128,7 @@ static JSValue js_widget_on (JSContext *ctx, JSValueConst this_val, int argc, JS
 
 static JSValue js_widget_off (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	int nSlot = EventSlot (ctx, pNode, argc > 0 ? argv[0] : JS_UNDEFINED);
@@ -2141,7 +2141,7 @@ static JSValue js_widget_off (JSContext *ctx, JSValueConst this_val, int argc, J
 
 static JSValue js_widget_focus (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	lv_group_t *pGroup = (lv_group_t *) lv_obj_get_group (pNode->pObj);
@@ -2153,7 +2153,7 @@ static JSValue js_widget_focus (JSContext *ctx, JSValueConst this_val, int argc,
 	return JS_UNDEFINED;
 }
 
-static void DeferDelete (JSContext *ctx, TZgNode *pNode)
+static void DeferDelete (JSContext *ctx, TGkNode *pNode)
 {
 	if (pNode->bDeleting)
 	{
@@ -2172,7 +2172,7 @@ static void DeferDelete (JSContext *ctx, TZgNode *pNode)
 
 static JSValue js_widget_delete (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val, FALSE);
+	TGkNode *pNode = GetNode (ctx, this_val, FALSE);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	if (pNode->pObj == 0 || pNode->bDeleting)
@@ -2192,7 +2192,7 @@ static JSValue js_widget_delete (JSContext *ctx, JSValueConst this_val, int argc
 
 static JSValue js_widget_clear (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	for (u32 i = 0; i < lv_obj_get_child_count (pNode->pObj); i++)
@@ -2200,7 +2200,7 @@ static JSValue js_widget_clear (JSContext *ctx, JSValueConst this_val, int argc,
 		lv_obj_t *pChild = lv_obj_get_child (pNode->pObj, i);
 		JSValue Child = Wrap (ctx, pChild, GuessType (pChild), JS_UNDEFINED);
 		if (JS_IsException (Child)) return Child;
-		DeferDelete (ctx, (TZgNode *) JS_GetOpaque (Child, s_WidgetClass));
+		DeferDelete (ctx, (TGkNode *) JS_GetOpaque (Child, s_WidgetClass));
 		JS_FreeValue (ctx, Child);
 	}
 
@@ -2209,7 +2209,7 @@ static JSValue js_widget_clear (JSContext *ctx, JSValueConst this_val, int argc,
 
 static JSValue js_widget_scroll_into_view (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	lv_obj_scroll_to_view_recursive (pNode->pObj, LV_ANIM_ON);
@@ -2219,7 +2219,7 @@ static JSValue js_widget_scroll_into_view (JSContext *ctx, JSValueConst this_val
 
 static JSValue js_widget_get_parent (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	lv_obj_t *pParent = lv_obj_get_parent (pNode->pObj);
@@ -2233,7 +2233,7 @@ static JSValue js_widget_get_parent (JSContext *ctx, JSValueConst this_val, int 
 
 static JSValue js_widget_get_children (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	JSValue Array = JS_NewArray (ctx);
@@ -2241,7 +2241,7 @@ static JSValue js_widget_get_children (JSContext *ctx, JSValueConst this_val, in
 	for (u32 i = 0; i < lv_obj_get_child_count (pNode->pObj); i++)
 	{
 		lv_obj_t *pChild = lv_obj_get_child (pNode->pObj, i);
-		TZgNode *pChildNode = (TZgNode *) lv_obj_get_user_data (pChild);
+		TGkNode *pChildNode = (TGkNode *) lv_obj_get_user_data (pChild);
 		if (pChildNode != 0 && pChildNode->bDeleting)
 		{
 			continue;
@@ -2254,7 +2254,7 @@ static JSValue js_widget_get_children (JSContext *ctx, JSValueConst this_val, in
 
 static JSValue js_widget_get_alive (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val, FALSE);
+	TGkNode *pNode = GetNode (ctx, this_val, FALSE);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	return JS_NewBool (ctx, pNode->pObj != 0 && !pNode->bDeleting);
@@ -2262,7 +2262,7 @@ static JSValue js_widget_get_alive (JSContext *ctx, JSValueConst this_val, int a
 
 static JSValue js_widget_get_type (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val, FALSE);
+	TGkNode *pNode = GetNode (ctx, this_val, FALSE);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	return JS_NewString (ctx, TypeNames[pNode->Type]);
@@ -2270,7 +2270,7 @@ static JSValue js_widget_get_type (JSContext *ctx, JSValueConst this_val, int ar
 
 // Table methods
 
-static int CellArgs (JSContext *ctx, TZgNode *pNode, int argc, JSValueConst *argv, uint32_t *pRow, uint32_t *pCol)
+static int CellArgs (JSContext *ctx, TGkNode *pNode, int argc, JSValueConst *argv, uint32_t *pRow, uint32_t *pCol)
 {
 	if (pNode->Type != WTable)
 	{
@@ -2287,7 +2287,7 @@ static int CellArgs (JSContext *ctx, TZgNode *pNode, int argc, JSValueConst *arg
 
 static JSValue js_table_set_cell (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	uint32_t r, c;
 	if (pNode == 0 || CellArgs (ctx, pNode, argc, argv, &r, &c)) return JS_EXCEPTION;
 
@@ -2301,7 +2301,7 @@ static JSValue js_table_set_cell (JSContext *ctx, JSValueConst this_val, int arg
 
 static JSValue js_table_get_cell (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	uint32_t r, c;
 	if (pNode == 0 || CellArgs (ctx, pNode, argc, argv, &r, &c)) return JS_EXCEPTION;
 
@@ -2316,7 +2316,7 @@ static JSValue js_table_get_cell (JSContext *ctx, JSValueConst this_val, int arg
 
 static JSValue js_table_set_column_width (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	uint32_t c;
@@ -2333,7 +2333,7 @@ static JSValue js_table_set_column_width (JSContext *ctx, JSValueConst this_val,
 // TabView method: addTab(title) -> Container (the tab's page)
 static JSValue js_tabview_add_tab (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 	if (pNode->Type != WTabView) return JS_ThrowTypeError (ctx, "not a TabView");
 
@@ -2349,7 +2349,7 @@ static JSValue js_tabview_add_tab (JSContext *ctx, JSValueConst this_val, int ar
 
 static JSValue js_prop_get (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	if (magic >= 1000)
@@ -2362,7 +2362,7 @@ static JSValue js_prop_get (JSContext *ctx, JSValueConst this_val, int argc, JSV
 
 static JSValue js_prop_set (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 
 	JSValueConst v = argc > 0 ? argv[0] : JS_UNDEFINED;
@@ -2401,11 +2401,11 @@ static void DefineGetter (JSContext *ctx, JSValueConst Obj, const char *pName, J
 
 // --- QR scanner -------------------------------------------------------------
 
-// Calls the handler of a zerogap event (EvCode, EvError) with an event
+// Calls the handler of a GapKeep event (EvCode, EvError) with an event
 // object; Ev is consumed.
-static void FireEvent (TZgNode *pNode, unsigned nSlot, JSValue Ev)
+static void FireEvent (TGkNode *pNode, unsigned nSlot, JSValue Ev)
 {
-	TZgApp *pApp = pNode->pApp;
+	TGkApp *pApp = pNode->pApp;
 	JSContext *ctx = pApp->pContext;
 	if (   JS_IsUndefined (pNode->Handlers[nSlot]) || pApp->pUI == 0 || pApp->pUI->bStopping
 	    || pNode->pObj == 0 || pNode->bDeleting)
@@ -2469,8 +2469,8 @@ static JSValue NewBytes (JSContext *ctx, const u8 *pData, unsigned nLength)
 
 static void ScanTimerCallback (lv_timer_t *pTimer)
 {
-	TZgNode *pNode = (TZgNode *) lv_timer_get_user_data (pTimer);
-	TZgScan *pScan = pNode->pScan;
+	TGkNode *pNode = (TGkNode *) lv_timer_get_user_data (pTimer);
+	TGkScan *pScan = pNode->pScan;
 	JSContext *ctx = pNode->pApp->pContext;
 
 	if (pScan->bErrorPending)
@@ -2487,7 +2487,7 @@ static void ScanTimerCallback (lv_timer_t *pTimer)
 	{
 		return;
 	}
-	if (nPoll & (CZgScanner::PollFrame | CZgScanner::PollError))
+	if (nPoll & (CGkScanner::PollFrame | CGkScanner::PollError))
 	{
 		lv_obj_invalidate (pNode->pObj);
 	}
@@ -2496,25 +2496,25 @@ static void ScanTimerCallback (lv_timer_t *pTimer)
 	unsigned nKind;
 	unsigned nLength;
 	const u8 *pData;
-	while (   (nPoll & CZgScanner::PollDetect) && pNode->pObj != 0 && pNode->pScan == pScan
+	while (   (nPoll & CGkScanner::PollDetect) && pNode->pObj != 0 && pNode->pScan == pScan
 	       && (nKind = pScan->pScanner->GetDetection (&pData, &nLength)) != 0)
 	{
 		JSValue Ev = JS_NewObject (ctx);
-		JS_SetPropertyStr (ctx, Ev, "kind", JS_NewString (ctx, nKind == ZG_DETECT_QR ? "qr" : "qr-color"));
+		JS_SetPropertyStr (ctx, Ev, "kind", JS_NewString (ctx, nKind == GK_DETECT_QR ? "qr" : "qr-color"));
 		JS_SetPropertyStr (ctx, Ev, "bytes", NewBytes (ctx, pData, nLength));
 		JS_SetPropertyStr (ctx, Ev, "text", Utf8OrNull (ctx, pData, nLength));
-		if (nKind == ZG_DETECT_QR_COLOR)
+		if (nKind == GK_DETECT_QR_COLOR)
 		{
 			const u8 *pColour;
 			unsigned nColour;
-			TZgColourStatus Status = pScan->pScanner->GetColour (&pColour, &nColour);
+			TGkColourStatus Status = pScan->pScanner->GetColour (&pColour, &nColour);
 			JS_SetPropertyStr (ctx, Ev, "status", JS_NewString (ctx,
-				Status == ZgColourOK ? "ok" : Status == ZgColourPlain ? "plain" : "unreadable"));
+				Status == GkColourOK ? "ok" : Status == GkColourPlain ? "plain" : "unreadable"));
 			JS_SetPropertyStr (ctx, Ev, "colour", pColour != 0 ? NewBytes (ctx, pColour, nColour) : JS_NULL);
 		}
 		FireEvent (pNode, EvDetect, Ev);
 	}
-	if ((nPoll & CZgScanner::PollError) && pNode->pScan != 0)
+	if ((nPoll & CGkScanner::PollError) && pNode->pScan != 0)
 	{
 		JSValue Ev = JS_NewObject (ctx);
 		JS_SetPropertyStr (ctx, Ev, "reason", JS_NewString (ctx, pScan->pScanner->GetError ()));
@@ -2522,18 +2522,18 @@ static void ScanTimerCallback (lv_timer_t *pTimer)
 	}
 }
 
-static void CreateScan (TZgNode *pNode)
+static void CreateScan (TGkNode *pNode)
 {
-	TZgScan *pScan = new TZgScan;
+	TGkScan *pScan = new TGkScan;
 	memset (pScan, 0, sizeof *pScan);
-	pScan->pScanner = new CZgScanner;
+	pScan->pScanner = new CGkScanner;
 	pScan->pTimer = lv_timer_create (ScanTimerCallback, 30, pNode);
 	pNode->pScan = pScan;
 }
 
-static void StartScan (TZgNode *pNode)
+static void StartScan (TGkNode *pNode)
 {
-	TZgScan *pScan = pNode->pScan;
+	TGkScan *pScan = pNode->pScan;
 	if (!pScan->pScanner->Start ())
 	{
 		pScan->bErrorPending = TRUE;	// reported from the timer, not from inside new/start()
@@ -2541,9 +2541,9 @@ static void StartScan (TZgNode *pNode)
 	lv_obj_invalidate (pNode->pObj);
 }
 
-static void FreeScan (TZgNode *pNode)
+static void FreeScan (TGkNode *pNode)
 {
-	TZgScan *pScan = pNode->pScan;
+	TGkScan *pScan = pNode->pScan;
 	if (pScan == 0)
 	{
 		return;
@@ -2564,12 +2564,12 @@ static void FreeScan (TZgNode *pNode)
 static void ScanDrawCallback (lv_event_t *e)
 {
 	lv_obj_t *pObj = (lv_obj_t *) lv_event_get_current_target (e);
-	TZgNode *pNode = (TZgNode *) lv_obj_get_user_data (pObj);
+	TGkNode *pNode = (TGkNode *) lv_obj_get_user_data (pObj);
 	if (pNode == 0 || pNode->pScan == 0)
 	{
 		return;
 	}
-	TZgScan *pScan = pNode->pScan;
+	TGkScan *pScan = pNode->pScan;
 	lv_layer_t *pLayer = lv_event_get_layer (e);
 
 	lv_area_t Area;
@@ -2580,7 +2580,7 @@ static void ScanDrawCallback (lv_event_t *e)
 		return;
 	}
 
-	CZgScanner *pScanner = pScan->pScanner;
+	CGkScanner *pScanner = pScan->pScanner;
 	const char *pText = 0;
 	CString Status;
 	if (!pScanner->IsScanning ())
@@ -2643,9 +2643,9 @@ static void ScanDrawCallback (lv_event_t *e)
 	lv_draw_label (pLayer, &Label, &TextArea);
 }
 
-static TZgNode *GetScanner (JSContext *ctx, JSValueConst this_val)
+static TGkNode *GetScanner (JSContext *ctx, JSValueConst this_val)
 {
-	TZgNode *pNode = GetNode (ctx, this_val);
+	TGkNode *pNode = GetNode (ctx, this_val);
 	if (pNode != 0 && pNode->pScan == 0)
 	{
 		JS_ThrowTypeError (ctx, "not a Scanner");
@@ -2656,7 +2656,7 @@ static TZgNode *GetScanner (JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_scanner_start (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetScanner (ctx, this_val);
+	TGkNode *pNode = GetScanner (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 	if (!pNode->pScan->pScanner->IsScanning ())
 	{
@@ -2667,7 +2667,7 @@ static JSValue js_scanner_start (JSContext *ctx, JSValueConst this_val, int argc
 
 static JSValue js_scanner_stop (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetScanner (ctx, this_val);
+	TGkNode *pNode = GetScanner (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 	pNode->pScan->bErrorPending = FALSE;
 	pNode->pScan->pScanner->Stop ();
@@ -2677,7 +2677,7 @@ static JSValue js_scanner_stop (JSContext *ctx, JSValueConst this_val, int argc,
 
 static JSValue js_scanner_get_scanning (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgNode *pNode = GetScanner (ctx, this_val);
+	TGkNode *pNode = GetScanner (ctx, this_val);
 	if (pNode == 0) return JS_EXCEPTION;
 	return JS_NewBool (ctx, pNode->pScan->pScanner->IsScanning ());
 }
@@ -2746,7 +2746,7 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent, boolean bMar
 // new ui.Label([parent], [props])
 static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv, int magic)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	TWidgetType Type = (TWidgetType) magic;
 
 	if (JS_IsUndefined (new_target))
@@ -2760,7 +2760,7 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 
 	if (argc > 0 && JS_GetOpaque (argv[0], s_WidgetClass) != 0)
 	{
-		TZgNode *pParentNode = GetNode (ctx, argv[0]);
+		TGkNode *pParentNode = GetNode (ctx, argv[0]);
 		if (pParentNode == 0) return JS_EXCEPTION;
 		pParent = pParentNode->pObj;
 		nArg = 1;
@@ -2774,7 +2774,7 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 		Props = argv[nArg];
 	}
 
-	if (Type == WScanner && !(pApp->pBundle->permissions & ZG_PERM_CAMERA))
+	if (Type == WScanner && !(pApp->pBundle->permissions & GK_PERM_CAMERA))
 	{
 		return JS_ThrowTypeError (ctx, "ui.Scanner needs \"permissions\": [\"camera\"] in manifest.json");
 	}
@@ -2801,7 +2801,7 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 		return Obj;
 	}
 
-	TZgNode *pNode = (TZgNode *) JS_GetOpaque (Obj, s_WidgetClass);
+	TGkNode *pNode = (TGkNode *) JS_GetOpaque (Obj, s_WidgetClass);
 	pNode->bMarkup = bMarkup;
 	if (Type == WScanner)
 	{
@@ -2834,7 +2834,7 @@ static JSValue js_widget_base_ctor (JSContext *ctx, JSValueConst new_target, int
 
 // --- alerts -----------------------------------------------------------------
 
-static void AlertClose (TZgAlert *pAlert, int nResult)
+static void AlertClose (TGkAlert *pAlert, int nResult)
 {
 	if (pAlert->bClosing)
 	{
@@ -2844,12 +2844,12 @@ static void AlertClose (TZgAlert *pAlert, int nResult)
 	pAlert->bClosing = TRUE;
 	pAlert->nResult = nResult;
 	lv_obj_add_flag (pAlert->pOverlay, LV_OBJ_FLAG_HIDDEN);
-	// resolved and deleted in ZgUIProcessDeferred, outside LVGL event processing
+	// resolved and deleted in GkUIProcessDeferred, outside LVGL event processing
 }
 
 static void AlertButtonEvent (lv_event_t *e)
 {
-	TZgAlert *pAlert = (TZgAlert *) lv_event_get_user_data (e);
+	TGkAlert *pAlert = (TGkAlert *) lv_event_get_user_data (e);
 	lv_obj_t *pButton = (lv_obj_t *) lv_event_get_target (e);
 
 	if (lv_event_get_code (e) == LV_EVENT_KEY)
@@ -2867,8 +2867,8 @@ static void AlertButtonEvent (lv_event_t *e)
 // ui.alert(message, {title, buttons}) -> Promise<index> (-1: Escape)
 static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
-	TZgUIState *pUI = pApp->pUI;
+	TGkApp *pApp = CAppHost::GetApp (ctx);
+	TGkUIState *pUI = pApp->pUI;
 
 	const char *pMessage = ToString (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "alert");
 	if (pMessage == 0) return JS_EXCEPTION;
@@ -2877,7 +2877,7 @@ static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSV
 	JSValue Title = JS_IsObject (Options) ? JS_GetPropertyStr (ctx, Options, "title") : JS_UNDEFINED;
 	JSValue Buttons = JS_IsObject (Options) ? JS_GetPropertyStr (ctx, Options, "buttons") : JS_UNDEFINED;
 
-	TZgAlert *pAlert = new TZgAlert;
+	TGkAlert *pAlert = new TGkAlert;
 	memset (pAlert, 0, sizeof *pAlert);
 	pAlert->pApp = pApp;
 
@@ -2909,7 +2909,7 @@ static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSV
 		const char *s = JS_ToCString (ctx, Title);
 		lv_obj_t *pLabel = lv_label_create (pPanel);
 		lv_label_set_text (pLabel, s ? s : "");
-		lv_obj_set_style_text_font (pLabel, &zg_montserrat_20, 0);
+		lv_obj_set_style_text_font (pLabel, &gk_montserrat_20, 0);
 		if (s) JS_FreeCString (ctx, s);
 	}
 
@@ -2929,7 +2929,7 @@ static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSV
 
 	// own focus group, so Tab stays inside the alert
 	pAlert->pGroup = lv_group_create ();
-	lv_group_set_focus_cb (pAlert->pGroup, ZgGroupFocusCallback);
+	lv_group_set_focus_cb (pAlert->pGroup, GkGroupFocusCallback);
 	pAlert->pPrevGroup = CAppHost::Get ()->GetKeyboard ()->GetGroup ();
 	lv_group_set_default (0);
 
@@ -2970,9 +2970,9 @@ static JSValue js_ui_alert (JSContext *ctx, JSValueConst this_val, int argc, JSV
 	return Promise;
 }
 
-static void AlertFree (TZgAlert *pAlert, boolean bResolve)
+static void AlertFree (TGkAlert *pAlert, boolean bResolve)
 {
-	TZgApp *pApp = pAlert->pApp;
+	TGkApp *pApp = pAlert->pApp;
 	JSContext *ctx = pApp->pContext;
 
 	if (pApp->pScreen != 0)
@@ -3022,7 +3022,7 @@ static JSValue js_ui_escape_markup (JSContext *ctx, JSValueConst this_val, int a
 
 static JSValue js_ui_on_key (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	JSValueConst Func = argc > 0 ? argv[0] : JS_UNDEFINED;
 
 	if (!JS_IsFunction (ctx, Func) && !JS_IsNull (Func) && !JS_IsUndefined (Func))
@@ -3036,7 +3036,7 @@ static JSValue js_ui_on_key (JSContext *ctx, JSValueConst this_val, int argc, JS
 	return JS_UNDEFINED;
 }
 
-// zerogap's theme = LVGL's default theme plus a clearly visible focus ring
+// GapKeep's theme = LVGL's default theme plus a clearly visible focus ring
 // in the secondary color, applied on top as a child theme.
 static lv_theme_t s_FocusTheme;
 
@@ -3048,7 +3048,7 @@ static void FocusThemeApply (lv_theme_t *pTheme, lv_obj_t *pObj)
 static void ApplyTheme (boolean bDark, lv_color_t Primary, lv_color_t Secondary)
 {
 	lv_display_t *pDisplay = lv_display_get_default ();
-	lv_theme_t *pBase = lv_theme_default_init (pDisplay, Primary, Secondary, bDark, &zg_montserrat_16);
+	lv_theme_t *pBase = lv_theme_default_init (pDisplay, Primary, Secondary, bDark, &gk_montserrat_16);
 
 	static boolean bStyleInit = FALSE;
 	if (!bStyleInit)
@@ -3068,7 +3068,7 @@ static void ApplyTheme (boolean bDark, lv_color_t Primary, lv_color_t Secondary)
 	lv_display_set_theme (pDisplay, &s_FocusTheme);
 }
 
-void ZgGroupFocusCallback (lv_group_t *pGroup)
+void GkGroupFocusCallback (lv_group_t *pGroup)
 {
 	lv_obj_t *pObj = lv_group_get_focused (pGroup);
 	if (pObj != 0)
@@ -3077,7 +3077,7 @@ void ZgGroupFocusCallback (lv_group_t *pGroup)
 	}
 }
 
-void ZgUIApplyDefaultTheme (void)
+void GkUIApplyDefaultTheme (void)
 {
 	ApplyTheme (TRUE, lv_palette_main (LV_PALETTE_TEAL), lv_palette_main (LV_PALETTE_AMBER));
 }
@@ -3147,7 +3147,7 @@ static const struct { const char *pName; const char *pSymbol; } Symbols[] =
 	{"new-line", LV_SYMBOL_NEW_LINE},
 };
 
-const char *ZgSymbolByName (const char *pName)
+const char *GkSymbolByName (const char *pName)
 {
 	for (unsigned i = 0; i < sizeof Symbols / sizeof Symbols[0]; i++)
 	{
@@ -3170,7 +3170,7 @@ static const char *ModuleExports[] =
 
 static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	JSRuntime *rt = JS_GetRuntime (ctx);
 
 	if (s_WidgetClass == 0)
@@ -3186,7 +3186,7 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 		JS_NewClass (rt, s_WidgetClass, &Def);
 	}
 
-	TZgUIState *pUI = new TZgUIState;
+	TGkUIState *pUI = new TGkUIState;
 	memset (pUI, 0, sizeof *pUI);
 	pApp->pUI = pUI;
 
@@ -3303,7 +3303,7 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 	return 0;
 }
 
-JSModuleDef *ZgInitUIModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitUIModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, UIModuleInit);
 	if (m == 0)
@@ -3321,7 +3321,7 @@ JSModuleDef *ZgInitUIModule (JSContext *ctx, const char *pName)
 
 // --- host hooks -------------------------------------------------------------
 
-boolean ZgUIDispatchKey (TZgApp *pApp, const TZgKey &rKey)
+boolean GkUIDispatchKey (TGkApp *pApp, const TGkKey &rKey)
 {
 	if (   JS_IsUndefined (pApp->KeyHandler)
 	    || (pApp->pUI != 0 && pApp->pUI->pAlerts != 0))	// alerts get keys first
@@ -3332,9 +3332,9 @@ boolean ZgUIDispatchKey (TZgApp *pApp, const TZgKey &rKey)
 	JSContext *ctx = pApp->pContext;
 	JSValue Ev = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Ev, "key", JS_NewString (ctx, rKey.Name));
-	JS_SetPropertyStr (ctx, Ev, "shift", JS_NewBool (ctx, rKey.nMods & ZG_MOD_SHIFT));
-	JS_SetPropertyStr (ctx, Ev, "ctrl", JS_NewBool (ctx, rKey.nMods & ZG_MOD_CTRL));
-	JS_SetPropertyStr (ctx, Ev, "alt", JS_NewBool (ctx, rKey.nMods & ZG_MOD_ALT));
+	JS_SetPropertyStr (ctx, Ev, "shift", JS_NewBool (ctx, rKey.nMods & GK_MOD_SHIFT));
+	JS_SetPropertyStr (ctx, Ev, "ctrl", JS_NewBool (ctx, rKey.nMods & GK_MOD_CTRL));
+	JS_SetPropertyStr (ctx, Ev, "alt", JS_NewBool (ctx, rKey.nMods & GK_MOD_ALT));
 	JS_SetPropertyStr (ctx, Ev, "repeat", JS_NewBool (ctx, rKey.bRepeat));
 
 	JSValue Result = CAppHost::Get ()->Call (pApp->KeyHandler, JS_UNDEFINED, 1, &Ev);
@@ -3345,13 +3345,13 @@ boolean ZgUIDispatchKey (TZgApp *pApp, const TZgKey &rKey)
 	return bConsumed;
 }
 
-void ZgUIProcessDeferred (TZgApp *pApp)
+void GkUIProcessDeferred (TGkApp *pApp)
 {
 	JSContext *ctx = pApp->pContext;
 
 	while (pApp->pDeferredDelete != 0)
 	{
-		TZgNode *pNode = pApp->pDeferredDelete;
+		TGkNode *pNode = pApp->pDeferredDelete;
 		pApp->pDeferredDelete = pNode->pNextDeferred;
 
 		if (pNode->pObj != 0)
@@ -3364,16 +3364,16 @@ void ZgUIProcessDeferred (TZgApp *pApp)
 		JS_FreeValue (ctx, Ref);		// may free the node
 	}
 
-	TZgUIState *pUI = pApp->pUI;
+	TGkUIState *pUI = pApp->pUI;
 	if (pUI == 0)
 	{
 		return;
 	}
 
 	// close alerts that were answered, innermost first
-	for (TZgAlert **pp = &pUI->pAlerts; *pp != 0; )
+	for (TGkAlert **pp = &pUI->pAlerts; *pp != 0; )
 	{
-		TZgAlert *pAlert = *pp;
+		TGkAlert *pAlert = *pp;
 		if (!pAlert->bClosing)
 		{
 			pp = &pAlert->pNext;
@@ -3387,14 +3387,14 @@ void ZgUIProcessDeferred (TZgApp *pApp)
 	}
 }
 
-void ZgUIAppStopping (TZgApp *pApp)
+void GkUIAppStopping (TGkApp *pApp)
 {
 	JSContext *ctx = pApp->pContext;
 
 	JS_FreeValue (ctx, pApp->KeyHandler);
 	pApp->KeyHandler = JS_UNDEFINED;
 
-	TZgUIState *pUI = pApp->pUI;
+	TGkUIState *pUI = pApp->pUI;
 	if (pUI == 0)
 	{
 		return;
@@ -3404,7 +3404,7 @@ void ZgUIAppStopping (TZgApp *pApp)
 
 	while (pUI->pAlerts != 0)
 	{
-		TZgAlert *pAlert = pUI->pAlerts;
+		TGkAlert *pAlert = pUI->pAlerts;
 		pUI->pAlerts = pAlert->pNext;
 		AlertFree (pAlert, FALSE);
 	}
@@ -3416,10 +3416,10 @@ void ZgUIAppStopping (TZgApp *pApp)
 	JS_FreeValue (ctx, pUI->BaseProto);
 
 	// pUI itself stays until the screen is deleted (NodeEventCallback checks
-	// bStopping); the host frees it after the screen with ZgUIFree().
+	// bStopping); the host frees it after the screen with GkUIFree().
 }
 
-void ZgUIFree (TZgApp *pApp)
+void GkUIFree (TGkApp *pApp)
 {
 	delete pApp->pUI;
 	pApp->pUI = 0;

@@ -2,8 +2,8 @@
 // a browser sends for typing, dead keys, AltGr, input methods, shortcuts and
 // paste, as plain objects. Two parts:
 //
-//  1. the decisions: which event types what, never twice, with Zerogap's own
-//     keyDown()/type() (sim/web/zerogap.js) over a recording stub;
+//  1. the decisions: which event types what, never twice, with Gapkeep's own
+//     keyDown()/type() (sim/web/gapkeep.js) over a recording stub;
 //  2. end to end, if "make -C sim web TEST=1" was run: the simulator in
 //     WebAssembly, tests/apps/typetest logging what reached a TextArea.
 //
@@ -15,7 +15,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { TextInput, MOD_CTRL, MOD_ALT, MOD_SHIFT } from "../../sim/web/textinput.js";
-import { Zerogap } from "../../sim/web/zerogap.js";
+import { Gapkeep } from "../../sim/web/gapkeep.js";
 import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -28,16 +28,16 @@ function check (name, got, want) {
 
 // --- 1. the decisions --------------------------------------------------------
 
-// Zerogap's methods on a stub: what reaches zg_sim_key_down_dom
+// Gapkeep's methods on a stub: what reaches gk_sim_key_down_dom
 function stubMachine () {
-  const z = Object.create (Zerogap.prototype);
+  const z = Object.create (Gapkeep.prototype);
   z.sent = [];
   z.halted = false;
   z.m = {
     stringToNewUTF8: (s) => s,
     _free: () => {},
     // as sim/src/sim.cpp's: specials by name, one ASCII or Latin-1 character
-    _zg_sim_key_down_dom: (key, mods) => {
+    _gk_sim_key_down_dom: (key, mods) => {
       const special = ["Enter", "Tab", "Escape", "Backspace", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
         "Home", "End", "Delete", "Insert", "PageUp", "PageDown", "Meta", "OS", " "].includes (key) || /^F[1-9]$/.test (key);
       const c = [...key].length === 1 ? key.codePointAt (0) : -1;
@@ -45,7 +45,7 @@ function stubMachine () {
       z.sent.push (mods ? `${key}+${mods}` : key);
       return 0;
     },
-    _zg_sim_key_up: () => {},
+    _gk_sim_key_up: () => {},
   };
   return z;
 }
@@ -150,7 +150,7 @@ const key = (k, more = {}) => ({ key: k, code: "Key" + k, repeat: false, shiftKe
   check ("pasted", z.sent, ["m", "s", "1", "2", " ", "ç", "Enter", "o", "k"]);
   check ("paste logged", logs, ["pasted 9 characters"]);
   keys.paste ("€uro");
-  check ("paste of a dropped character", logs[1], "pasted 3 of 4 characters (zerogap types ASCII and Latin-1 only)");
+  check ("paste of a dropped character", logs[1], "pasted 3 of 4 characters (GapKeep types ASCII and Latin-1 only)");
 }
 {
   // an input method's word, and an emoji: composition gives the text
@@ -165,14 +165,14 @@ const key = (k, more = {}) => ({ key: k, code: "Key" + k, repeat: false, shiftKe
 
 // --- 2. end to end ---------------------------------------------------------------
 
-const build = fileURLToPath (new URL ("../../sim/build/web/zgsim-test.js", import.meta.url));
+const build = fileURLToPath (new URL ("../../sim/build/web/gksim-test.js", import.meta.url));
 if (!existsSync (build)) {
-  console.log ("SKIP end to end: no sim/build/web/zgsim-test.js (make -C sim web TEST=1)");
+  console.log ("SKIP end to end: no sim/build/web/gksim-test.js (make -C sim web TEST=1)");
 } else {
   const log = [];
-  const zg = await Zerogap.create ({ moduleUrl: pathToFileURL (build).href, onLog: (line) => log.push (line) });
-  zg.boot (640, 480);
-  zg.start ();
+  const gk = await Gapkeep.create ({ moduleUrl: pathToFileURL (build).href, onLog: (line) => log.push (line) });
+  gk.boot (640, 480);
+  gk.start ();
   const until = async (re, ms = 10000) => {
     for (const end = Date.now () + ms; Date.now () < end; await new Promise ((r) => setTimeout (r, 20))) {
       const line = log.find ((l) => re.test (l));
@@ -181,9 +181,9 @@ if (!existsSync (build)) {
     return null;
   };
   check ("launcher", !!(await until (/launcher ready/)), true);
-  zg.launch ("typetest");
+  gk.launch ("typetest");
   check ("typetest", !!(await until (/typetest ready/)), true);
-  const keys = new TextInput (zg, { warn: () => {}, log: () => {} });
+  const keys = new TextInput (gk, { warn: () => {}, log: () => {} });
   const typed = async (want) => {
     keys.keydown (key ("Enter"));
     keys.keyup (key ("Enter"));
@@ -200,7 +200,7 @@ if (!existsSync (build)) {
   keys.paste ("á ã\n");
   await new Promise ((r) => setTimeout (r, 500));
   check ("pasted á ã", await typed ("U+00E1 U+0020 U+00E3"), true);
-  zg.stop ();
+  gk.stop ();
 }
 
 console.log (`textinput: ${passed} passed, ${failed} failed`);

@@ -16,11 +16,11 @@ ROOT=$(pwd)
 [ -x toolchain/arm-none-eabi/bin/arm-none-eabi-gcc ] || {
 	echo "check_reproducible: run tools/toolchain.sh first" >&2; exit 1; }
 ARGS=${*:-pi}
-WORK=$(mktemp -d -t zerogap-repro-XXXXXX)
+WORK=$(mktemp -d -t gapkeep-repro-XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
 for n in 1 2; do
-	dir=$WORK/build$n/zerogap-$n		# different paths on purpose
+	dir=$WORK/build$n/gapkeep-$n		# different paths on purpose
 	git clone -q "$ROOT" "$dir"
 	( cd "$dir"			# submodules from the local copies: no network
 	  git config submodule.circle.url "$ROOT/circle"

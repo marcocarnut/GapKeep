@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Extract dice39's codex32 recombiner logic from codex32_recover.html into ES
-modules for the zerogap codex32 app (apps/codex32/vendor/).
+modules for the GapKeep codex32 app (apps/codex32/vendor/).
 
 The sibling of extract_dice39.py, and built on it: the code is copied byte
 for byte, each module gets a header naming the source file and its SHA-256,
@@ -63,8 +63,8 @@ def main():
 
     # 3. from the page's own script: the strings (en and pt), entropy to
     # words, and the SeedQR digits (Compact SeedQR is the seed bytes as they
-    # are: zg:ui takes a Uint8Array). The DOM code around them is
-    # rewritten for zg:ui in the app.
+    # are: gk:ui takes a Uint8Array). The DOM code around them is
+    # rewritten for gk:ui in the app.
     line, text = block_starting_with(
         blocks, '/* ==================================================================\n   i18n')
     names = ['STRINGS', 'RECOVER_SIZES', 'wordsFromEntropy', 'hex',

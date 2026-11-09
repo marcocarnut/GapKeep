@@ -4,8 +4,8 @@
 // input. Built and run by tools/fuzz_qr.sh.
 //
 // Each round builds a greyscale image of random size and feeds it to
-// ZgDecodeQR, which must neither crash nor return a payload longer than
-// ZG_QR_MAX_PAYLOAD, nor stop: zxing-cpp is built without exceptions, and
+// GkDecodeQR, which must neither crash nor return a payload longer than
+// GK_QR_MAX_PAYLOAD, nor stop: zxing-cpp is built without exceptions, and
 // what it would throw is a fatal error (ZXing::Fatal), so a crafted code
 // reaching one would stop the kernel. Here it aborts with a report, as do
 // assertions and the C++ library's own checks. The images are:
@@ -29,7 +29,7 @@
 // or its payload decoder on bytes (QRCode::DecodeBitStream), for every
 // symbol type and version, as fast checks of the same code.
 //
-// With clang, -DZG_LIBFUZZER builds a libFuzzer target instead: the input
+// With clang, -DGK_LIBFUZZER builds a libFuzzer target instead: the input
 // bytes are the image (two bytes of width, two of height, then pixels).
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -58,7 +58,7 @@ u64 CTimer::GetClockTicks64 (void) { return 0; }
 extern "C" void lv_log_add (lv_log_level_t, const char *, int, const char *, const char *, ...) {}
 extern "C" void halt (void) { abort (); }
 
-extern "C" void zg_fatal (const char *pMessage)
+extern "C" void gk_fatal (const char *pMessage)
 {
 	fprintf (stderr, "fuzz_qr: fatal error: %s\n", pMessage);
 	abort ();
@@ -74,8 +74,8 @@ DecoderResult DecodeBitStream (ByteArray &&bytes, const Version &version, ErrorC
 
 static void Decode (const u8 *pImage, unsigned w, unsigned h, unsigned *pDecoded = 0)
 {
-	TZgQRCode Codes[4];
-	int n = ZgDecodeQR (pImage, w, h, Codes, 4);
+	TGkQRCode Codes[4];
+	int n = GkDecodeQR (pImage, w, h, Codes, 4);
 	if (n < 0)
 	{
 		fprintf (stderr, "fuzz_qr: built without the decoder\n");
@@ -83,7 +83,7 @@ static void Decode (const u8 *pImage, unsigned w, unsigned h, unsigned *pDecoded
 	}
 	for (int i = 0; i < n; i++)
 	{
-		if (Codes[i].nLength > ZG_QR_MAX_PAYLOAD)
+		if (Codes[i].nLength > GK_QR_MAX_PAYLOAD)
 		{
 			fprintf (stderr, "fuzz_qr: payload of %u bytes\n", Codes[i].nLength);
 			abort ();
@@ -100,7 +100,7 @@ static void Decode (const u8 *pImage, unsigned w, unsigned h, unsigned *pDecoded
 	}
 }
 
-#ifdef ZG_LIBFUZZER
+#ifdef GK_LIBFUZZER
 
 extern "C" int LLVMFuzzerTestOneInput (const uint8_t *p, size_t n)
 {
@@ -391,7 +391,7 @@ int main (int argc, char **argv)
 	s_nRandom = argc > 2 ? atoi (argv[2]) : 1;
 	if (s_nRandom == 0) s_nRandom = 1;
 
-	CZgSynthCamera Camera;
+	CGkSynthCamera Camera;
 	static u8 QR[qrcodegen_BUFFER_LEN_MAX];
 	unsigned nDecoded = 0, nCrafted = 0, nCraftedRead = 0, nCraftedDecoded = 0, nDirect = 0, nDirectValid = 0;
 	for (unsigned r = 0; r < nRounds; r++)
@@ -446,7 +446,7 @@ int main (int argc, char **argv)
 		if (nKind == 1 || nKind == 3)
 		{
 			// a real code, damaged
-			unsigned nLen = 1 + Below (Below (4) ? 200 : CZgSynthCamera::MaxQRBytes);
+			unsigned nLen = 1 + Below (Below (4) ? 200 : CGkSynthCamera::MaxQRBytes);
 			u8 *pData = (u8 *) malloc (nLen);
 			for (unsigned i = 0; i < nLen; i++) pData[i] = (u8) Random ();
 			Camera.SetQR (pData, nLen);

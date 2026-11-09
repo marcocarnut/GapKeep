@@ -40,12 +40,12 @@ static void Wipe (volatile u8 *p, size_t n)
 
 static const size_t HeaderSize = 8;	// keeps 8-byte alignment
 
-static size_t ZgUsableSize (const void *ptr)
+static size_t GkUsableSize (const void *ptr)
 {
 	return ptr ? *(const size_t *) ((const u8 *) ptr - HeaderSize) : 0;
 }
 
-static void *ZgMalloc (JSMallocState *s, size_t size)
+static void *GkMalloc (JSMallocState *s, size_t size)
 {
 	if (s->malloc_size + size > s->malloc_limit)
 	{
@@ -65,54 +65,54 @@ static void *ZgMalloc (JSMallocState *s, size_t size)
 	return p + HeaderSize;
 }
 
-static void ZgFree (JSMallocState *s, void *ptr)
+static void GkFree (JSMallocState *s, void *ptr)
 {
 	if (ptr == 0)
 	{
 		return;
 	}
 
-	size_t size = ZgUsableSize (ptr);
+	size_t size = GkUsableSize (ptr);
 	s->malloc_count--;
 	s->malloc_size -= size + HeaderSize;
 	Wipe ((u8 *) ptr - HeaderSize, size + HeaderSize);
 	free ((u8 *) ptr - HeaderSize);
 }
 
-static void *ZgRealloc (JSMallocState *s, void *ptr, size_t size)
+static void *GkRealloc (JSMallocState *s, void *ptr, size_t size)
 {
 	if (ptr == 0)
 	{
-		return size ? ZgMalloc (s, size) : 0;
+		return size ? GkMalloc (s, size) : 0;
 	}
 
 	if (size == 0)
 	{
-		ZgFree (s, ptr);
+		GkFree (s, ptr);
 		return 0;
 	}
 
-	size_t old = ZgUsableSize (ptr);
+	size_t old = GkUsableSize (ptr);
 	if (s->malloc_size + size - old > s->malloc_limit)
 	{
 		return 0;
 	}
 
-	void *p = ZgMalloc (s, size);	// checks the limit with both blocks counted
+	void *p = GkMalloc (s, size);	// checks the limit with both blocks counted
 	if (p == 0)
 	{
 		return 0;
 	}
 
 	memcpy (p, ptr, old < size ? old : size);
-	ZgFree (s, ptr);
+	GkFree (s, ptr);
 
 	return p;
 }
 
 static const JSMallocFunctions MallocFunctions =
 {
-	ZgMalloc, ZgFree, ZgRealloc, ZgUsableSize
+	GkMalloc, GkFree, GkRealloc, GkUsableSize
 };
 
 // --- host -------------------------------------------------------------------
@@ -143,9 +143,9 @@ CAppHost *CAppHost::Get (void)
 	return s_pThis;
 }
 
-TZgApp *CAppHost::GetApp (JSContext *pContext)
+TGkApp *CAppHost::GetApp (JSContext *pContext)
 {
-	return (TZgApp *) JS_GetContextOpaque (pContext);
+	return (TGkApp *) JS_GetContextOpaque (pContext);
 }
 
 JSRuntime *CAppHost::NewRuntime (void)
@@ -155,14 +155,14 @@ JSRuntime *CAppHost::NewRuntime (void)
 
 boolean CAppHost::Initialize (void)
 {
-	ZgUIApplyDefaultTheme ();
+	GkUIApplyDefaultTheme ();
 
 	m_pIdleScreen = lv_obj_create (0);
 
 	m_pKeyboard->SetKeyHook (KeyHook, this);
 	m_pKeyboard->SetHomeHandler (HomeHandler, this);
 
-	const zg_app_t *pLauncher = CAppStore::Find ("launcher");
+	const gk_app_t *pLauncher = CAppStore::Find ("launcher");
 	if (pLauncher == 0)
 	{
 		CLogger::Get ()->Write (FromHost, LogError, "No launcher app");
@@ -174,7 +174,7 @@ boolean CAppHost::Initialize (void)
 
 boolean CAppHost::RequestLaunch (const char *pID)
 {
-	const zg_app_t *pApp = CAppStore::Find (pID != 0 ? pID : "launcher");
+	const gk_app_t *pApp = CAppStore::Find (pID != 0 ? pID : "launcher");
 	if (pApp == 0)
 	{
 		return FALSE;
@@ -182,7 +182,7 @@ boolean CAppHost::RequestLaunch (const char *pID)
 	if (!CAppStore::IsAvailable (pApp))
 	{
 		CLogger::Get ()->Write (FromHost, LogWarning, "%s is experimental:"
-					" it needs \"experimental = yes\" in zerogap.txt", pApp->id);
+					" it needs \"experimental = yes\" in gapkeep.txt", pApp->id);
 		return FALSE;
 	}
 
@@ -212,7 +212,7 @@ void CAppHost::Update (void)
 
 	if (m_pPendingLaunch != 0)
 	{
-		const zg_app_t *pApp = m_pPendingLaunch;
+		const gk_app_t *pApp = m_pPendingLaunch;
 		m_pPendingLaunch = 0;
 
 		StopApp ();
@@ -225,7 +225,7 @@ void CAppHost::Update (void)
 	if (m_App.pBundle != 0)
 	{
 		RunJobs ();
-		ZgUIProcessDeferred (&m_App);
+		GkUIProcessDeferred (&m_App);
 	}
 }
 
@@ -238,7 +238,7 @@ static void PromiseRejectionTracker (JSContext *pContext, JSValueConst Promise,
 	}
 
 	// the same reason again: already reported
-	TZgApp *pApp = CAppHost::GetApp (pContext);
+	TGkApp *pApp = CAppHost::GetApp (pContext);
 	if (   JS_IsObject (Reason)
 	    && JS_IsObject (pApp->LastRejection)
 	    && JS_VALUE_GET_PTR (Reason) == JS_VALUE_GET_PTR (pApp->LastRejection))
@@ -259,8 +259,8 @@ static void PromiseRejectionTracker (JSContext *pContext, JSValueConst Promise,
 static CString ZeroEstimate (unsigned long long nWork)
 {
 	CString Text;
-#ifdef ZG_SIM
-	static const unsigned WorkPerSecondOnZero = ZG_ZERO_WORK_PER_SECOND;
+#ifdef GK_SIM
+	static const unsigned WorkPerSecondOnZero = GK_ZERO_WORK_PER_SECOND;
 	Text.Format (", about %u ms of JavaScript on a Pi Zero",
 		     (unsigned) (nWork * 1000 / WorkPerSecondOnZero));
 #else
@@ -269,7 +269,7 @@ static CString ZeroEstimate (unsigned long long nWork)
 	return Text;
 }
 
-boolean CAppHost::StartApp (const zg_app_t *pApp)
+boolean CAppHost::StartApp (const gk_app_t *pApp)
 {
 	assert (pApp != 0);
 	assert (m_App.pBundle == 0);
@@ -301,21 +301,21 @@ boolean CAppHost::StartApp (const zg_app_t *pApp)
 	assert (m_App.pContext != 0);
 	JS_SetContextOpaque (m_App.pContext, &m_App);
 
-	ZgInitGlobals (m_App.pContext);
+	GkInitGlobals (m_App.pContext);
 
 	// its translations (lang/<language>.json), checked
-	unsigned nCatalogUs = CZgI18n::LoadCatalog (&m_App);
+	unsigned nCatalogUs = CGkI18n::LoadCatalog (&m_App);
 
 	m_App.pScreen = lv_obj_create (0);
 	m_App.pGroup = lv_group_create ();
-	lv_group_set_focus_cb (m_App.pGroup, ZgGroupFocusCallback);
+	lv_group_set_focus_cb (m_App.pGroup, GkGroupFocusCallback);
 	lv_group_set_default (m_App.pGroup);
 	m_pKeyboard->SetGroup (m_App.pGroup);
 	lv_screen_load (m_App.pScreen);
 
 	// Run the entry module. Its evaluation returns a promise (modules may
 	// use top-level await); a rejection reaches PromiseRejectionTracker.
-	const zg_file_t *pEntry = 0;
+	const gk_file_t *pEntry = 0;
 	for (unsigned i = 0; i < pApp->file_count; i++)
 	{
 		if (strcmp (pApp->files[i].path, pApp->entry) == 0)
@@ -374,30 +374,30 @@ void CAppHost::StopApp (void)
 	lv_obj_invalidate (m_pIdleScreen);
 	lv_refr_now (0);
 
-	ZgUIAppStopping (&m_App);
-	ZgTimersFree (&m_App);
-	ZgClockFree (&m_App);
+	GkUIAppStopping (&m_App);
+	GkTimersFree (&m_App);
+	GkClockFree (&m_App);
 
 	// Deleting the screen deletes every widget of the app; each widget
 	// releases its JS event handlers as it goes.
 	lv_obj_delete (m_App.pScreen);
 	m_App.pScreen = 0;
-	ZgUIProcessDeferred (&m_App);
-	ZgUIFree (&m_App);
+	GkUIProcessDeferred (&m_App);
+	GkUIFree (&m_App);
 
 	lv_group_delete (m_App.pGroup);
 	m_App.pGroup = 0;
 
 	JS_FreeValue (m_App.pContext, m_App.LastRejection);
 	m_App.LastRejection = JS_UNDEFINED;
-	CZgI18n::FreeApp (&m_App);
+	CGkI18n::FreeApp (&m_App);
 
 	JS_FreeContext (m_App.pContext);
 	JS_FreeRuntime (m_App.pRuntime);	// asserts that nothing leaked
 
 	memset (&m_App, 0, sizeof m_App);
 
-	ZgUIApplyDefaultTheme ();		// the app may have changed it
+	GkUIApplyDefaultTheme ();		// the app may have changed it
 }
 
 void CAppHost::RunJobs (void)
@@ -519,12 +519,12 @@ void CAppHost::ShowError (const char *pTitle, const char *pText)
 	lv_label_set_text (pLabel, pText);
 	lv_label_set_long_mode (pLabel, LV_LABEL_LONG_MODE_WRAP);
 	lv_obj_set_width (pLabel, lv_pct (100));
-	lv_obj_set_style_text_font (pLabel, &zg_montserrat_12, 0);
+	lv_obj_set_style_text_font (pLabel, &gk_montserrat_12, 0);
 	lv_obj_set_style_text_color (pLabel, lv_color_white (), 0);
 
 	pLabel = lv_label_create (pBanner);
 	lv_label_set_text (pLabel, "Click to dismiss. Press the Windows key to return to the launcher.");
-	lv_obj_set_style_text_font (pLabel, &zg_montserrat_12, 0);
+	lv_obj_set_style_text_font (pLabel, &gk_montserrat_12, 0);
 	lv_obj_set_style_text_color (pLabel, lv_palette_lighten (LV_PALETTE_RED, 3), 0);
 
 	m_pErrorBanner = pBanner;
@@ -549,7 +549,7 @@ void CAppHost::ErrorBannerEvent (lv_event_t *e)
 	}
 }
 
-boolean CAppHost::KeyHook (const TZgKey &rKey, void *pParam)
+boolean CAppHost::KeyHook (const TGkKey &rKey, void *pParam)
 {
 	CAppHost *pThis = (CAppHost *) pParam;
 	if (pThis->m_App.pBundle == 0)
@@ -557,7 +557,7 @@ boolean CAppHost::KeyHook (const TZgKey &rKey, void *pParam)
 		return TRUE;		// no app: swallow
 	}
 
-	return ZgUIDispatchKey (&pThis->m_App, rKey);
+	return GkUIDispatchKey (&pThis->m_App, rKey);
 }
 
 void CAppHost::HomeHandler (void *pParam)		// IRQ context
@@ -595,15 +595,15 @@ int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)
 
 // --- modules ----------------------------------------------------------------
 //
-// "zg:..." names are system modules. Everything else must be a relative path
+// "gk:..." names are system modules. Everything else must be a relative path
 // ("./util.js", "../lib/x.js") resolved inside the app's own files.
 
 char *CAppHost::ModuleNormalize (JSContext *pContext, const char *pBase, const char *pName, void *pParam)
 {
-	if (strncmp (pName, "zg:", 3) == 0)
+	if (strncmp (pName, "gk:", 3) == 0)
 	{
-		// zg:i18n's own native half
-		if (strcmp (pName, "zg:i18n-native") == 0 && strcmp (pBase, "zg:i18n") != 0)
+		// gk:i18n's own native half
+		if (strcmp (pName, "gk:i18n-native") == 0 && strcmp (pBase, "gk:i18n") != 0)
 		{
 			JS_ThrowReferenceError (pContext, "no system module '%s'", pName);
 			return 0;
@@ -616,7 +616,7 @@ char *CAppHost::ModuleNormalize (JSContext *pContext, const char *pBase, const c
 	{
 		JS_ThrowReferenceError (pContext,
 			"cannot import '%s': use a relative path ('./%s') for the app's own files "
-			"or 'zg:...' for system modules", pName, pName);
+			"or 'gk:...' for system modules", pName, pName);
 		return 0;
 	}
 
@@ -684,57 +684,57 @@ char *CAppHost::ModuleNormalize (JSContext *pContext, const char *pBase, const c
 
 JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, void *pParam)
 {
-	TZgApp *pApp = GetApp (pContext);
+	TGkApp *pApp = GetApp (pContext);
 	assert (pApp != 0);
 
-	if (strcmp (pName, "zg:ui") == 0)
+	if (strcmp (pName, "gk:ui") == 0)
 	{
-		return ZgInitUIModule (pContext, pName);
+		return GkInitUIModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:sys") == 0)
+	if (strcmp (pName, "gk:sys") == 0)
 	{
-		return ZgInitSysModule (pContext, pName);
+		return GkInitSysModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:crypto") == 0)
+	if (strcmp (pName, "gk:crypto") == 0)
 	{
-		return ZgInitCryptoModule (pContext, pName);
+		return GkInitCryptoModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:clock") == 0)
+	if (strcmp (pName, "gk:clock") == 0)
 	{
-		return ZgInitClockModule (pContext, pName);
+		return GkInitClockModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:session") == 0)
+	if (strcmp (pName, "gk:session") == 0)
 	{
-		return ZgInitSessionModule (pContext, pName);
+		return GkInitSessionModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:i18n") == 0)
+	if (strcmp (pName, "gk:i18n") == 0)
 	{
-		return ZgInitI18nModule (pContext, pName);
+		return GkInitI18nModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:i18n-native") == 0)	// only for zg:i18n (ModuleNormalize)
+	if (strcmp (pName, "gk:i18n-native") == 0)	// only for gk:i18n (ModuleNormalize)
 	{
-		return ZgInitI18nNativeModule (pContext, pName);
+		return GkInitI18nNativeModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:apps") == 0)
+	if (strcmp (pName, "gk:apps") == 0)
 	{
-		if (!(pApp->pBundle->permissions & ZG_PERM_APPS))
+		if (!(pApp->pBundle->permissions & GK_PERM_APPS))
 		{
 			JS_ThrowReferenceError (pContext,
-				"'zg:apps' requires the \"apps\" permission in manifest.json");
+				"'gk:apps' requires the \"apps\" permission in manifest.json");
 			return 0;
 		}
-		return ZgInitAppsModule (pContext, pName);
+		return GkInitAppsModule (pContext, pName);
 	}
-	if (strncmp (pName, "zg:", 3) == 0)
+	if (strncmp (pName, "gk:", 3) == 0)
 	{
 		JS_ThrowReferenceError (pContext, "no system module '%s'", pName);
 		return 0;
 	}
 
-	const zg_app_t *pBundle = pApp->pBundle;
+	const gk_app_t *pBundle = pApp->pBundle;
 	for (unsigned i = 0; i < pBundle->file_count; i++)
 	{
-		const zg_file_t *pFile = &pBundle->files[i];
+		const gk_file_t *pFile = &pBundle->files[i];
 		if (strcmp (pFile->path, pName) == 0)
 		{
 			JSValue Func = JS_Eval (pContext, pFile->data, pFile->size, pFile->path,

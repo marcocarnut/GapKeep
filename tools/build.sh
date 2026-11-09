@@ -10,7 +10,7 @@
 # LVGL, QuickJS and the kernel are rebuilt from scratch; otherwise this is
 # an ordinary incremental make.
 #
-# zerogap's changes to Circle and zxing-cpp (patches/*/) are applied to the
+# GapKeep's changes to Circle and zxing-cpp (patches/*/) are applied to the
 # submodules first, once (tools/apply_patches.sh).
 #
 set -e
@@ -49,7 +49,7 @@ for d in STORAGE GAMEPAD PRINTER NET BLUETOOTH MIDI AUDIO SERIAL TOUCHSCREEN; do
 	CONFIG="$CONFIG -d EXCLUDE_USB_$d"
 done
 
-# Everything (Circle, LVGL, QuickJS, zerogap) is compiled with stack
+# Everything (Circle, LVGL, QuickJS, GapKeep) is compiled with stack
 # canaries; src/runtime/stackguard.cpp sets the canary from the hardware RNG.
 OPTIMIZE="-O2 -fstack-protector-strong"
 

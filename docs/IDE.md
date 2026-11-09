@@ -1,14 +1,14 @@
 # The browser IDE
 
-Write and run zerogap apps in a web browser, with no Pi and no QEMU. It is
-a static page: the zerogap simulator (the real runtime, LVGL and QuickJS
+Write and run GapKeep apps in a web browser, with no Pi and no QEMU. It is
+a static page: the GapKeep simulator (the real runtime, LVGL and QuickJS
 compiled to WebAssembly from `sim/`), a Monaco editor and a file tree. There
 is no server code, and the page needs no network once it is set up.
 
 ## Starting it
 
 ```sh
-tools/zgide.sh          # or: tools/zgide.sh 8080
+tools/gkide.sh          # or: tools/gkide.sh 8080
 ```
 
 It builds the simulator if needed (`make -C sim web`, with emsdk from
@@ -37,11 +37,11 @@ console (and its camera sends grey).
   any of `launcher`, `hello`, `gallery`, `dice39` and `qrscan` that you deleted. A dot marks
   unsaved files, a triangle the running app.
 - **Editor** (middle): Monaco, as in VS Code. JavaScript is checked as
-  zerogap runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
-  with completions and hovers for `zg:ui`, `zg:sys`, `zg:crypto` and
-  `zg:apps` from `sim/web/types/zerogap.d.ts`. `manifest.json` is checked
+  GapKeep runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
+  with completions and hovers for `gk:ui`, `gk:sys`, `gk:crypto` and
+  `gk:apps` from `sim/web/types/gapkeep.d.ts`. `manifest.json` is checked
   against the manifest's rules (keys, id, icon names).
-- **Screen** (right): zerogap's screen at its true size, scaled to fit in
+- **Screen** (right): GapKeep's screen at its true size, scaled to fit in
   whole steps when it fits. **Run** saves everything, boots a fresh machine
   with the card and starts the app whose file is open (if it doesn't start,
   the log says why and you stay on the launcher). **Stop** halts the machine.
@@ -49,7 +49,7 @@ console (and its camera sends grey).
   launcher, as switching the device on does. The menu sets the screen size
   (640x480, 800x480, 800x600, 1024x600, 1024x768, 1280x720, 1824x984),
   which reboots.
-- **Console** (bottom): zerogap's log. Errors are red. File references in
+- **Console** (bottom): GapKeep's log. Errors are red. File references in
   stack traces (`main.js:4:2`) and `apps/<id> not loaded` lines are links
   that open the file at that line. `console.log` in an app shows up as
   `app:<id>: ...`.
@@ -57,7 +57,7 @@ console (and its camera sends grey).
 ## Experimental features
 
 The **Experimental** box in the screen's toolbar puts `experimental = yes`
-in the simulated card's `zerogap.txt` and reboots: experimental apps (Color
+in the simulated card's `gapkeep.txt` and reboots: experimental apps (Color
 QR) are listed, and the `"qr-color"` detector exists
 ([EXPERIMENTAL.md](EXPERIMENTAL.md)). The camera bar's pictures and webcam
 frames reach the simulator in colour.
@@ -66,27 +66,27 @@ frames reach the simulator in colour.
 
 - **Ctrl+S** (Cmd+S on a Mac) saves the open file; **Ctrl+Enter** runs.
 - Click the screen to give it the keyboard (a yellow outline shows it has
-  it). Then every key goes to zerogap: Tab, arrows, Enter, Backspace, Escape
+  it). Then every key goes to GapKeep: Tab, arrows, Enter, Backspace, Escape
   and Ctrl shortcuts included, and Ctrl+S and Ctrl+Enter go to the app, not
   the IDE. Click the editor to type there again.
 - **Typing text** goes through your computer's keyboard layout: dead keys
   (" then a is ä, ´ then e is é), AltGr, Option on a Mac and input methods
-  all work, and zerogap gets the character they make. It types ASCII and
+  all work, and GapKeep gets the character they make. It types ASCII and
   Latin-1 (á, ç, ã, £, ²); anything else (€, emoji) is dropped, with a
-  warning in the log the first time. On the device it is zerogap's own
-  layout that makes characters (`keyboard` in `zerogap.txt`): in the
+  warning in the log the first time. On the device it is GapKeep's own
+  layout that makes characters (`keyboard` in `gapkeep.txt`): in the
   browser, leave it at `us`: with `br-abnt2`, a ´ ` ~ ^ or ¨ that your
-  layout types would be a dead key again in zerogap.
-- **Ctrl+V** (Cmd+V) on the screen types the clipboard's text into zerogap,
+  layout types would be a dead key again in GapKeep.
+- **Ctrl+V** (Cmd+V) on the screen types the clipboard's text into GapKeep,
   as key presses: a codex32 share, a test address. ASCII and Latin-1; a
   newline inside it is Enter, one at the end is dropped. A simulator
   convenience: the device has no clipboard.
-- zerogap's Home key is the Windows (Super) key, which the desktop or the
+- GapKeep's Home key is the Windows (Super) key, which the desktop or the
   browser usually keeps for itself: use the **Home** button.
-- The mouse works on the screen; zerogap draws its own cursor, so the
+- The mouse works on the screen; GapKeep draws its own cursor, so the
   browser's is hidden there.
 - Held keys repeat: Backspace, arrows and the other special keys at
-  zerogap's own rate, as on the device; letters as your computer repeats
+  GapKeep's own rate, as on the device; letters as your computer repeats
   them.
 
 How (for those changing the IDE): a hidden textarea beside the screen has
@@ -108,13 +108,13 @@ written to the repository. To keep an app, or move it to the repository,
 **Export .zip** it. The IDE warns before leaving the page with unsaved
 edits.
 
-For scripts and agents, the page exposes `window.zgide`: `run(id)`,
+For scripts and agents, the page exposes `window.gkide`: `run(id)`,
 `openFile(path, line)`, `home()`, `files` (path to contents), `machine` (the
-`Zerogap` instance of `sim/web/zerogap.js`), `editor`, `monaco`.
+`Gapkeep` instance of `sim/web/gapkeep.js`), `editor`, `monaco`.
 
 ## The camera
 
-Under the screen, **Camera** sets what zerogap's camera films, for apps
+Under the screen, **Camera** sets what GapKeep's camera films, for apps
 with `ui.Scanner` ([CAMERA.md](CAMERA.md)):
 
 - **Empty scene**: nothing in particular.
@@ -134,19 +134,19 @@ added them: to get a newer version of one (say `qrscan`, which now has a
 **Wide view** button), delete it and click **Examples**.
 
 The setting stays across reboots and reloads (the webcam and the picture
-are asked for again). zerogap decodes the codes itself, with the decoder it
+are asked for again). GapKeep decodes the codes itself, with the decoder it
 has on the Pi; the IDE only supplies pictures.
 
 ## Changing the launcher
 
 The launcher is an app too (`apps/launcher` in the repository), but built
-into zerogap rather than read from the card: the device refuses a card app
+into GapKeep rather than read from the card: the device refuses a card app
 named `launcher`. In the IDE, `launcher` (marked *built in*) is a copy you
 can edit: at each boot it replaces the built-in launcher, in the simulator
-only, with the built-in launcher's rights (`zg:apps`). Restart or Run shows
+only, with the built-in launcher's rights (`gk:apps`). Restart or Run shows
 your changes.
 
-zerogap starts with the launcher, so a launcher that fails to load stops
+GapKeep starts with the launcher, so a launcher that fails to load stops
 the boot: the log links to the error. Fix it, or delete `apps/launcher` to
 get the built-in one back (**Examples** brings back a fresh copy).
 
@@ -162,7 +162,7 @@ holds one folder named after the app's id):
 cd /media/$USER/<card>/apps && unzip ~/Downloads/myapp.zip
 ```
 
-zerogap reads the card at boot, so restart the Pi. See
+GapKeep reads the card at boot, so restart the Pi. See
 [APPS.md](APPS.md#installing-apps). The launcher shows the app's SHA-256;
 `python3 tools/bundle_apps.py --hash <folder>` computes it on your computer
 to compare.

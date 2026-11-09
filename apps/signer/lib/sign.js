@@ -43,7 +43,7 @@
 //   maxIndex  an address index above this is flagged (default 1000000).
 //   aux       taproot's auxiliary randomness: a Uint8Array(32), or a function
 //             (inputIndex) -> Uint8Array(32). Default: fresh random bytes from
-//             the crypto given (zg:crypto); tests pass zeros to compare.
+//             the crypto given (gk:crypto); tests pass zeros to compare.
 //
 // An input is signed only when all of these hold:
 //   - it spends a P2WPKH, P2SH-P2WPKH, P2TR (key path, no script tree) or

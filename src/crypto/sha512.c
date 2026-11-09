@@ -73,7 +73,7 @@ static void compress (uint64_t state[8], const uint8_t block[128])
 	memset (w, 0, sizeof w);
 }
 
-void zg_sha512_init (zg_sha512_t *ctx)
+void gk_sha512_init (gk_sha512_t *ctx)
 {
 	static const uint64_t H0[8] =
 	{
@@ -85,7 +85,7 @@ void zg_sha512_init (zg_sha512_t *ctx)
 	ctx->fill = 0;
 }
 
-void zg_sha512_update (zg_sha512_t *ctx, const void *data, size_t len)
+void gk_sha512_update (gk_sha512_t *ctx, const void *data, size_t len)
 {
 	const uint8_t *p = data;
 	ctx->length += len;
@@ -110,7 +110,7 @@ void zg_sha512_update (zg_sha512_t *ctx, const void *data, size_t len)
 	}
 }
 
-void zg_sha512_final (zg_sha512_t *ctx, uint8_t digest[ZG_SHA512_DIGEST_SIZE])
+void gk_sha512_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA512_DIGEST_SIZE])
 {
 	/* the length is 128 bits; the high 64 are zero here, but for the top
 	   three bits of the byte count */
@@ -143,15 +143,15 @@ void zg_sha512_final (zg_sha512_t *ctx, uint8_t digest[ZG_SHA512_DIGEST_SIZE])
 	memset (ctx, 0, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
-void zg_sha512 (const void *data, size_t len, uint8_t digest[ZG_SHA512_DIGEST_SIZE])
+void gk_sha512 (const void *data, size_t len, uint8_t digest[GK_SHA512_DIGEST_SIZE])
 {
-	zg_sha512_t ctx;
-	zg_sha512_init (&ctx);
-	zg_sha512_update (&ctx, data, len);
-	zg_sha512_final (&ctx, digest);
+	gk_sha512_t ctx;
+	gk_sha512_init (&ctx);
+	gk_sha512_update (&ctx, data, len);
+	gk_sha512_final (&ctx, digest);
 }
 
-int zg_sha512_selftest (void)
+int gk_sha512_selftest (void)
 {
 	/* FIPS 180-4 examples (NIST CSRC "SHA512.pdf"), and "" */
 	static const struct { const char *msg; const char *hex; } v[] =
@@ -164,31 +164,31 @@ int zg_sha512_selftest (void)
 		 "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018"
 		 "501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909"},
 	};
-	uint8_t d[ZG_SHA512_DIGEST_SIZE];
+	uint8_t d[GK_SHA512_DIGEST_SIZE];
 
 	for (unsigned i = 0; i < sizeof v / sizeof v[0]; i++)
 	{
-		zg_sha512 (v[i].msg, strlen (v[i].msg), d);
-		if (!zg_hex_equal (d, sizeof d, v[i].hex))
+		gk_sha512 (v[i].msg, strlen (v[i].msg), d);
+		if (!gk_hex_equal (d, sizeof d, v[i].hex))
 		{
 			return (int) i + 1;
 		}
 	}
 
 	/* one million 'a', fed in uneven pieces to exercise buffering */
-	zg_sha512_t ctx;
+	gk_sha512_t ctx;
 	char a[997];
 	memset (a, 'a', sizeof a);
-	zg_sha512_init (&ctx);
+	gk_sha512_init (&ctx);
 	size_t left = 1000000;
 	while (left > 0)
 	{
 		size_t n = left < sizeof a ? left : sizeof a;
-		zg_sha512_update (&ctx, a, n);
+		gk_sha512_update (&ctx, a, n);
 		left -= n;
 	}
-	zg_sha512_final (&ctx, d);
-	if (!zg_hex_equal (d, sizeof d,
+	gk_sha512_final (&ctx, d);
+	if (!gk_hex_equal (d, sizeof d,
 			   "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973eb"
 			   "de0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b"))
 	{

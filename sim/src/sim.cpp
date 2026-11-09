@@ -31,10 +31,10 @@ static const char From[] = "kernel";
 
 // --- the machine --------------------------------------------------------------
 
-static CZgRandom *s_pRandom;
+static CGkRandom *s_pRandom;
 static CKeyboardIndev *s_pKeyboard;
 static CAppHost *s_pAppHost;
-static CZgSynthCamera *s_pCamera;
+static CGkSynthCamera *s_pCamera;
 static boolean s_bAttached;
 
 static int s_nWidth, s_nHeight;
@@ -113,37 +113,37 @@ static void InitGUI (void)
 	lv_indev_set_read_cb (pIndev, PointerRead);
 	lv_obj_t *pCursor = lv_image_create (lv_screen_active ());
 	lv_indev_set_cursor (pIndev, pCursor);
-	ZgInstallCursor ();
+	GkInstallCursor ();
 }
 
-void zg_sim_set_builtin_dir (const char *dir)
+void gk_sim_set_builtin_dir (const char *dir)
 {
-	ZgSimSetBuiltinRoot (dir);
+	GkSimSetBuiltinRoot (dir);
 }
 
-static const char *s_pLanguage;		// --lang, over zerogap.txt
+static const char *s_pLanguage;		// --lang, over gapkeep.txt
 
-void zg_sim_set_language (const char *tag)
+void gk_sim_set_language (const char *tag)
 {
 	s_pLanguage = tag;
 }
 
-int zg_sim_language (const char *tag)
+int gk_sim_language (const char *tag)
 {
-	return CZgI18n::SetLanguage (tag, "simulator") ? 0 : -1;
+	return CGkI18n::SetLanguage (tag, "simulator") ? 0 : -1;
 }
 
-int zg_sim_boot (int width, int height, const char *card)
+int gk_sim_boot (int width, int height, const char *card)
 {
-	ZgSimClockStart ();
+	GkSimClockStart ();
 	s_nWidth = width;
 	s_nHeight = height;
 
-	s_pRandom = new CZgRandom;
+	s_pRandom = new CGkRandom;
 	s_pRandom->Initialize ();
 
-	ZgSimSetCardRoot (card);
-#ifndef ZG_SEALED
+	GkSimSetCardRoot (card);
+#ifndef GK_SEALED
 	CAppStore::Initialize (card != 0);
 #else
 	CAppStore::Initialize (FALSE);
@@ -154,13 +154,13 @@ int zg_sim_boot (int width, int height, const char *card)
 	s_pKeyboard = new CKeyboardIndev;
 	s_pKeyboard->Initialize ();
 
-	CLogger::Get ()->Write (From, LogNotice, "zerogap " ZEROGAP_VERSION " (simulator), built " __DATE__ " " __TIME__);
+	CLogger::Get ()->Write (From, LogNotice, "gapkeep " GAPKEEP_VERSION " (simulator), built " __DATE__ " " __TIME__);
 	CLogger::Get ()->Write (From, LogNotice, "Screen %ux%u", (unsigned) width, (unsigned) height);
 
-	s_pCamera = new CZgSynthCamera;
-	CZgCamera::Set (s_pCamera);
+	s_pCamera = new CGkSynthCamera;
+	CGkCamera::Set (s_pCamera);
 
-	if (s_pLanguage != 0 && !CZgI18n::SetLanguage (s_pLanguage, "--lang"))
+	if (s_pLanguage != 0 && !CGkI18n::SetLanguage (s_pLanguage, "--lang"))
 	{
 		return -1;
 	}
@@ -192,10 +192,10 @@ static void SimKeyDown (const TSimKey &rKey, u8 nUsage = 4)
 {
 	if (s_bKeyDown)
 	{
-		zg_sim_key_up ();
+		gk_sim_key_up ();
 	}
 
-	CUSBKeyboardDevice *pKeyboard = ZgSimKeyboard ();
+	CUSBKeyboardDevice *pKeyboard = GkSimKeyboard ();
 	unsigned char Raw[6] = {0};
 	if (rKey.String[0] != '\0')
 	{
@@ -214,14 +214,14 @@ static void SimKeyDown (const TSimKey &rKey, u8 nUsage = 4)
 	s_nNextRepeat = CTimer::GetClockTicks () + RepeatDelay;
 }
 
-void zg_sim_key_up (void)
+void gk_sim_key_up (void)
 {
 	if (!s_bKeyDown)
 	{
 		return;
 	}
 	unsigned char Raw[6] = {0};
-	ZgSimKeyboard ()->Report (0, Raw);
+	GkSimKeyboard ()->Report (0, Raw);
 	s_bKeyDown = FALSE;
 }
 
@@ -232,7 +232,7 @@ static void KeyRepeat (void)
 	    && (int) (CTimer::GetClockTicks () - s_nNextRepeat) >= 0)
 	{
 		s_pKeyboard->SetComposed (s_Key.bComposed);
-		ZgSimKeyboard ()->Pressed (s_Key.String);	// no report: a repeat
+		GkSimKeyboard ()->Pressed (s_Key.String);	// no report: a repeat
 		s_pKeyboard->SetComposed (FALSE);
 		s_nNextRepeat += RepeatRate;
 	}
@@ -287,14 +287,14 @@ static const struct { const char *pQemu; u8 nUsage; } CharKeys[] =
 	{"6", 0x23}, {"7", 0x24}, {"8", 0x25}, {"9", 0x26}, {"0", 0x27},
 };
 
-#define ZG_SIM_MOD_ALTGR	8	// "alt_r-": the right Alt, AltGr
+#define GK_SIM_MOD_ALTGR	8	// "alt_r-": the right Alt, AltGr
 
 static u8 HIDModifiers (int nMods)
 {
-	return   ((nMods & ZG_SIM_MOD_SHIFT) ? LSHIFT : 0)
-	       | ((nMods & ZG_SIM_MOD_CTRL) ? LCTRL : 0)
-	       | ((nMods & ZG_SIM_MOD_ALT) ? ALT : 0)
-	       | ((nMods & ZG_SIM_MOD_ALTGR) ? ALTGR : 0);
+	return   ((nMods & GK_SIM_MOD_SHIFT) ? LSHIFT : 0)
+	       | ((nMods & GK_SIM_MOD_CTRL) ? LCTRL : 0)
+	       | ((nMods & GK_SIM_MOD_ALT) ? ALT : 0)
+	       | ((nMods & GK_SIM_MOD_ALTGR) ? ALTGR : 0);
 }
 
 // What Circle's keymap types for this key: Ctrl+letter is the control
@@ -303,14 +303,14 @@ static u8 HIDModifiers (int nMods)
 static boolean KeyMapString (u8 nUsage, int nMods, TSimKey *pKey)
 {
 	const u16 (*pMap)[K_CTRLTAB+1] =
-		strcmp (ZgSimKeyboard ()->GetKeyMap (), "BR") == 0 ? KeyMapBR : KeyMapUS;
+		strcmp (GkSimKeyboard ()->GetKeyMap (), "BR") == 0 ? KeyMapBR : KeyMapUS;
 	pKey->nModifiers = HIDModifiers (nMods);
-	if (nMods & ZG_SIM_MOD_ALT)
+	if (nMods & GK_SIM_MOD_ALT)
 	{
 		return FALSE;
 	}
-	boolean bShift = (nMods & ZG_SIM_MOD_SHIFT) != 0;
-	unsigned nTable =   (nMods & ZG_SIM_MOD_ALTGR) ? (bShift ? K_ALTSHIFTTAB : K_ALTTAB)
+	boolean bShift = (nMods & GK_SIM_MOD_SHIFT) != 0;
+	unsigned nTable =   (nMods & GK_SIM_MOD_ALTGR) ? (bShift ? K_ALTSHIFTTAB : K_ALTTAB)
 			  : bShift ? K_SHIFTTAB : K_NORMTAB;
 	u16 nCode = pMap[nUsage][nTable];
 	char c;
@@ -326,7 +326,7 @@ static boolean KeyMapString (u8 nUsage, int nMods, TSimKey *pKey)
 	{
 		return FALSE;
 	}
-	if (nMods & ZG_SIM_MOD_CTRL)
+	if (nMods & GK_SIM_MOD_CTRL)
 	{
 		if (c < 'a' || c > 'z')
 		{
@@ -339,9 +339,9 @@ static boolean KeyMapString (u8 nUsage, int nMods, TSimKey *pKey)
 	return TRUE;
 }
 
-int zg_sim_keyboard (const char *pLayout)
+int gk_sim_keyboard (const char *pLayout)
 {
-	return ZgKeyLayoutSet (pLayout, "simulator") ? 0 : -1;
+	return GkKeyLayoutSet (pLayout, "simulator") ? 0 : -1;
 }
 
 // A printable character with modifiers, as Circle's keymap gives it:
@@ -349,7 +349,7 @@ int zg_sim_keyboard (const char *pLayout)
 static void Printable (char c, int nMods, TSimKey *pKey)
 {
 	pKey->nModifiers = HIDModifiers (nMods);
-	if ((nMods & ZG_SIM_MOD_CTRL) && isalpha ((unsigned char) c))
+	if ((nMods & GK_SIM_MOD_CTRL) && isalpha ((unsigned char) c))
 	{
 		c = (char) (tolower ((unsigned char) c) - 'a' + 1);
 	}
@@ -357,16 +357,16 @@ static void Printable (char c, int nMods, TSimKey *pKey)
 	pKey->String[1] = '\0';
 }
 
-int zg_sim_key_down_qemu (const char *pName)
+int gk_sim_key_down_qemu (const char *pName)
 {
 	// "shift-", "ctrl-", "alt-" prefixes
 	int nMods = 0;
 	for (;;)
 	{
-		if (strncmp (pName, "shift-", 6) == 0)		{ nMods |= ZG_SIM_MOD_SHIFT; pName += 6; }
-		else if (strncmp (pName, "ctrl-", 5) == 0)	{ nMods |= ZG_SIM_MOD_CTRL; pName += 5; }
-		else if (strncmp (pName, "alt-", 4) == 0)	{ nMods |= ZG_SIM_MOD_ALT; pName += 4; }
-		else if (strncmp (pName, "alt_r-", 6) == 0)	{ nMods |= ZG_SIM_MOD_ALTGR; pName += 6; }
+		if (strncmp (pName, "shift-", 6) == 0)		{ nMods |= GK_SIM_MOD_SHIFT; pName += 6; }
+		else if (strncmp (pName, "ctrl-", 5) == 0)	{ nMods |= GK_SIM_MOD_CTRL; pName += 5; }
+		else if (strncmp (pName, "alt-", 4) == 0)	{ nMods |= GK_SIM_MOD_ALT; pName += 4; }
+		else if (strncmp (pName, "alt_r-", 6) == 0)	{ nMods |= GK_SIM_MOD_ALTGR; pName += 6; }
 		else break;
 	}
 
@@ -416,7 +416,7 @@ int zg_sim_key_down_qemu (const char *pName)
 	return -1;
 }
 
-int zg_sim_key_down_dom (const char *pKey, int nMods)
+int gk_sim_key_down_dom (const char *pKey, int nMods)
 {
 	TSimKey Key;
 	memset (&Key, 0, sizeof Key);
@@ -467,28 +467,28 @@ int zg_sim_key_down_dom (const char *pKey, int nMods)
 	return -1;		// Shift, Control, Alt alone, dead keys, beyond Latin-1
 }
 
-int zg_sim_launch (const char *pID)
+int gk_sim_launch (const char *pID)
 {
 	return s_pAppHost->RequestLaunch (pID) ? 0 : -1;
 }
 
 // --- pointer ------------------------------------------------------------------
 
-void zg_sim_pointer (int x, int y, int pressed)
+void gk_sim_pointer (int x, int y, int pressed)
 {
 	s_Pointer.point.x = x < 0 ? 0 : x >= s_nWidth ? s_nWidth - 1 : x;
 	s_Pointer.point.y = y < 0 ? 0 : y >= s_nHeight ? s_nHeight - 1 : y;
 	s_Pointer.state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
-void zg_sim_wheel (int nNotches)
+void gk_sim_wheel (int nNotches)
 {
-	ZgWheelAt (s_Pointer.point.x, s_Pointer.point.y, nNotches);
+	GkWheelAt (s_Pointer.point.x, s_Pointer.point.y, nNotches);
 }
 
 // --- main loop ----------------------------------------------------------------
 
-void zg_sim_step (void)
+void gk_sim_step (void)
 {
 	// USB plug-and-play: the keyboard turns up at the first pass
 	boolean bUpdated = !s_bAttached;
@@ -508,14 +508,14 @@ void zg_sim_step (void)
 	s_pAppHost->Update ();
 }
 
-const uint16_t *zg_sim_frame (int *width, int *height)
+const uint16_t *gk_sim_frame (int *width, int *height)
 {
 	*width = s_nWidth;
 	*height = s_nHeight;
 	return s_pFrame;
 }
 
-unsigned zg_sim_frame_serial (void)
+unsigned gk_sim_frame_serial (void)
 {
 	return s_nFrameSerial;
 }
@@ -523,7 +523,7 @@ unsigned zg_sim_frame_serial (void)
 // --- camera -------------------------------------------------------------------
 // (Never logs what the camera shows: a QR code may hold a secret.)
 
-int zg_sim_camera (const char *mode)
+int gk_sim_camera (const char *mode)
 {
 	if (s_pCamera == 0)
 	{
@@ -545,7 +545,7 @@ int zg_sim_camera (const char *mode)
 	return 0;
 }
 
-int zg_sim_camera_qr (const uint8_t *data, unsigned length, int quiet)
+int gk_sim_camera_qr (const uint8_t *data, unsigned length, int quiet)
 {
 	if (s_pCamera == 0 || !s_pCamera->SetQR (data, length))
 	{
@@ -558,7 +558,7 @@ int zg_sim_camera_qr (const uint8_t *data, unsigned length, int quiet)
 	return 0;
 }
 
-int zg_sim_camera_picture (const uint8_t *grey, unsigned width, unsigned height)
+int gk_sim_camera_picture (const uint8_t *grey, unsigned width, unsigned height)
 {
 	if (s_pCamera == 0 || !s_pCamera->SetPicture (grey, width, height))
 	{
@@ -568,12 +568,12 @@ int zg_sim_camera_picture (const uint8_t *grey, unsigned width, unsigned height)
 	return 0;
 }
 
-int zg_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height)
+int gk_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height)
 {
 	return s_pCamera != 0 && s_pCamera->PushFrame (grey, width, height) ? 0 : -1;
 }
 
-int zg_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned height)
+int gk_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned height)
 {
 	if (s_pCamera == 0 || !s_pCamera->SetPictureRGB (rgb, width, height))
 	{
@@ -583,7 +583,7 @@ int zg_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned heig
 	return 0;
 }
 
-int zg_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height)
+int gk_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height)
 {
 	return s_pCamera != 0 && s_pCamera->PushFrameRGB (rgb, width, height) ? 0 : -1;
 }

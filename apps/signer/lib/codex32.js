@@ -1,6 +1,6 @@
-// codex32 (BIP-93) share checking and recombination, for any zerogap app.
+// codex32 (BIP-93) share checking and recombination, for any GapKeep app.
 //
-// Pure: no zg:* module, no globals, no I/O, so it runs unchanged in an app,
+// Pure: no gk:* module, no globals, no I/O, so it runs unchanged in an app,
 // under Node (tests/codex32/run_node.mjs) and in a future signer. The
 // arithmetic is dice39's own code (../vendor/codex32.js, copied verbatim by
 // tools/extract_codex32.py); this file adds what a keyboard needs on top:

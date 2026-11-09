@@ -1,5 +1,5 @@
 # Needs a test build (make TEST=1) and the test SD card (experimental = yes,
-# for colorqr). Simulator only ("launch"). The apps converted to zg:i18n,
+# for colorqr). Simulator only ("launch"). The apps converted to gk:i18n,
 # in pt-BR and in the pseudo-language qps (text that missed t() stays
 # plain, text cut off shows): each starts without an error, and the
 # screenshots are for looking at.

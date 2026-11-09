@@ -1,12 +1,12 @@
 # The clock
 
-A Pi Zero has no battery-backed clock, and zerogap has no network to ask
+A Pi Zero has no battery-backed clock, and GapKeep has no network to ask
 for the time. So the kernel keeps a clock in software, from the system
 timer, and someone sets it after each boot: the **Clock** app
 (`apps/clock`). Until then it counts from 1970-01-01 at boot.
 
 The clock runs whatever app is open. Every app can read it (`Date.now()`,
-`new Date()`, `zg:clock`); only apps with `"permissions": ["rtc"]` can set
+`new Date()`, `gk:clock`); only apps with `"permissions": ["rtc"]` can set
 it: in practice only the Clock app.
 
 ## Setting it
@@ -43,30 +43,34 @@ between the two settings is long:
 again over a week. The crystal's error also changes a little with
 temperature, so a few ppm is about as good as it gets.
 
-## zerogap.txt: keeping the trim and offset
+## gapkeep.txt: keeping the trim and offset
 
-zerogap never writes to the SD card, so the clock's settings can't be saved
+GapKeep never writes to the SD card, so the clock's settings can't be saved
 by the device. Instead, put them in a text file at the top of the card,
-`zerogap.txt`, from another computer; the Clock app shows the lines to
+`gapkeep.txt`, from another computer; the Clock app shows the lines to
 copy:
 
 ```
-# zerogap's settings
+# GapKeep's settings
 clock_trim_ppm = -21.4
 utc_offset = -03:00
 ```
 
-zerogap reads it at boot (the log shows each setting, and a warning for
+GapKeep reads it at boot (the log shows each setting, and a warning for
 anything it doesn't understand). The same file can turn on experimental
 features: [EXPERIMENTAL.md](EXPERIMENTAL.md), and set the language and the
 way numbers are written: [APPS.md](APPS.md#languages). The time itself can't be kept this way:
 set it after each boot. Sealed builds have no SD card code and don't read
 it.
 
+GapKeep was called ZeroGap, and the file `zerogap.txt`. On a card made
+before the rename, rename `zerogap.txt` to `gapkeep.txt`: the old name is
+not read.
+
 ## For apps
 
 ```js
-import * as clock from "zg:clock";
+import * as clock from "gk:clock";
 
 if (!clock.status().set) {
   // tell the person to set the clock in the Clock app
@@ -79,7 +83,7 @@ clock.every(30, ({ time, changed }) => redraw(time));   // at :00 and :30, and w
 - `every(seconds, fn)` calls `fn` on the clock's marks (UTC multiples of the
   period) and at once when the clock is set or its trim or offset change,
   so codes that depend on the time (TOTP) are redrawn right away.
-- The details: [API.md](API.md#zgclock).
+- The details: [API.md](API.md#gkclock).
 
 ## How it works
 

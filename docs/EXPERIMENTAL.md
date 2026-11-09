@@ -1,7 +1,7 @@
 # Experimental features
 
-Features still being researched, off unless the SD card's `zerogap.txt` (the
-file of [CLOCK.md](CLOCK.md), "zerogap.txt") says
+Features still being researched, off unless the SD card's `gapkeep.txt` (the
+file of [CLOCK.md](CLOCK.md), "gapkeep.txt") says
 
 ```
 experimental = yes
@@ -22,7 +22,7 @@ A colour QR code is an ordinary QR code whose data modules are coloured so
 that any reader still sees their dark and light: a phone reads its text as
 usual. The colours carry more data, about 3.6 times the code's own capacity
 in total (`lib/colorqr/FORMAT.md`). It comes from a research project of the
-same author; the decoder is `lib/colorqr` (C, MIT), and zerogap reads such
+same author; the decoder is `lib/colorqr` (C, MIT), and GapKeep reads such
 codes but cannot draw them.
 
 - **`ui.Scanner`'s `"qr-color"` detector** reads the colour layer of each code
@@ -73,7 +73,7 @@ specification: soft focus is untested.
   bytes) at about 3.1, the code filling most of the frame. A large code
   must be framed with care: one cut off at an edge isn't found. Decoding
   took about 0.9 s at version 20, 2.3 s at 36 and 3 s at 40 on a Pi Zero
-  with the ARM at 700 MHz and colorqr v1.0. At 1 GHz (zerogap's clock
+  with the ARM at 700 MHz and colorqr v1.0. At 1 GHz (GapKeep's clock
   since, `src/kernel.cpp`) colorqr v1.0.1 reads version 40 in 1.4 s.
   From version 20 the decoder corrects the grid locally (the lens bends it
   by up to half a module at the corners), which these reads need: with it
@@ -86,13 +86,13 @@ specification: soft focus is untested.
 
 ### Why it is experimental
 
-zerogap's premise is that data leaves the device only through what can be
+GapKeep's premise is that data leaves the device only through what can be
 read off its screen, and enters only through what the person shows its
 camera. A colour code weakens both sides:
 
 - **Leaving:** a person checking a displayed code with a phone sees only its
   black and white. The colours could carry anything, a key included, and
-  the check would not show it. So zerogap has **no colour encoder**: apps
+  the check would not show it. So GapKeep has **no colour encoder**: apps
   can't draw colour codes (`ui.QRCode` is black and white), and adding one
   would be a decision of its own.
 - **Entering:** a code someone checked with a phone may carry more than they
@@ -111,7 +111,7 @@ never the contents.
   `"qr-color"`. On the Pi camera each 2x2 Bayer tile gives one RGB pixel,
   linear (black level removed, no white balance: the decoder calibrates from
   the symbol), as the grey frames are made from the same tiles. The
-  sensor's tiles are BGGR with the flips zerogap uses, checked against a red
+  sensor's tiles are BGGR with the flips GapKeep uses, checked against a red
   object ([camera/IMPLEMENTATION.md](camera/IMPLEMENTATION.md)). The
   simulator's camera shows colour pictures and webcam frames in colour.
 - **The base code.** zxing-cpp reads the code as usual, and also keeps the
@@ -135,7 +135,7 @@ never the contents.
 - `tests/colorqr_hw.txt` (the rig): the same on a Pi Zero, for its timing;
   test builds turn experimental features on with `#experimental on` on the
   serial line, as the rig's card never changes.
-- `tests/experimental_off.txt`: without `zerogap.txt`, the app can't start.
+- `tests/experimental_off.txt`: without `gapkeep.txt`, the app can't start.
 - `tools/fuzz_colorqr.sh`: the decoder under AddressSanitizer and UBSan.
 - `tests/camraw.txt`, `tests/camcolour.txt`, `tests/camcodes.txt` (the rig):
   raw frames from the Pi camera, for tuning the decoder on the real sensor;

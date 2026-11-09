@@ -1,11 +1,11 @@
-// ide.js - the zerogap browser IDE (docs/IDE.md): a file tree of the apps
-// on a simulated SD card, a Monaco editor, the zerogap screen (the
-// simulator compiled to WebAssembly, through zerogap.js) and its log.
+// ide.js - the GapKeep browser IDE (docs/IDE.md): a file tree of the apps
+// on a simulated SD card, a Monaco editor, the GapKeep screen (the
+// simulator compiled to WebAssembly, through gapkeep.js) and its log.
 // Static files only; the work is kept in the browser's IndexedDB.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { Zerogap } from "./zerogap.js";
+import { Gapkeep } from "./gapkeep.js";
 import { TextInput } from "./textinput.js";
 import { Store } from "./store.js";
 import { makeZip } from "./zip.js";
@@ -15,16 +15,16 @@ const $ = (id) => document.getElementById (id);
 const here = (rel) => new URL (rel, import.meta.url).href;
 
 const SIZES = [[640, 480], [800, 480], [800, 600], [1024, 600], [1024, 768], [1280, 720], [1824, 984]];
-// Apps built into zerogap. The IDE's copy of one replaces it in the
+// Apps built into GapKeep. The IDE's copy of one replaces it in the
 // simulator (its "builtin" folder), so the launcher can be worked on here;
 // on the device, built-in apps come from the kernel image only.
 const BUILTIN = new Set (["launcher"]);
 // Fetched with cache: "no-cache": a hard reload doesn't refresh what a page
 // fetches later, and http.server sends no cache headers, so a browser would
-// otherwise keep an old copy after tools/zgide.sh rebuilds them.
-const EXAMPLES_URL = here ("../build/web/examples.json");   // written by tools/zgide.sh
+// otherwise keep an old copy after tools/gkide.sh rebuilds them.
+const EXAMPLES_URL = here ("../build/web/examples.json");   // written by tools/gkide.sh
 const EXAMPLES_DIR = here ("../build/web/examples/");
-const TYPES_URL = here ("types/zerogap.d.ts");
+const TYPES_URL = here ("types/gapkeep.d.ts");
 const MONACO_VS = here ("vendor/monaco/vs");
 
 // What docs/APPS.md allows: app ids, and file and folder names.
@@ -41,16 +41,16 @@ const models = new Map ();  // path -> Monaco model (text files)
 const savedVersion = new Map ();  // path -> model version id when last saved
 let current = null;         // path of the file in the editor
 let selected = null;        // { path, kind: "app" | "dir" | "file" }
-const expanded = new Set (JSON.parse (localStorage.getItem ("zgide.expanded") || "[]"));
+const expanded = new Set (JSON.parse (localStorage.getItem ("gkide.expanded") || "[]"));
 let binaryModel = null;     // read-only stand-in shown for binary files
 
-let machine = null;         // the running Zerogap instance
+let machine = null;         // the running Gapkeep instance
 let camera = null;          // CameraBar: what the camera films
 let runToken = 0;           // the latest run() wins when several overlap
-let runningApp = null;      // the app zerogap says it started (from the log)
+let runningApp = null;      // the app GapKeep says it started (from the log)
 let lastApp = null;         // what Run launched last (for screen size changes)
 const sizeName = ([w, h]) => `${w}x${h}`;
-let size = SIZES.find ((s) => sizeName (s) === localStorage.getItem ("zgide.size")) || SIZES[0];
+let size = SIZES.find ((s) => sizeName (s) === localStorage.getItem ("gkide.size")) || SIZES[0];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,7 +148,7 @@ function linkify (div, text) {
   div.append (text.slice (last));
 }
 
-// A line from zerogap's log.
+// A line from GapKeep's log.
 function onLog (line) {
   let m;
   if ((m = line.match (/ apphost: Starting (\S+)/))) {
@@ -334,7 +334,7 @@ function renderTree () {
       meta.className = "meta";
       meta.textContent = appName (node.name) + (BUILTIN.has (node.name) ? " (built in)" : "");
       if (BUILTIN.has (node.name)) {
-        meta.title = "Built into zerogap. This copy replaces it in the simulator; " +
+        meta.title = "Built into GapKeep. This copy replaces it in the simulator; " +
           "on the device, change apps/" + node.name + " in the repository and rebuild the kernel.";
       }
       row.append (meta);
@@ -371,7 +371,7 @@ function renderTree () {
 function toggle (path, open = !expanded.has (path)) {
   if (open) expanded.add (path);
   else expanded.delete (path);
-  localStorage.setItem ("zgide.expanded", JSON.stringify ([...expanded]));
+  localStorage.setItem ("gkide.expanded", JSON.stringify ([...expanded]));
 }
 
 // Expands the folders down to path.
@@ -389,7 +389,7 @@ function openFile (path, line, col = 1) {
     return;
   }
   current = path;
-  localStorage.setItem ("zgide.open", path || "");
+  localStorage.setItem ("gkide.open", path || "");
   if (!path) {
     editor.setModel (null);
   } else if (isText (files.get (path))) {
@@ -397,7 +397,7 @@ function openFile (path, line, col = 1) {
     editor.updateOptions ({ readOnly: false });
   } else {
     binaryModel.setValue (`(${relOf (path)}: binary, ${files.get (path).length} bytes; ` +
-      "zerogap only reads .js, .json and .txt files)");
+      "GapKeep only reads .js, .json and .txt files)");
     editor.setModel (binaryModel);
     editor.updateOptions ({ readOnly: true });
   }
@@ -435,7 +435,7 @@ function loadMonaco () {
 }
 
 // The manifest's keys and values, as docs/APPS.md lists them, for checks and
-// completions in manifest.json. zerogap checks it again at boot.
+// completions in manifest.json. GapKeep checks it again at boot.
 const ICONS = ("audio video list ok close power settings home download drive refresh mute " +
   "volume-mid volume-max image tint prev play pause stop next eject left right plus minus " +
   "eye-open eye-close warning shuffle up down loop directory upload call cut copy save bars " +
@@ -465,7 +465,7 @@ const MANIFEST_SCHEMA = {
       ],
     },
     entry: { type: "string", description: "Entry module (default main.js)." },
-    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc"] }, description: "Extra rights: \"apps\" (zg:apps), \"camera\" (ui.Scanner), \"rtc\" (setting zg:clock)." },
+    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc"] }, description: "Extra rights: \"apps\" (gk:apps), \"camera\" (ui.Scanner), \"rtc\" (setting gk:clock)." },
     hidden: { type: "boolean", description: "true: not listed in the launcher." },
   },
 };
@@ -473,9 +473,9 @@ const MANIFEST_SCHEMA = {
 async function setupEditor () {
   monaco = await loadMonaco ();
 
-  // JavaScript as zerogap runs it: ES2023 modules on QuickJS, no DOM. The
-  // zg:* modules and the few globals (console, timers) come from
-  // zerogap.d.ts. (monaco.typescript is new in 0.55; older: languages.typescript.)
+  // JavaScript as GapKeep runs it: ES2023 modules on QuickJS, no DOM. The
+  // gk:* modules and the few globals (console, timers) come from
+  // gapkeep.d.ts. (monaco.typescript is new in 0.55; older: languages.typescript.)
   const ts = monaco.typescript || monaco.languages.typescript;
   const js = ts.javascriptDefaults;
   js.setCompilerOptions ({
@@ -492,18 +492,18 @@ async function setupEditor () {
   try {
     const r = await fetch (TYPES_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error (r.status + " " + r.statusText);
-    js.addExtraLib (await r.text (), "file:///types/zerogap.d.ts");
+    js.addExtraLib (await r.text (), "file:///types/gapkeep.d.ts");
   } catch (e) {
-    ideLog (`could not load types/zerogap.d.ts (${e.message}): no zg:* completions`, true);
+    ideLog (`could not load types/gapkeep.d.ts (${e.message}): no gk:* completions`, true);
   }
 
   const json = monaco.json || monaco.languages.json;
   json.jsonDefaults.setDiagnosticsOptions ({
     validate: true,
-    schemas: [{ uri: "zerogap://manifest.schema.json", fileMatch: ["**/manifest.json"], schema: MANIFEST_SCHEMA }],
+    schemas: [{ uri: "gapkeep://manifest.schema.json", fileMatch: ["**/manifest.json"], schema: MANIFEST_SCHEMA }],
   });
 
-  monaco.editor.defineTheme ("zerogap", {
+  monaco.editor.defineTheme ("gapkeep", {
     base: "vs-dark", inherit: true, rules: [],
     colors: {
       "editor.background": "#292831",
@@ -515,14 +515,14 @@ async function setupEditor () {
   });
   editor = monaco.editor.create ($("editor"), {
     model: null,
-    theme: "zerogap",
+    theme: "gapkeep",
     automaticLayout: true,
     minimap: { enabled: false },
     fontSize: 13,
     tabSize: 2,
     scrollBeyondLastLine: false,
   });
-  binaryModel = monaco.editor.createModel ("", "plaintext", monaco.Uri.parse ("zgide:binary"));
+  binaryModel = monaco.editor.createModel ("", "plaintext", monaco.Uri.parse ("gkide:binary"));
 }
 
 // ---------------------------------------------------------------------------
@@ -551,19 +551,19 @@ async function run (appId, { focus = true } = {}) {
   stopMachine ();
   updateStatus ("booting...");
   const [w, h] = size;
-  let zg;
+  let gk;
   try {
-    zg = await Zerogap.create ({
-      onLog: (line) => { if (machine === zg) onLog (line); },
-      onHalt: () => { if (machine === zg) { updateStatus (); renderTree (); } },
+    gk = await Gapkeep.create ({
+      onLog: (line) => { if (machine === gk) onLog (line); },
+      onHalt: () => { if (machine === gk) { updateStatus (); renderTree (); } },
     });
   } catch (e) {
-    ideLog (`could not load the simulator (${e.message}); build it with tools/zgide.sh`, true);
+    ideLog (`could not load the simulator (${e.message}); build it with tools/gkide.sh`, true);
     updateStatus ("no simulator");
     return;
   }
   if (token !== runToken) return;   // a later run() took over
-  machine = zg;
+  machine = gk;
   logApp = null;
   const card = {}, builtin = {};
   for (const [path, data] of files) {
@@ -571,31 +571,31 @@ async function run (appId, { focus = true } = {}) {
     if (BUILTIN.has (appOf (path))) builtin[path.slice (5)] = data;
     else card[path] = data;
   }
-  // the card's zerogap.txt: only the experimental switch (docs/EXPERIMENTAL.md)
-  if (localStorage.getItem ("zgide.experimental") === "yes") card["zerogap.txt"] = "experimental = yes\n";
-  if (Object.keys (card).length) zg.writeCard (card);
-  if (Object.keys (builtin).length) zg.writeBuiltin (builtin);
+  // the card's gapkeep.txt: only the experimental switch (docs/EXPERIMENTAL.md)
+  if (localStorage.getItem ("gkide.experimental") === "yes") card["gapkeep.txt"] = "experimental = yes\n";
+  if (Object.keys (card).length) gk.writeCard (card);
+  if (Object.keys (builtin).length) gk.writeBuiltin (builtin);
   const canvas = $("screen");
   canvas.width = w;
   canvas.height = h;
   fitScreen ();
   ideLog (`boot ${w}x${h}` + (appId ? `, then start ${appId}` : ""));
   try {
-    zg.boot (w, h);
+    gk.boot (w, h);
   } catch (e) {
     ideLog (e.message, true);
     if (builtin["launcher/main.js"] !== undefined) {
-      ideLog ("zerogap starts with the launcher, and that is the copy in apps/launcher: " +
+      ideLog ("GapKeep starts with the launcher, and that is the copy in apps/launcher: " +
         "fix it (see the error above), or delete apps/launcher to use the built-in one", true);
     }
     stopMachine ();
     updateStatus ();
     return;
   }
-  zg.start ();
+  gk.start ();
   camera.apply ();
   lastApp = appId;
-  if (appId && !zg.launch (appId)) {
+  if (appId && !gk.launch (appId)) {
     ideLog (`${appId} did not start (see "not loaded" above); staying on the launcher`, true);
   }
   updateStatus ();
@@ -608,7 +608,7 @@ const appToRun = () => appOf (current) || appOf (selected?.path);
 
 function home () {
   if (!machine) return;
-  // zerogap's Home is the Windows key, which browsers and desktops keep
+  // GapKeep's Home is the Windows key, which browsers and desktops keep
   // for themselves; the button sends it.
   machine.keyDown ("Meta");
   setTimeout (() => machine?.keyUp (), 50);
@@ -639,13 +639,13 @@ function setupScreen () {
   sel.value = SIZES.indexOf (size);
   sel.onchange = () => {
     size = SIZES[sel.value];
-    localStorage.setItem ("zgide.size", sizeName (size));
+    localStorage.setItem ("gkide.size", sizeName (size));
     run (machine ? lastApp : null);
   };
   const experimental = $("experimental");
-  experimental.checked = localStorage.getItem ("zgide.experimental") === "yes";
+  experimental.checked = localStorage.getItem ("gkide.experimental") === "yes";
   experimental.onchange = () => {
-    localStorage.setItem ("zgide.experimental", experimental.checked ? "yes" : "no");
+    localStorage.setItem ("gkide.experimental", experimental.checked ? "yes" : "no");
     run (machine ? lastApp : null);
   };
 
@@ -667,7 +667,7 @@ function setupScreen () {
   const hint = () => {
     const focused = document.activeElement === input;
     canvas.classList.toggle ("focused", focused);
-    $("screen-hint").textContent = focused ? "keyboard goes to zerogap" : "click the screen to type into it";
+    $("screen-hint").textContent = focused ? "keyboard goes to GapKeep" : "click the screen to type into it";
     $("screen-hint").classList.toggle ("focused", focused);
   };
   input.addEventListener ("focus", hint);
@@ -693,14 +693,14 @@ function setupScreen () {
   input.addEventListener ("input", (e) => {
     if (keys.input ({ isComposing: e.isComposing, inputType: e.inputType }, input.value)) input.value = "";
   });
-  // Pasting types the clipboard's text into zerogap, a key at a time (a
+  // Pasting types the clipboard's text into GapKeep, a key at a time (a
   // simulator convenience: the device has no clipboard).
   input.addEventListener ("paste", (e) => {
     e.preventDefault ();
     if (machine) keys.paste (e.clipboardData.getData ("text/plain"));
   });
 
-  // Mouse: CSS pixels on the scaled canvas -> zerogap's screen pixels.
+  // Mouse: CSS pixels on the scaled canvas -> GapKeep's screen pixels.
   const toScreen = (e) => {
     const r = canvas.getBoundingClientRect ();
     const x = (e.clientX - r.left) * canvas.width / r.width;
@@ -751,9 +751,9 @@ function template (id) {
       id, name, version: "0.1.0", description: "A new app.", icon: "file",
     }, null, 2) + "\n",
     [`apps/${id}/main.js`]:
-`// ${name}: a new zerogap app. See docs/APPS.md and docs/API.md.
+`// ${name}: a new GapKeep app. See docs/APPS.md and docs/API.md.
 
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 const label = new ui.Label({ text: "Hello from ${id}!", font: 24 });
 
@@ -801,8 +801,8 @@ async function newFile () {
   const path = `${folder}/${rel}`;
   if (files.has (path)) return alert (`${path} exists already.`);
   if (pathsUnder (path).length) return alert (`${path} is a folder.`);
-  if (!/\.(js|json|txt)$/.test (rel)) ideLog (`note: zerogap ignores files other than .js, .json and .txt (${rel})`);
-  await addFiles ({ [path]: /\.js$/.test (rel) ? "import * as ui from \"zg:ui\";\n\n" : "" });
+  if (!/\.(js|json|txt)$/.test (rel)) ideLog (`note: GapKeep ignores files other than .js, .json and .txt (${rel})`);
+  await addFiles ({ [path]: /\.js$/.test (rel) ? "import * as ui from \"gk:ui\";\n\n" : "" });
   openFile (path);
 }
 
@@ -874,7 +874,7 @@ async function importFolder (list) {
       ideLog (`import: skipped ${id}/ (no manifest.json)`, true);
       continue;
     }
-    if (!APP_ID.test (id)) ideLog (`import: "${id}" is not a valid app id; zerogap will refuse it until renamed`, true);
+    if (!APP_ID.test (id)) ideLog (`import: "${id}" is not a valid app id; GapKeep will refuse it until renamed`, true);
     if (appIds ().has (id)) {
       if (!confirm (`Replace the app "${id}" with the imported one?`)) continue;
       await deletePaths (pathsUnder (`apps/${id}`));
@@ -900,11 +900,11 @@ async function exportApp () {
     : `exported ${id}.zip (${entries.length} files): unzip it into the card's apps/ folder`);
 }
 
-// The example apps that tools/zgide.sh copies to sim/build/web/examples.
+// The example apps that tools/gkide.sh copies to sim/build/web/examples.
 // only: the apps to add (default: all).
 async function fetchExamples (only = null) {
   const r = await fetch (EXAMPLES_URL, { cache: "no-cache" });
-  if (!r.ok) throw new Error (`${EXAMPLES_URL}: ${r.status} (start the IDE with tools/zgide.sh)`);
+  if (!r.ok) throw new Error (`${EXAMPLES_URL}: ${r.status} (start the IDE with tools/gkide.sh)`);
   const index = (await r.json ()).apps;
   const add = {};
   for (const [id, list] of Object.entries (index)) {
@@ -955,7 +955,7 @@ function setupUi () {
   $("clear").onclick = () => $("console").replaceChildren ();
 
   // Ctrl/Cmd+S and Ctrl/Cmd+Enter everywhere except on the screen, where
-  // every key belongs to zerogap. Capture phase, so Monaco doesn't see them.
+  // every key belongs to GapKeep. Capture phase, so Monaco doesn't see them.
   window.addEventListener ("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target === $("screen-input")) return;
     if (e.key === "s" || e.key === "S") {
@@ -999,7 +999,7 @@ async function main () {
     }
   }
   for (const path of files.keys ()) ensureModel (path);
-  const last = localStorage.getItem ("zgide.open");
+  const last = localStorage.getItem ("gkide.open");
   if (last && files.has (last)) openFile (last);
   else if (files.has ("apps/hello/main.js")) openFile ("apps/hello/main.js");
   else renderTree ();
@@ -1007,8 +1007,8 @@ async function main () {
   await run (null, { focus: false });
 }
 
-// For scripts and tests: window.zgide.run("hello"), .open("apps/x/main.js", 3)...
-window.zgide = {
+// For scripts and tests: window.gkide.run("hello"), .open("apps/x/main.js", 3)...
+window.gkide = {
   run, home, openFile, files, stop: () => $("stop").click (),
   get camera () { return camera; },
   get machine () { return machine; },

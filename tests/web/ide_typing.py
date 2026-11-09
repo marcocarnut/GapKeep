@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 The browser IDE's keyboard in a real browser: headless Chrome, driven over
-its DevTools protocol, types into zerogap's screen as a person would:
+its DevTools protocol, types into GapKeep's screen as a person would:
 letters, a dead key composed by an input method and one without
 composition, an AltGr character, ç á ã, Shift, Backspace, Ctrl+C, a paste
 (a synthetic paste event: headless Chrome has no clipboard), and clicking
@@ -11,7 +11,7 @@ its TextArea. tests/web/textinput.mjs tests the same logic under Node.
 Not run by tools/run_sim_tests.sh: it needs Google Chrome, Python's
 websockets, Monaco (sim/web/vendor, tools/fetch_monaco.sh) and the
 WebAssembly build (make -C sim web). It serves the IDE itself, on PORT,
-with the example apps and typetest (into sim/build/web, as tools/zgide.sh
+with the example apps and typetest (into sim/build/web, as tools/gkide.sh
 does), in a Chrome profile of its own that it deletes afterwards.
 
 What it can't show: real dead keys and AltGr from a real keyboard layout
@@ -129,7 +129,7 @@ async def run():
           re.findall(r"typetest: typed [^\n]*", L)[-1:])
     check("pasted 6 of 7, logged", "pasted 6 of 7 characters" in L)
     check("one warning", L.count("other characters are dropped") == 1)
-    # the editor: clicking it takes the keyboard back; typing goes there, not to zerogap
+    # the editor: clicking it takes the keyboard back; typing goes there, not to GapKeep
     ed = await c.js("(() => { const r = document.querySelector('.monaco-editor .view-lines').getBoundingClientRect(); return [r.x + 40, r.y + 10]; })()")
     for t in ("mousePressed", "mouseReleased"):
         await c.call("Input.dispatchMouseEvent", type=t, x=ed[0], y=ed[1], button="left", clickCount=1)
@@ -139,12 +139,12 @@ async def run():
     before = (await log()).count("typetest: key")
     await key("q", "KeyQ", "q", vk=81)
     await asyncio.sleep(0.3)
-    check("a key in the editor doesn't reach zerogap", (await log()).count("typetest: key") == before)
+    check("a key in the editor doesn't reach GapKeep", (await log()).count("typetest: key") == before)
     print(f"ide_typing: {sum(results)} passed, {len(results) - sum(results)} failed")
 
 
 def examples():
-    """The IDE's example apps, and typetest, as tools/zgide.sh puts them."""
+    """The IDE's example apps, and typetest, as tools/gkide.sh puts them."""
     out = os.path.join(ROOT, "sim", "build", "web", "examples")
     shutil.rmtree(out, ignore_errors=True)
     apps = {}
@@ -161,13 +161,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--chrome", default=shutil.which("google-chrome") or shutil.which("chromium"))
     args = ap.parse_args()
-    for need in ("sim/build/web/zgsim.js", "sim/web/vendor/monaco/vs/loader.js"):
+    for need in ("sim/build/web/gksim.js", "sim/web/vendor/monaco/vs/loader.js"):
         if not os.path.exists(os.path.join(ROOT, need)):
             sys.exit(f"ide_typing: no {need} (make -C sim web; tools/fetch_monaco.sh)")
     if not args.chrome:
         sys.exit("ide_typing: no Chrome (--chrome PATH)")
     examples()
-    profile = tempfile.mkdtemp(prefix="zg-ide-chrome-")
+    profile = tempfile.mkdtemp(prefix="gk-ide-chrome-")
     server = subprocess.Popen([sys.executable, "-m", "http.server", str(PORT), "--bind", "127.0.0.1",
                                "--directory", os.path.join(ROOT, "sim")],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

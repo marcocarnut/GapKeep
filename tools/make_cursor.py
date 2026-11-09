@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Draw zerogap's mouse pointer and write it as C (src/runtime/cursor.c).
+Draw GapKeep's mouse pointer and write it as C (src/runtime/cursor.c).
 
 An arrow with a white body, a dark outline and a soft shadow, drawn 8 times
 larger and scaled down, so its edges are smooth (anti-aliased) rather than
@@ -76,7 +76,7 @@ for y in range(h):
     print('\t' + ','.join(str(v) for v in row) + ',')
 print('};')
 print()
-print('const lv_image_dsc_t zg_cursor_image = {')
+print('const lv_image_dsc_t gk_cursor_image = {')
 print('\t.header = {')
 print('\t\t.magic = LV_IMAGE_HEADER_MAGIC,')
 print('\t\t.cf = LV_COLOR_FORMAT_ARGB8888,')
@@ -88,5 +88,5 @@ print('\t.data_size = sizeof CursorPixels,')
 print('\t.data = CursorPixels,')
 print('};')
 print()
-print('const int zg_cursor_hot_x = %d;' % MARGIN)
-print('const int zg_cursor_hot_y = %d;' % MARGIN)
+print('const int gk_cursor_hot_x = %d;' % MARGIN)
+print('const int gk_cursor_hot_y = %d;' % MARGIN)

@@ -1,16 +1,16 @@
-/* The zerogap IDE: a dark theme in zerogap's colors (the screen's
+/* The GapKeep IDE: a dark theme in GapKeep's colors (the screen's
    background, teal primary, amber focus ring).
    SPDX-License-Identifier: GPL-3.0-or-later */
 
 :root {
   --bg: #1d1c23;          /* page */
-  --pane: #292831;        /* zerogap's screen background */
+  --pane: #292831;        /* GapKeep's screen background */
   --head: #24232b;
   --line: #3a3944;
   --text: #e6e4ec;
   --dim: #8d8b96;
-  --primary: #00968c;     /* zerogap's primary */
-  --focus: #ffc300;       /* zerogap's focus ring */
+  --primary: #00968c;     /* GapKeep's primary */
+  --focus: #ffc300;       /* GapKeep's focus ring */
   --error: #ff6b6b;
   --select: #34404a;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
@@ -94,7 +94,7 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 #file-title.dirty::after { content: " \25CF"; color: var(--focus); }
 
 /* Screen: the canvas is the true size; CSS scales it (integer steps when
-   it fits) and keeps the pixels sharp. zerogap draws its own cursor. */
+   it fits) and keeps the pixels sharp. GapKeep draws its own cursor. */
 #screen-box {
   position: relative;
   flex: 1; min-height: 0; overflow: hidden;

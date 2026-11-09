@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Checks that docs/api/zerogap-api.yaml describes the API the runtime really
+Checks that docs/api/gapkeep-api.yaml describes the API the runtime really
 has: runs the introspection app (tests/apps/apiinfo) on the simulator (test
 build) and compares module exports, widget classes, their properties
 (readable or not) and methods, events, symbols and the globals.
 
 Also checks that the generated files are up to date (tools/gen_api.py).
 
-Usage: check_api.py [path/to/zgsim-test]     (default: builds sim TEST=1)
+Usage: check_api.py [path/to/gksim-test]     (default: builds sim TEST=1)
 Exit status 1 on any difference, each one listed.
 """
 import json
@@ -19,7 +19,7 @@ import sys
 import yaml
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-SPEC = os.path.join(ROOT, 'docs', 'api', 'zerogap-api.yaml')
+SPEC = os.path.join(ROOT, 'docs', 'api', 'gapkeep-api.yaml')
 
 problems = []
 
@@ -70,7 +70,7 @@ def main():
     if binary is None:
         subprocess.run(['make', '-C', os.path.join(ROOT, 'sim'), '-s', '-j%d' % (os.cpu_count() or 2),
                         'TEST=1'], check=True, stdout=subprocess.DEVNULL)
-        binary = os.path.join(ROOT, 'sim', 'build', 'zgsim-test')
+        binary = os.path.join(ROOT, 'sim', 'build', 'gksim-test')
     out = subprocess.run([binary, '--app', 'apiinfo', '--for', '2'], capture_output=True,
                          text=True, timeout=60).stdout
     if 'apiinfo done' not in out:
@@ -88,7 +88,7 @@ def main():
 
     widget_names = [w['name'] for w in ui['widgets']]
     ui_exports = [e['name'] for e in ui['exports'] if e.get('kind') != 'classes'] + widget_names
-    compare('zg:ui exports', ui_exports, real['modules']['zg:ui'])
+    compare('gk:ui exports', ui_exports, real['modules']['gk:ui'])
     for mod in spec['modules']:
         compare('%s exports' % mod['name'], [e['name'] for e in mod['exports']], real['modules'][mod['name']])
 
@@ -137,7 +137,7 @@ def main():
         problems.append(gen.stderr.strip() or gen.stdout.strip())
 
     if problems:
-        print('check_api: docs/api/zerogap-api.yaml and the runtime differ:')
+        print('check_api: docs/api/gapkeep-api.yaml and the runtime differ:')
         for p in problems:
             print('  - ' + p)
         sys.exit(1)

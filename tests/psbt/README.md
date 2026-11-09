@@ -3,7 +3,7 @@
     node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
 
 runs every module against `vectors.json`, with Node's SHA-256 and
-RIPEMD-160 in place of `zg:crypto`'s (and once more without RIPEMD-160).
+RIPEMD-160 in place of `gk:crypto`'s (and once more without RIPEMD-160).
 `tools/run_tests.sh` runs it as `psbt_node`. The simulator scenario is
 `tests/signer_read.txt`.
 

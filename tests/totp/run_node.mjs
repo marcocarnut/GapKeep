@@ -1,5 +1,5 @@
 // Runs the Authenticator's self-test (apps/totp/lib/selftest.js) under Node,
-// with Node's HMAC in place of zg:crypto's:
+// with Node's HMAC in place of gk:crypto's:
 //   node --experimental-default-type=module tests/totp/run_node.mjs
 // (the flag: apps/totp has no package.json saying its .js files are modules)
 import { createHmac } from "node:crypto";

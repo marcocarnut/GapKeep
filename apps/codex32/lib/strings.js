@@ -4,11 +4,11 @@
 // the page. tests/codex32/run_node.mjs checks that the page's are still its
 // own, word for word.
 //
-// Translated through zg:i18n (lang/<language>.json): the English is the key.
+// Translated through gk:i18n (lang/<language>.json): the English is the key.
 // The page's {placeholders} stay in the text, as on the page, and F() fills
 // them; the pt-BR catalog starts from the page's own Portuguese (STRINGS.pt).
 
-import { t } from "zg:i18n";
+import { t } from "gk:i18n";
 
 export const S = {
   // the page's, as it has them

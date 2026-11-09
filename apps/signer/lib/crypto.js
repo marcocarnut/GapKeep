@@ -1,11 +1,11 @@
 // The cryptography the signing modules use, given by the caller: in the app
-// zg:crypto itself, under Node a stand-in with the same functions
+// gk:crypto itself, under Node a stand-in with the same functions
 // (tests/signer/), as the PSBT library's setHashes:
 //
-//   import * as crypto from "zg:crypto";
+//   import * as crypto from "gk:crypto";
 //   setCrypto(crypto);
 //
-// What is used, with zg:crypto's signatures (docs/API.md, "zg:crypto"):
+// What is used, with gk:crypto's signatures (docs/API.md, "gk:crypto"):
 // sha256, sha512, ripemd160, hmac, pbkdf2, isPrivateKey, isPublicKey,
 // publicKey, privateKeyTweakAdd, publicKeyTweakAdd, ecdsaSign, ecdsaVerify,
 // xOnlyPublicKey, schnorrSign, schnorrVerify, taprootTweakPublicKey,

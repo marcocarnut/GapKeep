@@ -5,10 +5,10 @@
 // contents: a QR code may hold a secret, and the log goes to the serial
 // port in test builds.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import { sha256 } from "zg:crypto";
-import { t, plural } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import { sha256 } from "gk:crypto";
+import { t, plural } from "gk:i18n";
 
 const hex = (bytes) => Array.from (bytes, (b) => b.toString (16).padStart (2, "0")).join (" ");
 

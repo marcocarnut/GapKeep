@@ -59,7 +59,7 @@ static void compress (uint32_t state[8], const uint8_t block[64])
 	memset (w, 0, sizeof w);
 }
 
-void zg_sha256_init (zg_sha256_t *ctx)
+void gk_sha256_init (gk_sha256_t *ctx)
 {
 	static const uint32_t H0[8] =
 	{
@@ -71,7 +71,7 @@ void zg_sha256_init (zg_sha256_t *ctx)
 	ctx->fill = 0;
 }
 
-void zg_sha256_update (zg_sha256_t *ctx, const void *data, size_t len)
+void gk_sha256_update (gk_sha256_t *ctx, const void *data, size_t len)
 {
 	const uint8_t *p = data;
 	ctx->length += len;
@@ -96,7 +96,7 @@ void zg_sha256_update (zg_sha256_t *ctx, const void *data, size_t len)
 	}
 }
 
-void zg_sha256_final (zg_sha256_t *ctx, uint8_t digest[ZG_SHA256_DIGEST_SIZE])
+void gk_sha256_final (gk_sha256_t *ctx, uint8_t digest[GK_SHA256_DIGEST_SIZE])
 {
 	uint64_t bits = ctx->length * 8;
 
@@ -125,12 +125,12 @@ void zg_sha256_final (zg_sha256_t *ctx, uint8_t digest[ZG_SHA256_DIGEST_SIZE])
 	memset (ctx, 0, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
-void zg_sha256 (const void *data, size_t len, uint8_t digest[ZG_SHA256_DIGEST_SIZE])
+void gk_sha256 (const void *data, size_t len, uint8_t digest[GK_SHA256_DIGEST_SIZE])
 {
-	zg_sha256_t ctx;
-	zg_sha256_init (&ctx);
-	zg_sha256_update (&ctx, data, len);
-	zg_sha256_final (&ctx, digest);
+	gk_sha256_t ctx;
+	gk_sha256_init (&ctx);
+	gk_sha256_update (&ctx, data, len);
+	gk_sha256_final (&ctx, digest);
 }
 
 static int hex_equal (const uint8_t *digest, const char *hex)
@@ -146,7 +146,7 @@ static int hex_equal (const uint8_t *digest, const char *hex)
 	return 1;
 }
 
-int zg_sha256_selftest (void)
+int gk_sha256_selftest (void)
 {
 	/* FIPS 180-4 examples (NIST CSRC "SHA256.pdf", "SHA2_Additional.pdf") */
 	static const struct { const char *msg; const char *hex; } v[] =
@@ -162,7 +162,7 @@ int zg_sha256_selftest (void)
 
 	for (unsigned i = 0; i < sizeof v / sizeof v[0]; i++)
 	{
-		zg_sha256 (v[i].msg, strlen (v[i].msg), d);
+		gk_sha256 (v[i].msg, strlen (v[i].msg), d);
 		if (!hex_equal (d, v[i].hex))
 		{
 			return (int) i + 1;
@@ -170,18 +170,18 @@ int zg_sha256_selftest (void)
 	}
 
 	/* one million 'a', fed in uneven pieces to exercise buffering */
-	zg_sha256_t ctx;
+	gk_sha256_t ctx;
 	char a[997];
 	memset (a, 'a', sizeof a);
-	zg_sha256_init (&ctx);
+	gk_sha256_init (&ctx);
 	size_t left = 1000000;
 	while (left > 0)
 	{
 		size_t n = left < sizeof a ? left : sizeof a;
-		zg_sha256_update (&ctx, a, n);
+		gk_sha256_update (&ctx, a, n);
 		left -= n;
 	}
-	zg_sha256_final (&ctx, d);
+	gk_sha256_final (&ctx, d);
 	if (!hex_equal (d, "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"))
 	{
 		return 100;

@@ -1,7 +1,7 @@
 //
 // kernel.cpp
 //
-// zerogap kernel: brings up the hardware (HDMI framebuffer, USB keyboard and
+// GapKeep kernel: brings up the hardware (HDMI framebuffer, USB keyboard and
 // mouse), LVGL, and the app host, then runs the main loop.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -20,8 +20,8 @@
 
 // same rate as the serial bootloader (FLASHBAUD), so one terminal setting
 // covers both
-#ifndef ZG_SERIAL_BAUD
-#define ZG_SERIAL_BAUD	921600
+#ifndef GK_SERIAL_BAUD
+#define GK_SERIAL_BAUD	921600
 #endif
 
 static const char FromKernel[] = "kernel";
@@ -32,12 +32,12 @@ CKernel::CKernel (void)
 	m_Logger (m_Options.GetLogLevel (), &m_Timer),
 	m_CPUThrottle (CPUSpeedMaximum),
 	m_USBHCI (&m_Interrupt, &m_Timer, TRUE),	// TRUE: plug-and-play
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 	m_EMMC (&m_Interrupt, &m_Timer, &m_ActLED),
 #endif
 	m_GUI (&m_Screen),
 	m_AppHost (&m_Keyboard)
-#ifdef ZG_TEST
+#ifdef GK_TEST
 	, m_TestShot (&m_Screen, &m_Serial, &m_PiCamera)
 #endif
 {
@@ -62,12 +62,12 @@ boolean CKernel::Initialize (void)
 		ShowLoading ();
 	}
 
-#ifdef ZG_SERIAL_LOG
+#ifdef GK_SERIAL_LOG
 	if (bOK)
 	{
-		// ZG_SERIAL_BAUD needs a fast enough UART clock (the Pi firmware
+		// GK_SERIAL_BAUD needs a fast enough UART clock (the Pi firmware
 		// gives 48 MHz, see init_uart_clock in config.txt); QEMU's is slower
-		unsigned nBaud = ZG_SERIAL_BAUD;
+		unsigned nBaud = GK_SERIAL_BAUD;
 		if (CMachineInfo::Get ()->GetClockRate (CLOCK_ID_UART) / (16 * nBaud) < 1)
 		{
 			nBaud = 115200;
@@ -108,7 +108,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		// the exception and interrupt vectors are in place: no more writes
-		// to the vector page (circle/lib/pagetable.cpp, zerogap's W^X map)
+		// to the vector page (circle/lib/pagetable.cpp, GapKeep's W^X map)
 		CPageTable::ProtectVectorPage ();
 	}
 
@@ -124,7 +124,7 @@ boolean CKernel::Initialize (void)
 
 	if (bOK)
 	{
-		// a failing RNG is reported and disables zg:crypto's random
+		// a failing RNG is reported and disables gk:crypto's random
 		// functions, but does not stop the system
 		m_Random.Initialize ();
 	}
@@ -132,7 +132,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		// apps: built in, then from the SD card (no card: built-in only)
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 		CAppStore::Initialize (m_EMMC.Initialize ());
 #else
 		CAppStore::Initialize (FALSE);
@@ -142,24 +142,24 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		bOK = m_GUI.Initialize ();
-		ZgInstallCursor ();
+		GkInstallCursor ();
 	}
 
 	if (bOK)
 	{
 		m_Keyboard.Initialize ();
 
-		m_Logger.Write (FromKernel, LogNotice, "zerogap " ZEROGAP_VERSION ", built " __DATE__ " " __TIME__);
+		m_Logger.Write (FromKernel, LogNotice, "gapkeep " GAPKEEP_VERSION ", built " __DATE__ " " __TIME__);
 		m_Logger.Write (FromKernel, LogNotice, "Screen %ux%u", m_Screen.GetWidth (), m_Screen.GetHeight ());
 		LogClocks ();
 
-#ifndef ZG_TEST
+#ifndef GK_TEST
 		// A Pi Camera on the connector? The probe powers it for a moment
 		// only. Test builds keep their synthetic camera (the tests depend
 		// on it) and switch with "#camera pi" (testshot.h).
 		if (m_PiCamera.Probe ())
 		{
-			CZgCamera::Set (&m_PiCamera);
+			CGkCamera::Set (&m_PiCamera);
 		}
 #endif
 
@@ -180,15 +180,15 @@ TShutdownMode CKernel::Run (void)
 		int nWheel = m_GUI.TakeWheelMove ();	// USB: > 0 is up (patches/circle/0006)
 		if (nWheel != 0)
 		{
-			ZgWheel (-nWheel);		// scrolls what is under the pointer
+			GkWheel (-nWheel);		// scrolls what is under the pointer
 		}
 		if (bUpdated)
 		{
-			ZgInstallCursor ();		// a mouse may have turned up
+			GkInstallCursor ();		// a mouse may have turned up
 		}
 		m_AppHost.Update ();			// JS jobs, deferred work, app switches
 		m_CPUThrottle.Update ();		// down to the minimum when hot
-#ifdef ZG_TEST
+#ifdef GK_TEST
 		m_TestShot.Update ();			// serial screenshots
 #endif
 	}
@@ -203,7 +203,7 @@ TShutdownMode CKernel::Run (void)
 void CKernel::ShowLoading (void)
 {
 	static const char *Lines[] = {
-		"ZeroGap is loading.",
+		"GapKeep is loading.",
 		"It will come up in a few seconds."
 	};
 	const unsigned nLines = sizeof Lines / sizeof Lines[0];

@@ -2,6 +2,6 @@
   "id": "gallery",
   "name": "Widget Gallery",
   "version": "0.1.0",
-  "description": "Every zg:ui widget, plus a self-test of the runtime.",
+  "description": "Every gk:ui widget, plus a self-test of the runtime.",
   "icon": "list"
 }

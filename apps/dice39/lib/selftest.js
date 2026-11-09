@@ -1,5 +1,5 @@
 // dice39 self-test: published test vectors and invariants for the extracted
-// dice39 logic. Runs in the app at startup (on zerogap's native SHA-256)
+// dice39 logic. Runs in the app at startup (on GapKeep's native SHA-256)
 // and on the development machine under Node (tests/dice39/run_node.mjs).
 //
 // Needs a global `crypto` with subtle.digest and getRandomValues, and

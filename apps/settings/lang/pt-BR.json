@@ -14,7 +14,7 @@
     "Amount: {amount} BTC": "Valor: {amount} BTC",
     "Number: {number}": "Número: {number}",
     "Date and time: {date}": "Data e hora: {date}",
-    "These apply now, until ZeroGap is switched off. To keep them, put these lines in zerogap.txt at the top of the SD card:": "Valem a partir de agora, até o ZeroGap ser desligado. Para mantê-las, coloque estas linhas no zerogap.txt, na raiz do cartão SD:",
+    "These apply now, until GapKeep is switched off. To keep them, put these lines in gapkeep.txt at the top of the SD card:": "Valem a partir de agora, até o GapKeep ser desligado. Para mantê-las, coloque estas linhas no gapkeep.txt, na raiz do cartão SD:",
     "Back": "Voltar"
   },
   "notes": {

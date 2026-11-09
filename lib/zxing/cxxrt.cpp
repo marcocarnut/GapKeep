@@ -12,7 +12,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <wchar.h>
-#include "zg_bridge.h"
+#include "gk_bridge.h"
 
 // std::string: libstdc++ declares the instantiation for char extern (it is
 // compiled into libstdc++.a, with exceptions). The one member function
@@ -34,32 +34,32 @@ namespace std
 {
 	[[noreturn]] void __throw_bad_alloc (void)
 	{
-		zg_fatal ("QR decoder: C++ library: out of memory");
+		gk_fatal ("QR decoder: C++ library: out of memory");
 	}
 	[[noreturn]] void __throw_bad_array_new_length (void)
 	{
-		zg_fatal ("QR decoder: C++ library: bad array new length");
+		gk_fatal ("QR decoder: C++ library: bad array new length");
 	}
 	[[noreturn]] void __throw_bad_function_call (void)
 	{
-		zg_fatal ("QR decoder: C++ library: bad function call");
+		gk_fatal ("QR decoder: C++ library: bad function call");
 	}
 	[[noreturn]] void __throw_length_error (const char *)
 	{
-		zg_fatal ("QR decoder: C++ library: length error");
+		gk_fatal ("QR decoder: C++ library: length error");
 	}
 	[[noreturn]] void __throw_logic_error (const char *)
 	{
-		zg_fatal ("QR decoder: C++ library: logic error");
+		gk_fatal ("QR decoder: C++ library: logic error");
 	}
 	[[noreturn]] void __throw_out_of_range_fmt (const char *, ...)
 	{
-		zg_fatal ("QR decoder: C++ library: out of range");
+		gk_fatal ("QR decoder: C++ library: out of range");
 	}
 }
 
 // From the C library, which the kernel does not have (zxing-cpp's text
-// conversion: zerogap takes QR payloads as bytes, but the code is linked)
+// conversion: GapKeep takes QR payloads as bytes, but the code is linked)
 extern "C" int tolower (int c)
 {
 	return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c;

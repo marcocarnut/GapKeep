@@ -11,14 +11,14 @@
 
 static const unsigned FrameTicks = CLOCKHZ / 15;
 
-CZgSynthCamera::CZgSynthCamera (void)
+CGkSynthCamera::CGkSynthCamera (void)
 :	m_Mode (ModeScene),
 	m_bStreaming (FALSE),
 	m_pPicture (new u8[FrameWidth * FrameHeight]),
 	m_nPictureWidth (FrameWidth),
 	m_nPictureHeight (FrameHeight),
 	m_pFrame (new u8[FrameWidth * FrameHeight]),
-	m_Field (ZgFieldCenter),
+	m_Field (GkFieldCenter),
 	m_pSource (0),
 	m_nSourceChannels (1),
 	m_pPictureRGB (0),
@@ -37,7 +37,7 @@ CZgSynthCamera::CZgSynthCamera (void)
 	DrawScene ();
 }
 
-CZgSynthCamera::~CZgSynthCamera (void)
+CGkSynthCamera::~CGkSynthCamera (void)
 {
 	delete [] m_pPicture;
 	delete [] m_pFrame;
@@ -46,7 +46,7 @@ CZgSynthCamera::~CZgSynthCamera (void)
 	delete [] m_pFrameRGB;
 }
 
-const char *CZgSynthCamera::GetMode (void) const
+const char *CGkSynthCamera::GetMode (void) const
 {
 	switch (m_Mode)
 	{
@@ -60,7 +60,7 @@ const char *CZgSynthCamera::GetMode (void) const
 }
 
 // A soft diagonal gradient, the "room" the camera looks at.
-void CZgSynthCamera::DrawScene (void)
+void CGkSynthCamera::DrawScene (void)
 {
 	m_bPictureRGB = FALSE;
 	m_nPictureWidth = FrameWidth;
@@ -74,18 +74,18 @@ void CZgSynthCamera::DrawScene (void)
 	}
 }
 
-void CZgSynthCamera::SetNone (void)
+void CGkSynthCamera::SetNone (void)
 {
 	m_Mode = ModeNone;
 }
 
-void CZgSynthCamera::SetScene (void)
+void CGkSynthCamera::SetScene (void)
 {
 	m_Mode = ModeScene;
 	DrawScene ();
 }
 
-boolean CZgSynthCamera::SetQR (const u8 *pData, unsigned nLength)
+boolean CGkSynthCamera::SetQR (const u8 *pData, unsigned nLength)
 {
 	if (nLength > MaxQRBytes)
 	{
@@ -173,7 +173,7 @@ boolean CZgSynthCamera::SetQR (const u8 *pData, unsigned nLength)
 // A picture or a live frame keeps its own resolution; each frame is made
 // from it as the field asks, as a real camera's would be: the middle at
 // full detail, or all of it, averaged down (less detail per degree).
-boolean CZgSynthCamera::SetSource (const u8 *pPixels, unsigned nChannels, unsigned nWidth,
+boolean CGkSynthCamera::SetSource (const u8 *pPixels, unsigned nChannels, unsigned nWidth,
 				   unsigned nHeight, unsigned nMaxSide)
 {
 	if (nWidth == 0 || nHeight == 0 || nWidth > nMaxSide || nHeight > nMaxSide)
@@ -196,7 +196,7 @@ boolean CZgSynthCamera::SetSource (const u8 *pPixels, unsigned nChannels, unsign
 }
 
 // the colour picture's grey, as the Pi camera's: (R + 2G + B) / 4
-void CZgSynthCamera::Greys (void)
+void CGkSynthCamera::Greys (void)
 {
 	const u8 *p = m_pPictureRGB;
 	for (unsigned i = 0; i < m_nPictureWidth * m_nPictureHeight; i++, p += 3)
@@ -205,7 +205,7 @@ void CZgSynthCamera::Greys (void)
 	}
 }
 
-void CZgSynthCamera::Derive (void)
+void CGkSynthCamera::Derive (void)
 {
 	unsigned W = m_nSourceWidth, H = m_nSourceHeight, C = m_nSourceChannels;
 	m_bPictureRGB = C == 3;
@@ -215,7 +215,7 @@ void CZgSynthCamera::Derive (void)
 	}
 	u8 *pOut = m_bPictureRGB ? m_pPictureRGB : m_pPicture;
 
-	if (m_Field == ZgFieldCenter || (W <= FrameWidth && H <= FrameHeight))
+	if (m_Field == GkFieldCenter || (W <= FrameWidth && H <= FrameHeight))
 	{
 		// the middle, pixel for pixel
 		unsigned w = W < FrameWidth ? W : FrameWidth;
@@ -272,7 +272,7 @@ void CZgSynthCamera::Derive (void)
 	}
 }
 
-void CZgSynthCamera::SetField (TZgCameraField Field)
+void CGkSynthCamera::SetField (TGkCameraField Field)
 {
 	m_Field = Field;
 	if (m_Mode == ModePicture)
@@ -285,7 +285,7 @@ void CZgSynthCamera::SetField (TZgCameraField Field)
 	}
 }
 
-boolean CZgSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
+boolean CGkSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
 {
 	if (!SetSource (pGrey, 1, nWidth, nHeight, MaxPictureSide))
 	{
@@ -296,7 +296,7 @@ boolean CZgSynthCamera::SetPicture (const u8 *pGrey, unsigned nWidth, unsigned n
 	return TRUE;
 }
 
-boolean CZgSynthCamera::SetPictureRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight)
+boolean CGkSynthCamera::SetPictureRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight)
 {
 	if (!SetSource (pRGB, 3, nWidth, nHeight, MaxColourSide))
 	{
@@ -307,7 +307,7 @@ boolean CZgSynthCamera::SetPictureRGB (const u8 *pRGB, unsigned nWidth, unsigned
 	return TRUE;
 }
 
-boolean CZgSynthCamera::PushFrame (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
+boolean CGkSynthCamera::PushFrame (const u8 *pGrey, unsigned nWidth, unsigned nHeight)
 {
 	if (!SetSource (pGrey, 1, nWidth, nHeight, MaxPushSide))
 	{
@@ -318,7 +318,7 @@ boolean CZgSynthCamera::PushFrame (const u8 *pGrey, unsigned nWidth, unsigned nH
 	return TRUE;
 }
 
-boolean CZgSynthCamera::PushFrameRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight)
+boolean CGkSynthCamera::PushFrameRGB (const u8 *pRGB, unsigned nWidth, unsigned nHeight)
 {
 	if (!SetSource (pRGB, 3, nWidth, nHeight, MaxPushSide))
 	{
@@ -329,7 +329,7 @@ boolean CZgSynthCamera::PushFrameRGB (const u8 *pRGB, unsigned nWidth, unsigned 
 	return TRUE;
 }
 
-boolean CZgSynthCamera::Start (void)
+boolean CGkSynthCamera::Start (void)
 {
 	if (m_Mode == ModeNone)
 	{
@@ -345,12 +345,12 @@ boolean CZgSynthCamera::Start (void)
 	return TRUE;
 }
 
-void CZgSynthCamera::Stop (void)
+void CGkSynthCamera::Stop (void)
 {
 	m_bStreaming = FALSE;
 }
 
-const char *CZgSynthCamera::GetError (void)
+const char *CGkSynthCamera::GetError (void)
 {
 	return m_Mode == ModeNone ? "no camera" : 0;
 }
@@ -360,7 +360,7 @@ static inline u8 Clamp (int v)
 	return (u8) (v < 0 ? 0 : v > 255 ? 255 : v);
 }
 
-void CZgSynthCamera::MakeFrame (void)
+void CGkSynthCamera::MakeFrame (void)
 {
 	// the picture plus noise of +-4 levels (xorshift32); in colour, the
 	// same noise on each channel, so the grey frame stays its grey
@@ -385,7 +385,7 @@ void CZgSynthCamera::MakeFrame (void)
 	m_nNoise = n;
 }
 
-const u8 *CZgSynthCamera::GetColourFrame (void)
+const u8 *CGkSynthCamera::GetColourFrame (void)
 {
 	if (!m_bColour || m_pFrameRGB == 0)
 	{
@@ -406,7 +406,7 @@ const u8 *CZgSynthCamera::GetColourFrame (void)
 	return m_pFrameRGB;
 }
 
-const u8 *CZgSynthCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight)
+const u8 *CGkSynthCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight)
 {
 	if (!m_bStreaming || m_Mode == ModeNone)
 	{

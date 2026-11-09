@@ -1,23 +1,23 @@
 #!/bin/sh
 #
-# Runs an app in the zerogap simulator (sim/), for development: builds the
+# Runs an app in the GapKeep simulator (sim/), for development: builds the
 # simulator if needed, puts the app(s) on a temporary "SD card" and starts
 # the first one. The log goes to stdout; type commands on stdin (see
 # sim/src/main.cpp: key <name>, pointer <x> <y> <0|1>, shot <file.png>,
 # launch <id>, quit).
 #
-# Usage: tools/zgsim [--size WxH] [--lang TAG] [--for SECONDS] [--shot FILE.png] APP_DIR [APP_DIR ...]
+# Usage: tools/gksim [--size WxH] [--lang TAG] [--for SECONDS] [--shot FILE.png] APP_DIR [APP_DIR ...]
 #
-#   tools/zgsim apps/hello                         # run it, Ctrl-D or "quit" to stop
-#   tools/zgsim --for 3 --shot /tmp/x.png myapp    # run 3 s, screenshot, exit
-#   tools/zgsim --lang pt-BR apps/clock            # in Brazilian Portuguese
-#   tools/zgsim --lang qps apps/clock              # the pseudo-language: text
+#   tools/gksim apps/hello                         # run it, Ctrl-D or "quit" to stop
+#   tools/gksim --for 3 --shot /tmp/x.png myapp    # run 3 s, screenshot, exit
+#   tools/gksim --lang pt-BR apps/clock            # in Brazilian Portuguese
+#   tools/gksim --lang qps apps/clock              # the pseudo-language: text
 #                                                  # not translated stands out
 #
 # The card is a copy: edit the app, run again. Each APP_DIR is a folder
 # with manifest.json; its name must be the app's id. A folder named
 # launcher replaces the built-in launcher (simulator only, see --builtin
-# in docs/SIMULATOR.md):  tools/zgsim apps/launcher
+# in docs/SIMULATOR.md):  tools/gksim apps/launcher
 #
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -26,24 +26,24 @@ APPS=
 while [ $# -gt 0 ]; do
 	case $1 in
 	--size|--for|--shot|--lang) ARGS="$ARGS $1 $2"; shift 2 ;;
-	-*) echo "zgsim: unknown option $1" >&2; exit 2 ;;
+	-*) echo "gksim: unknown option $1" >&2; exit 2 ;;
 	*) APPS="$APPS $1"; shift ;;
 	esac
 done
 [ -n "$APPS" ] || { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 make -C "$ROOT/sim" -s -j"$(nproc)" >/dev/null
-CARD=$(mktemp -d -t zgsim-card-XXXXXX)
+CARD=$(mktemp -d -t gksim-card-XXXXXX)
 trap 'rm -rf "$CARD"' EXIT
 mkdir "$CARD/apps" "$CARD/builtin"
 FIRST=
 for a in $APPS; do
 	a=${a%/}
-	[ -f "$a/manifest.json" ] || { echo "zgsim: $a has no manifest.json" >&2; exit 2; }
+	[ -f "$a/manifest.json" ] || { echo "gksim: $a has no manifest.json" >&2; exit 2; }
 	case $(basename "$a") in
 	launcher) cp -r "$a" "$CARD/builtin/" ;;
 	*) cp -r "$a" "$CARD/apps/" ;;
 	esac
 	FIRST=${FIRST:-$(basename "$a")}
 done
-"$ROOT/sim/build/zgsim" --card "$CARD" --builtin "$CARD/builtin" --app "$FIRST" $ARGS
+"$ROOT/sim/build/gksim" --card "$CARD" --builtin "$CARD/builtin" --app "$FIRST" $ARGS

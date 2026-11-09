@@ -1,6 +1,6 @@
-// zg:i18n's pure parts under Node: messages, plurals, the pseudo-language,
+// gk:i18n's pure parts under Node: messages, plurals, the pseudo-language,
 // numbers, amounts (GapWallet's W4 cases), dates. The runtime's own module,
-// src/runtime/i18n.js, with fake_native.mjs for "zg:i18n-native".
+// src/runtime/i18n.js, with fake_native.mjs for "gk:i18n-native".
 //   node --experimental-default-type=module tests/i18n/run_node.mjs
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -11,9 +11,9 @@ import assert from "node:assert/strict";
 
 const native = new URL("./fake_native.mjs", import.meta.url);
 const source = readFileSync(new URL("../../src/runtime/i18n.js", import.meta.url), "utf8")
-  .replace(`from "zg:i18n-native"`, `from ${JSON.stringify(native.href)}`);
-assert.ok(source.includes(native.href), "the import of zg:i18n-native");
-const dir = mkdtempSync(join(tmpdir(), "zg-i18n-"));
+  .replace(`from "gk:i18n-native"`, `from ${JSON.stringify(native.href)}`);
+assert.ok(source.includes(native.href), "the import of gk:i18n-native");
+const dir = mkdtempSync(join(tmpdir(), "gk-i18n-"));
 writeFileSync(join(dir, "i18n.mjs"), source);
 const i = await import(join(dir, "i18n.mjs"));
 rmSync(dir, { recursive: true });

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Extract dice39's logic from bip39_generator.html into ES modules for the
-zerogap dice39 app (apps/dice39/vendor/).
+GapKeep dice39 app (apps/dice39/vendor/).
 
 The code is copied byte for byte. Each module gets a header naming the
 source file and its SHA-256, a short prelude so browser-isms keep working
@@ -180,7 +180,7 @@ def main():
              'isPartialDiceCode', 'diceWordFor', 'SEEDQR_ECC', 'seedQrDigits',
              'compactSeedQrPayload', 'samplesToBytes',
              # entropy pad accounting (the pad itself is DOM code, rewritten
-             # for zg:ui in main.js)
+             # for gk:ui in main.js)
              'BITS_PER_DRAG_POINT', 'BITS_PER_TAP', 'MIN_DRAG_DISTANCE_PX',
              'MIN_SAMPLE_INTERVAL_MS', 'SAMPLE_CAP']
     parts = [extract_decl(text, n) for n in names]

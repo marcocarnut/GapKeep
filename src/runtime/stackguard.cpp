@@ -7,10 +7,10 @@
 // returning. A buffer overflow that reaches the return address changes it,
 // and the system stops instead of running the attacker's choice of code.
 //
-// The guard is a fixed value until ZgInitStackGuard() replaces it with one
+// The guard is a fixed value until GkInitStackGuard() replaces it with one
 // from the hardware RNG, first thing in main(). Only functions that are
 // running at that moment would see a changed guard: sysinit(), which never
-// returns, and main() and ZgInitStackGuard() itself, which are compiled
+// returns, and main() and GkInitStackGuard() itself, which are compiled
 // without the check.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -38,7 +38,7 @@ extern "C"
 }
 
 __attribute__ ((no_stack_protector))
-void ZgInitStackGuard (void)
+void GkInitStackGuard (void)
 {
 	CBcmRandomNumberGenerator Random;
 	u32 nGuard = Random.GetNumber ();

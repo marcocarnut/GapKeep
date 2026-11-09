@@ -1,7 +1,7 @@
 //
 // js_clock.cpp
 //
-// The "zg:clock" module: the wall clock (clock.h). Every app may read it
+// The "gk:clock" module: the wall clock (clock.h). Every app may read it
 // and ask to be called on its marks (every 30 s, ...); only apps with the
 // "rtc" permission may set it, its trim or its UTC offset. See docs/API.md
 // and docs/CLOCK.md.
@@ -25,22 +25,22 @@ static const double MaxTime = 4102444800000.0;	// 2100-01-01, ms
 static const unsigned MaxPeriod = 86400;	// s
 static const unsigned CheckMs = 50;
 
-struct TZgAlarm
+struct TGkAlarm
 {
-	TZgAlarm *pNext;
+	TGkAlarm *pNext;
 	unsigned nID;
 	s64 nPeriod;			// µs
 	s64 nNext;			// µs since the epoch: the next mark
 	JSValue Func;
 };
 
-struct TZgClockState
+struct TGkClockState
 {
-	TZgAlarm *pAlarms;
+	TGkAlarm *pAlarms;
 	unsigned nNextID;
 	unsigned nSerial;		// the clock's, when the marks were worked out
 	lv_timer_t *pTimer;
-	TZgApp *pApp;
+	TGkApp *pApp;
 };
 
 static s64 NextMark (s64 nNow, s64 nPeriod)
@@ -53,9 +53,9 @@ static s64 NextMark (s64 nNow, s64 nPeriod)
 	return (n + 1) * nPeriod;
 }
 
-static TZgAlarm *FindAlarm (TZgClockState *pState, unsigned nID)
+static TGkAlarm *FindAlarm (TGkClockState *pState, unsigned nID)
 {
-	for (TZgAlarm *p = pState->pAlarms; p != 0; p = p->pNext)
+	for (TGkAlarm *p = pState->pAlarms; p != 0; p = p->pNext)
 	{
 		if (p->nID == nID)
 		{
@@ -65,9 +65,9 @@ static TZgAlarm *FindAlarm (TZgClockState *pState, unsigned nID)
 	return 0;
 }
 
-static void FreeAlarm (JSContext *ctx, TZgClockState *pState, TZgAlarm *pAlarm)
+static void FreeAlarm (JSContext *ctx, TGkClockState *pState, TGkAlarm *pAlarm)
 {
-	for (TZgAlarm **pp = &pState->pAlarms; *pp != 0; pp = &(*pp)->pNext)
+	for (TGkAlarm **pp = &pState->pAlarms; *pp != 0; pp = &(*pp)->pNext)
 	{
 		if (*pp == pAlarm)
 		{
@@ -79,9 +79,9 @@ static void FreeAlarm (JSContext *ctx, TZgClockState *pState, TZgAlarm *pAlarm)
 	delete pAlarm;
 }
 
-static void Fire (TZgClockState *pState, unsigned nID, s64 nNow, boolean bChanged)
+static void Fire (TGkClockState *pState, unsigned nID, s64 nNow, boolean bChanged)
 {
-	TZgAlarm *pAlarm = FindAlarm (pState, nID);	// a handler may have cancelled it
+	TGkAlarm *pAlarm = FindAlarm (pState, nID);	// a handler may have cancelled it
 	if (pAlarm == 0)
 	{
 		return;
@@ -101,15 +101,15 @@ static void Fire (TZgClockState *pState, unsigned nID, s64 nNow, boolean bChange
 
 static void CheckAlarms (lv_timer_t *pTimer)
 {
-	TZgClockState *pState = (TZgClockState *) lv_timer_get_user_data (pTimer);
-	s64 nNow = CZgClock::Now ();
-	boolean bChanged = CZgClock::GetSerial () != pState->nSerial;
-	pState->nSerial = CZgClock::GetSerial ();
+	TGkClockState *pState = (TGkClockState *) lv_timer_get_user_data (pTimer);
+	s64 nNow = CGkClock::Now ();
+	boolean bChanged = CGkClock::GetSerial () != pState->nSerial;
+	pState->nSerial = CGkClock::GetSerial ();
 
 	// the due ones first: handlers may add or cancel alarms
 	static const unsigned MaxDue = 32;
 	unsigned Due[MaxDue], nDue = 0;
-	for (TZgAlarm *p = pState->pAlarms; p != 0 && nDue < MaxDue; p = p->pNext)
+	for (TGkAlarm *p = pState->pAlarms; p != 0 && nDue < MaxDue; p = p->pNext)
 	{
 		if (bChanged || nNow >= p->nNext)
 		{
@@ -122,15 +122,15 @@ static void CheckAlarms (lv_timer_t *pTimer)
 	}
 }
 
-static TZgClockState *GetState (JSContext *ctx)
+static TGkClockState *GetState (JSContext *ctx)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	if (pApp->pClock == 0)
 	{
-		TZgClockState *pState = new TZgClockState;
+		TGkClockState *pState = new TGkClockState;
 		pState->pAlarms = 0;
 		pState->nNextID = 1;
-		pState->nSerial = CZgClock::GetSerial ();
+		pState->nSerial = CGkClock::GetSerial ();
 		pState->pApp = pApp;
 		pState->pTimer = lv_timer_create (CheckAlarms, CheckMs, pState);
 		pApp->pClock = pState;
@@ -138,9 +138,9 @@ static TZgClockState *GetState (JSContext *ctx)
 	return pApp->pClock;
 }
 
-void ZgClockFree (TZgApp *pApp)
+void GkClockFree (TGkApp *pApp)
 {
-	TZgClockState *pState = pApp->pClock;
+	TGkClockState *pState = pApp->pClock;
 	if (pState == 0)
 	{
 		return;
@@ -156,7 +156,7 @@ void ZgClockFree (TZgApp *pApp)
 
 static boolean MayChange (JSContext *ctx, const char *pFunction)
 {
-	if (CAppHost::GetApp (ctx)->pBundle->permissions & ZG_PERM_RTC)
+	if (CAppHost::GetApp (ctx)->pBundle->permissions & GK_PERM_RTC)
 	{
 		return TRUE;
 	}
@@ -168,18 +168,18 @@ static boolean MayChange (JSContext *ctx, const char *pFunction)
 
 static JSValue js_clock_now (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return JS_NewFloat64 (ctx, (double) (CZgClock::Now () / 1000));
+	return JS_NewFloat64 (ctx, (double) (CGkClock::Now () / 1000));
 }
 
 static JSValue js_clock_status (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	JSValue Obj = JS_NewObject (ctx);
-	JS_SetPropertyStr (ctx, Obj, "set", JS_NewBool (ctx, CZgClock::IsSet ()));
-	JS_SetPropertyStr (ctx, Obj, "time", JS_NewFloat64 (ctx, (double) (CZgClock::Now () / 1000)));
-	JS_SetPropertyStr (ctx, Obj, "trimPpm", JS_NewFloat64 (ctx, CZgClock::GetTrim ()));
-	JS_SetPropertyStr (ctx, Obj, "utcOffset", JS_NewInt32 (ctx, CZgClock::GetUtcOffset ()));
+	JS_SetPropertyStr (ctx, Obj, "set", JS_NewBool (ctx, CGkClock::IsSet ()));
+	JS_SetPropertyStr (ctx, Obj, "time", JS_NewFloat64 (ctx, (double) (CGkClock::Now () / 1000)));
+	JS_SetPropertyStr (ctx, Obj, "trimPpm", JS_NewFloat64 (ctx, CGkClock::GetTrim ()));
+	JS_SetPropertyStr (ctx, Obj, "utcOffset", JS_NewInt32 (ctx, CGkClock::GetUtcOffset ()));
 
-	const TZgDrift *pDrift = CZgClock::GetDrift ();
+	const TGkDrift *pDrift = CGkClock::GetDrift ();
 	JSValue Drift = JS_NULL;
 	if (pDrift->bValid)
 	{
@@ -216,7 +216,7 @@ static JSValue js_clock_set (JSContext *ctx, JSValueConst this_val, int argc, JS
 		return JS_ThrowRangeError (ctx, "clock.set: the time must be from 2000 to 2099");
 	}
 
-	CZgClock::Set ((s64) fTime * 1000);
+	CGkClock::Set ((s64) fTime * 1000);
 	return js_clock_status (ctx, this_val, 0, 0);
 }
 
@@ -232,10 +232,10 @@ static JSValue js_clock_set_trim (JSContext *ctx, JSValueConst this_val, int arg
 	{
 		return JS_ThrowTypeError (ctx, "clock.setTrim: a number (ppm) expected");
 	}
-	if (!CZgClock::SetTrim (fPPM))
+	if (!CGkClock::SetTrim (fPPM))
 	{
 		return JS_ThrowRangeError (ctx, "clock.setTrim: from -%d to %d ppm",
-					   CZgClock::MaxTrim, CZgClock::MaxTrim);
+					   CGkClock::MaxTrim, CGkClock::MaxTrim);
 	}
 	return JS_UNDEFINED;
 }
@@ -253,7 +253,7 @@ static JSValue js_clock_set_utc_offset (JSContext *ctx, JSValueConst this_val, i
 	{
 		return JS_ThrowTypeError (ctx, "clock.setUtcOffset: whole minutes expected");
 	}
-	if (!CZgClock::SetUtcOffset ((int) fMinutes))
+	if (!CGkClock::SetUtcOffset ((int) fMinutes))
 	{
 		return JS_ThrowRangeError (ctx, "clock.setUtcOffset: from -720 (UTC-12:00) to 840 (UTC+14:00)");
 	}
@@ -274,11 +274,11 @@ static JSValue js_clock_every (JSContext *ctx, JSValueConst this_val, int argc, 
 		return JS_ThrowTypeError (ctx, "clock.every: a function expected");
 	}
 
-	TZgClockState *pState = GetState (ctx);
-	TZgAlarm *pAlarm = new TZgAlarm;
+	TGkClockState *pState = GetState (ctx);
+	TGkAlarm *pAlarm = new TGkAlarm;
 	pAlarm->nID = pState->nNextID++;
 	pAlarm->nPeriod = (s64) fSeconds * 1000000;
-	pAlarm->nNext = NextMark (CZgClock::Now (), pAlarm->nPeriod);
+	pAlarm->nNext = NextMark (CGkClock::Now (), pAlarm->nPeriod);
 	pAlarm->Func = JS_DupValue (ctx, argv[1]);
 	pAlarm->pNext = pState->pAlarms;
 	pState->pAlarms = pAlarm;
@@ -288,13 +288,13 @@ static JSValue js_clock_every (JSContext *ctx, JSValueConst this_val, int argc, 
 
 static JSValue js_clock_cancel (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	uint32_t nID;
 	if (pApp->pClock == 0 || argc < 1 || JS_ToUint32 (ctx, &nID, argv[0]))
 	{
 		return JS_UNDEFINED;
 	}
-	TZgAlarm *pAlarm = FindAlarm (pApp->pClock, nID);
+	TGkAlarm *pAlarm = FindAlarm (pApp->pClock, nID);
 	if (pAlarm != 0)
 	{
 		FreeAlarm (ctx, pApp->pClock, pAlarm);
@@ -321,7 +321,7 @@ static int ClockModuleInit (JSContext *ctx, JSModuleDef *m)
 				       sizeof ClockFunctions / sizeof ClockFunctions[0]);
 }
 
-JSModuleDef *ZgInitClockModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitClockModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, ClockModuleInit);
 	if (m != 0)

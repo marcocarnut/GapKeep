@@ -26,7 +26,7 @@
 # for the rest of the kernel.
 #
 # The library holds one object, zxing.o: everything linked together, then
-# only what ZgDecodeQR reaches kept (ld -r --gc-sections, from the
+# only what GkDecodeQR reaches kept (ld -r --gc-sections, from the
 # functions' and data's own sections). zxing-cpp's other code (text
 # conversion, structured append merging, JSON, ...) mostly is not, which
 # saves about 80 KiB. The kernel itself is linked as before.
@@ -43,14 +43,14 @@ vpath %.cpp $(ZXDIR) $(ZXDIR)/qrcode $(RUNTIME)
 OBJS	= $(notdir $(ZXING_SOURCES:.cpp=.o)) qrdecode.o cxxrt.o
 
 EXTRAINCLUDE = -I . -I $(ZXDIR) -I $(RUNTIME)
-DEFINE  += $(ZXING_DEFINES) -DZG_HAVE_ZXING
+DEFINE  += $(ZXING_DEFINES) -DGK_HAVE_ZXING
 STANDARD = -std=c++20
 WARNINGS = -Wall -Wno-sign-compare -Wno-unused-parameter
 
 libzxing.a: $(OBJS) tree.o list.o
 	@echo "  LD    zxing.o"
 	@$(LD) -r --gc-sections -o zxing.o \
-		-u $$($(PREFIX)nm qrdecode.o | sed -n 's/^.* T \(.*ZgDecodeQR.*\)$$/\1/p') \
+		-u $$($(PREFIX)nm qrdecode.o | sed -n 's/^.* T \(.*GkDecodeQR.*\)$$/\1/p') \
 		$(OBJS) tree.o list.o
 	@echo "  AR    $@"
 	@rm -f $@

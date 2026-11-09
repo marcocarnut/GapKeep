@@ -8,19 +8,19 @@
 // pseudo-language for testing, i18n.js) or one the launcher has a catalog
 // for (apps/launcher/lang/<tag>.json: the launcher holds the system's own
 // text). It comes from the build (make LANGUAGE=pt-BR, the only way for
-// sealed builds), then zerogap.txt ("language = pt-BR"), and can be
+// sealed builds), then gapkeep.txt ("language = pt-BR"), and can be
 // changed while running, until reboot, by an app with the "settings"
-// permission (zg:i18n's setLanguage).
+// permission (gk:i18n's setLanguage).
 //
 // A catalog is data: parsed with JSON.parse (QuickJS's JS_ParseJSON), never
 // evaluated, at most 256 KB, and each translation is checked before it is
 // used: same {names} as its key, no control or bidi characters. A
 // translation that fails is logged and the English shown instead. LVGL's
-// recolor ("#ff0000 red#") is never on for zg:ui's labels, so a "#" in a
+// recolor ("#ff0000 red#") is never on for gk:ui's labels, so a "#" in a
 // translation is just a "#".
 //
-// The JavaScript side is src/runtime/i18n.js (the module "zg:i18n"); the
-// functions it needs are the module "zg:i18n-native", which only it may
+// The JavaScript side is src/runtime/i18n.js (the module "gk:i18n"); the
+// functions it needs are the module "gk:i18n-native", which only it may
 // import.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -35,17 +35,17 @@ extern "C" {
 #include <quickjs.h>
 }
 
-struct TZgApp;
+struct TGkApp;
 #include "bundle.h"
 
-class CZgI18n
+class CGkI18n
 {
 public:
-	// After the built-in apps are registered, before zerogap.txt: the
+	// After the built-in apps are registered, before gapkeep.txt: the
 	// build's language (make LANGUAGE=..., default English)
 	static void Initialize (void);
 
-	// A zerogap.txt line: TRUE if the key is one of ours ("language",
+	// A gapkeep.txt line: TRUE if the key is one of ours ("language",
 	// "decimal_mark", "group_mark"); problems are logged
 	static boolean Configure (const char *pKey, const char *pValue, unsigned nLine);
 
@@ -55,25 +55,25 @@ public:
 	static const char *GetLanguage (void)	{ return s_Language; }
 
 	// The marks numbers are written with: the language's, or those set
-	// (zerogap.txt, setMarks). 0: the language's own. FALSE if refused.
+	// (gapkeep.txt, setMarks). 0: the language's own. FALSE if refused.
 	static boolean SetMarks (const char *pDecimal, const char *pGroup, const char *pFrom);
 	static const char *GetDecimal (void)	{ return s_Decimal; }
 	static const char *GetGroup (void)	{ return s_Group; }
 
 	// The keyboard layout: keylayout.h's, which also lists the layouts and
-	// switches them (ZgKeyLayouts, ZgKeyLayoutSet)
-	static const char *GetKeyboard (void)	{ return ZgKeyLayoutGet (); }
+	// switches them (GkKeyLayouts, GkKeyLayoutSet)
+	static const char *GetKeyboard (void)	{ return GkKeyLayoutGet (); }
 
 	// The app's catalog, at its start and when the language changes;
 	// returns the time it took, in microseconds
-	static unsigned LoadCatalog (TZgApp *pApp);
-	static void FreeApp (TZgApp *pApp);
+	static unsigned LoadCatalog (TGkApp *pApp);
+	static void FreeApp (TGkApp *pApp);
 
 	// An app's name or description in the language: the manifest's English
 	// is the key in the app's own catalog, checked as any translation.
 	// Cached until the language changes (a catalog is parsed once for both).
-	static const char *GetAppName (JSContext *pContext, const zg_app_t *pApp);
-	static const char *GetAppDescription (JSContext *pContext, const zg_app_t *pApp);
+	static const char *GetAppName (JSContext *pContext, const gk_app_t *pApp);
+	static const char *GetAppDescription (JSContext *pContext, const gk_app_t *pApp);
 
 private:
 	static boolean IsKnown (const char *pTag);
@@ -85,7 +85,7 @@ private:
 	static boolean s_bDecimalSet, s_bGroupSet;
 };
 
-JSModuleDef *ZgInitI18nModule (JSContext *pContext, const char *pName);		// "zg:i18n"
-JSModuleDef *ZgInitI18nNativeModule (JSContext *pContext, const char *pName);	// "zg:i18n-native"
+JSModuleDef *GkInitI18nModule (JSContext *pContext, const char *pName);		// "gk:i18n"
+JSModuleDef *GkInitI18nNativeModule (JSContext *pContext, const char *pName);	// "gk:i18n-native"
 
 #endif

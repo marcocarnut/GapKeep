@@ -1,7 +1,7 @@
 //
 // js_crypto.cpp
 //
-// The "zg:crypto" module: SHA-1, SHA-256, SHA-512, RIPEMD-160, HMAC,
+// The "gk:crypto" module: SHA-1, SHA-256, SHA-512, RIPEMD-160, HMAC,
 // PBKDF2, secp256k1 (ECDSA, BIP-340 Schnorr, BIP-32 and Taproot key
 // tweaks), and health-checked hardware random bytes.
 // See docs/API.md.
@@ -137,7 +137,7 @@ static boolean HashesOK (JSContext *ctx)
 	if (s_nResult < 0)
 	{
 		unsigned nStart = CTimer::Get ()->GetClockTicks ();
-		s_nResult = zg_hmac_selftest ();
+		s_nResult = gk_hmac_selftest ();
 		unsigned nTicks = CTimer::Get ()->GetClockTicks () - nStart;
 		if (s_nResult == 0)
 		{
@@ -158,10 +158,10 @@ static boolean HashesOK (JSContext *ctx)
 
 // sha1/sha256/sha512(data) -> Uint8Array; data: typed array, ArrayBuffer or
 // string (hashed as UTF-8)
-static JSValue Digest (JSContext *ctx, int argc, JSValueConst *argv, const zg_hash_t *pHash,
+static JSValue Digest (JSContext *ctx, int argc, JSValueConst *argv, const gk_hash_t *pHash,
 		       const char *pFunction)
 {
-	if (pHash != &zg_hash_sha256 && !HashesOK (ctx))
+	if (pHash != &gk_hash_sha256 && !HashesOK (ctx))
 	{
 		return JS_EXCEPTION;
 	}
@@ -173,8 +173,8 @@ static JSValue Digest (JSContext *ctx, int argc, JSValueConst *argv, const zg_ha
 		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, pFunction, "data");
 	}
 
-	u8 Digest[ZG_HASH_MAX_DIGEST];
-	zg_hash_ctx_t Hash;
+	u8 Digest[GK_HASH_MAX_DIGEST];
+	gk_hash_ctx_t Hash;
 	pHash->init (&Hash);
 	pHash->update (&Hash, Data.Data (), Data.Length ());
 	pHash->final (&Hash, Digest);
@@ -188,17 +188,17 @@ static JSValue Digest (JSContext *ctx, int argc, JSValueConst *argv, const zg_ha
 
 static JSValue js_crypto_sha1 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return Digest (ctx, argc, argv, &zg_hash_sha1, "sha1");
+	return Digest (ctx, argc, argv, &gk_hash_sha1, "sha1");
 }
 
 static JSValue js_crypto_sha256 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return Digest (ctx, argc, argv, &zg_hash_sha256, "sha256");
+	return Digest (ctx, argc, argv, &gk_hash_sha256, "sha256");
 }
 
 static JSValue js_crypto_sha512 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return Digest (ctx, argc, argv, &zg_hash_sha512, "sha512");
+	return Digest (ctx, argc, argv, &gk_hash_sha512, "sha512");
 }
 
 // hmac(hash, key, data) -> Uint8Array; hash: "SHA-1", "SHA-256", "SHA-512"
@@ -209,7 +209,7 @@ static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, 
 		return JS_EXCEPTION;
 	}
 
-	const zg_hash_t *pHash = 0;
+	const gk_hash_t *pHash = 0;
 	if (argc > 0 && JS_IsString (argv[0]))
 	{
 		const char *pName = JS_ToCString (ctx, argv[0]);
@@ -217,7 +217,7 @@ static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, 
 		{
 			return JS_EXCEPTION;
 		}
-		pHash = zg_hash_find (pName);
+		pHash = gk_hash_find (pName);
 		JS_FreeCString (ctx, pName);
 	}
 	if (pHash == 0)
@@ -236,8 +236,8 @@ static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, 
 		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "hmac", "data");
 	}
 
-	u8 Mac[ZG_HASH_MAX_DIGEST];
-	zg_hmac (pHash, Key.Data (), Key.Length (), Data.Data (), Data.Length (), Mac);
+	u8 Mac[GK_HASH_MAX_DIGEST];
+	gk_hmac (pHash, Key.Data (), Key.Length (), Data.Data (), Data.Length (), Mac);
 	Key.Release ();
 	Data.Release ();
 
@@ -249,7 +249,7 @@ static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, 
 
 static JSValue ThrowRNGFailure (JSContext *ctx)
 {
-	CZgRandom *pRNG = CZgRandom::Instance ();
+	CGkRandom *pRNG = CGkRandom::Instance ();
 	return JS_ThrowInternalError (ctx, "hardware random number generator unavailable: %s",
 				      pRNG && pRNG->GetFailure () ? pRNG->GetFailure () : "not present");
 }
@@ -267,7 +267,7 @@ static JSValue js_crypto_random_bytes (JSContext *ctx, JSValueConst this_val, in
 		return JS_ThrowRangeError (ctx, "randomBytes: at most %u bytes per call", MaxRandomBytes);
 	}
 
-	CZgRandom *pRNG = CZgRandom::Instance ();
+	CGkRandom *pRNG = CGkRandom::Instance ();
 	u8 *pBuffer = new u8[n ? n : 1];
 	if (pRNG == 0 || !pRNG->Get (pBuffer, n))
 	{
@@ -300,7 +300,7 @@ static JSValue js_crypto_get_random_values (JSContext *ctx, JSValueConst this_va
 		return JS_ThrowRangeError (ctx, "getRandomValues: at most %u bytes per call", MaxRandomBytes);
 	}
 
-	CZgRandom *pRNG = CZgRandom::Instance ();
+	CGkRandom *pRNG = CGkRandom::Instance ();
 	boolean bOK = pRNG != 0 && pRNG->Get (p, nLength);
 	JS_FreeValue (ctx, Hold);
 	if (!bOK)
@@ -313,7 +313,7 @@ static JSValue js_crypto_get_random_values (JSContext *ctx, JSValueConst this_va
 
 static JSValue js_crypto_rng_status (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	CZgRandom *pRNG = CZgRandom::Instance ();
+	CGkRandom *pRNG = CGkRandom::Instance ();
 
 	JSValue Obj = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Obj, "healthy", JS_NewBool (ctx, pRNG && pRNG->IsHealthy ()));
@@ -342,8 +342,8 @@ static int RunSelfTest (const char *pName, int (*pTest) (void))
 	return nResult;
 }
 
-static int RipemdTest (void) { return zg_ripemd160_selftest (0); }
-static int Pbkdf2Test (void) { return zg_pbkdf2_selftest (0); }
+static int RipemdTest (void) { return gk_ripemd160_selftest (0); }
+static int Pbkdf2Test (void) { return gk_pbkdf2_selftest (0); }
 
 static boolean RipemdOK (JSContext *ctx)
 {
@@ -376,20 +376,20 @@ static boolean Pbkdf2OK (JSContext *ctx)
 }
 
 // secp256k1: the context is created on first use, blinded with random
-// bytes, and checked (zg_secp_selftest).
+// bytes, and checked (gk_secp_selftest).
 static int s_nSecpResult = -1;
 static u8 s_SecpSeed[32];
 
 static int SecpInit (void)
 {
-	return zg_secp_init (s_SecpSeed);
+	return gk_secp_init (s_SecpSeed);
 }
 
 static boolean SecpOK (JSContext *ctx)
 {
 	if (s_nSecpResult < 0)
 	{
-		CZgRandom *pRNG = CZgRandom::Instance ();
+		CGkRandom *pRNG = CGkRandom::Instance ();
 		if (pRNG == 0 || !pRNG->Get (s_SecpSeed, sizeof s_SecpSeed))
 		{
 			ThrowRNGFailure (ctx);
@@ -421,14 +421,14 @@ static JSValue Ripemd (JSContext *ctx, int argc, JSValueConst *argv, boolean bHa
 		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, pFunction, "data");
 	}
 
-	u8 Digest[ZG_RIPEMD160_DIGEST_SIZE];
+	u8 Digest[GK_RIPEMD160_DIGEST_SIZE];
 	if (bHash160)
 	{
-		zg_hash160 (Data.Data (), Data.Length (), Digest);
+		gk_hash160 (Data.Data (), Data.Length (), Digest);
 	}
 	else
 	{
-		zg_ripemd160 (Data.Data (), Data.Length (), Digest);
+		gk_ripemd160 (Data.Data (), Data.Length (), Digest);
 	}
 	Data.Release ();
 
@@ -450,9 +450,9 @@ static JSValue js_crypto_hash160 (JSContext *ctx, JSValueConst this_val, int arg
 static const uint32_t MaxPbkdf2Iterations = 10000000;
 static const uint32_t MaxPbkdf2Length = 1024;
 
-static const zg_hash_t *GetHashName (JSContext *ctx, JSValueConst v, const char *pFunction)
+static const gk_hash_t *GetHashName (JSContext *ctx, JSValueConst v, const char *pFunction)
 {
-	const zg_hash_t *pHash = 0;
+	const gk_hash_t *pHash = 0;
 	if (JS_IsString (v))
 	{
 		const char *pName = JS_ToCString (ctx, v);
@@ -460,7 +460,7 @@ static const zg_hash_t *GetHashName (JSContext *ctx, JSValueConst v, const char 
 		{
 			return 0;
 		}
-		pHash = zg_hash_find (pName);
+		pHash = gk_hash_find (pName);
 		JS_FreeCString (ctx, pName);
 	}
 	if (pHash == 0)
@@ -477,7 +477,7 @@ static JSValue js_crypto_pbkdf2 (JSContext *ctx, JSValueConst this_val, int argc
 	{
 		return JS_EXCEPTION;
 	}
-	const zg_hash_t *pHash = GetHashName (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "pbkdf2");
+	const gk_hash_t *pHash = GetHashName (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "pbkdf2");
 	if (pHash == 0)
 	{
 		return JS_EXCEPTION;
@@ -512,7 +512,7 @@ static JSValue js_crypto_pbkdf2 (JSContext *ctx, JSValueConst this_val, int argc
 
 	size_t nLength = (size_t) fLength;
 	u8 *pKey = new u8[nLength];
-	zg_pbkdf2 (pHash, Password.Data (), Password.Length (), Salt.Data (), Salt.Length (),
+	gk_pbkdf2 (pHash, Password.Data (), Password.Length (), Salt.Data (), Salt.Length (),
 		   (uint32_t) fIterations, pKey, nLength);
 	Password.Release ();
 	Salt.Release ();
@@ -620,7 +620,7 @@ static JSValue js_crypto_is_private_key (JSContext *ctx, JSValueConst this_val, 
 		memcpy (*Key, p, 32);
 	}
 	JS_FreeValue (ctx, Hold);
-	return JS_NewBool (ctx, bOK && zg_secp_seckey_verify (*Key));
+	return JS_NewBool (ctx, bOK && gk_secp_seckey_verify (*Key));
 }
 
 // isPublicKey(key) -> boolean
@@ -644,7 +644,7 @@ static JSValue js_crypto_is_public_key (JSContext *ctx, JSValueConst this_val, i
 		memcpy (Pub, p, nLength);
 	}
 	JS_FreeValue (ctx, Hold);
-	return JS_NewBool (ctx, bOK && zg_secp_pubkey_convert (Pub, nLength, 1, Out));
+	return JS_NewBool (ctx, bOK && gk_secp_pubkey_convert (Pub, nLength, 1, Out));
 }
 
 // publicKey(privateKey, compressed = true) -> Uint8Array(33 or 65)
@@ -657,7 +657,7 @@ static JSValue js_crypto_public_key (JSContext *ctx, JSValueConst this_val, int 
 	}
 	boolean bCompressed = GetCompressed (ctx, argc, argv, 1);
 	u8 Out[65];
-	if (!zg_secp_pubkey_create (*Key, bCompressed, Out))
+	if (!gk_secp_pubkey_create (*Key, bCompressed, Out))
 	{
 		return ThrowBadPrivateKey (ctx, "publicKey");
 	}
@@ -676,7 +676,7 @@ static JSValue js_crypto_public_key_convert (JSContext *ctx, JSValueConst this_v
 		return JS_EXCEPTION;
 	}
 	boolean bCompressed = GetCompressed (ctx, argc, argv, 1);
-	if (nLength > sizeof Pub || !zg_secp_pubkey_convert (Pub, nLength, bCompressed, Out))
+	if (nLength > sizeof Pub || !gk_secp_pubkey_convert (Pub, nLength, bCompressed, Out))
 	{
 		return ThrowBadPublicKey (ctx, "publicKeyConvert");
 	}
@@ -693,11 +693,11 @@ static JSValue js_crypto_private_key_tweak_add (JSContext *ctx, JSValueConst thi
 	{
 		return JS_EXCEPTION;
 	}
-	if (!zg_secp_seckey_verify (*Key))
+	if (!gk_secp_seckey_verify (*Key))
 	{
 		return ThrowBadPrivateKey (ctx, "privateKeyTweakAdd");
 	}
-	if (!zg_secp_seckey_tweak_add (*Key, *Tweak, *Out))
+	if (!gk_secp_seckey_tweak_add (*Key, *Tweak, *Out))
 	{
 		return JS_ThrowRangeError (ctx, "privateKeyTweakAdd: the tweak is not below the curve order, "
 					   "or the result is 0");
@@ -718,11 +718,11 @@ static JSValue js_crypto_public_key_tweak_add (JSContext *ctx, JSValueConst this
 		return JS_EXCEPTION;
 	}
 	boolean bCompressed = GetCompressed (ctx, argc, argv, 2);
-	if (nLength > sizeof Pub || !zg_secp_pubkey_convert (Pub, nLength, 1, Out))
+	if (nLength > sizeof Pub || !gk_secp_pubkey_convert (Pub, nLength, 1, Out))
 	{
 		return ThrowBadPublicKey (ctx, "publicKeyTweakAdd");
 	}
-	if (!zg_secp_pubkey_tweak_add (Pub, nLength, Tweak, bCompressed, Out))
+	if (!gk_secp_pubkey_tweak_add (Pub, nLength, Tweak, bCompressed, Out))
 	{
 		return JS_ThrowRangeError (ctx, "publicKeyTweakAdd: the tweak is not below the curve order, "
 					   "or the result is the point at infinity");
@@ -740,9 +740,9 @@ static JSValue js_crypto_ecdsa_sign (JSContext *ctx, JSValueConst this_val, int 
 	{
 		return JS_EXCEPTION;
 	}
-	u8 Der[ZG_SECP_DER_MAX];
+	u8 Der[GK_SECP_DER_MAX];
 	size_t nLength;
-	if (!zg_secp_ecdsa_sign (*Hash, *Key, Der, &nLength))
+	if (!gk_secp_ecdsa_sign (*Hash, *Key, Der, &nLength))
 	{
 		return ThrowBadPrivateKey (ctx, "ecdsaSign");
 	}
@@ -752,7 +752,7 @@ static JSValue js_crypto_ecdsa_sign (JSContext *ctx, JSValueConst this_val, int 
 // ecdsaVerify(signature, hash, publicKey) -> boolean
 static JSValue js_crypto_ecdsa_verify (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	u8 Der[ZG_SECP_DER_MAX], Hash[32], Pub[65];
+	u8 Der[GK_SECP_DER_MAX], Hash[32], Pub[65];
 	size_t nDer, nPub;
 	if (   !SecpOK (ctx)
 	    || !GetVariable (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, Der, sizeof Der, &nDer, "ecdsaVerify", "signature")
@@ -762,7 +762,7 @@ static JSValue js_crypto_ecdsa_verify (JSContext *ctx, JSValueConst this_val, in
 		return JS_EXCEPTION;
 	}
 	return JS_NewBool (ctx, nDer <= sizeof Der && nPub <= sizeof Pub
-				&& zg_secp_ecdsa_verify (Der, nDer, Hash, Pub, nPub));
+				&& gk_secp_ecdsa_verify (Der, nDer, Hash, Pub, nPub));
 }
 
 // xOnlyPublicKey(privateKey) -> Uint8Array(32)
@@ -775,7 +775,7 @@ static JSValue js_crypto_xonly_public_key (JSContext *ctx, JSValueConst this_val
 	}
 	u8 Out[32];
 	int nParity;
-	if (!zg_secp_xonly_pubkey (*Key, Out, &nParity))
+	if (!gk_secp_xonly_pubkey (*Key, Out, &nParity))
 	{
 		return ThrowBadPrivateKey (ctx, "xOnlyPublicKey");
 	}
@@ -801,14 +801,14 @@ static JSValue js_crypto_schnorr_sign (JSContext *ctx, JSValueConst this_val, in
 	}
 	else
 	{
-		CZgRandom *pRNG = CZgRandom::Instance ();
+		CGkRandom *pRNG = CGkRandom::Instance ();
 		if (pRNG == 0 || !pRNG->Get (*Aux, 32))
 		{
 			return ThrowRNGFailure (ctx);
 		}
 	}
 	u8 Sig[64];
-	if (!zg_secp_schnorr_sign (*Msg, *Key, *Aux, Sig))
+	if (!gk_secp_schnorr_sign (*Msg, *Key, *Aux, Sig))
 	{
 		return ThrowBadPrivateKey (ctx, "schnorrSign");
 	}
@@ -835,7 +835,7 @@ static JSValue js_crypto_schnorr_verify (JSContext *ctx, JSValueConst this_val, 
 		return JS_ThrowTypeError (ctx, "schnorrVerify: message must be a Uint8Array (or other typed array) "
 					  "or an ArrayBuffer");
 	}
-	boolean bOK = nSig == 64 && nKey == 32 && zg_secp_schnorr_verify (Sig, pMsg, nMsg, Key);
+	boolean bOK = nSig == 64 && nKey == 32 && gk_secp_schnorr_verify (Sig, pMsg, nMsg, Key);
 	JS_FreeValue (ctx, Hold);
 	return JS_NewBool (ctx, bOK);
 }
@@ -851,7 +851,7 @@ static JSValue js_crypto_taproot_tweak_public_key (JSContext *ctx, JSValueConst 
 		return JS_EXCEPTION;
 	}
 	int nParity;
-	if (!zg_secp_xonly_tweak_add (Key, Tweak, Out, &nParity))
+	if (!gk_secp_xonly_tweak_add (Key, Tweak, Out, &nParity))
 	{
 		return JS_ThrowRangeError (ctx, "taprootTweakPublicKey: not a valid x-only public key, "
 					   "or the tweak is not below the curve order");
@@ -872,11 +872,11 @@ static JSValue js_crypto_taproot_tweak_private_key (JSContext *ctx, JSValueConst
 	{
 		return JS_EXCEPTION;
 	}
-	if (!zg_secp_seckey_verify (*Key))
+	if (!gk_secp_seckey_verify (*Key))
 	{
 		return ThrowBadPrivateKey (ctx, "taprootTweakPrivateKey");
 	}
-	if (!zg_secp_seckey_taproot_tweak (*Key, *Tweak, *Out))
+	if (!gk_secp_seckey_taproot_tweak (*Key, *Tweak, *Out))
 	{
 		return JS_ThrowRangeError (ctx, "taprootTweakPrivateKey: the tweak is not below the curve order, "
 					   "or the result is 0");
@@ -918,7 +918,7 @@ static int CryptoModuleInit (JSContext *ctx, JSModuleDef *m)
 	return 0;
 }
 
-JSModuleDef *ZgInitCryptoModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitCryptoModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, CryptoModuleInit);
 	if (m == 0)

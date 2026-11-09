@@ -26,16 +26,16 @@ static boolean PointerAt (lv_point_t *pPoint)
 	return FALSE;
 }
 
-void ZgWheel (int nNotches)
+void GkWheel (int nNotches)
 {
 	lv_point_t Point;
 	if (PointerAt (&Point))
 	{
-		ZgWheelAt (Point.x, Point.y, nNotches);
+		GkWheelAt (Point.x, Point.y, nNotches);
 	}
 }
 
-void ZgWheelAt (int x, int y, int nNotches)
+void GkWheelAt (int x, int y, int nNotches)
 {
 	lv_point_t Point = {x, y};
 	if (nNotches == 0)

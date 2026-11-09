@@ -25,7 +25,7 @@
 
 #include "camera.h"
 
-class CZgSynthCamera : public CZgCamera
+class CGkSynthCamera : public CGkCamera
 {
 public:
 	static const unsigned FrameWidth = 640;
@@ -34,8 +34,8 @@ public:
 	static const unsigned MaxPictureSide = 4096;	// SetPicture() limit
 	static const unsigned MaxQRBytes = 2953;	// a version 40 code, low error correction
 
-	CZgSynthCamera (void);
-	~CZgSynthCamera (void);
+	CGkSynthCamera (void);
+	~CGkSynthCamera (void);
 
 	void SetNone (void);					// no camera
 	void SetScene (void);					// nothing to see
@@ -52,7 +52,7 @@ public:
 
 	const char *GetMode (void) const;			// "none", "scene", "qr", ...
 
-	void SetField (TZgCameraField Field);
+	void SetField (TGkCameraField Field);
 
 	boolean Start (void);
 	void Stop (void);
@@ -77,7 +77,7 @@ private:
 	u8 *m_pPicture;		// what the camera looks at, m_nPictureWidth x ..Height
 	unsigned m_nPictureWidth, m_nPictureHeight;	// at most FrameWidth x FrameHeight
 	u8 *m_pFrame;		// the current frame (the picture plus noise)
-	TZgCameraField m_Field;
+	TGkCameraField m_Field;
 	u8 *m_pSource;		// the picture or the last pushed frame, as given
 	unsigned m_nSourceChannels;	// 1 grey, 3 RGB
 	u8 *m_pPictureRGB;	// in colour, if the source is (m_bPictureRGB)

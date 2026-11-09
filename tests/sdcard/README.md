@@ -13,5 +13,5 @@ other folder must be refused, each for its own reason:
 | `badjson` | manifest.json is not valid JSON |
 | `badutf8` | a module is not valid UTF-8 |
 | `noentry` | the entry module does not exist |
-| `unknownkey` | manifest.json has a key zerogap doesn't know |
+| `unknownkey` | manifest.json has a key GapKeep doesn't know |
 | `wrongid` | the manifest's id differs from the folder name |

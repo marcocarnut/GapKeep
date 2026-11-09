@@ -1,11 +1,11 @@
-// A stand-in for zg:crypto under Node, for tests only: hashes, HMAC and
+// A stand-in for gk:crypto under Node, for tests only: hashes, HMAC and
 // PBKDF2 from node:crypto, and secp256k1 in BigInt, ported from the
 // pure-Python reference in tools/check_secp.py (SEC 1, RFC 6979 as
 // libsecp256k1 applies it, Bitcoin Core's low-R grinding, BIP-340, BIP-341's
 // tweaks). Slow and not constant-time: never for real keys.
 //
 // Same function names, arguments, return types and errors (TypeError,
-// RangeError) as zg:crypto (docs/API.md).
+// RangeError) as gk:crypto (docs/API.md).
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 

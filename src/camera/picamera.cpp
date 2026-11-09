@@ -35,16 +35,16 @@ static const double MaxDigital = 4.0;		// beyond, mostly noise
 static const unsigned TargetMean = 110;		// of 255: QR codes want contrast,
 						// so a little under rather than clipped
 
-CZgPiCamera::CZgPiCamera (void)
+CGkPiCamera::CGkPiCamera (void)
 :	m_pI2C (0),
 	m_pSensor (0),
 	m_bPowered (FALSE),
 	m_bStreaming (FALSE),
 	m_pError (0),
 	m_nTestPattern (0),
-	m_Field (ZgFieldCenter),
+	m_Field (GkFieldCenter),
 	m_pForcedMode (0),
-	m_pMode (&CZgIMX219::ModeDetail),
+	m_pMode (&CGkIMX219::ModeDetail),
 	m_nStride (0),
 	m_nWidth (0),
 	m_nHeight (0),
@@ -64,7 +64,7 @@ CZgPiCamera::CZgPiCamera (void)
 	m_nSerial (0),
 	m_nExposure (StartExposure),
 	m_nAnalogue (0),
-	m_nDigital (CZgIMX219::MinDigitalGain),
+	m_nDigital (CGkIMX219::MinDigitalGain),
 	m_fProduct (StartExposure),
 	m_nSkip (0),
 	m_nLastMean (0),
@@ -103,7 +103,7 @@ CZgPiCamera::CZgPiCamera (void)
 	}
 }
 
-CZgPiCamera::~CZgPiCamera (void)
+CGkPiCamera::~CGkPiCamera (void)
 {
 	Stop ();
 	delete [] m_pGrey;
@@ -111,7 +111,7 @@ CZgPiCamera::~CZgPiCamera (void)
 	delete [] m_pRGB;
 }
 
-boolean CZgPiCamera::PowerUp (void)
+boolean CGkPiCamera::PowerUp (void)
 {
 	assert (!m_bPowered);
 
@@ -149,11 +149,11 @@ boolean CZgPiCamera::PowerUp (void)
 		return FALSE;
 	}
 
-	m_pSensor = new CZgIMX219 (m_pI2C);
+	m_pSensor = new CGkIMX219 (m_pI2C);
 	return TRUE;
 }
 
-void CZgPiCamera::PowerDown (void)
+void CGkPiCamera::PowerDown (void)
 {
 	delete m_pSensor;
 	m_pSensor = 0;
@@ -168,7 +168,7 @@ void CZgPiCamera::PowerDown (void)
 	}
 }
 
-boolean CZgPiCamera::Probe (void)
+boolean CGkPiCamera::Probe (void)
 {
 	if (m_bStreaming)
 	{
@@ -199,7 +199,7 @@ boolean CZgPiCamera::Probe (void)
 	return bFound;
 }
 
-void CZgPiCamera::Fail (const char *pError)
+void CGkPiCamera::Fail (const char *pError)
 {
 	CLogger::Get ()->Write (FromCamera, LogError, "%s", pError);
 	if (m_pError == 0)
@@ -208,7 +208,7 @@ void CZgPiCamera::Fail (const char *pError)
 	}
 }
 
-boolean CZgPiCamera::Start (void)
+boolean CGkPiCamera::Start (void)
 {
 	if (m_bStreaming)
 	{
@@ -231,7 +231,7 @@ boolean CZgPiCamera::Start (void)
 }
 
 // Power, sensor, receiver, in the order of SPEC 4.2, 4.3 and 5.3.
-boolean CZgPiCamera::StartStreaming (void)
+boolean CGkPiCamera::StartStreaming (void)
 {
 	CLogger *pLogger = CLogger::Get ();
 
@@ -265,10 +265,10 @@ boolean CZgPiCamera::StartStreaming (void)
 	// The two fields' modes were chosen by measurement (IMPLEMENTATION.md,
 	// decision 15): "detail" reads small codes best, "full" shows it all.
 	m_pMode = m_pForcedMode != 0 ? m_pForcedMode
-		: m_Field == ZgFieldFull ? &CZgIMX219::ModeFull : &CZgIMX219::ModeDetail;
+		: m_Field == GkFieldFull ? &CGkIMX219::ModeFull : &CGkIMX219::ModeDetail;
 
 	if (!m_pSensor->Configure (*m_pMode, m_nExposure, m_nAnalogue,
-				   m_nTestPattern != 0 ? CZgIMX219::MinDigitalGain : m_nDigital,
+				   m_nTestPattern != 0 ? CGkIMX219::MinDigitalGain : m_nDigital,
 				   m_nTestPattern))
 	{
 		Fail ("the camera does not answer");
@@ -321,13 +321,13 @@ boolean CZgPiCamera::StartStreaming (void)
 	pLogger->Write (FromCamera, LogNotice,
 			"streaming %ux%u RAW8 (%s) on 2 lanes, %u lines per frame, exposure %u lines,"
 			" %u buffers of %u KiB, grey %ux%u%s",
-			m_pMode->nWidth, m_pMode->nHeight, m_pMode->pName, CZgIMX219::FrameLength,
-			m_nExposure, CZgUnicam::Buffers, m_nStride * m_pMode->nHeight / 1024,
+			m_pMode->nWidth, m_pMode->nHeight, m_pMode->pName, CGkIMX219::FrameLength,
+			m_nExposure, CGkUnicam::Buffers, m_nStride * m_pMode->nHeight / 1024,
 			m_nWidth, m_nHeight, m_nTestPattern != 0 ? ", test pattern" : "");
 	return TRUE;
 }
 
-void CZgPiCamera::Stop (void)
+void CGkPiCamera::Stop (void)
 {
 	if (!m_bStreaming)
 	{
@@ -366,12 +366,12 @@ void CZgPiCamera::Stop (void)
 	}
 }
 
-const char *CZgPiCamera::GetError (void)
+const char *CGkPiCamera::GetError (void)
 {
 	return m_pError;
 }
 
-void CZgPiCamera::SetTestPattern (unsigned nPattern)
+void CGkPiCamera::SetTestPattern (unsigned nPattern)
 {
 	m_nTestPattern = nPattern;
 	if (m_bStreaming)
@@ -379,14 +379,14 @@ void CZgPiCamera::SetTestPattern (unsigned nPattern)
 		// the pattern comes before digital gain (SPEC 4.7): 1.0x, so it
 		// shows its own values
 		m_pSensor->SetExposure (m_nExposure, m_nAnalogue,
-					nPattern != 0 ? CZgIMX219::MinDigitalGain : m_nDigital);
+					nPattern != 0 ? CGkIMX219::MinDigitalGain : m_nDigital);
 		m_pSensor->SetTestPattern (nPattern);
 		m_nSkip = 2;
 	}
 	CLogger::Get ()->Write (FromCamera, LogNotice, "test pattern %u", nPattern);
 }
 
-const u8 *CZgPiCamera::GetGrey (unsigned *pWidth, unsigned *pHeight) const
+const u8 *CGkPiCamera::GetGrey (unsigned *pWidth, unsigned *pHeight) const
 {
 	if (!m_bStreaming || m_pError != 0)
 	{
@@ -397,7 +397,7 @@ const u8 *CZgPiCamera::GetGrey (unsigned *pWidth, unsigned *pHeight) const
 	return m_pGrey;
 }
 
-const u8 *CZgPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight)
+const u8 *CGkPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight)
 {
 	if (!m_bStreaming || m_pError != 0)
 	{
@@ -459,7 +459,7 @@ const u8 *CZgPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *
 // Each 2x2 Bayer tile (one red, two green, one blue) -> its average, which
 // does not depend on the tile's order, so neither do the flips. Four pixels
 // of each line are loaded at once: two tiles.
-void CZgPiCamera::ToGrey (const u8 *pRaw)
+void CGkPiCamera::ToGrey (const u8 *pRaw)
 {
 	u8 *pOut = m_pGrey;
 	for (unsigned y = 0; y < m_nHeight; y++)
@@ -485,7 +485,7 @@ void CZgPiCamera::ToGrey (const u8 *pRaw)
 // sensor makes them after the flips (docs/camera/IMPLEMENTATION.md).
 // Four pixels of each line are loaded at once (two tiles), as in ToGrey:
 // the frame buffer is slow to read byte by byte.
-void CZgPiCamera::ToColour (const u8 *pRaw)
+void CGkPiCamera::ToColour (const u8 *pRaw)
 {
 	u8 *pOut = m_pRGB;
 	for (unsigned y = 0; y < m_nHeight; y++)
@@ -509,7 +509,7 @@ void CZgPiCamera::ToColour (const u8 *pRaw)
 // SPEC 7: measure the middle of the picture, correct the product of
 // exposure and gains half-way (in log terms) towards the target, then let
 // two frames pass, as new values take that long to show.
-void CZgPiCamera::AutoExposure (void)
+void CGkPiCamera::AutoExposure (void)
 {
 	if (m_nTestPattern != 0)
 	{
@@ -593,10 +593,10 @@ void CZgPiCamera::AutoExposure (void)
 // Exposure first, up to the motion-blur cap; then analogue gain to 8x; then
 // exposure up to the frame; digital gain last (SPEC 7, step 4). Going
 // darker undoes them in the reverse order, since the same split applies.
-void CZgPiCamera::SetProduct (double fProduct)
+void CGkPiCamera::SetProduct (double fProduct)
 {
-	const double fMaxExposure = CZgIMX219::MaxExposure;
-	double fMin = CZgIMX219::MinExposure;
+	const double fMaxExposure = CGkIMX219::MaxExposure;
+	double fMin = CGkIMX219::MinExposure;
 	double fMax = fMaxExposure * MaxAnalogue * MaxDigital;
 	if (fProduct < fMin)	fProduct = fMin;
 	if (fProduct > fMax)	fProduct = fMax;
@@ -626,9 +626,9 @@ void CZgPiCamera::SetProduct (double fProduct)
 	// analogue gain = 256 / (256 - code); digital gain in 4.8 fixed point
 	unsigned nExposure = (unsigned) (fExposure + 0.5);
 	unsigned nAnalogue = (unsigned) (256.0 - 256.0 / fAnalogue + 0.5);
-	if (nAnalogue > CZgIMX219::MaxAnalogueCode)
+	if (nAnalogue > CGkIMX219::MaxAnalogueCode)
 	{
-		nAnalogue = CZgIMX219::MaxAnalogueCode;
+		nAnalogue = CGkIMX219::MaxAnalogueCode;
 	}
 	unsigned nDigital = (unsigned) (fDigital * 256.0 + 0.5);
 
@@ -653,7 +653,7 @@ void CZgPiCamera::SetProduct (double fProduct)
 
 // From GetFrame: logs what is worth knowing, rate-limited, and notices a
 // camera that has stopped sending.
-void CZgPiCamera::Watch (void)
+void CGkPiCamera::Watch (void)
 {
 	CLogger *pLogger = CLogger::Get ();
 	unsigned long long nNow = CTimer::GetClockTicks64 ();
@@ -701,21 +701,21 @@ void CZgPiCamera::Watch (void)
 	if (m_nErrorsSeen != 0 && nNow >= m_nNextErrorLog)
 	{
 		char Buffer[160];
-		CZgUnicam::DescribeErrors (m_nErrorsSeen, Buffer, sizeof Buffer);
+		CGkUnicam::DescribeErrors (m_nErrorsSeen, Buffer, sizeof Buffer);
 		pLogger->Write (FromCamera, LogWarning, "receiver errors: %s", Buffer);
 		m_nErrorsSeen = 0;
 		m_nNextErrorLog = nNow + LogEveryTicks;
 	}
 }
 
-void CZgPiCamera::RequestRaw (void)
+void CGkPiCamera::RequestRaw (void)
 {
 	m_bRawReady = FALSE;
 	m_nRawWait = 2;
 	m_bRawWanted = TRUE;
 }
 
-const u8 *CZgPiCamera::GetRaw (unsigned *pWidth, unsigned *pHeight, unsigned *pStride,
+const u8 *CGkPiCamera::GetRaw (unsigned *pWidth, unsigned *pHeight, unsigned *pStride,
 			       unsigned *pExposure, unsigned *pAnalogue, unsigned *pDigital) const
 {
 	if (!m_bRawReady)

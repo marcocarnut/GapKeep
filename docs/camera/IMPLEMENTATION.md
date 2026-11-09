@@ -11,7 +11,7 @@ showed.
 | --- | --- |
 | `src/camera/imx219.*` | The sensor over I2C: chip ID, the LP-11 stream toggle, the mode (SPEC 4.3 A-E), exposure and gains, test patterns, standby. Five modes (decision 15): `detail`, the centre 1280x960 unbinned (default); `centre`, the spec's recommended binned 640x480; `full`, the binned full field (SPEC 6.7); `wide` and `mid`. |
 | `src/camera/unicam.*` | Unicam1: power domain, CAM1 clock, lane clock gate, bring-up (SPEC 5.3) and stop (5.6), the frame interrupt, rotation over four DMA buffers, cache maintenance, error and frame counters. |
-| `src/camera/picamera.*` | `CZgPiCamera`, the `CZgCamera`: power (GPIO 41, LED GPIO 32), probe, start/stop, 2x2 Bayer average to grey, automatic exposure, logging, errors ("no camera", "no frames from the camera", ...). |
+| `src/camera/picamera.*` | `CGkPiCamera`, the `CGkCamera`: power (GPIO 41, LED GPIO 32), probe, start/stop, 2x2 Bayer average to grey, automatic exposure, logging, errors ("no camera", "no frames from the camera", ...). |
 | `src/kernel.*` | Production and sealed builds probe at boot and register the camera if found. |
 | `src/testshot.*` | Test builds: `#camera pi`, `#camera synth`, `#camera pattern <n>`, `#camera mode centre|full`. |
 | `tests/picamera.txt` | Rig-only scenario; `tools/run_tests.sh` and `tools/run_sim_tests.sh` skip files with a `# Rig only` line. |
@@ -167,7 +167,7 @@ No camera driver code of any project was opened or searched (Linux, rsta2/libcam
       share of the 3280-pixel width. It is not in SPEC.md.
 
 16. **The scanner's field** (`ui.Scanner`'s `field`, through
-    `CZgCamera::SetField` before each start): `center` uses `detail`
+    `CGkCamera::SetField` before each start): `center` uses `detail`
     (1280x960 unbinned, 640x480 grey) and `full` uses `full` (3280x2464
     binned, 820x616 grey). In test builds, `#camera mode <name>` overrides
     the field until `#camera mode auto` or `#camera synth`, so the rig can

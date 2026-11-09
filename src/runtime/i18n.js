@@ -1,4 +1,4 @@
-// zg:i18n: an app's text in the person's language, and numbers, amounts and
+// gk:i18n: an app's text in the person's language, and numbers, amounts and
 // dates written the same way on every build (QuickJS has no Intl).
 //
 // The English text is the key, written where it is used:
@@ -12,12 +12,12 @@
 // here. This module only looks them up. The runtime's own text (the messages
 // below) is translated by the launcher's catalog, apps/launcher/lang/.
 //
-// docs/plans/I18N.md is the design; docs/API.md ("zg:i18n") the reference.
+// docs/plans/I18N.md is the design; docs/API.md ("gk:i18n") the reference.
 // The pure parts are tested under Node (tests/i18n/run_node.mjs), with a
-// stand-in for "zg:i18n-native", which only this module may import.
+// stand-in for "gk:i18n-native", which only this module may import.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
-import * as host from "zg:i18n-native";
+import * as host from "gk:i18n-native";
 
 let state = host.state();		// { language, decimal, group, keyboard }
 let messages = host.messages();		// the app's catalog: key -> text, or null

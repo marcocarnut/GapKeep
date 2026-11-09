@@ -1,8 +1,8 @@
 // A known-answer self-test of the signing path on the device: the same
-// code as signing, over the crypto given (zg:crypto's libsecp256k1 on the
+// code as signing, over the crypto given (gk:crypto's libsecp256k1 on the
 // Pi), against published vectors.
 //
-//   import * as crypto from "zg:crypto";
+//   import * as crypto from "gk:crypto";
 //   const r = selfTest(crypto);   // { ok, checks: [{ name, ok, ms }] }
 //
 // Calls setCrypto(crypto). About 0.2 s on a Pi Zero (the BIP-39 seed is

@@ -18,8 +18,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Messages are English with {names}, translated by main.js (zg:i18n's t();
-// this file runs under Node too, where there is no zg:i18n). N_ marks a
+// Messages are English with {names}, translated by main.js (gk:i18n's t();
+// this file runs under Node too, where there is no gk:i18n). N_ marks a
 // message for tools/i18n.py. A message's English, its toString(), is what
 // the log gets.
 const N_ = (s) => s;

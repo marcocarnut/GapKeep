@@ -75,10 +75,10 @@ or structure were copied.
 | --- | --- | --- |
 | V1 | MediaTek IMX219 sensor driver file imx219mipiraw_Sensor.c (no licence header in the file), in the same repository as P1, commit bb4a45ea | Contains the same 0x30EB/0x300A/0x300B access sequence and the same twelve 0x4xxx values as G3. Used only to support the statement that these are Sony reference values, not Raspberry Pi inventions. |
 
-## Same-licence material (zerogap's vendored Circle, GPLv3)
+## Same-licence material (GapKeep's vendored Circle, GPLv3)
 
 Circle, as vendored in /home/mac/claude/code/lvglzero/circle (commit
-7a81e1b480fe7d19fc1fc695b89bff0a0848f44b), may be used directly by zerogap. It
+7a81e1b480fe7d19fc1fc695b89bff0a0848f44b), may be used directly by GapKeep. It
 was consulted for: `ARM_CM_CAM1CTL/DIV`, `ARM_CM_PASSWD`; `ARM_IRQ_CAM1` and
 `ARM_FIQ_CAM1 = 39`; `PROPTAG_SET_DOMAIN_STATE`, `DOMAIN_ID_UNICAM1 = 14`,
 `CLOCK_ID_CORE = 4`; `CGPIOClock` with `GPIOClockCAM1 = 9` and PLLD = 500 MHz

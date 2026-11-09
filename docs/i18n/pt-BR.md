@@ -1,6 +1,6 @@
 # Glossary: Brazilian Portuguese (pt-BR)
 
-The terms ZeroGap's apps and GapWallet use in Brazilian Portuguese, so the
+The terms GapKeep's apps and GapWallet use in Brazilian Portuguese, so the
 same thing has the same name everywhere. The user decides them; translators
 follow them and propose changes here, not in a catalog alone.
 
@@ -17,10 +17,10 @@ one word, so "frase-senha" is not "senha".
   ("Escolha uma rede", "Digite um valor").
 - "Transação" and "PSBT" are feminine ("a PSBT está assinada"); "QR code"
   is masculine and stays in English.
-- Never translated: ZeroGap, GapWallet, dice39, codex32, BIP numbers, script
+- Never translated: GapKeep, GapWallet, dice39, codex32, BIP numbers, script
   and key formats (P2WPKH, zpub, xpub, Base43, BBQr), units (BTC, sat,
   sat/vB), network names (mainnet, testnet, signet).
-- Numbers, amounts and dates come from zg:i18n (`formatBtc`, `formatDate`...),
+- Numbers, amounts and dates come from gk:i18n (`formatBtc`, `formatDate`...),
   never typed into a translation.
 
 ## Terms

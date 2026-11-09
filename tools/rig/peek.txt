@@ -1,4 +1,4 @@
-# Starts the Pi Camera, with the scanner open, for zgrig.py peek
+# Starts the Pi Camera, with the scanner open, for gkrig.py peek
 expect Keyboard attached 60
 expect launcher ready 60
 send #camera pi

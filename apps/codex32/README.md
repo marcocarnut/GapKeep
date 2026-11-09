@@ -32,8 +32,8 @@ Escape leaves the camera, the QR pages and About.
 
 ## Differences from the web page
 
-- No clipboard (ZeroGap has none), so no copy button.
-- Languages are ZeroGap's (`language` in `zerogap.txt`, or the Settings
+- No clipboard (GapKeep has none), so no copy button.
+- Languages are GapKeep's (`language` in `gapkeep.txt`, or the Settings
   app), not a button on the page. The Brazilian Portuguese catalog
   (`lang/pt-BR.json`) has the page's own Portuguese for its strings.
 - One box per share instead of one text area, with the checks above as you
@@ -53,13 +53,13 @@ BIP-93 encodes a **BIP-32 master seed**. dice39 puts **BIP-39 entropy** in
 the shares instead, and this app (like the page) turns it back into the
 words. The two give different wallets: a wallet handed the entropy as a raw
 BIP-32 seed opens a different, empty wallet. The words are what to restore
-from. (The master fingerprint and xpub, which will come with zg:crypto's
+from. (The master fingerprint and xpub, which will come with gk:crypto's
 PBKDF2 and secp256k1, are derived from the words' BIP-39 seed: see
 `showKeys` in `main.js`.)
 
 ## For other apps: `lib/codex32.js`
 
-A pure ES module (no `zg:*`, no globals, no logging), usable unchanged by
+A pure ES module (no `gk:*`, no globals, no logging), usable unchanged by
 another app, e.g. a signer:
 
 ```js
@@ -84,7 +84,7 @@ It needs `vendor/codex32.js` beside it in `../vendor/`.
 ## Security notes
 
 - **Nothing is kept**: the shares and the result are in the app's memory
-  only, never in the session store (`zg:session`) or on the card. Leaving
+  only, never in the session store (`gk:session`) or on the card. Leaving
   the app drops them; Clear erases them. The recovered seed is a
   `Uint8Array` overwritten with zeros on Clear, on Back, and before a new
   recovery. The words and the typed text are JavaScript strings, which
@@ -117,10 +117,10 @@ It needs `vendor/codex32.js` beside it in `../vendor/`.
   failed`; Recover stays disabled until it has passed.
 - `lib/strings.js`: the page's English strings with the HTML taken out, and
   a few replaced where they speak of a browser, translated through
-  `zg:i18n`. `tests/codex32/run_node.mjs` checks that the page's are still
+  `gk:i18n`. `tests/codex32/run_node.mjs` checks that the page's are still
   its own, word for word.
 - `lib/messages.js`: the errors of `lib/codex32.js` (English, for logs and
-  Node) worded again through `zg:i18n`, from their codes and details; in
+  Node) worded again through `gk:i18n`, from their codes and details; in
   English the same words (checked by `tests/codex32/run_node.mjs`).
 - `lang/pt-BR.json`: the Brazilian Portuguese catalog.
 - `main.js`: the screens.

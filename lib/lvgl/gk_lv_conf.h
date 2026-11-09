@@ -1,5 +1,5 @@
 /**
- * zerogap LVGL configuration, derived from circle/addon/lvgl/lv_conf.h.
+ * GapKeep LVGL configuration, derived from circle/addon/lvgl/lv_conf.h.
  * Changes: QR codes on, Montserrat 28/32/40 on, widgets demo off, dark theme,
  * custom allocator that wipes freed memory (src/runtime/lv_mem_wipe.c).
  *
@@ -618,10 +618,10 @@
  *   FONT USAGE
  *===================*/
 
-/* LVGL's built-in Montserrat fonts (ASCII and the icons) are off: zerogap
+/* LVGL's built-in Montserrat fonts (ASCII and the icons) are off: GapKeep
  * has its own, with Latin-1, Latin Extended-A, some punctuation, the euro
  * and bitcoin signs and the same icons (src/runtime/fonts/, made by
- * tools/make_fonts.py), declared below as zg_montserrat_<size>. */
+ * tools/make_fonts.py), declared below as gk_montserrat_<size>. */
 #define LV_FONT_MONTSERRAT_8  0
 #define LV_FONT_MONTSERRAT_10 0
 #define LV_FONT_MONTSERRAT_12 0
@@ -664,26 +664,26 @@
  *  @endcode
  */
 #define LV_FONT_CUSTOM_DECLARE \
-    LV_FONT_DECLARE(zg_montserrat_12) \
-    LV_FONT_DECLARE(zg_montserrat_14) \
-    LV_FONT_DECLARE(zg_montserrat_16) \
-    LV_FONT_DECLARE(zg_montserrat_18) \
-    LV_FONT_DECLARE(zg_montserrat_20) \
-    LV_FONT_DECLARE(zg_montserrat_22) \
-    LV_FONT_DECLARE(zg_montserrat_24) \
-    LV_FONT_DECLARE(zg_montserrat_28) \
-    LV_FONT_DECLARE(zg_montserrat_32) \
-    LV_FONT_DECLARE(zg_montserrat_40) \
-    LV_FONT_DECLARE(zg_mono_12) \
-    LV_FONT_DECLARE(zg_mono_14) \
-    LV_FONT_DECLARE(zg_mono_16) \
-    LV_FONT_DECLARE(zg_mono_18) \
-    LV_FONT_DECLARE(zg_mono_20) \
-    LV_FONT_DECLARE(zg_mono_24) \
-    LV_FONT_DECLARE(zg_mono_28)
+    LV_FONT_DECLARE(gk_montserrat_12) \
+    LV_FONT_DECLARE(gk_montserrat_14) \
+    LV_FONT_DECLARE(gk_montserrat_16) \
+    LV_FONT_DECLARE(gk_montserrat_18) \
+    LV_FONT_DECLARE(gk_montserrat_20) \
+    LV_FONT_DECLARE(gk_montserrat_22) \
+    LV_FONT_DECLARE(gk_montserrat_24) \
+    LV_FONT_DECLARE(gk_montserrat_28) \
+    LV_FONT_DECLARE(gk_montserrat_32) \
+    LV_FONT_DECLARE(gk_montserrat_40) \
+    LV_FONT_DECLARE(gk_mono_12) \
+    LV_FONT_DECLARE(gk_mono_14) \
+    LV_FONT_DECLARE(gk_mono_16) \
+    LV_FONT_DECLARE(gk_mono_18) \
+    LV_FONT_DECLARE(gk_mono_20) \
+    LV_FONT_DECLARE(gk_mono_24) \
+    LV_FONT_DECLARE(gk_mono_28)
 
 /** Always set a default font */
-#define LV_FONT_DEFAULT &zg_montserrat_14
+#define LV_FONT_DEFAULT &gk_montserrat_14
 
 /** Enable handling large font and/or fonts with a lot of characters.
  *  The limit depends on the font size, font face and bpp.

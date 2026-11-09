@@ -51,10 +51,10 @@ static int Chunk (FILE *f, const char *type, const uint8_t *data, size_t n)
 	       && fwrite (tail, 1, 4, f) == 4;
 }
 
-int zg_sim_screenshot (const char *path)
+int gk_sim_screenshot (const char *path)
 {
 	int w, h;
-	const uint16_t *frame = zg_sim_frame (&w, &h);
+	const uint16_t *frame = gk_sim_frame (&w, &h);
 	if (frame == 0)
 	{
 		return -1;

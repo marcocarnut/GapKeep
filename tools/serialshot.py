@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Screenshots over the serial line from a zerogap test build (make TEST=1).
+Screenshots over the serial line from a GapKeep test build (make TEST=1).
 
 Sends "#shot\\n" and decodes the kernel's answer (see src/testshot.h) into a
 PNG. Used on the hardware rig against the Pi Zero's UART, and by

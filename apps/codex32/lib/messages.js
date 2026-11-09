@@ -1,9 +1,9 @@
-// lib/codex32.js's errors in the person's language (zg:i18n). The library
+// lib/codex32.js's errors in the person's language (gk:i18n). The library
 // words them in English, for logs and Node; each error carries its code and
 // details, and this module words them again through t(), the English the
 // same as the library's.
 
-import { t, plural } from "zg:i18n";
+import { t, plural } from "gk:i18n";
 
 const q = (c) => `'${c}'`;
 const up = (s) => String(s).toUpperCase();

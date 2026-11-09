@@ -19,23 +19,23 @@ static const char From[] = "i18n";
 static const unsigned MaxCatalogSize = 256 * 1024;
 static const unsigned MaxNames = 32;		// {names} in one message
 
-#ifndef ZG_LANGUAGE
-#define ZG_LANGUAGE "en"
+#ifndef GK_LANGUAGE
+#define GK_LANGUAGE "en"
 #endif
 
 // src/runtime/i18n.js, embedded by tools/embed_js.py
-extern "C" const char zg_i18n_js[];
-extern "C" const unsigned zg_i18n_js_size;
+extern "C" const char gk_i18n_js[];
+extern "C" const unsigned gk_i18n_js_size;
 
-char CZgI18n::s_Language[16] = "en";
-char CZgI18n::s_Decimal[4] = ".";
-char CZgI18n::s_Group[4] = ",";
-char CZgI18n::s_SetDecimal[4] = "";
-char CZgI18n::s_SetGroup[4] = "";
-boolean CZgI18n::s_bDecimalSet = FALSE;
-boolean CZgI18n::s_bGroupSet = FALSE;
+char CGkI18n::s_Language[16] = "en";
+char CGkI18n::s_Decimal[4] = ".";
+char CGkI18n::s_Group[4] = ",";
+char CGkI18n::s_SetDecimal[4] = "";
+char CGkI18n::s_SetGroup[4] = "";
+boolean CGkI18n::s_bDecimalSet = FALSE;
+boolean CGkI18n::s_bGroupSet = FALSE;
 
-struct TZgI18nState
+struct TGkI18nState
 {
 	JSValue Messages;	// the app's: a null-prototype object, or null
 	JSValue System;		// the launcher's, once asked for (undefined until then)
@@ -79,7 +79,7 @@ static boolean IsTag (const char *p)
 	}
 }
 
-static const zg_file_t *FindFile (const zg_app_t *pApp, const char *pPath)
+static const gk_file_t *FindFile (const gk_app_t *pApp, const char *pPath)
 {
 	for (unsigned i = 0; pApp != 0 && i < pApp->file_count; i++)
 	{
@@ -91,7 +91,7 @@ static const zg_file_t *FindFile (const zg_app_t *pApp, const char *pPath)
 	return 0;
 }
 
-static const zg_file_t *CatalogFile (const zg_app_t *pApp, const char *pTag)
+static const gk_file_t *CatalogFile (const gk_app_t *pApp, const char *pTag)
 {
 	char Path[32];
 	if (strlen (pTag) + 11 > sizeof Path)
@@ -104,23 +104,23 @@ static const zg_file_t *CatalogFile (const zg_app_t *pApp, const char *pTag)
 	return FindFile (pApp, Path);
 }
 
-boolean CZgI18n::IsKnown (const char *pTag)
+boolean CGkI18n::IsKnown (const char *pTag)
 {
 	return    strcmp (pTag, "en") == 0
 	       || strcmp (pTag, "qps") == 0
 	       || (IsTag (pTag) && CatalogFile (CAppStore::Find ("launcher"), pTag) != 0);
 }
 
-void CZgI18n::Initialize (void)
+void CGkI18n::Initialize (void)
 {
-	if (strcmp (ZG_LANGUAGE, "en") != 0 && !SetLanguage (ZG_LANGUAGE, "build"))
+	if (strcmp (GK_LANGUAGE, "en") != 0 && !SetLanguage (GK_LANGUAGE, "build"))
 	{
 		CLogger::Get ()->Write (From, LogWarning, "the build's language \"%s\" is unknown: English",
-					ZG_LANGUAGE);
+					GK_LANGUAGE);
 	}
 }
 
-boolean CZgI18n::SetLanguage (const char *pTag, const char *pFrom)
+boolean CGkI18n::SetLanguage (const char *pTag, const char *pFrom)
 {
 	if (!IsKnown (pTag))
 	{
@@ -139,7 +139,7 @@ boolean CZgI18n::SetLanguage (const char *pTag, const char *pFrom)
 static boolean IsDecimalMark (const char *p)	{ return strcmp (p, ".") == 0 || strcmp (p, ",") == 0; }
 static boolean IsGroupMark (const char *p)	{ return IsDecimalMark (p) || *p == '\0'; }
 
-void CZgI18n::ResolveMarks (void)
+void CGkI18n::ResolveMarks (void)
 {
 	// the language's own: Portuguese writes 1.234,5; the others we have, 1,234.5
 	boolean bComma = strcmp (s_Language, "pt") == 0 || strncmp (s_Language, "pt-", 3) == 0;
@@ -160,7 +160,7 @@ void CZgI18n::ResolveMarks (void)
 	}
 }
 
-boolean CZgI18n::SetMarks (const char *pDecimal, const char *pGroup, const char *pFrom)
+boolean CGkI18n::SetMarks (const char *pDecimal, const char *pGroup, const char *pFrom)
 {
 	if (   (pDecimal != 0 && !IsDecimalMark (pDecimal))
 	    || (pGroup != 0 && !IsGroupMark (pGroup))
@@ -177,14 +177,14 @@ boolean CZgI18n::SetMarks (const char *pDecimal, const char *pGroup, const char 
 	return TRUE;
 }
 
-boolean CZgI18n::Configure (const char *pKey, const char *pValue, unsigned nLine)
+boolean CGkI18n::Configure (const char *pKey, const char *pValue, unsigned nLine)
 {
 	CLogger *pLogger = CLogger::Get ();
 	if (strcmp (pKey, "language") == 0)
 	{
-		if (!SetLanguage (pValue, "zerogap.txt"))
+		if (!SetLanguage (pValue, "gapkeep.txt"))
 		{
-			pLogger->Write (From, LogWarning, "zerogap.txt:%u: language: English instead", nLine);
+			pLogger->Write (From, LogWarning, "gapkeep.txt:%u: language: English instead", nLine);
 		}
 		return TRUE;
 	}
@@ -196,8 +196,8 @@ boolean CZgI18n::Configure (const char *pKey, const char *pValue, unsigned nLine
 	}
 	if (bDecimal ? !IsDecimalMark (pValue) : !IsGroupMark (pValue))
 	{
-		pLogger->Write (From, LogWarning, bDecimal ? "zerogap.txt:%u: decimal_mark: . or , expected"
-						  : "zerogap.txt:%u: group_mark: . or , or nothing expected", nLine);
+		pLogger->Write (From, LogWarning, bDecimal ? "gapkeep.txt:%u: decimal_mark: . or , expected"
+						  : "gapkeep.txt:%u: group_mark: . or , or nothing expected", nLine);
 		return TRUE;
 	}
 	const char *pDecimal = bDecimal ? pValue : s_bDecimalSet ? s_SetDecimal : 0;
@@ -205,9 +205,9 @@ boolean CZgI18n::Configure (const char *pKey, const char *pValue, unsigned nLine
 	char Decimal[4], Group[4];		// SetMarks copies onto s_Set*
 	if (pDecimal != 0) { strcpy (Decimal, pDecimal); pDecimal = Decimal; }
 	if (pGroup != 0) { strcpy (Group, pGroup); pGroup = Group; }
-	if (!SetMarks (pDecimal, pGroup, "zerogap.txt"))
+	if (!SetMarks (pDecimal, pGroup, "gapkeep.txt"))
 	{
-		pLogger->Write (From, LogWarning, "zerogap.txt:%u: decimal_mark and group_mark must differ", nLine);
+		pLogger->Write (From, LogWarning, "gapkeep.txt:%u: decimal_mark and group_mark must differ", nLine);
 	}
 	return TRUE;
 }
@@ -365,7 +365,7 @@ static const char *CheckTranslation (const char *pKey, size_t nKey, const char *
 
 	// tags (markup.h): a key's tags kept, as a multiset, in a valid nesting;
 	// a key without tags stays without
-	return ZgMarkupCheckTranslation (pKey, nKey, pText, nText);
+	return GkMarkupCheckTranslation (pKey, nKey, pText, nText);
 }
 
 // --- loading catalogs -----------------------------------------------------------
@@ -396,7 +396,7 @@ static void Problem (const char *pApp, const char *pPath, const char *pWhat)
 }
 
 // Adds the checked translations of one catalog file to Messages
-static void LoadFile (JSContext *ctx, JSValueConst Messages, const zg_app_t *pApp, const zg_file_t *pFile,
+static void LoadFile (JSContext *ctx, JSValueConst Messages, const gk_app_t *pApp, const gk_file_t *pFile,
 		      const char *pTag)
 {
 	if (pFile->size > MaxCatalogSize)
@@ -502,7 +502,7 @@ static void LoadFile (JSContext *ctx, JSValueConst Messages, const zg_app_t *pAp
 
 // An app's translations into the language: lang/pt.json, then lang/pt-BR.json
 // over it. null if there is nothing to translate (English, qps, no catalog).
-static JSValue LoadMessages (JSContext *ctx, const zg_app_t *pApp, const char *pTag)
+static JSValue LoadMessages (JSContext *ctx, const gk_app_t *pApp, const char *pTag)
 {
 	if (pApp == 0 || strcmp (pTag, "en") == 0 || strcmp (pTag, "qps") == 0)
 	{
@@ -516,8 +516,8 @@ static JSValue LoadMessages (JSContext *ctx, const zg_app_t *pApp, const char *p
 	{
 		*pDash = '\0';
 	}
-	const zg_file_t *pBase = pDash != 0 ? CatalogFile (pApp, Base) : 0;
-	const zg_file_t *pFile = CatalogFile (pApp, pTag);
+	const gk_file_t *pBase = pDash != 0 ? CatalogFile (pApp, Base) : 0;
+	const gk_file_t *pFile = CatalogFile (pApp, pTag);
 	if (pBase == 0 && pFile == 0)
 	{
 		return JS_NULL;
@@ -540,7 +540,7 @@ static JSValue LoadMessages (JSContext *ctx, const zg_app_t *pApp, const char *p
 // The translation of each key, or 0, from one catalog file. Only these
 // keys are looked at (the launcher asks for every app's), with the checks
 // of LoadFile; a refused one is logged.
-static void LookupFile (JSContext *ctx, const zg_app_t *pApp, const zg_file_t *pFile, const char *pTag,
+static void LookupFile (JSContext *ctx, const gk_app_t *pApp, const gk_file_t *pFile, const char *pTag,
 			const char *pKeys[], char *pOut[], unsigned nKeys)
 {
 	if (pFile == 0 || pFile->size > MaxCatalogSize)
@@ -606,7 +606,7 @@ static void LookupFile (JSContext *ctx, const zg_app_t *pApp, const zg_file_t *p
 
 struct TAppText
 {
-	const zg_app_t *pApp;
+	const gk_app_t *pApp;
 	char Language[16];	// what these are in
 	char *pName;		// 0: the manifest's
 	char *pDescription;
@@ -615,7 +615,7 @@ struct TAppText
 static const unsigned MaxAppTexts = 256;
 static TAppText s_AppTexts[MaxAppTexts];
 
-static TAppText *AppText (JSContext *ctx, const zg_app_t *pApp, const char *pLanguage)
+static TAppText *AppText (JSContext *ctx, const gk_app_t *pApp, const char *pLanguage)
 {
 	TAppText *pFree = 0;
 	for (unsigned i = 0; i < MaxAppTexts; i++)
@@ -714,7 +714,7 @@ static const char *Pseudo (const char *pText, char **ppCache)
 	return *ppCache;
 }
 
-const char *CZgI18n::GetAppName (JSContext *ctx, const zg_app_t *pApp)
+const char *CGkI18n::GetAppName (JSContext *ctx, const gk_app_t *pApp)
 {
 	TAppText *p = AppText (ctx, pApp, s_Language);
 	if (p != 0 && strcmp (s_Language, "qps") == 0)
@@ -724,7 +724,7 @@ const char *CZgI18n::GetAppName (JSContext *ctx, const zg_app_t *pApp)
 	return p != 0 && p->pName != 0 ? p->pName : pApp->name;
 }
 
-const char *CZgI18n::GetAppDescription (JSContext *ctx, const zg_app_t *pApp)
+const char *CGkI18n::GetAppDescription (JSContext *ctx, const gk_app_t *pApp)
 {
 	TAppText *p = AppText (ctx, pApp, s_Language);
 	if (p != 0 && strcmp (s_Language, "qps") == 0)
@@ -734,14 +734,14 @@ const char *CZgI18n::GetAppDescription (JSContext *ctx, const zg_app_t *pApp)
 	return p != 0 && p->pDescription != 0 ? p->pDescription : pApp->description;
 }
 
-unsigned CZgI18n::LoadCatalog (TZgApp *pApp)
+unsigned CGkI18n::LoadCatalog (TGkApp *pApp)
 {
 	unsigned nStart = CTimer::Get ()->GetClockTicks ();
 
 	JSContext *ctx = pApp->pContext;
 	if (pApp->pI18n == 0)
 	{
-		pApp->pI18n = new TZgI18nState;
+		pApp->pI18n = new TGkI18nState;
 		pApp->pI18n->Messages = JS_NULL;
 		pApp->pI18n->System = JS_UNDEFINED;
 	}
@@ -753,7 +753,7 @@ unsigned CZgI18n::LoadCatalog (TZgApp *pApp)
 	return CTimer::Get ()->GetClockTicks () - nStart;
 }
 
-void CZgI18n::FreeApp (TZgApp *pApp)
+void CGkI18n::FreeApp (TGkApp *pApp)
 {
 	if (pApp->pI18n != 0)
 	{
@@ -764,18 +764,18 @@ void CZgI18n::FreeApp (TZgApp *pApp)
 	}
 }
 
-// --- "zg:i18n-native" -------------------------------------------------------------
+// --- "gk:i18n-native" -------------------------------------------------------------
 
-static TZgI18nState *State (JSContext *ctx)
+static TGkI18nState *State (JSContext *ctx)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	assert (pApp != 0 && pApp->pI18n != 0);
 	return pApp->pI18n;
 }
 
 static boolean MayChange (JSContext *ctx, const char *pFunction)
 {
-	if (CAppHost::GetApp (ctx)->pBundle->permissions & ZG_PERM_SETTINGS)
+	if (CAppHost::GetApp (ctx)->pBundle->permissions & GK_PERM_SETTINGS)
 	{
 		return TRUE;
 	}
@@ -786,10 +786,10 @@ static boolean MayChange (JSContext *ctx, const char *pFunction)
 static JSValue js_i18n_state (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	JSValue Obj = JS_NewObject (ctx);
-	JS_SetPropertyStr (ctx, Obj, "language", JS_NewString (ctx, CZgI18n::GetLanguage ()));
-	JS_SetPropertyStr (ctx, Obj, "decimal", JS_NewString (ctx, CZgI18n::GetDecimal ()));
-	JS_SetPropertyStr (ctx, Obj, "group", JS_NewString (ctx, CZgI18n::GetGroup ()));
-	JS_SetPropertyStr (ctx, Obj, "keyboard", JS_NewString (ctx, CZgI18n::GetKeyboard ()));
+	JS_SetPropertyStr (ctx, Obj, "language", JS_NewString (ctx, CGkI18n::GetLanguage ()));
+	JS_SetPropertyStr (ctx, Obj, "decimal", JS_NewString (ctx, CGkI18n::GetDecimal ()));
+	JS_SetPropertyStr (ctx, Obj, "group", JS_NewString (ctx, CGkI18n::GetGroup ()));
+	JS_SetPropertyStr (ctx, Obj, "keyboard", JS_NewString (ctx, CGkI18n::GetKeyboard ()));
 	return Obj;
 }
 
@@ -800,10 +800,10 @@ static JSValue js_i18n_messages (JSContext *ctx, JSValueConst this_val, int argc
 
 static JSValue js_i18n_system_messages (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgI18nState *pState = State (ctx);
+	TGkI18nState *pState = State (ctx);
 	if (JS_IsUndefined (pState->System))
 	{
-		pState->System = LoadMessages (ctx, CAppStore::Find ("launcher"), CZgI18n::GetLanguage ());
+		pState->System = LoadMessages (ctx, CAppStore::Find ("launcher"), CGkI18n::GetLanguage ());
 	}
 	return JS_DupValue (ctx, pState->System);
 }
@@ -820,10 +820,10 @@ static JSValue js_i18n_languages (JSContext *ctx, JSValueConst this_val, int arg
 	JS_SetPropertyStr (ctx, English, "name", JS_NewString (ctx, "English"));
 	JS_SetPropertyUint32 (ctx, List, n++, English);
 
-	const zg_app_t *pLauncher = CAppStore::Find ("launcher");
+	const gk_app_t *pLauncher = CAppStore::Find ("launcher");
 	for (unsigned i = 0; pLauncher != 0 && i < pLauncher->file_count; i++)
 	{
-		const zg_file_t *pFile = &pLauncher->files[i];
+		const gk_file_t *pFile = &pLauncher->files[i];
 		size_t nPath = strlen (pFile->path);
 		char Tag[16];
 		if (   strncmp (pFile->path, "lang/", 5) != 0 || nPath < 5 + 5 || nPath - 10 >= sizeof Tag
@@ -871,7 +871,7 @@ static JSValue js_i18n_languages (JSContext *ctx, JSValueConst this_val, int arg
 static JSValue js_i18n_keyboards (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	JSValue List = JS_NewArray (ctx);
-	const char *const *ppLayouts = ZgKeyLayouts ();
+	const char *const *ppLayouts = GkKeyLayouts ();
 	for (unsigned i = 0; ppLayouts[i] != 0; i++)
 	{
 		JS_SetPropertyUint32 (ctx, List, i, JS_NewString (ctx, ppLayouts[i]));
@@ -890,10 +890,10 @@ static JSValue js_i18n_set_language (JSContext *ctx, JSValueConst this_val, int 
 	{
 		return JS_EXCEPTION;
 	}
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 	CString Who;
 	Who.Format ("app %s", pApp->pBundle->id);
-	boolean bOK = CZgI18n::SetLanguage (pTag, Who);
+	boolean bOK = CGkI18n::SetLanguage (pTag, Who);
 	JSValue Result = JS_UNDEFINED;
 	if (!bOK)
 	{
@@ -901,7 +901,7 @@ static JSValue js_i18n_set_language (JSContext *ctx, JSValueConst this_val, int 
 	}
 	else
 	{
-		unsigned nUs = CZgI18n::LoadCatalog (pApp);
+		unsigned nUs = CGkI18n::LoadCatalog (pApp);
 		CLogger::Get ()->Write (From, LogNotice, "%s: catalog reloaded, %u us", pApp->pBundle->id, nUs);
 	}
 	JS_FreeCString (ctx, pTag);
@@ -959,7 +959,7 @@ static JSValue js_i18n_set_marks (JSContext *ctx, JSValueConst this_val, int arg
 	}
 	CString Who;
 	Who.Format ("app %s", CAppHost::GetApp (ctx)->pBundle->id);
-	if (!CZgI18n::SetMarks (bDecimal ? Decimal : 0, bGroup ? Group : 0, Who))
+	if (!CGkI18n::SetMarks (bDecimal ? Decimal : 0, bGroup ? Group : 0, Who))
 	{
 		return JS_ThrowRangeError (ctx, "setMarks: decimal \".\" or \",\"; group \".\", \",\" or \"\"; not the same");
 	}
@@ -981,7 +981,7 @@ static JSValue js_i18n_set_keyboard (JSContext *ctx, JSValueConst this_val, int 
 	// until power-off; logged, never what is typed
 	CString Who;
 	Who.Format ("app %s", CAppHost::GetApp (ctx)->pBundle->id);
-	boolean bOK = ZgKeyLayoutSet (pLayout, Who);
+	boolean bOK = GkKeyLayoutSet (pLayout, Who);
 	JS_FreeCString (ctx, pLayout);
 	if (!bOK)
 	{
@@ -992,7 +992,7 @@ static JSValue js_i18n_set_keyboard (JSContext *ctx, JSValueConst this_val, int 
 
 static JSValue js_i18n_utc_offset (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return JS_NewInt32 (ctx, CZgClock::GetUtcOffset ());
+	return JS_NewInt32 (ctx, CGkClock::GetUtcOffset ());
 }
 
 static const JSCFunctionListEntry NativeFunctions[] =
@@ -1013,7 +1013,7 @@ static int NativeModuleInit (JSContext *ctx, JSModuleDef *m)
 	return JS_SetModuleExportList (ctx, m, NativeFunctions, sizeof NativeFunctions / sizeof NativeFunctions[0]);
 }
 
-JSModuleDef *ZgInitI18nNativeModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitI18nNativeModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, NativeModuleInit);
 	if (m == 0)
@@ -1024,10 +1024,10 @@ JSModuleDef *ZgInitI18nNativeModule (JSContext *ctx, const char *pName)
 	return m;
 }
 
-// "zg:i18n": compiled from its JavaScript when an app imports it
-JSModuleDef *ZgInitI18nModule (JSContext *ctx, const char *pName)
+// "gk:i18n": compiled from its JavaScript when an app imports it
+JSModuleDef *GkInitI18nModule (JSContext *ctx, const char *pName)
 {
-	JSValue Func = JS_Eval (ctx, zg_i18n_js, zg_i18n_js_size, pName,
+	JSValue Func = JS_Eval (ctx, gk_i18n_js, gk_i18n_js_size, pName,
 				JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
 	if (JS_IsException (Func))
 	{

@@ -10,7 +10,7 @@ expect apps/badutf8 not loaded: main.js: not valid UTF-8 text
 expect apps/hello not loaded: an app with this id is built in
 expect apps/noentry not loaded: entry module "main.js" not found
 # the same hash as "tools/bundle_apps.py --hash tests/sdcard/apps/sdhello"
-expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 0627776fc0fd5752ffed7704f323d11392d79e9d476394ebfdf62ed4b109d1fc
+expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 08ab835023ad24a18a3de481f20b5b55b44224e738959e3964477cf43695a3ed
 expect apps/unknownkey not loaded: manifest.json: unknown key "network"
 expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
 expect 1 app\(s\) from the SD card, 9 not loaded
@@ -21,6 +21,6 @@ tilefocus sdhello
 wait 1
 shot 01-launcher
 key ret
-expect sdhello ready: Hello from the SD card sdcard 0627776fc0fd5752ffed7704f323d11392d79e9d476394ebfdf62ed4b109d1fc icon 32x32
+expect sdhello ready: Hello from the SD card sdcard 08ab835023ad24a18a3de481f20b5b55b44224e738959e3964477cf43695a3ed icon 32x32
 wait 1
 shot 02-sdhello

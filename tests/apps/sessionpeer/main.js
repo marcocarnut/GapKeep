@@ -1,6 +1,6 @@
 // Test builds only: must see none of sessiontest's values (tests/session.txt).
-import * as ui from "zg:ui";
-import * as session from "zg:session";
+import * as ui from "gk:ui";
+import * as session from "gk:session";
 
 const keys = session.keys();
 const got = session.get("record");

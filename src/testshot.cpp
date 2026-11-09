@@ -16,14 +16,14 @@
 #include <circle/string.h>
 #include <circle/util.h>
 
-CTestShot::CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial, CZgPiCamera *pPiCamera)
+CTestShot::CTestShot (CScreenDevice *pScreen, CSerialDevice *pSerial, CGkPiCamera *pPiCamera)
 :	m_pScreen (pScreen),
 	m_pSerial (pSerial),
 	m_pPiCamera (pPiCamera),
 	m_nLine (0),
 	m_bRawPending (FALSE)
 {
-	CZgCamera::Set (&m_Camera);
+	CGkCamera::Set (&m_Camera);
 }
 
 void CTestShot::Update (void)
@@ -49,15 +49,15 @@ void CTestShot::Update (void)
 				}
 				else if (strncmp (m_Line, "#crash ", 7) == 0)
 				{
-					ZgTestCrash (m_Line + 7);
+					GkTestCrash (m_Line + 7);
 				}
 				else if (strcmp (m_Line, "#experimental on") == 0)
 				{
-					CZgSettings::SetExperimental (TRUE, "serial line, test build");
+					CGkSettings::SetExperimental (TRUE, "serial line, test build");
 				}
 				else if (strcmp (m_Line, "#fonts") == 0)
 				{
-					ZgStyledFontStats ();
+					GkStyledFontStats ();
 				}
 				else if (strcmp (m_Line, "#redraw") == 0)
 				{
@@ -70,7 +70,7 @@ void CTestShot::Update (void)
 				}
 				else if (strncmp (m_Line, "#keyboard ", 10) == 0)
 				{
-					ZgKeyLayoutSet (m_Line + 10, "serial line, test build");
+					GkKeyLayoutSet (m_Line + 10, "serial line, test build");
 				}
 				else if (strncmp (m_Line, "#camera ", 8) == 0)
 				{
@@ -79,7 +79,7 @@ void CTestShot::Update (void)
 				else if (strncmp (m_Line, "#language ", 10) == 0)
 				{
 					// for the apps started from now on
-					CZgI18n::SetLanguage (m_Line + 10, "serial line, test build");
+					CGkI18n::SetLanguage (m_Line + 10, "serial line, test build");
 				}
 				m_nLine = 0;
 			}
@@ -212,7 +212,7 @@ void CTestShot::Camera (const char *pArgs)
 	{
 		if (m_pPiCamera->Probe ())
 		{
-			CZgCamera::Set (m_pPiCamera);
+			CGkCamera::Set (m_pPiCamera);
 			pLogger->Write ("camera", LogNotice, "pi");
 		}
 		else
@@ -229,10 +229,10 @@ void CTestShot::Camera (const char *pArgs)
 	}
 	if (strncmp (pArgs, "mode ", 5) == 0)
 	{
-		const TZgIMX219Mode *pMode = CZgIMX219::GetMode (pArgs + 5);
+		const TGkIMX219Mode *pMode = CGkIMX219::GetMode (pArgs + 5);
 		if (pMode == 0)
 		{
-			pLogger->Write ("camera", LogWarning, "#camera mode auto|%s", CZgIMX219::ModeNames);
+			pLogger->Write ("camera", LogWarning, "#camera mode auto|%s", CGkIMX219::ModeNames);
 			return;
 		}
 		m_pPiCamera->SetMode (pMode);
@@ -242,7 +242,7 @@ void CTestShot::Camera (const char *pArgs)
 	if (strncmp (pArgs, "picture ", 8) == 0)
 	{
 		// a test picture (testpictures.h), unpacked
-		const TZgTestPicture *p = zg_test_pictures;
+		const TGkTestPicture *p = gk_test_pictures;
 		while (p->pName != 0 && strcmp (p->pName, pArgs + 8) != 0)
 		{
 			p++;
@@ -265,7 +265,7 @@ void CTestShot::Camera (const char *pArgs)
 		}
 		if (nOut == nSize && m_Camera.SetPictureRGB (pRGB, p->nWidth, p->nHeight))
 		{
-			CZgCamera::Set (&m_Camera);
+			CGkCamera::Set (&m_Camera);
 			pLogger->Write ("camera", LogNotice, "a colour picture, %ux%u", p->nWidth, p->nHeight);
 		}
 		else
@@ -344,5 +344,5 @@ void CTestShot::Camera (const char *pArgs)
 				"#camera qr <text> | picture <name> | scene | none | synth | pi | grey | raw | pattern <n> | mode <name>");
 		return;
 	}
-	CZgCamera::Set (&m_Camera);
+	CGkCamera::Set (&m_Camera);
 }

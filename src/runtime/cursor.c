@@ -28,7 +28,7 @@ static const unsigned char CursorPixels[1472] = {
 	0,0,0,2,0,0,0,5,0,0,0,7,0,0,0,7,0,0,0,5,0,0,0,4,0,0,0,10,0,0,0,29,0,0,0,55,0,0,0,74,0,0,0,77,0,0,0,66,0,0,0,46,0,0,0,24,0,0,0,9,0,0,0,2,
 };
 
-const lv_image_dsc_t zg_cursor_image = {
+const lv_image_dsc_t gk_cursor_image = {
 	.header = {
 		.magic = LV_IMAGE_HEADER_MAGIC,
 		.cf = LV_COLOR_FORMAT_ARGB8888,
@@ -40,5 +40,5 @@ const lv_image_dsc_t zg_cursor_image = {
 	.data = CursorPixels,
 };
 
-const int zg_cursor_hot_x = 2;
-const int zg_cursor_hot_y = 2;
+const int gk_cursor_hot_x = 2;
+const int gk_cursor_hot_y = 2;

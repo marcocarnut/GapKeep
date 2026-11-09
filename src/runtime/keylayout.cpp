@@ -8,8 +8,8 @@
 #include <circle/string.h>
 #include <circle/util.h>
 
-#ifndef ZG_KEYBOARD
-#define ZG_KEYBOARD	"us"		// make KEYBOARD=... (src/Makefile)
+#ifndef GK_KEYBOARD
+#define GK_KEYBOARD	"us"		// make KEYBOARD=... (src/Makefile)
 #endif
 
 static const char From[] = "keyboard";
@@ -48,7 +48,7 @@ static const TLayout &Current (void)
 {
 	if (s_nLayout < 0)
 	{
-		s_nLayout = Find (ZG_KEYBOARD);
+		s_nLayout = Find (GK_KEYBOARD);
 		if (s_nLayout < 0)		// src/Makefile checks KEYBOARD
 		{
 			s_nLayout = 0;
@@ -57,23 +57,23 @@ static const TLayout &Current (void)
 	return Layouts[s_nLayout];
 }
 
-const char *const *ZgKeyLayouts (void)
+const char *const *GkKeyLayouts (void)
 {
 	return Names;
 }
 
-const char *ZgKeyLayoutGet (void)
+const char *GkKeyLayoutGet (void)
 {
 	return Current ().pName;
 }
 
-boolean ZgKeyLayoutSet (const char *pName, const char *pFrom)
+boolean GkKeyLayoutSet (const char *pName, const char *pFrom)
 {
 	int n = pName != 0 ? Find (pName) : -1;
 	if (n < 0)
 	{
 		CLogger::Get ()->Write (From, LogWarning, "no layout \"%s\" (%s): still %s",
-					pName != 0 ? pName : "", pFrom, ZgKeyLayoutGet ());
+					pName != 0 ? pName : "", pFrom, GkKeyLayoutGet ());
 		return FALSE;
 	}
 
@@ -83,7 +83,7 @@ boolean ZgKeyLayoutSet (const char *pName, const char *pFrom)
 	return TRUE;
 }
 
-boolean ZgKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLine)
+boolean GkKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLine)
 {
 	if (strcmp (pKey, "keyboard") != 0)
 	{
@@ -97,20 +97,20 @@ boolean ZgKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLi
 			List.Append (i == 0 ? "" : ", ");
 			List.Append (Layouts[i].pName);
 		}
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: keyboard: one of %s expected",
+		CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt:%u: keyboard: one of %s expected",
 					nLine, (const char *) List);
 		return TRUE;
 	}
-	ZgKeyLayoutSet (pValue, "zerogap.txt");
+	GkKeyLayoutSet (pValue, "gapkeep.txt");
 	return TRUE;
 }
 
-const char *ZgKeyLayoutCircleMap (void)
+const char *GkKeyLayoutCircleMap (void)
 {
 	return Current ().pCircleMap;
 }
 
-unsigned ZgKeyLayoutGeneration (void)
+unsigned GkKeyLayoutGeneration (void)
 {
 	return s_nGeneration;
 }
@@ -121,7 +121,7 @@ unsigned ZgKeyLayoutGeneration (void)
 static const u32 Acute = 0xB4, Grave = 0x60, Tilde = 0x7E, Circumflex = 0x5E, Diaeresis = 0xA8;
 
 // accent, base letter, composed letter: Latin-1 and Latin Extended-A, which
-// zerogap's fonts have
+// GapKeep's fonts have
 static const struct { u16 nAccent, nBase, nComposed; } Compose[] =
 {
 	{Acute, 'a', 0xE1}, {Acute, 'e', 0xE9}, {Acute, 'i', 0xED}, {Acute, 'o', 0xF3},
@@ -160,7 +160,7 @@ static boolean IsDead (u32 nChar)
 	       || nChar == Circumflex || nChar == Diaeresis;
 }
 
-unsigned CZgDeadKeys::Feed (u32 nChar, boolean bRepeat, boolean bCancelKey,
+unsigned CGkDeadKeys::Feed (u32 nChar, boolean bRepeat, boolean bCancelKey,
 			    u32 pOut[2], boolean *pbConsumed)
 {
 	*pbConsumed = FALSE;
@@ -235,7 +235,7 @@ unsigned CZgDeadKeys::Feed (u32 nChar, boolean bRepeat, boolean bCancelKey,
 	return 2;
 }
 
-unsigned ZgUtf8Encode (u32 nChar, char pBuf[5])
+unsigned GkUtf8Encode (u32 nChar, char pBuf[5])
 {
 	unsigned n;
 	if (nChar < 0x80)

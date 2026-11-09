@@ -3,7 +3,7 @@
 // scenarios' patterns stay ASCII (tests/keyboard.txt). Never use this for
 // anything secret: the log goes to the serial port.
 
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 const hex = (s) => [...s].map((c) => "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")).join(" ");
 

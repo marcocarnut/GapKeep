@@ -1,6 +1,6 @@
 # The hardware test rig
 
-zerogap is developed mostly in QEMU, but QEMU is not a Pi Zero. The rig lets
+GapKeep is developed mostly in QEMU, but QEMU is not a Pi Zero. The rig lets
 the same test scenarios run on a real Pi Zero with no person at the keyboard.
 A second Raspberry Pi (here a Pi 5 called `five`) is wired to the Zero and:
 
@@ -37,7 +37,7 @@ bootloader (921600 baud), a `config.txt` and the test card's `apps` folder
 (`tests/sdcard`); copy all of it to a FAT32 card. This is done once.
 Test kernels sent over serial read that `apps` folder like a real system;
 `tests/sdapps.txt` checks it, and runs on the rig only with
-`ZG_RIG_SDAPPS=1` (cards made before the folder existed lack it).
+`GK_RIG_SDAPPS=1` (cards made before the folder existed lack it).
 
 ## Setting up the rig
 
@@ -51,13 +51,13 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
   (`pinctrl`).
 - `sudo tools/rig/gadget.sh up` creates the keyboard and mouse (`/dev/hidg0`,
   `/dev/hidg1`). **Do this before resetting the Zero after every rig
-  reboot**, or install `tools/rig/zerogap-gadget.service` to do it at boot
+  reboot**, or install `tools/rig/gapkeep-gadget.service` to do it at boot
   (instructions inside). See "Known issues".
 - **If the Zero stops finding the keyboard** (its log: `dwhci: Control
   transfer timed out`, `Cannot get device descriptor`; the Pi 5's `dmesg`
   shows `new device is high-speed` but no `new address`), the gadget is
   wedged although its service says active: `sudo systemctl restart
-  zerogap-gadget` (or `sudo tools/rig/gadget.sh up`). Seen once, on
+  gapkeep-gadget` (or `sudo tools/rig/gadget.sh up`). Seen once, on
   2026-11-04, after the rig had been up for two days.
 - **Camera:** a Pi Camera Module v2.1 is plugged into the Zero, looking
   at a printed QR code. `tests/picamera.txt` (rig only) uses it through
@@ -66,7 +66,7 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
   the camera's view on 2026-11-04: it showed the ceiling
   (docs/camera/IMPLEMENTATION.md).
 - Test commands on the serial line (`#camera ...`, `#crash ...`) are read
-  by polling the UART's 16-byte FIFO from the main loop, so `zgrig.py`
+  by polling the UART's 16-byte FIFO from the main loop, so `gkrig.py`
   sends long lines in pieces of 12 bytes, 0.6 s apart.
 
 ## Using it
@@ -76,11 +76,11 @@ From the development machine:
 ```sh
 tools/rig/run_hw_tests.sh                      # every scenario in tests/
 tools/rig/run_hw_tests.sh tests/dice39.txt     # one scenario
-ZG_RIG=user@host tools/rig/run_hw_tests.sh     # another rig (default mac@five.local)
+GK_RIG=user@host tools/rig/run_hw_tests.sh     # another rig (default mac@five.local)
 ```
 
 This builds a test kernel for the Pi (`tools/build.sh pi TEST=1`), copies it
-with the rig tools to `~/zerogap-rig` on the rig, plays each scenario and
+with the rig tools to `~/gapkeep-rig` on the rig, plays each scenario and
 fetches screenshots and logs. Each scenario starts with a reset and a fresh
 upload (about 33 s).
 
@@ -89,15 +89,15 @@ on the development machine, a 640x480 grey frame every 3.5 s or so, with lines
 marking the middle. It builds and sends a test kernel and opens the scanner
 (about a minute); `--no-flash` skips that when the scanner is already open.
 
-On the rig itself, `zgrig.py` does the individual steps:
+On the rig itself, `gkrig.py` does the individual steps:
 
 ```sh
-python3 zgrig.py reset                  # reset the Zero
-python3 zgrig.py flash kernel.hex --log 20   # upload, run, print the log for 20 s
-python3 zgrig.py log 10                 # print the serial log for 10 s
-python3 zgrig.py shot screen.png        # screenshot (test builds)
-python3 zgrig.py peek [kernel.hex]      # the camera's grey frames, as PGM on stdout
-python3 zgrig.py run kernel.hex scenario.txt --out DIR
+python3 gkrig.py reset                  # reset the Zero
+python3 gkrig.py flash kernel.hex --log 20   # upload, run, print the log for 20 s
+python3 gkrig.py log 10                 # print the serial log for 10 s
+python3 gkrig.py shot screen.png        # screenshot (test builds)
+python3 gkrig.py peek [kernel.hex]      # the camera's grey frames, as PGM on stdout
+python3 gkrig.py run kernel.hex scenario.txt --out DIR
 ```
 
 Scenarios are the same files QEMU runs (`tests/*.txt`, see
@@ -114,7 +114,7 @@ Rig-only scenario commands and serial commands (test builds, `src/testshot.h`):
   `<name>.raw.json`; `tests/camraw.txt` takes the colour bars and the scene
   in both of the scanner's modes.
 - `send #experimental on`: experimental features on, as `experimental = yes`
-  in `zerogap.txt` would (the rig's card never changes); the launcher lists
+  in `gapkeep.txt` would (the rig's card never changes); the launcher lists
   the experimental apps from its next start (`tests/colorqr_hw.txt`).
 - `camera picture <name>`: one of the colour codes of `tests/colorqr`, built
   into test kernels, for the synthetic camera.
@@ -127,7 +127,7 @@ no commands while it sends the screenshot.
 - **Reset:** `pinctrl set 17 op dl`, 100 ms, then `pinctrl set 17 ip pn`
   (floating again: RUN has its own pull-up on the Zero).
 - **Upload:** Circle's bootloader (`circle/tools/bootloader`) announces
-  `IHEX-F`. `zgrig.py` first sends `R` (noise during reset can leave the
+  `IHEX-F`. `gkrig.py` first sends `R` (noise during reset can leave the
   bootloader in its error state, which only `R` leaves), then the kernel as
   the bootloader's binary records (`=` and the Intel HEX record's bytes: half
   the size of HEX text), waits for `#EOF:ok` and sends `g`.
@@ -136,7 +136,7 @@ no commands while it sends the screenshot.
   (`src/testshot.*`, `tools/serialshot.py`).
 - **Keyboard and mouse:** `tools/rig/gadget.sh` (configfs; boot-protocol
   keyboard with 8-byte reports and a 3-button mouse with relative 8-bit
-  X/Y). `zgrig.py` translates the scenarios' QEMU key names to HID usage
+  X/Y). `gkrig.py` translates the scenarios' QEMU key names to HID usage
   codes.
 
 ## Known issues

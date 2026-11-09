@@ -25,7 +25,7 @@ def expect(what, got, want):
 
 
 src = r'''
-import { t, plural } from "zg:i18n";
+import { t, plural } from "gk:i18n";
 // t("a comment is not a key")
 const re = /t\("not in a regex"\)/g;
 t("Plain");
@@ -57,7 +57,7 @@ expect('refused', refused, sorted([
     '"Pay {to}": the translation has a control or bidi character',
     '"Bell": the translation has a control or bidi character',
     '"A number": not a string',
-    '"Test app: zg:i18n and the checks on catalogs (tests/i18n.txt).": the translation has a control or bidi character',
+    '"Test app: gk:i18n and the checks on catalogs (tests/i18n.txt).": the translation has a control or bidi character',
     '"Send <span color=\'#ffb300\'>{amount}</span>": the translation hasn\'t the same tags as its key',
     '"Just text": the translation has a tag, and its key has none',
     '"Keep <tt>this</tt>": the translation is not valid markup',

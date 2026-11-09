@@ -130,7 +130,7 @@ static const char FromUnicam[] = "unicam";
 #define DOMAIN_UNICAM1		14
 #define MIN_CORE_CLOCK		250000000
 
-CZgUnicam::CZgUnicam (void)
+CGkUnicam::CGkUnicam (void)
 :	m_Clock (GPIOClockCAM1, GPIOClockSourcePLLD),
 	m_bPowered (FALSE),
 	m_bRunning (FALSE),
@@ -150,7 +150,7 @@ CZgUnicam::CZgUnicam (void)
 	}
 }
 
-CZgUnicam::~CZgUnicam (void)
+CGkUnicam::~CGkUnicam (void)
 {
 	Stop ();
 	PowerOff ();
@@ -165,7 +165,7 @@ static boolean SetDomain (boolean bOn)
 	return Tags.GetTag (PROPTAG_SET_DOMAIN_STATE, &Domain, sizeof Domain, 8);
 }
 
-boolean CZgUnicam::PowerOn (void)
+boolean CGkUnicam::PowerOn (void)
 {
 	if (m_bPowered)
 	{
@@ -206,7 +206,7 @@ boolean CZgUnicam::PowerOn (void)
 	return TRUE;
 }
 
-void CZgUnicam::PowerOff (void)
+void CGkUnicam::PowerOff (void)
 {
 	if (!m_bPowered)
 	{
@@ -219,7 +219,7 @@ void CZgUnicam::PowerOff (void)
 	m_bPowered = FALSE;
 }
 
-boolean CZgUnicam::Start (unsigned nWidth, unsigned nHeight, unsigned nStride)
+boolean CGkUnicam::Start (unsigned nWidth, unsigned nHeight, unsigned nStride)
 {
 	assert (m_bPowered);
 	assert (!m_bRunning);
@@ -308,7 +308,7 @@ boolean CZgUnicam::Start (unsigned nWidth, unsigned nHeight, unsigned nStride)
 	return TRUE;
 }
 
-void CZgUnicam::Stop (void)
+void CGkUnicam::Stop (void)
 {
 	if (!m_bRunning)
 	{
@@ -343,7 +343,7 @@ void CZgUnicam::Stop (void)
 	FreeBuffers ();
 }
 
-void CZgUnicam::FreeBuffers (void)
+void CGkUnicam::FreeBuffers (void)
 {
 	for (unsigned i = 0; i < Buffers; i++)
 	{
@@ -360,7 +360,7 @@ void CZgUnicam::FreeBuffers (void)
 	m_nNext = m_nWriting = m_nReady = m_nInUse = -1;
 }
 
-void CZgUnicam::Program (unsigned nBuffer)
+void CGkUnicam::Program (unsigned nBuffer)
 {
 	assert (nBuffer < Buffers);
 	m_State[nBuffer] = StateNext;
@@ -372,14 +372,14 @@ void CZgUnicam::Program (unsigned nBuffer)
 	write32 (UNICAM_IBEA0, nStart + m_nBufferSize);		// exclusive
 }
 
-void CZgUnicam::InterruptHandler (void *pParam)
+void CGkUnicam::InterruptHandler (void *pParam)
 {
-	CZgUnicam *pThis = (CZgUnicam *) pParam;
+	CGkUnicam *pThis = (CGkUnicam *) pParam;
 	assert (pThis != 0);
 	pThis->Interrupt ();
 }
 
-void CZgUnicam::Interrupt (void)
+void CGkUnicam::Interrupt (void)
 {
 	u32 nSTA = read32 (UNICAM_STA);
 	write32 (UNICAM_STA, nSTA);
@@ -404,7 +404,7 @@ void CZgUnicam::Interrupt (void)
 	}
 }
 
-void CZgUnicam::FrameStart (void)
+void CGkUnicam::FrameStart (void)
 {
 	unsigned long long nNow = CTimer::GetClockTicks64 ();
 	if (m_nStarted++ == 0)
@@ -445,7 +445,7 @@ void CZgUnicam::FrameStart (void)
 	Program (nBuffer);
 }
 
-void CZgUnicam::FrameEnd (void)
+void CGkUnicam::FrameEnd (void)
 {
 	if (m_nWriting < 0)		// a second report of the same end
 	{
@@ -472,7 +472,7 @@ void CZgUnicam::FrameEnd (void)
 	m_nLastFrameEnd = CTimer::GetClockTicks64 ();
 }
 
-const u8 *CZgUnicam::TakeFrame (void)
+const u8 *CGkUnicam::TakeFrame (void)
 {
 	assert (m_nInUse < 0);
 
@@ -496,7 +496,7 @@ const u8 *CZgUnicam::TakeFrame (void)
 	return m_pBuffer[nBuffer];
 }
 
-void CZgUnicam::ReleaseFrame (void)
+void CGkUnicam::ReleaseFrame (void)
 {
 	EnterCritical (IRQ_LEVEL);
 	if (m_nInUse >= 0)
@@ -507,7 +507,7 @@ void CZgUnicam::ReleaseFrame (void)
 	LeaveCritical ();
 }
 
-void CZgUnicam::GetFrameStartTiming (unsigned *pCount, unsigned long long *pTicks) const
+void CGkUnicam::GetFrameStartTiming (unsigned *pCount, unsigned long long *pTicks) const
 {
 	EnterCritical (IRQ_LEVEL);
 	*pCount = m_nStarted;
@@ -515,7 +515,7 @@ void CZgUnicam::GetFrameStartTiming (unsigned *pCount, unsigned long long *pTick
 	LeaveCritical ();
 }
 
-u32 CZgUnicam::GetErrors (void)
+u32 CGkUnicam::GetErrors (void)
 {
 	EnterCritical (IRQ_LEVEL);
 	u32 nErrors = m_nErrors;
@@ -524,7 +524,7 @@ u32 CZgUnicam::GetErrors (void)
 	return nErrors;
 }
 
-void CZgUnicam::DescribeErrors (u32 nErrors, char *pBuffer, unsigned nSize)
+void CGkUnicam::DescribeErrors (u32 nErrors, char *pBuffer, unsigned nSize)
 {
 	static const struct { u32 nBit; const char *pName; } Names[] =
 	{
@@ -548,7 +548,7 @@ void CZgUnicam::DescribeErrors (u32 nErrors, char *pBuffer, unsigned nSize)
 	}
 }
 
-void CZgUnicam::DumpRegisters (const char *pWhen)
+void CGkUnicam::DumpRegisters (const char *pWhen)
 {
 	PeripheralEntry ();
 	CLogger::Get ()->Write (FromUnicam, LogNotice,

@@ -21,9 +21,9 @@ typedef struct
 	const unsigned char *pRuns;
 	unsigned nLength;
 }
-TZgTestPicture;
+TGkTestPicture;
 
-extern const TZgTestPicture zg_test_pictures[];	// ends with pName == 0
+extern const TGkTestPicture gk_test_pictures[];	// ends with pName == 0
 
 #ifdef __cplusplus
 }

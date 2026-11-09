@@ -1,5 +1,5 @@
 /*
- * secp.c - zerogap's interface to libsecp256k1 (see secp.h).
+ * secp.c - GapKeep's interface to libsecp256k1 (see secp.h).
  *
  * The library does the curve arithmetic, constant-time for secrets; this
  * file only converts between its opaque structures and bytes, and wipes
@@ -15,8 +15,8 @@
 #include <secp256k1_preallocated.h>
 #include <string.h>
 
-/* src/runtime/zg_bridge.h (C++ header): halts with a message */
-void zg_fatal (const char *message) __attribute__ ((noreturn));
+/* src/runtime/gk_bridge.h (C++ header): halts with a message */
+void gk_fatal (const char *message) __attribute__ ((noreturn));
 
 /* libsecp256k1's default callbacks (USE_EXTERNAL_DEFAULT_CALLBACKS): an
    illegal argument is a bug here (every input is checked first), an
@@ -25,14 +25,14 @@ void secp256k1_default_illegal_callback_fn (const char *str, void *data)
 {
 	(void) data;
 	(void) str;
-	zg_fatal ("secp256k1: illegal argument");
+	gk_fatal ("secp256k1: illegal argument");
 }
 
 void secp256k1_default_error_callback_fn (const char *str, void *data)
 {
 	(void) data;
 	(void) str;
-	zg_fatal ("secp256k1: internal error");
+	gk_fatal ("secp256k1: internal error");
 }
 
 static secp256k1_context *s_ctx;
@@ -48,7 +48,7 @@ static void wipe (void *p, size_t n)
 	}
 }
 
-int zg_secp_init (const uint8_t seed[32])
+int gk_secp_init (const uint8_t seed[32])
 {
 	if (s_ctx != 0)
 	{
@@ -65,7 +65,7 @@ int zg_secp_init (const uint8_t seed[32])
 	}
 
 	s_ctx = ctx;
-	int r = zg_secp_selftest ();
+	int r = gk_secp_selftest ();
 	if (r != 0)
 	{
 		s_ctx = 0;
@@ -73,7 +73,7 @@ int zg_secp_init (const uint8_t seed[32])
 	return r;
 }
 
-int zg_secp_seckey_verify (const uint8_t seckey[32])
+int gk_secp_seckey_verify (const uint8_t seckey[32])
 {
 	return s_ctx != 0 && secp256k1_ec_seckey_verify (s_ctx, seckey);
 }
@@ -85,7 +85,7 @@ static int serialize (const secp256k1_pubkey *pk, int compressed, uint8_t *out)
 					      compressed ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
 }
 
-int zg_secp_pubkey_create (const uint8_t seckey[32], int compressed, uint8_t *out)
+int gk_secp_pubkey_create (const uint8_t seckey[32], int compressed, uint8_t *out)
 {
 	secp256k1_pubkey pk;
 	int ok = s_ctx != 0 && secp256k1_ec_pubkey_create (s_ctx, &pk, seckey)
@@ -94,14 +94,14 @@ int zg_secp_pubkey_create (const uint8_t seckey[32], int compressed, uint8_t *ou
 	return ok;
 }
 
-int zg_secp_pubkey_convert (const uint8_t *pubkey, size_t len, int compressed, uint8_t *out)
+int gk_secp_pubkey_convert (const uint8_t *pubkey, size_t len, int compressed, uint8_t *out)
 {
 	secp256k1_pubkey pk;
 	return s_ctx != 0 && secp256k1_ec_pubkey_parse (s_ctx, &pk, pubkey, len)
 	       && serialize (&pk, compressed, out);
 }
 
-int zg_secp_seckey_tweak_add (const uint8_t seckey[32], const uint8_t tweak[32], uint8_t out[32])
+int gk_secp_seckey_tweak_add (const uint8_t seckey[32], const uint8_t tweak[32], uint8_t out[32])
 {
 	uint8_t k[32];
 	memcpy (k, seckey, 32);
@@ -114,7 +114,7 @@ int zg_secp_seckey_tweak_add (const uint8_t seckey[32], const uint8_t tweak[32],
 	return ok;
 }
 
-int zg_secp_pubkey_tweak_add (const uint8_t *pubkey, size_t len, const uint8_t tweak[32],
+int gk_secp_pubkey_tweak_add (const uint8_t *pubkey, size_t len, const uint8_t tweak[32],
 			      int compressed, uint8_t *out)
 {
 	secp256k1_pubkey pk;
@@ -123,8 +123,8 @@ int zg_secp_pubkey_tweak_add (const uint8_t *pubkey, size_t len, const uint8_t t
 	       && serialize (&pk, compressed, out);
 }
 
-int zg_secp_ecdsa_sign (const uint8_t hash[32], const uint8_t seckey[32],
-			uint8_t der[ZG_SECP_DER_MAX], size_t *derlen)
+int gk_secp_ecdsa_sign (const uint8_t hash[32], const uint8_t seckey[32],
+			uint8_t der[GK_SECP_DER_MAX], size_t *derlen)
 {
 	if (s_ctx == 0)
 	{
@@ -151,7 +151,7 @@ int zg_secp_ecdsa_sign (const uint8_t hash[32], const uint8_t seckey[32],
 
 	if (ok)
 	{
-		*derlen = ZG_SECP_DER_MAX;
+		*derlen = GK_SECP_DER_MAX;
 		ok = secp256k1_ecdsa_signature_serialize_der (s_ctx, der, derlen, &sig);
 	}
 	wipe (extra, sizeof extra);
@@ -160,7 +160,7 @@ int zg_secp_ecdsa_sign (const uint8_t hash[32], const uint8_t seckey[32],
 	return ok;
 }
 
-int zg_secp_ecdsa_verify (const uint8_t *der, size_t derlen, const uint8_t hash[32],
+int gk_secp_ecdsa_verify (const uint8_t *der, size_t derlen, const uint8_t hash[32],
 			  const uint8_t *pubkey, size_t publen)
 {
 	secp256k1_ecdsa_signature sig;
@@ -170,7 +170,7 @@ int zg_secp_ecdsa_verify (const uint8_t *der, size_t derlen, const uint8_t hash[
 	       && secp256k1_ecdsa_verify (s_ctx, &sig, hash, &pk);
 }
 
-int zg_secp_xonly_pubkey (const uint8_t seckey[32], uint8_t out[32], int *parity)
+int gk_secp_xonly_pubkey (const uint8_t seckey[32], uint8_t out[32], int *parity)
 {
 	secp256k1_keypair kp;
 	secp256k1_xonly_pubkey xpk;
@@ -181,7 +181,7 @@ int zg_secp_xonly_pubkey (const uint8_t seckey[32], uint8_t out[32], int *parity
 	return ok;
 }
 
-int zg_secp_schnorr_sign (const uint8_t msg[32], const uint8_t seckey[32], const uint8_t aux[32],
+int gk_secp_schnorr_sign (const uint8_t msg[32], const uint8_t seckey[32], const uint8_t aux[32],
 			  uint8_t sig[64])
 {
 	secp256k1_keypair kp;
@@ -191,7 +191,7 @@ int zg_secp_schnorr_sign (const uint8_t msg[32], const uint8_t seckey[32], const
 	return ok;
 }
 
-int zg_secp_schnorr_verify (const uint8_t sig[64], const uint8_t *msg, size_t msglen,
+int gk_secp_schnorr_verify (const uint8_t sig[64], const uint8_t *msg, size_t msglen,
 			    const uint8_t xonly[32])
 {
 	secp256k1_xonly_pubkey xpk;
@@ -199,7 +199,7 @@ int zg_secp_schnorr_verify (const uint8_t sig[64], const uint8_t *msg, size_t ms
 	       && secp256k1_schnorrsig_verify (s_ctx, sig, msg, msglen, &xpk);
 }
 
-int zg_secp_xonly_tweak_add (const uint8_t xonly[32], const uint8_t tweak[32],
+int gk_secp_xonly_tweak_add (const uint8_t xonly[32], const uint8_t tweak[32],
 			     uint8_t out[32], int *parity)
 {
 	secp256k1_xonly_pubkey xpk;
@@ -210,7 +210,7 @@ int zg_secp_xonly_tweak_add (const uint8_t xonly[32], const uint8_t tweak[32],
 	       && secp256k1_xonly_pubkey_serialize (s_ctx, out, &xpk);
 }
 
-int zg_secp_seckey_taproot_tweak (const uint8_t seckey[32], const uint8_t tweak[32], uint8_t out[32])
+int gk_secp_seckey_taproot_tweak (const uint8_t seckey[32], const uint8_t tweak[32], uint8_t out[32])
 {
 	secp256k1_keypair kp;
 	int ok = s_ctx != 0 && secp256k1_keypair_create (s_ctx, &kp, seckey)
@@ -236,7 +236,7 @@ static void unhex (const char *hex, uint8_t *out, size_t len)
 
 #include "secp_kat.h"
 
-int zg_secp_selftest (void)
+int gk_secp_selftest (void)
 {
 	uint8_t k[32], t[32], m[32], a[32], out[72], sig[64];
 	size_t len;
@@ -245,8 +245,8 @@ int zg_secp_selftest (void)
 	/* 1*G */
 	memset (k, 0, 32);
 	k[31] = 1;
-	if (!zg_secp_pubkey_create (k, 1, out)
-	    || !zg_hex_equal (out, 33, "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"))
+	if (!gk_secp_pubkey_create (k, 1, out)
+	    || !gk_hex_equal (out, 33, "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"))
 	{
 		return 1;
 	}
@@ -257,14 +257,14 @@ int zg_secp_selftest (void)
 		unhex (bip340[i].seckey, k, 32);
 		unhex (bip340[i].aux, a, 32);
 		unhex (bip340[i].msg, m, 32);
-		if (   !zg_secp_xonly_pubkey (k, out, &parity) || !zg_hex_equal (out, 32, bip340[i].pubkey)
-		    || !zg_secp_schnorr_sign (m, k, a, sig) || !zg_hex_equal (sig, 64, bip340[i].sig)
-		    || !zg_secp_schnorr_verify (sig, m, 32, out))
+		if (   !gk_secp_xonly_pubkey (k, out, &parity) || !gk_hex_equal (out, 32, bip340[i].pubkey)
+		    || !gk_secp_schnorr_sign (m, k, a, sig) || !gk_hex_equal (sig, 64, bip340[i].sig)
+		    || !gk_secp_schnorr_verify (sig, m, 32, out))
 		{
 			return 10 + (int) i;
 		}
 		sig[63] ^= 1;
-		if (zg_secp_schnorr_verify (sig, m, 32, out))
+		if (gk_secp_schnorr_verify (sig, m, 32, out))
 		{
 			return 20 + (int) i;
 		}
@@ -278,17 +278,17 @@ int zg_secp_selftest (void)
 		unhex (kat[i].tweak, t, 32);
 		unhex (kat[i].hash, m, 32);
 		uint8_t pub[65];
-		if (   !zg_secp_pubkey_create (k, 0, pub) || !zg_hex_equal (pub, 65, kat[i].pubkey65)
-		    || !zg_secp_ecdsa_sign (m, k, out, &len) || !zg_hex_equal (out, len, kat[i].der)
-		    || !zg_secp_ecdsa_verify (out, len, m, pub, 65))
+		if (   !gk_secp_pubkey_create (k, 0, pub) || !gk_hex_equal (pub, 65, kat[i].pubkey65)
+		    || !gk_secp_ecdsa_sign (m, k, out, &len) || !gk_hex_equal (out, len, kat[i].der)
+		    || !gk_secp_ecdsa_verify (out, len, m, pub, 65))
 		{
 			return 30 + (int) i;
 		}
-		if (   !zg_secp_seckey_tweak_add (k, t, out) || !zg_hex_equal (out, 32, kat[i].tweaked)
-		    || !zg_secp_pubkey_tweak_add (pub, 65, t, 1, out) || !zg_hex_equal (out, 33, kat[i].tweakedpub)
-		    || !zg_secp_seckey_taproot_tweak (k, t, out) || !zg_hex_equal (out, 32, kat[i].taproot)
-		    || !zg_secp_xonly_pubkey (k, a, &parity)
-		    || !zg_secp_xonly_tweak_add (a, t, out, &parity) || !zg_hex_equal (out, 32, kat[i].taprootpub)
+		if (   !gk_secp_seckey_tweak_add (k, t, out) || !gk_hex_equal (out, 32, kat[i].tweaked)
+		    || !gk_secp_pubkey_tweak_add (pub, 65, t, 1, out) || !gk_hex_equal (out, 33, kat[i].tweakedpub)
+		    || !gk_secp_seckey_taproot_tweak (k, t, out) || !gk_hex_equal (out, 32, kat[i].taproot)
+		    || !gk_secp_xonly_pubkey (k, a, &parity)
+		    || !gk_secp_xonly_tweak_add (a, t, out, &parity) || !gk_hex_equal (out, 32, kat[i].taprootpub)
 		    || parity != kat[i].taprootparity)
 		{
 			return 40 + (int) i;

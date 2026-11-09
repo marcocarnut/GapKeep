@@ -14,7 +14,7 @@
 #include <circle/string.h>
 #include <assert.h>
 
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 #include <ff.h>				// lib/fatfs: read-only FatFs
 #endif
 
@@ -30,9 +30,9 @@ static const unsigned MaxDepth = 8;			// folder levels inside an app
 static const unsigned MaxNameLength = 64;		// of one file or folder name
 static const unsigned MaxProblems = 16;
 
-static const zg_app_t **s_ppApps = 0;
+static const gk_app_t **s_ppApps = 0;
 static unsigned s_nApps = 0;
-static TZgCardStatus s_CardStatus = ZgCardDisabled;
+static TGkCardStatus s_CardStatus = GkCardDisabled;
 
 struct TProblem
 {
@@ -55,17 +55,17 @@ unsigned CAppStore::GetCount (void)
 	return s_nApps;
 }
 
-const zg_app_t *CAppStore::Get (unsigned nIndex)
+const gk_app_t *CAppStore::Get (unsigned nIndex)
 {
 	return nIndex < s_nApps ? s_ppApps[nIndex] : 0;
 }
 
-boolean CAppStore::IsAvailable (const zg_app_t *pApp)
+boolean CAppStore::IsAvailable (const gk_app_t *pApp)
 {
-	return !pApp->experimental || CZgSettings::IsExperimental ();
+	return !pApp->experimental || CGkSettings::IsExperimental ();
 }
 
-const zg_app_t *CAppStore::Find (const char *pID)
+const gk_app_t *CAppStore::Find (const char *pID)
 {
 	for (unsigned i = 0; i < s_nApps; i++)
 	{
@@ -78,7 +78,7 @@ const zg_app_t *CAppStore::Find (const char *pID)
 	return 0;
 }
 
-TZgCardStatus CAppStore::GetCardStatus (void)
+TGkCardStatus CAppStore::GetCardStatus (void)
 {
 	return s_CardStatus;
 }
@@ -87,11 +87,11 @@ const char *CAppStore::GetCardStatusName (void)
 {
 	switch (s_CardStatus)
 	{
-	case ZgCardDisabled:	return "disabled";
-	case ZgCardNone:	return "none";
-	case ZgCardUnreadable:	return "unreadable";
-	case ZgCardNoApps:	return "no-apps";
-	case ZgCardOK:		return "ok";
+	case GkCardDisabled:	return "disabled";
+	case GkCardNone:	return "none";
+	case GkCardUnreadable:	return "unreadable";
+	case GkCardNoApps:	return "no-apps";
+	case GkCardOK:		return "ok";
 	}
 
 	return "?";
@@ -112,7 +112,7 @@ const char *CAppStore::GetProblemText (unsigned nIndex)
 	return nIndex < s_nProblems ? s_Problems[nIndex].pText : 0;
 }
 
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 
 static void AddProblem (const char *pFolder, const char *pText)
 {
@@ -245,7 +245,7 @@ static boolean IsValidUTF8 (const u8 *p, unsigned n)
 
 struct TFileList
 {
-	zg_file_t *pFiles;		// MaxFiles entries
+	gk_file_t *pFiles;		// MaxFiles entries
 	unsigned nCount;
 	unsigned nTotalSize;
 };
@@ -303,7 +303,7 @@ static boolean ReadFile (const char *pFullPath, const char *pRelPath, unsigned n
 		return FALSE;
 	}
 
-	zg_file_t *pFile = &pList->pFiles[pList->nCount++];
+	gk_file_t *pFile = &pList->pFiles[pList->nCount++];
 	pFile->path = StrDup (pRelPath);
 	pFile->data = pData;
 	pFile->size = nSize;
@@ -388,7 +388,7 @@ static void SortFiles (TFileList *pList)
 	// insertion sort by path (byte order, like the bundler); n is small
 	for (unsigned i = 1; i < pList->nCount; i++)
 	{
-		zg_file_t Tmp = pList->pFiles[i];
+		gk_file_t Tmp = pList->pFiles[i];
 		unsigned j = i;
 		for (; j > 0 && strcmp (pList->pFiles[j - 1].path, Tmp.path) > 0; j--)
 		{
@@ -398,7 +398,7 @@ static void SortFiles (TFileList *pList)
 	}
 }
 
-static const zg_file_t *FindFile (const TFileList *pList, const char *pPath)
+static const gk_file_t *FindFile (const TFileList *pList, const char *pPath)
 {
 	for (unsigned i = 0; i < pList->nCount; i++)
 	{
@@ -519,14 +519,14 @@ static boolean GetIconSide (JSContext *ctx, JSValueConst Icon, const char *pKey,
 	JSValue Value = JS_GetPropertyStr (ctx, Icon, pKey);
 	double f;
 	boolean bOK =    JS_IsNumber (Value) && JS_ToFloat64 (ctx, &f, Value) == 0
-		      && f >= 1 && f <= ZG_ICON_MAX_SIDE && f == (double) (unsigned) f;
+		      && f >= 1 && f <= GK_ICON_MAX_SIDE && f == (double) (unsigned) f;
 	JS_FreeValue (ctx, Value);
 	*pSide = bOK ? (unsigned) f : 0;
 	return bOK;
 }
 
 // A picture icon: { "width", "height", "rgba" } (docs/APPS.md)
-static boolean ParseIconPicture (JSContext *ctx, JSValueConst Icon, zg_app_t *pApp, CString *pError)
+static boolean ParseIconPicture (JSContext *ctx, JSValueConst Icon, gk_app_t *pApp, CString *pError)
 {
 	JSPropertyEnum *pProps;
 	uint32_t nProps;
@@ -556,7 +556,7 @@ static boolean ParseIconPicture (JSContext *ctx, JSValueConst Icon, zg_app_t *pA
 	    || !GetIconSide (ctx, Icon, "height", &nHeight))
 	{
 		pError->Format ("manifest.json: icon width and height must be whole numbers from 1 to %u",
-				ZG_ICON_MAX_SIDE);
+				GK_ICON_MAX_SIDE);
 		return FALSE;
 	}
 	size_t nPixelBytes = nWidth * nHeight * 4;
@@ -607,8 +607,8 @@ static boolean ParseIconPicture (JSContext *ctx, JSValueConst Icon, zg_app_t *pA
 
 // Fills pApp's metadata from manifest.json, with the checks of
 // tools/bundle_apps.py.
-static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
-			      zg_app_t *pApp, CString *pError)
+static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
+			      gk_app_t *pApp, CString *pError)
 {
 	static const char *Known[] = {"id", "name", "version", "description", "icon", "entry",
 				      "permissions", "hidden", "experimental"};
@@ -691,7 +691,7 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 			break;
 		}
 
-		const char *pSymbol = ZgSymbolByName (pIcon ? pIcon : "file");
+		const char *pSymbol = GkSymbolByName (pIcon ? pIcon : "file");
 		if (pSymbol == 0)
 		{
 			pError->Format ("manifest.json: unknown icon \"%s\"", pIcon);
@@ -726,19 +726,19 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 				const char *p = JS_IsString (Perm) ? JS_ToCString (ctx, Perm) : 0;
 				if (p != 0 && strcmp (p, "apps") == 0)
 				{
-					pApp->permissions |= ZG_PERM_APPS;
+					pApp->permissions |= GK_PERM_APPS;
 				}
 				else if (p != 0 && strcmp (p, "camera") == 0)
 				{
-					pApp->permissions |= ZG_PERM_CAMERA;
+					pApp->permissions |= GK_PERM_CAMERA;
 				}
 				else if (p != 0 && strcmp (p, "rtc") == 0)
 				{
-					pApp->permissions |= ZG_PERM_RTC;
+					pApp->permissions |= GK_PERM_RTC;
 				}
 				else if (p != 0 && strcmp (p, "settings") == 0)
 				{
-					pApp->permissions |= ZG_PERM_SETTINGS;
+					pApp->permissions |= GK_PERM_SETTINGS;
 				}
 				else
 				{
@@ -807,30 +807,30 @@ static boolean ParseManifest (const zg_file_t *pManifest, const char *pFolder,
 
 // --- loading ----------------------------------------------------------------
 
-static char *HashApp (const zg_file_t *pFiles, unsigned nCount)
+static char *HashApp (const gk_file_t *pFiles, unsigned nCount)
 {
 	// docs/APPS.md, "App hashes"; also tools/bundle_apps.py app_hash()
-	zg_sha256_t Ctx;
-	zg_sha256_init (&Ctx);
+	gk_sha256_t Ctx;
+	gk_sha256_init (&Ctx);
 	for (unsigned i = 0; i < nCount; i++)
 	{
 		CString Size;
 		Size.Format ("%u", pFiles[i].size);
-		zg_sha256_update (&Ctx, pFiles[i].path, strlen (pFiles[i].path) + 1);
-		zg_sha256_update (&Ctx, (const char *) Size, Size.GetLength () + 1);
-		zg_sha256_update (&Ctx, pFiles[i].data, pFiles[i].size);
+		gk_sha256_update (&Ctx, pFiles[i].path, strlen (pFiles[i].path) + 1);
+		gk_sha256_update (&Ctx, (const char *) Size, Size.GetLength () + 1);
+		gk_sha256_update (&Ctx, pFiles[i].data, pFiles[i].size);
 	}
-	u8 Digest[ZG_SHA256_DIGEST_SIZE];
-	zg_sha256_final (&Ctx, Digest);
+	u8 Digest[GK_SHA256_DIGEST_SIZE];
+	gk_sha256_final (&Ctx, Digest);
 
-	char *pHex = new char[2 * ZG_SHA256_DIGEST_SIZE + 1];
+	char *pHex = new char[2 * GK_SHA256_DIGEST_SIZE + 1];
 	static const char Digits[] = "0123456789abcdef";
-	for (unsigned i = 0; i < ZG_SHA256_DIGEST_SIZE; i++)
+	for (unsigned i = 0; i < GK_SHA256_DIGEST_SIZE; i++)
 	{
 		pHex[2 * i] = Digits[Digest[i] >> 4];
 		pHex[2 * i + 1] = Digits[Digest[i] & 15];
 	}
-	pHex[2 * ZG_SHA256_DIGEST_SIZE] = '\0';
+	pHex[2 * GK_SHA256_DIGEST_SIZE] = '\0';
 
 	return pHex;
 }
@@ -838,11 +838,11 @@ static char *HashApp (const zg_file_t *pFiles, unsigned nCount)
 // Reads, checks and hashes the app in pDir (e.g. "SD:/apps/hello"), whose
 // id must be pFolder; pLabel names it in the log. Returns 0 and the reason
 // in *pError if it fails.
-static zg_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFolder,
+static gk_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFolder,
 			  CString *pError)
 {
 	TFileList List;
-	List.pFiles = new zg_file_t[MaxFiles];
+	List.pFiles = new gk_file_t[MaxFiles];
 	List.nCount = 0;
 	List.nTotalSize = 0;
 
@@ -853,7 +853,7 @@ static zg_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFol
 	}
 	SortFiles (&List);
 
-	const zg_file_t *pManifest = FindFile (&List, "manifest.json");
+	const gk_file_t *pManifest = FindFile (&List, "manifest.json");
 	if (pManifest == 0)
 	{
 		*pError = "no manifest.json";
@@ -861,7 +861,7 @@ static zg_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFol
 		return 0;
 	}
 
-	zg_app_t *pApp = new zg_app_t;
+	gk_app_t *pApp = new gk_app_t;
 	memset (pApp, 0, sizeof *pApp);
 	if (!ParseManifest (pManifest, pFolder, pApp, pError))
 	{
@@ -886,7 +886,7 @@ static zg_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFol
 	pApp->files = List.pFiles;
 	pApp->file_count = List.nCount;
 	pApp->hash = HashApp (List.pFiles, List.nCount);
-	pApp->source = ZG_APP_SDCARD;
+	pApp->source = GK_APP_SDCARD;
 
 	CLogger::Get ()->Write (From, LogNotice, "%s: %s %s, %u files, %u bytes, sha256 %s",
 				pLabel, pApp->id, pApp->version, List.nCount, List.nTotalSize,
@@ -912,7 +912,7 @@ static void LoadApp (const char *pFolder)
 	Dir.Format ("SD:/apps/%s", pFolder);
 	Label.Format ("apps/%s", pFolder);
 	CString Error;
-	zg_app_t *pApp = ReadApp (Dir, Label, pFolder, &Error);
+	gk_app_t *pApp = ReadApp (Dir, Label, pFolder, &Error);
 	if (pApp == 0)
 	{
 		AddProblem (pFolder, Error);
@@ -927,17 +927,17 @@ static void LoadCard (void)
 	static FATFS FileSystem;		// stays mounted: f_open needs it
 	if (f_mount (&FileSystem, "SD:", 1) != FR_OK)
 	{
-		s_CardStatus = ZgCardUnreadable;
+		s_CardStatus = GkCardUnreadable;
 		CLogger::Get ()->Write (From, LogWarning, "SD card: no FAT file system");
 		return;
 	}
 
-	CZgSettings::Load ();		// zerogap.txt, while the card is mounted
+	CGkSettings::Load ();		// gapkeep.txt, while the card is mounted
 
 	DIR Dir;
 	if (f_opendir (&Dir, "SD:/apps") != FR_OK)
 	{
-		s_CardStatus = ZgCardNoApps;
+		s_CardStatus = GkCardNoApps;
 		CLogger::Get ()->Write (From, LogNotice, "SD card: no /apps folder");
 		return;
 	}
@@ -968,7 +968,7 @@ static void LoadCard (void)
 	}
 	f_closedir (&Dir);
 
-	s_CardStatus = ZgCardOK;
+	s_CardStatus = GkCardOK;
 	for (unsigned i = 0; i < nFolders; i++)
 	{
 		LoadApp (Folders[i]);
@@ -976,15 +976,15 @@ static void LoadCard (void)
 	}
 }
 
-#ifdef ZG_SIM
+#ifdef GK_SIM
 
 // The simulator can replace a built-in app with a folder of the same name
-// in its "builtin" folder (zgsim --builtin DIR, the IDE's copy of the
+// in its "builtin" folder (gksim --builtin DIR, the IDE's copy of the
 // launcher), to work on the launcher without rebuilding. The replacement
 // gets the built-in app's rights; if it fails a check, the built-in app
 // stays. The Pi has no such folder: built-in apps come only from the
 // kernel image.
-static const zg_app_t *SimReplacement (const zg_app_t *pBuiltin)
+static const gk_app_t *SimReplacement (const gk_app_t *pBuiltin)
 {
 	CString Dir, Label;
 	Dir.Format ("SIM:/%s", pBuiltin->id);
@@ -998,7 +998,7 @@ static const zg_app_t *SimReplacement (const zg_app_t *pBuiltin)
 	f_closedir (&Probe);
 
 	CString Error;
-	zg_app_t *pApp = ReadApp (Dir, Label, pBuiltin->id, &Error);
+	gk_app_t *pApp = ReadApp (Dir, Label, pBuiltin->id, &Error);
 	if (pApp == 0)
 	{
 		CLogger::Get ()->Write (From, LogWarning, "%s not loaded: %s; using the built-in %s",
@@ -1006,36 +1006,36 @@ static const zg_app_t *SimReplacement (const zg_app_t *pBuiltin)
 		return pBuiltin;
 	}
 
-	pApp->source = ZG_APP_BUILTIN;
+	pApp->source = GK_APP_BUILTIN;
 	CLogger::Get ()->Write (From, LogNotice, "%s replaces the built-in %s (simulator only)",
 				(const char *) Label, pBuiltin->id);
 	return pApp;
 }
 
-#endif	// ZG_SIM
+#endif	// GK_SIM
 
-#endif	// !ZG_SEALED
+#endif	// !GK_SEALED
 
 void CAppStore::Initialize (boolean bCardPresent)
 {
 	assert (s_ppApps == 0);
-	s_ppApps = new const zg_app_t *[zg_builtin_app_count + MaxCardApps];
+	s_ppApps = new const gk_app_t *[gk_builtin_app_count + MaxCardApps];
 
-	for (unsigned i = 0; i < zg_builtin_app_count; i++)
+	for (unsigned i = 0; i < gk_builtin_app_count; i++)
 	{
-		const zg_app_t *pApp = &zg_builtin_apps[i];
-#if defined (ZG_SIM) && !defined (ZG_SEALED)
+		const gk_app_t *pApp = &gk_builtin_apps[i];
+#if defined (GK_SIM) && !defined (GK_SEALED)
 		pApp = SimReplacement (pApp);
 #endif
 		s_ppApps[s_nApps++] = pApp;
 	}
-	CLogger::Get ()->Write (From, LogNotice, "%u app(s) built in", zg_builtin_app_count);
-	CZgI18n::Initialize ();		// the build's language (it needs the launcher's catalogs)
+	CLogger::Get ()->Write (From, LogNotice, "%u app(s) built in", gk_builtin_app_count);
+	CGkI18n::Initialize ();		// the build's language (it needs the launcher's catalogs)
 
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 	if (!bCardPresent)
 	{
-		s_CardStatus = ZgCardNone;
+		s_CardStatus = GkCardNone;
 		CLogger::Get ()->Write (From, LogNotice, "No SD card");
 		return;
 	}
@@ -1043,8 +1043,8 @@ void CAppStore::Initialize (boolean bCardPresent)
 	LoadCard ();
 
 	CLogger::Get ()->Write (From, LogNotice, "%u app(s) from the SD card, %u not loaded",
-				s_nApps - zg_builtin_app_count, s_nProblems);
+				s_nApps - gk_builtin_app_count, s_nProblems);
 #else
-	s_CardStatus = ZgCardDisabled;
+	s_CardStatus = GkCardDisabled;
 #endif
 }

@@ -1,21 +1,21 @@
-// Clock: shows and sets zerogap's clock (docs/CLOCK.md).
+// Clock: shows and sets GapKeep's clock (docs/CLOCK.md).
 //
 // A Pi Zero has no battery-backed clock: the time is lost at power-off and
 // is set here after each boot. Type the local time a little ahead of a
 // reference clock (a phone, a watch), and press Enter when the reference
 // shows it. Set it again hours later and the clock measures its own drift;
 // the trim that cancels it can be applied here, and written into the
-// card's zerogap.txt (from another computer) so it survives reboots.
+// card's gapkeep.txt (from another computer) so it survives reboots.
 //
-// Its text is translated (zg:i18n, lang/<language>.json): an example of an
+// Its text is translated (gk:i18n, lang/<language>.json): an example of an
 // app in more than one language (docs/APPS.md, "Languages"). Numbers on
-// screen are written the language's way; the zerogap.txt lines it shows are
+// screen are written the language's way; the gapkeep.txt lines it shows are
 // not, since that file is read the same way whatever the language.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as clock from "zg:clock";
-import { t, formatDate, formatTime, formatDateTime, formatNumber, parseNumber } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as clock from "gk:clock";
+import { t, formatDate, formatTime, formatDateTime, formatNumber, parseNumber } from "gk:i18n";
 
 const pad = (n, w = 2) => String(n).padStart(w, "0");
 const DAYS = [
@@ -35,7 +35,7 @@ function dateText(d) {
 function ppmText(ppm, decimals = 1) {
   return (ppm > 0 ? "+" : "") + formatNumber(ppm, { decimals });
 }
-// in zerogap.txt, always +1.5
+// in gapkeep.txt, always +1.5
 function ppmFileText(ppm) {
   return (ppm > 0 ? "+" : "") + ppm.toFixed(1);
 }
@@ -126,7 +126,7 @@ function render() {
   dateLabel.text = `${dateText(now)}   UTC${offsetText(st.utcOffset)}`;
   statusLabel.text = st.set
     ? t("Set since this boot. Trim {ppm} ppm.", { ppm: ppmText(st.trimPpm, 3) })
-    : t("Not set since this boot: ZeroGap has no battery-backed clock, so it counts from 1970 until the time is set here.");
+    : t("Not set since this boot: GapKeep has no battery-backed clock, so it counts from 1970 until the time is set here.");
 
   if (st.drift) {
     const d = st.drift;
@@ -145,7 +145,7 @@ function render() {
     applyDrift.hidden = true;
   }
 
-  cardLabel.text = t("To keep the trim and offset across reboots, put these lines in zerogap.txt at the top of the SD card:") +
+  cardLabel.text = t("To keep the trim and offset across reboots, put these lines in gapkeep.txt at the top of the SD card:") +
     `\nclock_trim_ppm = ${ppmFileText(st.trimPpm)}\nutc_offset = ${offsetText(st.utcOffset)}`;
 }
 

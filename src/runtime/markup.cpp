@@ -19,16 +19,16 @@ struct TParser
 	const int *pSizes;
 	unsigned nSizes;
 
-	TZgMarkup *pOut;
+	TGkMarkup *pOut;
 	unsigned nText;			// bytes in pOut->pText
 
 	struct
 	{
 		char Name[8];
 		unsigned nPos;		// of its "<"
-		TZgMarkupStyle Style;
+		TGkMarkupStyle Style;
 	}
-	Stack[ZG_MARKUP_MAX_DEPTH + 1];
+	Stack[GK_MARKUP_MAX_DEPTH + 1];
 	unsigned nDepth;		// Stack[0]: the label's own style
 
 	char *pError;
@@ -60,7 +60,7 @@ boolean Fail (TParser &r, unsigned nPos, const char *pWhat, const char *pDetail 
 	return FALSE;
 }
 
-boolean SameStyle (const TZgMarkupStyle &a, const TZgMarkupStyle &b)
+boolean SameStyle (const TGkMarkupStyle &a, const TGkMarkupStyle &b)
 {
 	return    a.nSize == b.nSize && a.bMono == b.bMono && a.bBold == b.bBold && a.bItalic == b.bItalic
 	       && a.bColor == b.bColor
@@ -73,12 +73,12 @@ boolean AddText (TParser &r, const char *p, unsigned n, unsigned nPos)
 	{
 		return TRUE;
 	}
-	TZgMarkup *pOut = r.pOut;
-	const TZgMarkupStyle &Style = r.Stack[r.nDepth].Style;
-	TZgMarkupRun *pLast = pOut->nRuns > 0 ? &pOut->Runs[pOut->nRuns - 1] : 0;
+	TGkMarkup *pOut = r.pOut;
+	const TGkMarkupStyle &Style = r.Stack[r.nDepth].Style;
+	TGkMarkupRun *pLast = pOut->nRuns > 0 ? &pOut->Runs[pOut->nRuns - 1] : 0;
 	if (pLast == 0 || !SameStyle (pLast->Style, Style))
 	{
-		if (pOut->nRuns == ZG_MARKUP_MAX_RUNS)
+		if (pOut->nRuns == GK_MARKUP_MAX_RUNS)
 		{
 			return Fail (r, nPos, "more than 64 pieces of text in different styles");
 		}
@@ -210,7 +210,7 @@ boolean ParseColor (const char *p, u32 *pColor)
 }
 
 // One attribute of <span>, applied to pStyle
-boolean SpanAttribute (TParser &r, unsigned nPos, const char *pName, const char *pValue, TZgMarkupStyle *pStyle)
+boolean SpanAttribute (TParser &r, unsigned nPos, const char *pName, const char *pValue, TGkMarkupStyle *pStyle)
 {
 	CString Detail;
 	if (   strcmp (pName, "color") == 0 || strcmp (pName, "foreground") == 0
@@ -258,7 +258,7 @@ boolean SpanAttribute (TParser &r, unsigned nPos, const char *pName, const char 
 	{
 		boolean bUnderline = pName[0] == 'u';
 		const char *pOn = bUnderline ? "single" : "true", *pOff = bUnderline ? "none" : "false";
-		unsigned nBit = bUnderline ? ZG_MARKUP_UNDERLINE : ZG_MARKUP_STRIKE;
+		unsigned nBit = bUnderline ? GK_MARKUP_UNDERLINE : GK_MARKUP_STRIKE;
 		if (strcmp (pValue, pOn) == 0)
 		{
 			pStyle->nDecor |= nBit;
@@ -295,8 +295,8 @@ boolean SpanAttribute (TParser &r, unsigned nPos, const char *pName, const char 
 
 boolean AddTag (TParser &r, const char *pTag)
 {
-	TZgMarkup *pOut = r.pOut;
-	if (pOut->nTags == ZG_MARKUP_MAX_TAGS)
+	TGkMarkup *pOut = r.pOut;
+	if (pOut->nTags == GK_MARKUP_MAX_TAGS)
 	{
 		return Fail (r, r.nPos, "more than 64 tags");
 	}
@@ -363,11 +363,11 @@ boolean Tag (TParser &r)
 		return TRUE;
 	}
 
-	if (r.nDepth == ZG_MARKUP_MAX_DEPTH)
+	if (r.nDepth == GK_MARKUP_MAX_DEPTH)
 	{
 		return Fail (r, nStart, "tags nested more than 16 deep");
 	}
-	TZgMarkupStyle Style = r.Stack[r.nDepth].Style;
+	TGkMarkupStyle Style = r.Stack[r.nDepth].Style;
 	CString Normal (Name);
 
 	// attributes: <span> only, each once, sorted for the tag's normal form
@@ -492,8 +492,8 @@ boolean Tag (TParser &r)
 	else if (strcmp (Name, "i") == 0)	Style.bItalic = TRUE;
 	else if (strcmp (Name, "big") == 0)	Style.nSize = r.pSizes[nIndex + 1 < (int) r.nSizes ? nIndex + 1 : nIndex];
 	else if (strcmp (Name, "small") == 0)	Style.nSize = r.pSizes[nIndex > 0 ? nIndex - 1 : 0];
-	else if (strcmp (Name, "u") == 0)	Style.nDecor |= ZG_MARKUP_UNDERLINE;
-	else if (strcmp (Name, "s") == 0)	Style.nDecor |= ZG_MARKUP_STRIKE;
+	else if (strcmp (Name, "u") == 0)	Style.nDecor |= GK_MARKUP_UNDERLINE;
+	else if (strcmp (Name, "s") == 0)	Style.nDecor |= GK_MARKUP_STRIKE;
 
 	if (Style.bMono && (Style.bBold || Style.bItalic))
 	{
@@ -511,9 +511,9 @@ boolean Tag (TParser &r)
 
 }	// namespace
 
-boolean ZgMarkupParse (const char *pSource, unsigned nSourceLength,
+boolean GkMarkupParse (const char *pSource, unsigned nSourceLength,
 		       const int *pSizes, unsigned nSizes, int nSize, boolean bMono,
-		       TZgMarkup *pOut, char *pError, unsigned nErrorSize)
+		       TGkMarkup *pOut, char *pError, unsigned nErrorSize)
 {
 	memset (pOut, 0, sizeof *pOut);
 	pOut->pText = new char[nSourceLength + 1];
@@ -573,7 +573,7 @@ boolean ZgMarkupParse (const char *pSource, unsigned nSourceLength,
 	return TRUE;
 }
 
-void ZgMarkupFree (TZgMarkup *pMarkup)
+void GkMarkupFree (TGkMarkup *pMarkup)
 {
 	delete [] pMarkup->pText;
 	pMarkup->pText = 0;
@@ -585,7 +585,7 @@ void ZgMarkupFree (TZgMarkup *pMarkup)
 	pMarkup->nRuns = 0;
 }
 
-const char *ZgMarkupCheckTranslation (const char *pKey, unsigned nKey, const char *pText, unsigned nText)
+const char *GkMarkupCheckTranslation (const char *pKey, unsigned nKey, const char *pText, unsigned nText)
 {
 	boolean bMarkup = memchr (pKey, '<', nKey) != 0 || memchr (pKey, '&', nKey) != 0;
 	if (!bMarkup)
@@ -595,11 +595,11 @@ const char *ZgMarkupCheckTranslation (const char *pKey, unsigned nKey, const cha
 
 	// sizes don't matter here, as long as every size is one of them
 	static const int Sizes[] = {12, 14, 16, 18, 20, 22, 24, 28, 32, 40};
-	static TZgMarkup Key, Text;		// big for the stack
+	static TGkMarkup Key, Text;		// big for the stack
 	char Error[2];
-	boolean bKeyOK = ZgMarkupParse (pKey, nKey, Sizes, sizeof Sizes / sizeof Sizes[0], 16, FALSE,
+	boolean bKeyOK = GkMarkupParse (pKey, nKey, Sizes, sizeof Sizes / sizeof Sizes[0], 16, FALSE,
 					&Key, Error, sizeof Error);
-	boolean bTextOK = ZgMarkupParse (pText, nText, Sizes, sizeof Sizes / sizeof Sizes[0], 16, FALSE,
+	boolean bTextOK = GkMarkupParse (pText, nText, Sizes, sizeof Sizes / sizeof Sizes[0], 16, FALSE,
 					 &Text, Error, sizeof Error);
 	const char *pWhy = 0;
 	if (!bKeyOK)
@@ -621,7 +621,7 @@ const char *ZgMarkupCheckTranslation (const char *pKey, unsigned nKey, const cha
 	else
 	{
 		// the same multiset: each of the key's tags matched with one of the text's
-		boolean Used[ZG_MARKUP_MAX_TAGS] = {FALSE};
+		boolean Used[GK_MARKUP_MAX_TAGS] = {FALSE};
 		for (unsigned i = 0; i < Key.nTags && pWhy == 0; i++)
 		{
 			unsigned j;
@@ -639,7 +639,7 @@ const char *ZgMarkupCheckTranslation (const char *pKey, unsigned nKey, const cha
 			}
 		}
 	}
-	ZgMarkupFree (&Key);
-	ZgMarkupFree (&Text);
+	GkMarkupFree (&Key);
+	GkMarkupFree (&Text);
 	return pWhy;
 }

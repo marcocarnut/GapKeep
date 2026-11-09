@@ -6,9 +6,9 @@
 #include "session.h"
 #include <circle/util.h>
 
-struct TZgSessionEntry
+struct TGkSessionEntry
 {
-	TZgSessionEntry *pNext;
+	TGkSessionEntry *pNext;
 	char *pOwner;
 	char *pKey;
 	u8 *pData;
@@ -16,8 +16,8 @@ struct TZgSessionEntry
 	size_t nCost;			// counted against the limits: key + data
 };
 
-TZgSessionEntry *CZgSession::s_pFirst = 0;
-size_t CZgSession::s_nTotal = 0;
+TGkSessionEntry *CGkSession::s_pFirst = 0;
+size_t CGkSession::s_nTotal = 0;
 
 static char *CopyString (const char *p)
 {
@@ -41,7 +41,7 @@ static void WipeDelete (void *p, size_t n)
 	}
 }
 
-void CZgSession::Free (TZgSessionEntry *pEntry)
+void CGkSession::Free (TGkSessionEntry *pEntry)
 {
 	WipeDelete (pEntry->pOwner, strlen (pEntry->pOwner) + 1);
 	WipeDelete (pEntry->pKey, strlen (pEntry->pKey) + 1);
@@ -50,9 +50,9 @@ void CZgSession::Free (TZgSessionEntry *pEntry)
 	delete pEntry;
 }
 
-TZgSessionEntry *CZgSession::Find (const char *pOwner, const char *pKey, TZgSessionEntry ***pppLink)
+TGkSessionEntry *CGkSession::Find (const char *pOwner, const char *pKey, TGkSessionEntry ***pppLink)
 {
-	for (TZgSessionEntry **pp = &s_pFirst; *pp != 0; pp = &(*pp)->pNext)
+	for (TGkSessionEntry **pp = &s_pFirst; *pp != 0; pp = &(*pp)->pNext)
 	{
 		if (   strcmp ((*pp)->pOwner, pOwner) == 0
 		    && strcmp ((*pp)->pKey, pKey) == 0)
@@ -67,10 +67,10 @@ TZgSessionEntry *CZgSession::Find (const char *pOwner, const char *pKey, TZgSess
 	return 0;
 }
 
-CZgSession::TResult CZgSession::Set (const char *pOwner, const char *pKey, const void *pData, size_t nSize)
+CGkSession::TResult CGkSession::Set (const char *pOwner, const char *pKey, const void *pData, size_t nSize)
 {
-	TZgSessionEntry **ppLink;
-	TZgSessionEntry *pOld = Find (pOwner, pKey, &ppLink);
+	TGkSessionEntry **ppLink;
+	TGkSessionEntry *pOld = Find (pOwner, pKey, &ppLink);
 	size_t nOldCost = pOld != 0 ? pOld->nCost : 0;
 	size_t nCost = strlen (pKey) + nSize;
 
@@ -97,7 +97,7 @@ CZgSession::TResult CZgSession::Set (const char *pOwner, const char *pKey, const
 		return Ok;
 	}
 
-	TZgSessionEntry *pEntry = new TZgSessionEntry;
+	TGkSessionEntry *pEntry = new TGkSessionEntry;
 	pEntry->pNext = 0;
 	pEntry->pOwner = CopyString (pOwner);
 	pEntry->pKey = CopyString (pKey);
@@ -106,7 +106,7 @@ CZgSession::TResult CZgSession::Set (const char *pOwner, const char *pKey, const
 	pEntry->nCost = nCost;
 	s_nTotal += nCost;
 
-	TZgSessionEntry **pp = &s_pFirst;
+	TGkSessionEntry **pp = &s_pFirst;
 	while (*pp != 0)
 	{
 		pp = &(*pp)->pNext;
@@ -116,9 +116,9 @@ CZgSession::TResult CZgSession::Set (const char *pOwner, const char *pKey, const
 	return Ok;
 }
 
-const u8 *CZgSession::Get (const char *pOwner, const char *pKey, size_t *pSize)
+const u8 *CGkSession::Get (const char *pOwner, const char *pKey, size_t *pSize)
 {
-	TZgSessionEntry *pEntry = Find (pOwner, pKey, 0);
+	TGkSessionEntry *pEntry = Find (pOwner, pKey, 0);
 	if (pEntry == 0)
 	{
 		return 0;
@@ -127,10 +127,10 @@ const u8 *CZgSession::Get (const char *pOwner, const char *pKey, size_t *pSize)
 	return pEntry->pData;
 }
 
-boolean CZgSession::Remove (const char *pOwner, const char *pKey)
+boolean CGkSession::Remove (const char *pOwner, const char *pKey)
 {
-	TZgSessionEntry **ppLink;
-	TZgSessionEntry *pEntry = Find (pOwner, pKey, &ppLink);
+	TGkSessionEntry **ppLink;
+	TGkSessionEntry *pEntry = Find (pOwner, pKey, &ppLink);
 	if (pEntry == 0)
 	{
 		return FALSE;
@@ -140,12 +140,12 @@ boolean CZgSession::Remove (const char *pOwner, const char *pKey)
 	return TRUE;
 }
 
-void CZgSession::Clear (const char *pOwner)
+void CGkSession::Clear (const char *pOwner)
 {
-	TZgSessionEntry **pp = &s_pFirst;
+	TGkSessionEntry **pp = &s_pFirst;
 	while (*pp != 0)
 	{
-		TZgSessionEntry *pEntry = *pp;
+		TGkSessionEntry *pEntry = *pp;
 		if (strcmp (pEntry->pOwner, pOwner) == 0)
 		{
 			*pp = pEntry->pNext;
@@ -158,9 +158,9 @@ void CZgSession::Clear (const char *pOwner)
 	}
 }
 
-const char *CZgSession::NextKey (const char *pOwner, const char *pKey)
+const char *CGkSession::NextKey (const char *pOwner, const char *pKey)
 {
-	TZgSessionEntry *p = s_pFirst;
+	TGkSessionEntry *p = s_pFirst;
 	if (pKey != 0)
 	{
 		p = Find (pOwner, pKey, 0);
@@ -180,10 +180,10 @@ const char *CZgSession::NextKey (const char *pOwner, const char *pKey)
 	return 0;
 }
 
-size_t CZgSession::GetUsed (const char *pOwner)
+size_t CGkSession::GetUsed (const char *pOwner)
 {
 	size_t n = 0;
-	for (TZgSessionEntry *p = s_pFirst; p != 0; p = p->pNext)
+	for (TGkSessionEntry *p = s_pFirst; p != 0; p = p->pNext)
 	{
 		if (strcmp (p->pOwner, pOwner) == 0)
 		{

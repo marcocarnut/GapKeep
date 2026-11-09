@@ -3,26 +3,26 @@
 //
 // Accounts come from QR codes (otpauth://totp/... or Google Authenticator's
 // export, otpauth-migration://...) or are typed in. They are kept in RAM
-// only, in the app's session store (zg:session): they survive leaving the
-// app for another, and are gone at power-off. zerogap never writes to the
+// only, in the app's session store (gk:session): they survive leaving the
+// app for another, and are gone at power-off. GapKeep never writes to the
 // card. The codes need the right time: the clock app sets it after each
 // boot; until then (clock.status().set false) no code is shown.
 //
 // The log never holds a secret or a code: codes are logged as tags only
 // the account's key can check, for the tests (tests/totp.txt). Its text is
-// translated (zg:i18n, lang/), but the log stays in English; neither a
+// translated (gk:i18n, lang/), but the log stays in English; neither a
 // secret nor a code is ever a param of a translated text.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as clock from "zg:clock";
-import * as session from "zg:session";
-import { sha256, hmac } from "zg:crypto";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as clock from "gk:clock";
+import * as session from "gk:session";
+import { sha256, hmac } from "gk:crypto";
 import { setHmac, makeHmac, totpCounter, hotp, groupCode, ALGORITHMS } from "./lib/hotp.js";
 import { parseCode, base32Decode, ParseError, Message, MAX_PERIOD } from "./lib/parse.js";
-import { t, plural, formatDateTime } from "zg:i18n";
+import { t, plural, formatDateTime } from "gk:i18n";
 import { runSelfTest } from "./lib/selftest.js";
 
 setHmac(hmac);
@@ -103,7 +103,7 @@ function forgetAll() {
 
 // --- the session store: the accounts outlive the app, until power-off -------
 
-// Over zg:session's 64 KiB (some 300 accounts) they are still shown, but
+// Over gk:session's 64 KiB (some 300 accounts) they are still shown, but
 // not kept: say so.
 function save() {
   try {
@@ -165,7 +165,7 @@ function update(ms) {
       a.ui.code.text = groupCode(a.code);
       // For tests: a tag only the account's key can check. (A plain hash
       // of a 6-digit code is reversed by trying all million of them.)
-      const tag = a.hmac.mac(Uint8Array.from("zerogap log " + a.code, (c) => c.charCodeAt(0)));
+      const tag = a.hmac.mac(Uint8Array.from("gapkeep log " + a.code, (c) => c.charCodeAt(0)));
       console.log(`totp: account ${a.n}, step ${counter}, code tag ${hex(tag).slice(0, 16)}`);
       tag.fill(0);
     }

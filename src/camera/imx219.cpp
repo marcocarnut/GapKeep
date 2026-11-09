@@ -79,33 +79,33 @@ static const TRegWrite Mode[] =
 
 	// E: frame length (exposure, gains and the test pattern follow, from
 	// the caller's values)
-	{0x0160, 2, {CZgIMX219::FrameLength >> 8, CZgIMX219::FrameLength & 0xFF}},
+	{0x0160, 2, {CGkIMX219::FrameLength >> 8, CGkIMX219::FrameLength & 0xFF}},
 };
 
 // Every window is centred on the array's centre (1640, 1232) and starts
 // on an even pixel, so each 2x2 tile is one Bayer quad.
 //
 // The recommended mode: the centre 1280x960, binned (SPEC 1, 4.3 D).
-const TZgIMX219Mode CZgIMX219::ModeCentre = {"centre", 1000, 2279, 752, 1711, 640, 480, 3};
+const TGkIMX219Mode CGkIMX219::ModeCentre = {"centre", 1000, 2279, 752, 1711, 640, 480, 3};
 // The whole array, binned (SPEC 6.7): 6.6 times the data, the full field
 // of view.
-const TZgIMX219Mode CZgIMX219::ModeFull = {"full", 0, 3279, 0, 2463, 1640, 1232, 3};
+const TGkIMX219Mode CGkIMX219::ModeFull = {"full", 0, 3279, 0, 2463, 1640, 1232, 3};
 // The centre 1280x960 again, not binned: twice the detail of "centre".
-const TZgIMX219Mode CZgIMX219::ModeDetail = {"detail", 1000, 2279, 752, 1711, 1280, 960, 0};
+const TGkIMX219Mode CGkIMX219::ModeDetail = {"detail", 1000, 2279, 752, 1711, 1280, 960, 0};
 // The centre 2560x1920 (78 % of the width), binned to 1280x960.
-const TZgIMX219Mode CZgIMX219::ModeWide = {"wide", 360, 2919, 272, 2191, 1280, 960, 3};
+const TGkIMX219Mode CGkIMX219::ModeWide = {"wide", 360, 2919, 272, 2191, 1280, 960, 3};
 // The centre 1640x1232 (half the width), not binned.
-const TZgIMX219Mode CZgIMX219::ModeMid = {"mid", 820, 2459, 616, 1847, 1640, 1232, 0};
+const TGkIMX219Mode CGkIMX219::ModeMid = {"mid", 820, 2459, 616, 1847, 1640, 1232, 0};
 
-static const TZgIMX219Mode *const Modes[] =
+static const TGkIMX219Mode *const Modes[] =
 {
-	&CZgIMX219::ModeCentre, &CZgIMX219::ModeFull, &CZgIMX219::ModeDetail,
-	&CZgIMX219::ModeWide, &CZgIMX219::ModeMid
+	&CGkIMX219::ModeCentre, &CGkIMX219::ModeFull, &CGkIMX219::ModeDetail,
+	&CGkIMX219::ModeWide, &CGkIMX219::ModeMid
 };
 
-const char CZgIMX219::ModeNames[] = "centre|full|detail|wide|mid";
+const char CGkIMX219::ModeNames[] = "centre|full|detail|wide|mid";
 
-const TZgIMX219Mode *CZgIMX219::GetMode (const char *pName)
+const TGkIMX219Mode *CGkIMX219::GetMode (const char *pName)
 {
 	for (unsigned i = 0; i < sizeof Modes / sizeof Modes[0]; i++)
 	{
@@ -117,14 +117,14 @@ const TZgIMX219Mode *CZgIMX219::GetMode (const char *pName)
 	return 0;
 }
 
-CZgIMX219::CZgIMX219 (CI2CMaster *pI2C)
+CGkIMX219::CGkIMX219 (CI2CMaster *pI2C)
 :	m_pI2C (pI2C),
 	m_nLastResult (0)
 {
 	assert (m_pI2C != 0);
 }
 
-boolean CZgIMX219::Write (u16 nRegister, const u8 *pValues, unsigned nCount)
+boolean CGkIMX219::Write (u16 nRegister, const u8 *pValues, unsigned nCount)
 {
 	u8 Buffer[2 + 12];
 	assert (nCount <= sizeof Buffer - 2);
@@ -141,12 +141,12 @@ boolean CZgIMX219::Write (u16 nRegister, const u8 *pValues, unsigned nCount)
 	return TRUE;
 }
 
-boolean CZgIMX219::Write8 (u16 nRegister, u8 uchValue)
+boolean CGkIMX219::Write8 (u16 nRegister, u8 uchValue)
 {
 	return Write (nRegister, &uchValue, 1);
 }
 
-boolean CZgIMX219::Write16 (u16 nRegister, u16 usValue)
+boolean CGkIMX219::Write16 (u16 nRegister, u16 usValue)
 {
 	u8 Value[2] = {(u8) (usValue >> 8), (u8) (usValue & 0xFF)};
 	return Write (nRegister, Value, 2);
@@ -155,7 +155,7 @@ boolean CZgIMX219::Write16 (u16 nRegister, u16 usValue)
 // A write of the index, then a read: the sensor keeps the index between
 // transfers, so the STOP in between is fine (SPEC 2.3), and the plain
 // Write/Read pair avoids the repeated-start path.
-boolean CZgIMX219::Read (u16 nRegister, u8 *pValues, unsigned nCount)
+boolean CGkIMX219::Read (u16 nRegister, u8 *pValues, unsigned nCount)
 {
 	u8 Index[2] = {(u8) (nRegister >> 8), (u8) (nRegister & 0xFF)};
 	int nResult = m_pI2C->Write (SlaveAddress, Index, 2);
@@ -174,7 +174,7 @@ boolean CZgIMX219::Read (u16 nRegister, u8 *pValues, unsigned nCount)
 	return TRUE;
 }
 
-boolean CZgIMX219::Probe (u16 *pID)
+boolean CGkIMX219::Probe (u16 *pID)
 {
 	u8 ID[2] = {0, 0};
 	*pID = 0;
@@ -186,7 +186,7 @@ boolean CZgIMX219::Probe (u16 *pID)
 	return *pID == ModelID;
 }
 
-boolean CZgIMX219::SettleLanes (void)
+boolean CGkIMX219::SettleLanes (void)
 {
 	if (!Write8 (REG_MODE_SELECT, 1))
 	{
@@ -201,7 +201,7 @@ boolean CZgIMX219::SettleLanes (void)
 	return TRUE;
 }
 
-boolean CZgIMX219::Configure (const TZgIMX219Mode &rMode, unsigned nExposure, unsigned nAnalogueCode,
+boolean CGkIMX219::Configure (const TGkIMX219Mode &rMode, unsigned nExposure, unsigned nAnalogueCode,
 			      unsigned nDigitalGain, unsigned nTestPattern)
 {
 	for (unsigned i = 0; i < sizeof Mode / sizeof Mode[0]; i++)
@@ -236,17 +236,17 @@ boolean CZgIMX219::Configure (const TZgIMX219Mode &rMode, unsigned nExposure, un
 	       && SetTestPattern (nTestPattern);
 }
 
-boolean CZgIMX219::StartStreaming (void)
+boolean CGkIMX219::StartStreaming (void)
 {
 	return Write8 (REG_MODE_SELECT, 1);
 }
 
-boolean CZgIMX219::StopStreaming (void)
+boolean CGkIMX219::StopStreaming (void)
 {
 	return Write8 (REG_MODE_SELECT, 0);
 }
 
-boolean CZgIMX219::SetExposure (unsigned nExposure, unsigned nAnalogueCode, unsigned nDigitalGain)
+boolean CGkIMX219::SetExposure (unsigned nExposure, unsigned nAnalogueCode, unsigned nDigitalGain)
 {
 	// beyond FRM_LENGTH_A - 4 the sensor would stretch the frame (SPEC 4.5)
 	if (nExposure < MinExposure)		nExposure = MinExposure;
@@ -266,7 +266,7 @@ boolean CZgIMX219::SetExposure (unsigned nExposure, unsigned nAnalogueCode, unsi
 	return Write (REG_ANA_GAIN, Values, sizeof Values);
 }
 
-boolean CZgIMX219::SetTestPattern (unsigned nPattern)
+boolean CGkIMX219::SetTestPattern (unsigned nPattern)
 {
 	return Write16 (REG_TEST_PATTERN, (u16) nPattern);
 }

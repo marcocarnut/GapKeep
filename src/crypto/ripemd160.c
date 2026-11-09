@@ -99,7 +99,7 @@ static void compress (uint32_t h[5], const uint8_t block[64])
 	memset (x, 0, sizeof x);
 }
 
-void zg_ripemd160_init (zg_ripemd160_t *ctx)
+void gk_ripemd160_init (gk_ripemd160_t *ctx)
 {
 	static const uint32_t H0[5] =
 	{
@@ -110,7 +110,7 @@ void zg_ripemd160_init (zg_ripemd160_t *ctx)
 	ctx->fill = 0;
 }
 
-void zg_ripemd160_update (zg_ripemd160_t *ctx, const void *data, size_t len)
+void gk_ripemd160_update (gk_ripemd160_t *ctx, const void *data, size_t len)
 {
 	const uint8_t *p = data;
 	ctx->length += len;
@@ -135,7 +135,7 @@ void zg_ripemd160_update (zg_ripemd160_t *ctx, const void *data, size_t len)
 	}
 }
 
-void zg_ripemd160_final (zg_ripemd160_t *ctx, uint8_t digest[ZG_RIPEMD160_DIGEST_SIZE])
+void gk_ripemd160_final (gk_ripemd160_t *ctx, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE])
 {
 	uint64_t bits = ctx->length * 8;
 
@@ -164,23 +164,23 @@ void zg_ripemd160_final (zg_ripemd160_t *ctx, uint8_t digest[ZG_RIPEMD160_DIGEST
 	memset (ctx, 0, sizeof *ctx);
 }
 
-void zg_ripemd160 (const void *data, size_t len, uint8_t digest[ZG_RIPEMD160_DIGEST_SIZE])
+void gk_ripemd160 (const void *data, size_t len, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE])
 {
-	zg_ripemd160_t ctx;
-	zg_ripemd160_init (&ctx);
-	zg_ripemd160_update (&ctx, data, len);
-	zg_ripemd160_final (&ctx, digest);
+	gk_ripemd160_t ctx;
+	gk_ripemd160_init (&ctx);
+	gk_ripemd160_update (&ctx, data, len);
+	gk_ripemd160_final (&ctx, digest);
 }
 
-void zg_hash160 (const void *data, size_t len, uint8_t digest[ZG_RIPEMD160_DIGEST_SIZE])
+void gk_hash160 (const void *data, size_t len, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE])
 {
-	uint8_t h[ZG_SHA256_DIGEST_SIZE];
-	zg_sha256 (data, len, h);
-	zg_ripemd160 (h, sizeof h, digest);
+	uint8_t h[GK_SHA256_DIGEST_SIZE];
+	gk_sha256 (data, len, h);
+	gk_ripemd160 (h, sizeof h, digest);
 	memset (h, 0, sizeof h);
 }
 
-int zg_ripemd160_selftest (int full)
+int gk_ripemd160_selftest (int full)
 {
 	/* the authors' test vectors (the RIPEMD-160 page, homes.esat.kuleuven.be/~bosselae) */
 	static const struct { const char *msg; const char *hex; } v[] =
@@ -197,12 +197,12 @@ int zg_ripemd160_selftest (int full)
 		{"12345678901234567890123456789012345678901234567890123456789012345678901234567890",
 		 "9b752e45573d4b39f4dbd3323cab82bf63326bfb"},
 	};
-	uint8_t d[ZG_RIPEMD160_DIGEST_SIZE];
+	uint8_t d[GK_RIPEMD160_DIGEST_SIZE];
 
 	for (unsigned i = 0; i < sizeof v / sizeof v[0]; i++)
 	{
-		zg_ripemd160 (v[i].msg, strlen (v[i].msg), d);
-		if (!zg_hex_equal (d, sizeof d, v[i].hex))
+		gk_ripemd160 (v[i].msg, strlen (v[i].msg), d);
+		if (!gk_hex_equal (d, sizeof d, v[i].hex))
 		{
 			return (int) i + 1;
 		}
@@ -213,19 +213,19 @@ int zg_ripemd160_selftest (int full)
 		return 0;
 	}
 
-	zg_ripemd160_t ctx;
+	gk_ripemd160_t ctx;
 	char a[997];
 	memset (a, 'a', sizeof a);
-	zg_ripemd160_init (&ctx);
+	gk_ripemd160_init (&ctx);
 	size_t left = 1000000;
 	while (left > 0)
 	{
 		size_t n = left < sizeof a ? left : sizeof a;
-		zg_ripemd160_update (&ctx, a, n);
+		gk_ripemd160_update (&ctx, a, n);
 		left -= n;
 	}
-	zg_ripemd160_final (&ctx, d);
-	if (!zg_hex_equal (d, sizeof d, "52783243c1697bdbe16d37f97f68f08325dc1528"))
+	gk_ripemd160_final (&ctx, d);
+	if (!gk_hex_equal (d, sizeof d, "52783243c1697bdbe16d37f97f68f08325dc1528"))
 	{
 		return 100;
 	}

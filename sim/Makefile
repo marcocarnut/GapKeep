@@ -1,14 +1,14 @@
 #
-# The zerogap simulator: src/runtime, the keyboard device, LVGL and QuickJS
+# The GapKeep simulator: src/runtime, the keyboard device, LVGL and QuickJS
 # compiled for a host instead of the Pi, with sim/ standing in for Circle.
 #
-#   make                 build/zgsim, native, for scripts, tests and agents
-#   make web             build/web/zgsim.{js,wasm}, for the browser IDE
+#   make                 build/gksim, native, for scripts, tests and agents
+#   make web             build/web/gksim.{js,wasm}, for the browser IDE
 #                        (Emscripten: emcc on PATH, or EMSDK=~/emsdk)
 #
 # Built-in apps, as the kernel's build modes (../src/Makefile):
 #   (default)            the launcher only; apps come from the "SD card"
-#                        (zgsim --card DIR: DIR/apps)
+#                        (gksim --card DIR: DIR/apps)
 #   TEST=1               every app in ../apps and ../tests/apps
 #
 # Objects go to build/<native|web>-<mode>/, so builds don't mix.
@@ -21,7 +21,7 @@ QJS      := $(ROOT)/third_party/quickjs
 ifeq ($(strip $(TEST)),1)
 MODE     := test
 BUNDLE   := $(ROOT)/apps $(ROOT)/tests/apps
-MODEDEF  := -DZG_TEST
+MODEDEF  := -DGK_TEST
 else
 MODE     := production
 BUNDLE   := --only launcher $(ROOT)/apps
@@ -55,7 +55,7 @@ OBJDIR   := build/$(TARGET)-$(MODE)$(if $(HAVEZX),-zxing)
 # did 67 units in 2.0 s, QuickJS's test suite 155 in 3.9 s.
 ZERO_WORK_PER_SECOND := 36
 
-DEFS     := -DZG_SIM $(MODEDEF) -DZG_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<zg_lv_conf.h>" \
+DEFS     := -DGK_SIM $(MODEDEF) -DGK_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<gk_lv_conf.h>" \
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
 INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -I $(ROOT)/lib/colorqr/include -idirafter $(ROOT)/circle/addon
@@ -65,7 +65,7 @@ ifneq ($(HAVEZX),)
 $(shell $(ROOT)/tools/apply_patches.sh zxing-cpp >&2)
 include $(ROOT)/lib/zxing/zxing.mk
 ZXSRC    := $(addprefix $(ZXING)/,$(ZXING_SOURCES))
-DEFS     += -DZG_HAVE_ZXING
+DEFS     += -DGK_HAVE_ZXING
 endif
 CFLAGS   := $(OPT) $(DEFS) $(INCS) -fno-strict-aliasing -Wall -Wno-unused-parameter \
 	    -Wno-sign-compare -Wno-format-truncation -Wno-array-bounds -Wno-unknown-warning-option
@@ -76,7 +76,7 @@ ZXFLAGS  := $(CFLAGS) -std=c++20 -fno-exceptions -fno-rtti $(ZXING_DEFINES) -I $
 
 RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/js_ui.cpp $(ROOT)/src/runtime/js_sys.cpp \
-	    $(ROOT)/src/runtime/js_crypto.cpp $(ROOT)/src/runtime/zg_bridge.cpp \
+	    $(ROOT)/src/runtime/js_crypto.cpp $(ROOT)/src/runtime/gk_bridge.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \
 	    $(ROOT)/src/runtime/cursor_install.c \
 	    $(ROOT)/src/runtime/scanner.cpp $(ROOT)/src/runtime/qrdecode.cpp \
@@ -88,7 +88,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
 	    $(ROOT)/src/kbdindev.cpp \
-	    $(wildcard $(ROOT)/src/runtime/fonts/zg_*.c)
+	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
 # libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
 include $(ROOT)/lib/secp256k1/secp256k1.mk
@@ -117,21 +117,21 @@ CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 
 .PHONY: all web clean FORCE
-all: build/zgsim$(if $(filter test,$(MODE)),-test)
+all: build/gksim$(if $(filter test,$(MODE)),-test)
 
-build/zgsim build/zgsim-test: $(OBJS)
+build/gksim build/gksim-test: $(OBJS)
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) -o $@ $(OBJS) -lm
 
-web: build/web/zgsim$(if $(filter test,$(MODE)),-test).js
+web: build/web/gksim$(if $(filter test,$(MODE)),-test).js
 
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
-	    -sMODULARIZE=1 -sEXPORT_NAME=createZerogap -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
+	    -sMODULARIZE=1 -sEXPORT_NAME=createGapkeep -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
 	    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAPU16,UTF8ToString,stringToNewUTF8 \
-	    -sEXPORTED_FUNCTIONS=_malloc,_free,_zg_sim_boot,_zg_sim_set_builtin_dir,_zg_sim_key_down_qemu,_zg_sim_key_down_dom,_zg_sim_key_up,_zg_sim_pointer,_zg_sim_wheel,_zg_sim_launch,_zg_sim_frame_serial,_zg_sim_camera,_zg_sim_camera_qr,_zg_sim_camera_picture,_zg_sim_camera_push,_zg_sim_camera_picture_rgb,_zg_sim_camera_push_rgb,_zg_web_run,_zg_web_frame,_zg_web_width,_zg_web_height \
+	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
-build/web/zgsim.js build/web/zgsim-test.js: $(OBJS)
+build/web/gksim.js build/web/gksim-test.js: $(OBJS)
 	@mkdir -p build/web
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) $(WEBFLAGS) -o $@ $(OBJS)
@@ -143,10 +143,10 @@ ifeq ($(strip $(TEST)),1)
 endif
 	@python3 $(ROOT)/tools/bundle_apps.py $@ $(BUNDLE)
 
-# zg:i18n's JavaScript
+# gk:i18n's JavaScript
 $(OBJDIR)/i18n_js.c: $(ROOT)/src/runtime/i18n.js $(ROOT)/tools/embed_js.py
 	@mkdir -p $(dir $@)
-	@python3 $(ROOT)/tools/embed_js.py $@ zg_i18n_js $<
+	@python3 $(ROOT)/tools/embed_js.py $@ gk_i18n_js $<
 
 $(OBJDIR)/i18n_js.c.o: $(OBJDIR)/i18n_js.c
 	@$(CC) $(CFLAGS) -c -o $@ $<
@@ -155,8 +155,8 @@ $(OBJDIR)/apps_bundle.c.o: $(OBJDIR)/apps_bundle.c
 	@$(CC) $(CFLAGS) -I $(ROOT)/src/runtime -c -o $@ $<
 
 # QuickJS asks the C library for the time: in the simulator too, that is
-# zerogap's clock (src/runtime/clock.cpp), not the host's (platform.cpp).
-$(call obj,$(QJS)/quickjs.c): CFLAGS += -Dgettimeofday=zg_gettimeofday -Dlocaltime_r=zg_localtime_r
+# GapKeep's clock (src/runtime/clock.cpp), not the host's (platform.cpp).
+$(call obj,$(QJS)/quickjs.c): CFLAGS += -Dgettimeofday=gk_gettimeofday -Dlocaltime_r=gk_localtime_r
 $(call obj,$(QJS)/quickjs.c): Makefile		# flags above: rebuild when they change
 
 $(OBJDIR)/up/%.c.o: ../%.c

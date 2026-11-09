@@ -1,11 +1,11 @@
 // User-facing text. The warnings are dice39's own wording (English), with
 // the HTML taken out: each is [headline, explanation].
 //
-// Translated through zg:i18n (lang/<language>.json): the English is the key.
+// Translated through gk:i18n (lang/<language>.json): the English is the key.
 // The values (counts, bits, odds, tables) are {placeholders}, so a
 // translation can reword a sentence but not change what it shows.
 
-import { t } from "zg:i18n";
+import { t } from "gk:i18n";
 
 export const S = {
   tagline: t("Entropy you see."),
@@ -96,7 +96,7 @@ export const S = {
     "generic BIP-93 tool gives back the entropy, and handing that to a wallet as a raw seed opens a different, " +
     "empty wallet, silently. Recover with dice39's codex32_recover page, which turns the entropy back into your " +
     "words."),
-  deviceEntropy: t("The device words come from ZeroGap's hardware random generator (health-checked, SHA-256 " +
+  deviceEntropy: t("The device words come from GapKeep's hardware random generator (health-checked, SHA-256 " +
     "conditioned) mixed with what you did on the entropy pad and the timing of every key you pressed, hashed " +
     "together with SHA-256."),
 
