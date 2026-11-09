@@ -764,7 +764,7 @@ void CGkI18n::FreeApp (TGkApp *pApp)
 	}
 }
 
-// --- "zg:i18n-native" -------------------------------------------------------------
+// --- "gk:i18n-native" -------------------------------------------------------------
 
 static TGkI18nState *State (JSContext *ctx)
 {
@@ -1024,7 +1024,7 @@ JSModuleDef *GkInitI18nNativeModule (JSContext *ctx, const char *pName)
 	return m;
 }
 
-// "zg:i18n": compiled from its JavaScript when an app imports it
+// "gk:i18n": compiled from its JavaScript when an app imports it
 JSModuleDef *GkInitI18nModule (JSContext *ctx, const char *pName)
 {
 	JSValue Func = JS_Eval (ctx, gk_i18n_js, gk_i18n_js_size, pName,

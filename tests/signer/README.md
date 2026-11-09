@@ -3,7 +3,7 @@
     node --experimental-default-type=module tests/signer/run_node.mjs [-v]
 
 runs BIP-39, BIP-32, the sighashes and PSBT signing against the vectors
-below, with `crypto_ref.mjs` in place of `zg:crypto`: node:crypto's hashes,
+below, with `crypto_ref.mjs` in place of `gk:crypto`: node:crypto's hashes,
 HMAC and PBKDF2, and secp256k1 in BigInt, ported from the pure-Python
 reference in `tools/check_secp.py` (RFC 6979 as libsecp256k1 applies it,
 Bitcoin Core's low-R grinding, BIP-340, BIP-341's tweaks). The reference is
@@ -13,7 +13,7 @@ vectors. Test-only: slow and not constant-time. `tools/run_tests.sh` runs
 it as `signer_node`.
 
 On the device, the app (or a gallery self-test) calls
-`selfTest(crypto)` from `apps/signer/lib/selftest.js` with `zg:crypto`:
+`selfTest(crypto)` from `apps/signer/lib/selftest.js` with `gk:crypto`:
 four known answers through the real libsecp256k1.
 
 ## The scenario

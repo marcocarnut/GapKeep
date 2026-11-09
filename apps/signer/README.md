@@ -112,7 +112,7 @@ malformed or truncated, with what is wrong.
   negative; a warning when over 500 sat/vB or 10% of what is spent).
 - **Claimed change** (the keys decide, later) is an output with a BIP-32 key
   from a wallet (master fingerprint) that also signs the inputs, and whose
-  script pays to that key: P2WPKH and P2PKH by RIPEMD-160 (`zg:crypto`'s `ripemd160` when the
+  script pays to that key: P2WPKH and P2PKH by RIPEMD-160 (`gk:crypto`'s `ripemd160` when the
   system has it; without it the check is skipped and the screen says so),
   P2SH by its redeemScript, P2WSH multisig by its witnessScript. An output
   claiming a wallet key but paying elsewhere is flagged red and counted as
@@ -143,11 +143,11 @@ Pi Zero at some 40 times that (under half a second for all of it).
 ## Signing library (`lib/`)
 
 Pure modules, like the PSBT library (`lib/psbt/`, all but `view.js`, which
-draws): no `zg:*` import, so the same files run here and
+draws): no `gk:*` import, so the same files run here and
 under Node (`tests/signer/run_node.mjs`). The cryptography is given once:
 
 ```js
-import * as crypto from "zg:crypto";
+import * as crypto from "gk:crypto";
 import { setCrypto } from "./lib/crypto.js";
 setCrypto(crypto);          // also gives SHA-256 and RIPEMD-160 to lib/psbt
 ```
@@ -205,7 +205,7 @@ Errors: `Bip32Error`. Private keys are never serialized.
 - `network`: `"mainnet"`, `"testnet"` or `"regtest"`, to flag coin types that don't match.
 - `accounts`: account paths whose own fingerprint stands for the master's (Electrum's watch-only wallets, below). Default `STANDARD_ACCOUNTS`: account 0 of BIP-44, 49, 84 and 86, mainnet and test.
 - `maxIndex`: an address index above this is flagged (default 1000000).
-- `aux`: taproot's auxiliary randomness, 32 bytes or `(input) => bytes`; default fresh random bytes from zg:crypto.
+- `aux`: taproot's auxiliary randomness, 32 bytes or `(input) => bytes`; default fresh random bytes from gk:crypto.
 
 `plan()` returns
 
@@ -339,7 +339,7 @@ signatures, with or without keys.
 
 `selfTest(crypto)` -> `{ ok, checks: [{ name, ok, ms }] }`: BIP-32 test
 vector 1, a BIP-39 seed to BIP-84's first key, BIP-143's P2SH-P2WPKH
-signature, and a BIP-341 key-path signature, through zg:crypto's
+signature, and a BIP-341 key-path signature, through gk:crypto's
 libsecp256k1. It calls `setCrypto(crypto)`. About 8 ms in the simulator.
 
 ## Electrum and fingerprints

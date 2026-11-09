@@ -1,6 +1,6 @@
 // The entropy pad's accounting: dice39's rules, with its constants copied
 // verbatim (vendor/dice.js). The pad itself (DOM code in dice39) is
-// rewritten for zg:ui in main.js.
+// rewritten for gk:ui in main.js.
 //
 // A mouse press scores BITS_PER_TAP, a drag point BITS_PER_DRAG_POINT, and a
 // drag counts only if it moved far enough, late enough after the last
@@ -24,7 +24,7 @@ export function newPad() {
   return { samples: [], bits: 0, last: null, lastTime: -Infinity };
 }
 
-// ev: a zg:ui press or drag event ({ pointer, x, y, time }). kind: "tap" or
+// ev: a gk:ui press or drag event ({ pointer, x, y, time }). kind: "tap" or
 // "drag". Returns whether the sample was accepted.
 export function addPadSample(pad, ev, kind) {
   if (pad.samples.length >= SAMPLE_CAP) return false;

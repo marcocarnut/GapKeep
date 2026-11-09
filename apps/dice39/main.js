@@ -4,13 +4,13 @@
 // tools/extract_dice39.py; this file is only the user interface. See
 // ./vendor/*.js for the provenance header (source file and its SHA-256).
 //
-// The text is translated (zg:i18n, lang/<language>.json; most of it in
+// The text is translated (gk:i18n, lang/<language>.json; most of it in
 // lib/strings.js). The log stays in English, and holds no secret.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as zgcrypto from "zg:crypto";
-import { t, plural } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as gkcrypto from "gk:crypto";
+import { t, plural } from "gk:i18n";
 import "./lib/cryptoshim.js";
 import { BIP39_WORDS } from "./vendor/wordlist.js";
 import { buildMnemonic, importMnemonic, PHRASE_SIZES, concatBytes, sha256 } from "./vendor/bip39core.js";
@@ -25,7 +25,7 @@ import { S } from "./lib/strings.js";
 import { setCrypto } from "./lib/crypto.js";
 import { accountKey, MAX_ACCOUNT } from "./lib/pubkey.js";
 
-setCrypto(zgcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
+setCrypto(gkcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
 
 const GREEN = "#66bb6a", AMBER = "#ffb300", RED = "#ef5350", MUTED = "#8a9199";
 const WORDS = new Set(BIP39_WORDS);
@@ -453,7 +453,7 @@ async function onGenerate() {
   const n = countWords();
   const userWords = state.fields.slice(0, n).map((f) => f.word);
   try {
-    const baseline = zgcrypto.randomBytes(32);
+    const baseline = gkcrypto.randomBytes(32);
     // dice39 hashes the CSPRNG baseline with the pad samples; zerogap adds
     // the key timings after them
     const seed = await sha256(concatBytes(baseline, samplesToBytes(state.pad.samples),
@@ -727,7 +727,7 @@ const SCHEMES = [[2, 3], [2, 4], [3, 5]];
 
 function randomIdentifier() {
   // 4 symbols from the bech32 alphabet; 256 is a multiple of 32, so & 31 is uniform
-  return Array.from(zgcrypto.randomBytes(4), (b) => CODEX32.CX_CHARSET[b & 31]).join("");
+  return Array.from(gkcrypto.randomBytes(4), (b) => CODEX32.CX_CHARSET[b & 31]).join("");
 }
 
 // The last split stays (state.split) while the phrase does: coming back

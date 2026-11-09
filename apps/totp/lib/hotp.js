@@ -1,5 +1,5 @@
 // HOTP (RFC 4226) and TOTP (RFC 6238), on an HMAC given by the caller
-// through setHmac(): zg:crypto's (native) in the app, Node's in the tests.
+// through setHmac(): gk:crypto's (native) in the app, Node's in the tests.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 

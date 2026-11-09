@@ -1,10 +1,10 @@
-// Widget Gallery: shows every zg:ui widget and runs the runtime self-test.
+// Widget Gallery: shows every gk:ui widget and runs the runtime self-test.
 // Every interaction is logged, so tests/*.txt scenarios can check it.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
 import { runSelfTest } from "./selftest.js";
-import { t, tm, plural } from "zg:i18n";
+import { t, tm, plural } from "gk:i18n";
 
 ui.screen.set({ padding: 0, gap: 0 });
 

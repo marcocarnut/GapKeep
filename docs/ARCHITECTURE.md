@@ -9,7 +9,7 @@ no radio; the SD card is read once at boot, for the apps, and never written.
  ┌──────────────────────────────────────────────────────────────┐
  │  apps/*            JavaScript apps (launcher, dice39, ...)   │
  ├──────────────────────────────────────────────────────────────┤
- │  src/runtime       app host · zg:ui · zg:sys · zg:apps        │
+ │  src/runtime       app host · gk:ui · gk:sys · gk:apps        │
  │                    QuickJS (third_party/quickjs)              │
  │                    LVGL (circle/addon/lvgl, lib/lvgl config)  │
  ├──────────────────────────────────────────────────────────────┤
@@ -59,7 +59,7 @@ Runs one app at a time. Starting an app:
 1. A new **QuickJS runtime** with a 96 MB heap limit, a 512 KB stack limit, a
    module loader and an interrupt handler (watchdog and Home key).
 2. A new **LVGL screen** and **focus group**; the keyboard is pointed at it.
-3. The app's entry module is evaluated. It imports `zg:*` modules (created
+3. The app's entry module is evaluated. It imports `gk:*` modules (created
    on demand, permission-checked) and its own files (from memory).
 
 Stopping an app (exit, Home, or launching another) deletes its screen, which
@@ -97,17 +97,17 @@ handler" safe.
 All properties are described by one table; constructors, `set()` and the
 per-type property accessors all go through it, with strict validation.
 
-The wall clock (`clock.cpp`, `zg:clock` in `js_clock.cpp`) is kept by the
+The wall clock (`clock.cpp`, `gk:clock` in `js_clock.cpp`) is kept by the
 kernel from the system timer, with a trim and a UTC offset; see
 [CLOCK.md](CLOCK.md).
 
-The session store (`session.cpp`, `zg:session` in `js_session.cpp`) keeps
+The session store (`session.cpp`, `gk:session` in `js_session.cpp`) keeps
 values for each app across its runs, in the kernel's heap, until power-off.
 Entries are filed under the app's id and hash; values are serialized by
 QuickJS's object writer (plain data only: no bytecode, no references) and
 copied in and out. Every byte is overwritten before it is freed.
 
-Languages (`i18n.cpp`, `zg:i18n`): the language and number marks are the
+Languages (`i18n.cpp`, `gk:i18n`): the language and number marks are the
 system's (`zerogap.txt`, or the Settings app until power-off). When an app
 starts, its catalog (`lang/<language>.json`, with `lang/pt.json` under
 `lang/pt-BR.json`) is parsed with `JSON.parse`, never evaluated, and each
@@ -115,7 +115,7 @@ translation checked (the same `{names}` as its key, no control or bidi
 characters); what passes is kept in a null-prototype object. The module
 itself is JavaScript, `src/runtime/i18n.js`, embedded by
 `tools/embed_js.py` and compiled when an app imports it; its native half,
-`zg:i18n-native`, can be imported by it alone. The launcher's catalogs are
+`gk:i18n-native`, can be imported by it alone. The launcher's catalogs are
 the system's: they translate the module's own messages.
 
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
@@ -136,7 +136,7 @@ HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1 and
 SHA-512) run before their first use, and disable them if they fail. Every
 context and buffer that held key material is overwritten after use. The
 hardware RNG wrapper (`hwrng.*`) applies NIST SP 800-90B health tests to
-every raw byte and conditions output through SHA-256; see `zg:crypto` in
+every raw byte and conditions output through SHA-256; see `gk:crypto` in
 [API.md](API.md).
 
 RIPEMD-160 (`ripemd160.*`, from its authors' paper, with HASH160) and
@@ -145,7 +145,7 @@ PBKDF2 (`pbkdf2.*`, RFC 8018, over `gk_hash_t`) are checked the same way
 (`third_party/secp256k1`, pinned to a release; built by
 `lib/secp256k1/secp256k1.mk` with the extrakeys and schnorrsig modules and
 a 16 KiB verification table, about 100 KiB of code and tables in all).
-`secp.*` turns its opaque structures into bytes for `zg:crypto`: ECDSA
+`secp.*` turns its opaque structures into bytes for `gk:crypto`: ECDSA
 with RFC 6979 nonces, low S and Bitcoin Core's low-R grinding, BIP-340,
 and the BIP-32 and Taproot tweaks. Its context lives in a static buffer
 (no allocation), is blinded with random bytes, and halts the system on an

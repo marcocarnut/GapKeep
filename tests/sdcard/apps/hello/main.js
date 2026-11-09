@@ -1,7 +1,7 @@
 // Hello: the example from docs/APPS.md.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
 
 new ui.Label({ text: "Hello, air gap!", font: 28 });
 

@@ -7,7 +7,7 @@
 // A Message is a String: its English, the key with the params filled in, as
 // the libraries always wrote it (tests and logs read that). It also keeps
 // the key and the params, so the app can say it in the person's language
-// (lib/psbt/view.js, say()): zg:i18n's t() with the same key, amounts
+// (lib/psbt/view.js, say()): gk:i18n's t() with the same key, amounts
 // formatted the language's way. Params may be Messages themselves.
 //
 // The keys are string literals in calls of t() and plural(), as

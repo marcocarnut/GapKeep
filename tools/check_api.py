@@ -88,7 +88,7 @@ def main():
 
     widget_names = [w['name'] for w in ui['widgets']]
     ui_exports = [e['name'] for e in ui['exports'] if e.get('kind') != 'classes'] + widget_names
-    compare('zg:ui exports', ui_exports, real['modules']['zg:ui'])
+    compare('gk:ui exports', ui_exports, real['modules']['gk:ui'])
     for mod in spec['modules']:
         compare('%s exports' % mod['name'], [e['name'] for e in mod['exports']], real['modules'][mod['name']])
 

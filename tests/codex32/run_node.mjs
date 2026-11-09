@@ -3,7 +3,7 @@
 // The app's self-test (every BIP-93 test vector, valid and invalid), then
 // what is too slow for a Pi Zero at start-up: every single-character typo
 // of every valid vector's shares must be refused, and pointed at. And the
-// app's own wording of the errors (lib/messages.js, through zg:i18n): in
+// app's own wording of the errors (lib/messages.js, through gk:i18n): in
 // English the library's, word for word; in pt-BR translated, nothing left out.
 import { webcrypto } from "node:crypto";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -73,16 +73,16 @@ console.log(`codex32: dice39 threshold-0 bug ${upstream}`);
 
 // --- the app's wording of the errors -------------------------------------------
 //
-// zg:i18n is the runtime's src/runtime/i18n.js with tests/i18n/fake_native.mjs
+// gk:i18n is the runtime's src/runtime/i18n.js with tests/i18n/fake_native.mjs
 // (as tests/i18n/run_node.mjs runs it), and lib/messages.js imports it.
 const dir = mkdtempSync(join(tmpdir(), "zg-codex32-"));
 const native = new URL("../i18n/fake_native.mjs", import.meta.url);
 writeFileSync(join(dir, "i18n.mjs"), readFileSync(new URL("../../src/runtime/i18n.js", import.meta.url), "utf8")
-  .replace(`from "zg:i18n-native"`, `from ${JSON.stringify(native.href)}`));
+  .replace(`from "gk:i18n-native"`, `from ${JSON.stringify(native.href)}`));
 const lib = new URL("../../apps/codex32/lib/", import.meta.url);
 for (const name of ["messages", "strings"]) {
   writeFileSync(join(dir, `${name}.mjs`), readFileSync(new URL(`${name}.js`, lib), "utf8")
-    .replace(`from "zg:i18n"`, `from ${JSON.stringify(join(dir, "i18n.mjs"))}`));
+    .replace(`from "gk:i18n"`, `from ${JSON.stringify(join(dir, "i18n.mjs"))}`));
 }
 const i18n = await import(join(dir, "i18n.mjs"));
 const { codex32Message } = await import(join(dir, "messages.mjs"));

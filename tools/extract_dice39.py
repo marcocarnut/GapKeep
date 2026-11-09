@@ -180,7 +180,7 @@ def main():
              'isPartialDiceCode', 'diceWordFor', 'SEEDQR_ECC', 'seedQrDigits',
              'compactSeedQrPayload', 'samplesToBytes',
              # entropy pad accounting (the pad itself is DOM code, rewritten
-             # for zg:ui in main.js)
+             # for gk:ui in main.js)
              'BITS_PER_DRAG_POINT', 'BITS_PER_TAP', 'MIN_DRAG_DISTANCE_PX',
              'MIN_SAMPLE_INTERVAL_MS', 'SAMPLE_CAP']
     parts = [extract_decl(text, n) for n in names]

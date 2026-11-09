@@ -1,7 +1,7 @@
 //
 // js_clock.cpp
 //
-// The "zg:clock" module: the wall clock (clock.h). Every app may read it
+// The "gk:clock" module: the wall clock (clock.h). Every app may read it
 // and ask to be called on its marks (every 30 s, ...); only apps with the
 // "rtc" permission may set it, its trim or its UTC offset. See docs/API.md
 // and docs/CLOCK.md.

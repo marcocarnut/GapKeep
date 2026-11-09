@@ -1,7 +1,7 @@
 //
 // js_sys.cpp
 //
-// Globals (console, timers) and the "zg:sys" and "zg:apps" modules.
+// Globals (console, timers) and the "gk:sys" and "gk:apps" modules.
 // See docs/API.md for the JavaScript-side documentation.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -248,7 +248,7 @@ void GkInitGlobals (JSContext *ctx)
 	JS_FreeValue (ctx, Global);
 }
 
-// --- zg:sys -----------------------------------------------------------------
+// --- gk:sys -----------------------------------------------------------------
 
 static JSValue js_sys_uptime (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -429,7 +429,7 @@ JSModuleDef *GkInitSysModule (JSContext *ctx, const char *pName)
 	return m;
 }
 
-// --- zg:apps ----------------------------------------------------------------
+// --- gk:apps ----------------------------------------------------------------
 
 static JSValue js_apps_list (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {

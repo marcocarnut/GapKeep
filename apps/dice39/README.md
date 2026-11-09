@@ -23,7 +23,7 @@ already have a seed phrase stay disabled until it has passed.
 The launcher icon is the favicon of `bip39_generator.html`, converted with
 `python3 tools/make_icon.py favicon.png --manifest apps/dice39/manifest.json`.
 `lib/cryptoshim.js` gives the browser code the two WebCrypto calls it uses,
-backed by `zg:crypto`. `main.js` is the LVGL interface.
+backed by `gk:crypto`. `main.js` is the LVGL interface.
 
 **Device entropy** works as in dice39: the device words come from
 `SHA256(32 random bytes ‖ entropy pad samples)`, and Generate stays
@@ -39,7 +39,7 @@ and only drags that really moved count. Two additions:
   samples. It is not credited on the bar.
 
 The 32 random bytes come from ZeroGap's hardware random generator
-(`zg:crypto`, health-checked and SHA-256 conditioned) instead of
+(`gk:crypto`, health-checked and SHA-256 conditioned) instead of
 `crypto.getRandomValues`.
 
 **A phrase you already have** ("I already have a seed phrase"; the page's

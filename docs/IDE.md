@@ -38,8 +38,8 @@ console (and its camera sends grey).
   unsaved files, a triangle the running app.
 - **Editor** (middle): Monaco, as in VS Code. JavaScript is checked as
   zerogap runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
-  with completions and hovers for `zg:ui`, `zg:sys`, `zg:crypto` and
-  `zg:apps` from `sim/web/types/zerogap.d.ts`. `manifest.json` is checked
+  with completions and hovers for `gk:ui`, `gk:sys`, `gk:crypto` and
+  `gk:apps` from `sim/web/types/zerogap.d.ts`. `manifest.json` is checked
   against the manifest's rules (keys, id, icon names).
 - **Screen** (right): zerogap's screen at its true size, scaled to fit in
   whole steps when it fits. **Run** saves everything, boots a fresh machine
@@ -143,7 +143,7 @@ The launcher is an app too (`apps/launcher` in the repository), but built
 into zerogap rather than read from the card: the device refuses a card app
 named `launcher`. In the IDE, `launcher` (marked *built in*) is a copy you
 can edit: at each boot it replaces the built-in launcher, in the simulator
-only, with the built-in launcher's rights (`zg:apps`). Restart or Run shows
+only, with the built-in launcher's rights (`gk:apps`). Restart or Run shows
 your changes.
 
 zerogap starts with the launcher, so a launcher that fails to load stops

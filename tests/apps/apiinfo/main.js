@@ -1,13 +1,13 @@
 // Dumps the JavaScript API this runtime really has, as JSON log lines
 // ("apiinfo <part>: ..."), for tools/check_api.py to compare with
 // docs/api/zerogap-api.yaml. Test builds only.
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as crypto from "zg:crypto";
-import * as apps from "zg:apps";
-import * as clock from "zg:clock";
-import * as session from "zg:session";
-import * as i18n from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as crypto from "gk:crypto";
+import * as apps from "gk:apps";
+import * as clock from "gk:clock";
+import * as session from "gk:session";
+import * as i18n from "gk:i18n";
 
 // own members of a prototype: methods, and accessors with get/set
 function members(proto) {
@@ -30,13 +30,13 @@ for (const [name, value] of Object.entries(ui)) {
 
 const info = {
   modules: {
-    "zg:ui": Object.keys(ui).sort(),
-    "zg:sys": Object.keys(sys).sort(),
-    "zg:crypto": Object.keys(crypto).sort(),
-    "zg:apps": Object.keys(apps).sort(),
-    "zg:clock": Object.keys(clock).sort(),
-    "zg:session": Object.keys(session).sort(),
-    "zg:i18n": Object.keys(i18n).sort(),
+    "gk:ui": Object.keys(ui).sort(),
+    "gk:sys": Object.keys(sys).sort(),
+    "gk:crypto": Object.keys(crypto).sort(),
+    "gk:apps": Object.keys(apps).sort(),
+    "gk:clock": Object.keys(clock).sort(),
+    "gk:session": Object.keys(session).sort(),
+    "gk:i18n": Object.keys(i18n).sort(),
   },
   base: members(ui.Widget.prototype),
   widgets,

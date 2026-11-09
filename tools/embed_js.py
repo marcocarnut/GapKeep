@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Embeds a system module written in JavaScript (src/runtime/i18n.js, the
-module "zg:i18n") into the kernel and the simulator, as a C string:
+module "gk:i18n") into the kernel and the simulator, as a C string:
 
     const char <symbol>[] = "...";
     const unsigned <symbol>_size = <bytes>;

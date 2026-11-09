@@ -25,8 +25,8 @@ expect i18ntest context: "Abrir"
 expect i18ntest recolor: "Cor #ff0000 texto#"
 # the manifest's name in the language; the description's translation refused
 expect i18ntest name: "teste de i18n"
-expect i18ntest description: "Test app: zg:i18n and the checks on catalogs \(tests/i18n.txt\)."
-expect i18ntest lang/pt-BR.json: "Test app: zg:i18n and the checks on cata\.\.\.": the translation has a control or bidi character
+expect i18ntest description: "Test app: gk:i18n and the checks on catalogs \(tests/i18n.txt\)."
+expect i18ntest lang/pt-BR.json: "Test app: gk:i18n and the checks on cata\.\.\.": the translation has a control or bidi character
 # refused, each logged: English instead
 expect i18ntest lang/pt-BR.json: "Send \{amount\}": the translation hasn't the same \{names\} as its key
 expect i18ntest lang/pt-BR.json: "Fee \{fee\}": the translation hasn't the same \{names\} as its key
@@ -48,7 +48,7 @@ expect i18ntest Control: "Bell"
 expect i18ntest Number: "A number"
 expect i18ntest Empty: "Not translated yet"
 expect i18ntest Unknown: "Not in any catalog"
-# the rest of zg:i18n, in pt-BR
+# the rest of gk:i18n, in pt-BR
 expect i18ntest plural: \["0 codes","1 code","2 codes"\]
 expect i18ntest numbers: \["1\.234\.567,5","2\.100\.000\.000\.000\.000","1,23456789"\]
 expect i18ntest parseBtc: 123450000000
@@ -56,7 +56,7 @@ expect i18ntest parseBtc error: "“1\.000” pode ser lido de duas formas
 expect i18ntest date: "2025-11-08 14:03:05 UTC"
 expect i18ntest languages: \[\{"tag":"en","name":"English"\},\{"tag":"pt-BR","name":"Português \(Brasil\)"\}\]
 expect i18ntest setLanguage: "TypeError: setLanguage needs \\"permissions\\": \[\\"settings\\"\]
-expect i18ntest native: "ReferenceError: no system module 'zg:i18n-native'"
+expect i18ntest native: "ReferenceError: no system module 'gk:i18n-native'"
 expect Started i18ntest: modules \d+ ms, catalog \d+\.\d ms
 # the launcher, started again, and the clock, in pt-BR
 mark

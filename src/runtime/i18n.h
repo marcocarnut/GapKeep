@@ -10,17 +10,17 @@
 // text). It comes from the build (make LANGUAGE=pt-BR, the only way for
 // sealed builds), then zerogap.txt ("language = pt-BR"), and can be
 // changed while running, until reboot, by an app with the "settings"
-// permission (zg:i18n's setLanguage).
+// permission (gk:i18n's setLanguage).
 //
 // A catalog is data: parsed with JSON.parse (QuickJS's JS_ParseJSON), never
 // evaluated, at most 256 KB, and each translation is checked before it is
 // used: same {names} as its key, no control or bidi characters. A
 // translation that fails is logged and the English shown instead. LVGL's
-// recolor ("#ff0000 red#") is never on for zg:ui's labels, so a "#" in a
+// recolor ("#ff0000 red#") is never on for gk:ui's labels, so a "#" in a
 // translation is just a "#".
 //
-// The JavaScript side is src/runtime/i18n.js (the module "zg:i18n"); the
-// functions it needs are the module "zg:i18n-native", which only it may
+// The JavaScript side is src/runtime/i18n.js (the module "gk:i18n"); the
+// functions it needs are the module "gk:i18n-native", which only it may
 // import.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -85,7 +85,7 @@ private:
 	static boolean s_bDecimalSet, s_bGroupSet;
 };
 
-JSModuleDef *GkInitI18nModule (JSContext *pContext, const char *pName);		// "zg:i18n"
-JSModuleDef *GkInitI18nNativeModule (JSContext *pContext, const char *pName);	// "zg:i18n-native"
+JSModuleDef *GkInitI18nModule (JSContext *pContext, const char *pName);		// "gk:i18n"
+JSModuleDef *GkInitI18nNativeModule (JSContext *pContext, const char *pName);	// "gk:i18n-native"
 
 #endif

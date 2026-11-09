@@ -6,8 +6,8 @@
 // next 27 s. The button sets 2000000007 instead, 3 s before that step ends,
 // to see a code change at the period mark.
 
-import * as ui from "zg:ui";
-import * as clock from "zg:clock";
+import * as ui from "gk:ui";
+import * as clock from "gk:clock";
 
 function set(seconds) {
   const s = clock.set(seconds * 1000);

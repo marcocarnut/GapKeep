@@ -20,7 +20,7 @@ one word, so "frase-senha" is not "senha".
 - Never translated: ZeroGap, GapWallet, dice39, codex32, BIP numbers, script
   and key formats (P2WPKH, zpub, xpub, Base43, BBQr), units (BTC, sat,
   sat/vB), network names (mainnet, testnet, signet).
-- Numbers, amounts and dates come from zg:i18n (`formatBtc`, `formatDate`...),
+- Numbers, amounts and dates come from gk:i18n (`formatBtc`, `formatDate`...),
   never typed into a translation.
 
 ## Terms

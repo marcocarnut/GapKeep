@@ -3,7 +3,7 @@
   "$app": "gallery",
   "messages": {
     "Widget Gallery": "Galeria de widgets",
-    "Every zg:ui widget, plus a self-test of the runtime.": "Todos os widgets do zg:ui, e um autoteste do sistema.",
+    "Every gk:ui widget, plus a self-test of the runtime.": "Todos os widgets do gk:ui, e um autoteste do sistema.",
     "Inputs": "Entradas",
     "Letters only (accept)": "Só letras (accept)",
     "Checkbox": "Caixa de seleção",

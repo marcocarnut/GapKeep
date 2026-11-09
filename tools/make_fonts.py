@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerates zerogap's fonts, src/runtime/fonts/gk_montserrat_*.c, gk_mono_*.c and gk_ttf_*.c.
 
-The ten sizes zg:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
+The ten sizes gk:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
 Montserrat Medium for text and Font Awesome Free for LVGL's icons
 (lv_symbol_def.h), converted by lv_font_conv 1.5.3 the way LVGL converts
 its own built-in fonts (4 bpp, uncompressed, kerning by classes).
@@ -40,7 +40,7 @@ FONTTOOLS_VERSION; Debian's python3-fonttools), which makes its tables
 small enough for plain lookups, and the Extension lookups are unwrapped.
 The outlines and hinting are kept: the glyphs are the same.
 
-The monospaced font (zg:ui's "mono", for addresses, keys, hex and code):
+The monospaced font (gk:ui's "mono", for addresses, keys, hex and code):
 JetBrains Mono 2.304 Medium, the weight whose stems match Montserrat
 Medium's (1.57 px against 1.60 at 16 px; Regular's are 1.43), in
 MONO_SIZES, with Basic Latin and Latin-1. It has the same line height and

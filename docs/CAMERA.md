@@ -5,7 +5,7 @@ other than the keyboard. Apps use one widget, `ui.Scanner`: they say what
 to look for, and get what the kernel found, nothing else:
 
 ```js
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 const scanner = new ui.Scanner({
   detect: ["qr"],                          // what to look for

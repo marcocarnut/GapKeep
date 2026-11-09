@@ -16,10 +16,10 @@ extern "C" {
 #endif
 
 /* permission bits, granted by "permissions" in manifest.json */
-#define GK_PERM_APPS	(1u << 0)	/* zg:apps - list and launch other apps */
-#define GK_PERM_RTC	(1u << 2)	/* zg:clock's set, setTrim, setUtcOffset */
+#define GK_PERM_APPS	(1u << 0)	/* gk:apps - list and launch other apps */
+#define GK_PERM_RTC	(1u << 2)	/* gk:clock's set, setTrim, setUtcOffset */
 #define GK_PERM_CAMERA	(1u << 1)	/* ui.Scanner - the camera, for QR codes and such */
-#define GK_PERM_SETTINGS (1u << 3)	/* zg:i18n's setLanguage, setMarks, setKeyboard */
+#define GK_PERM_SETTINGS (1u << 3)	/* gk:i18n's setLanguage, setMarks, setKeyboard */
 
 typedef struct
 {

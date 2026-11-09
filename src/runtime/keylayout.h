@@ -14,7 +14,7 @@
 // build (make KEYBOARD=br-abnt2, the default before zerogap.txt; the only
 // way for sealed builds, which read no card), from a test build's serial
 // line ("#keyboard br-abnt2"), and while running by GkKeyLayoutSet (for
-// zg:i18n's setKeyboard). A change lasts until reboot: nothing is written.
+// gk:i18n's setKeyboard). A change lasts until reboot: nothing is written.
 //
 // What apps get is UTF-8: ui.onKey's key names, and the text typed into a
 // TextArea.

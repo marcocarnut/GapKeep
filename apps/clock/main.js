@@ -7,15 +7,15 @@
 // the trim that cancels it can be applied here, and written into the
 // card's zerogap.txt (from another computer) so it survives reboots.
 //
-// Its text is translated (zg:i18n, lang/<language>.json): an example of an
+// Its text is translated (gk:i18n, lang/<language>.json): an example of an
 // app in more than one language (docs/APPS.md, "Languages"). Numbers on
 // screen are written the language's way; the zerogap.txt lines it shows are
 // not, since that file is read the same way whatever the language.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as clock from "zg:clock";
-import { t, formatDate, formatTime, formatDateTime, formatNumber, parseNumber } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as clock from "gk:clock";
+import { t, formatDate, formatTime, formatDateTime, formatNumber, parseNumber } from "gk:i18n";
 
 const pad = (n, w = 2) => String(n).padStart(w, "0");
 const DAYS = [

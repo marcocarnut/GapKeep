@@ -3,14 +3,14 @@
 A zerogap app is a small JavaScript program with a manifest, in a folder of
 its own. It is either copied to the `apps` folder of the SD card or built
 into the system image, shows up in the launcher, and talks to the system only
-through a few documented modules (`zg:ui`, `zg:sys`, ...). This guide walks
+through a few documented modules (`gk:ui`, `gk:sys`, ...). This guide walks
 through writing one; [API.md](API.md) is the full reference.
 
 ## What you get, and what you don't
 
 - **Modern JavaScript** (ES2023 via [QuickJS](https://bellard.org/quickjs/)):
   modules, classes, async/await, BigInt, typed arrays, destructuring...
-- **A widget toolkit** (`zg:ui`) drawn by [LVGL](https://lvgl.io): labels,
+- **A widget toolkit** (`gk:ui`) drawn by [LVGL](https://lvgl.io): labels,
   buttons, text fields, tables, QR codes, tabs, alerts.
 - **A keyboard and a mouse.** Every widget can be reached with Tab and
   activated with Enter or Space.
@@ -44,7 +44,7 @@ apps/
 `main.js`:
 
 ```js
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 let count = 0;
 const label = new ui.Label({ text: "0 clicks", font: 28 });
@@ -84,7 +84,7 @@ handlers and timers.
 | `description` | no | One line for the launcher tile. |
 | `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
-| `permissions` | no | Extra rights: `"apps"` (import `zg:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
+| `permissions` | no | Extra rights: `"apps"` (import `gk:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 | `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `zerogap.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 
@@ -194,7 +194,7 @@ A Label made with `markup: true` takes Pango-style markup, for a few
 words in another style:
 
 ```js
-import { tm } from "zg:i18n";
+import { tm } from "gk:i18n";
 
 new ui.Label({
   markup: true,
@@ -287,7 +287,7 @@ follow each language's glossary, [i18n/pt-BR.md](i18n/pt-BR.md) for
 Brazilian Portuguese, so a term has one name in every app.
 
 ```js
-import { t, plural, formatBtc } from "zg:i18n";
+import { t, plural, formatBtc } from "gk:i18n";
 
 new ui.Label({ text: t("Sign this transaction?") });
 say(t("Send {amount} BTC to {address}?", { amount: formatBtc(sats), address }));
@@ -321,7 +321,7 @@ apps/myapp/
 
 `notes` is for translators; the runtime ignores it. The manifest's `name`
 and `description` are keys too: their translations go in the catalog, not
-in manifest.json, and the launcher (`zg:apps`' `list()`) and `sys.app` show
+in manifest.json, and the launcher (`gk:apps`' `list()`) and `sys.app` show
 them in the language, with the same checks (and no line breaks). Leave out
 a name that is a product's (`dice39`): it stays as it is. `tools/i18n.py` keeps
 catalogs in step with the code:
@@ -340,7 +340,7 @@ no translation, translations no longer used, and those the runtime would
 refuse; `tools/run_sim_tests.sh` runs it for every app with a `lang/`
 folder. Keys must be string literals (or literals joined with `+`):
 `t(variable)` works, but `check` can't see it and says so. Code that can't import
-`zg:i18n` (a library also run under Node) marks its text with a no-op
+`gk:i18n` (a library also run under Node) marks its text with a no-op
 `N_("...")` (`const N_ = (s) => s;`), and the app passes it to `t()`
 later: `check` finds those keys too (`apps/totp/lib/parse.js`).
 
@@ -469,7 +469,7 @@ scenario check it.
   way to clear them.
 - **Check the clock before relying on it.** A Pi Zero has no battery-backed
   clock: the Clock app sets it after each boot, and until then `Date.now()`
-  counts from 1970. `zg:clock`'s `status().set` says which
+  counts from 1970. `gk:clock`'s `status().set` says which
   ([CLOCK.md](CLOCK.md)).
 - **Be keyboard-friendly.** Order widgets so Tab follows the natural flow,
   and focus the first input when a screen appears (`widget.focus()`).

@@ -1,11 +1,11 @@
 // User-facing text. The warnings are dice39's own wording (English), with
 // the HTML taken out: each is [headline, explanation].
 //
-// Translated through zg:i18n (lang/<language>.json): the English is the key.
+// Translated through gk:i18n (lang/<language>.json): the English is the key.
 // The values (counts, bits, odds, tables) are {placeholders}, so a
 // translation can reword a sentence but not change what it shows.
 
-import { t } from "zg:i18n";
+import { t } from "gk:i18n";
 
 export const S = {
   tagline: t("Entropy you see."),

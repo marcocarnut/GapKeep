@@ -1,18 +1,18 @@
-// A transaction's summary as zg:ui widgets: the totals, the warnings, each
-// output and input, the details. The only module of lib/psbt that imports zg:ui;
+// A transaction's summary as gk:ui widgets: the totals, the warnings, each
+// output and input, the details. The only module of lib/psbt that imports gk:ui;
 // the others are pure.
 //
 //   const rows = new Rows(page);          // rows that Tab, arrows, Enter reach
 //   showAnalysis(list, rows, a, { encoding, chars, size }, options)
 //
-// Its text is translated (zg:i18n): amounts, addresses, paths and
+// Its text is translated (gk:i18n): amounts, addresses, paths and
 // fingerprints are always {placeholders}, written the language's way, and
 // the libraries' Messages (../text.js) through tr().
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import * as ui from "zg:ui";
-import { t, plural, formatBtc, formatSats, formatNumber } from "zg:i18n";
+import * as ui from "gk:ui";
+import { t, plural, formatBtc, formatSats, formatNumber } from "gk:i18n";
 import { typeName, sighashName } from "./analyze.js";
 import { NETWORKS, disassemble } from "./script.js";
 import { Message } from "../text.js";

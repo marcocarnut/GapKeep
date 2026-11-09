@@ -63,8 +63,8 @@ def main():
 
     # 3. from the page's own script: the strings (en and pt), entropy to
     # words, and the SeedQR digits (Compact SeedQR is the seed bytes as they
-    # are: zg:ui takes a Uint8Array). The DOM code around them is
-    # rewritten for zg:ui in the app.
+    # are: gk:ui takes a Uint8Array). The DOM code around them is
+    # rewritten for gk:ui in the app.
     line, text = block_starting_with(
         blocks, '/* ==================================================================\n   i18n')
     names = ['STRINGS', 'RECOVER_SIZES', 'wordsFromEntropy', 'hex',

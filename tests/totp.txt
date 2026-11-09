@@ -9,7 +9,7 @@
 #   SHA1,   8 digits, step 66666666: 69279037  03f8ca84c736ba76
 #   SHA256, 8 digits, step 66666666: 90698825  bcb2d91df57850d2
 #   SHA1, 6 digits, JBSWY3DPEHPK3PXP: 890699   3d10ac4a71bb51a0
-# The accounts are kept in the session store (zg:session) between runs.
+# The accounts are kept in the session store (gk:session) between runs.
 expect Keyboard attached 60
 expect launcher ready 60
 
@@ -89,7 +89,7 @@ wait 0.5
 shot 05-details
 key esc
 
-# 6. The code changes on the period mark (zg:clock every): 3 s before it.
+# 6. The code changes on the period mark (gk:clock every): 3 s before it.
 # All four accounts come back
 launch clockset
 key ret

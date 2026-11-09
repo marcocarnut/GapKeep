@@ -25,7 +25,7 @@ Open Font License (`LICENCE.montserrat`, `LICENCE.fontawesome` and
 `LICENCE.jetbrainsmono` on the cards; `tools/make_fonts.py` makes them).
 
 ```js
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 const label = new ui.Label({ text: "Hello, air gap!", font: 28 });
 new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
@@ -34,12 +34,12 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 ## Documentation
 
 - [Writing apps](docs/APPS.md): start here.
-- [API reference](docs/API.md): `zg:ui`, `zg:sys`, `zg:crypto`, `zg:clock`, `zg:session`, `zg:i18n`, `zg:apps`, globals.
+- [API reference](docs/API.md): `gk:ui`, `gk:sys`, `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:apps`, globals.
   Generated from [docs/api/zerogap-api.yaml](docs/api/zerogap-api.yaml), which a
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
 - [Browser IDE](docs/IDE.md): edit and run apps in the browser.
-- [The clock](docs/CLOCK.md): keeping time without a real-time clock; `zg:clock`.
+- [The clock](docs/CLOCK.md): keeping time without a real-time clock; `gk:clock`.
 - [The camera and QR codes](docs/CAMERA.md): `ui.Scanner`, and testing it without a camera.
 - [Guide for coding agents](docs/AGENTS.md): writing apps with an AI agent.
 - [Architecture and security model](docs/ARCHITECTURE.md)
@@ -128,17 +128,17 @@ activates, and the Windows (Super) key always returns to the launcher.
 ## Status
 
 - [x] Step 1: LVGL on the framebuffer, USB keyboard and mouse
-- [x] Step 2: QuickJS app runtime, `zg:ui` widget API, launcher, docs, tests
-- [x] Step 3: native SHA-256 and a health-checked hardware RNG, with test vectors (`zg:crypto`)
+- [x] Step 2: QuickJS app runtime, `gk:ui` widget API, launcher, docs, tests
+- [x] Step 3: native SHA-256 and a health-checked hardware RNG, with test vectors (`gk:crypto`)
 - [x] Step 4: dice39 logic extracted verbatim (`tools/extract_dice39.py`) and checked: BIP-39 and BIP-93 test vectors, under Node and on the target
 - [x] Step 5: dice39 user interface: dice-code entry, results with verbatim proof, mistake detectors, SeedQR / Compact SeedQR / words QR, codex32 shares
 - [x] Real hardware: every scenario passes on a Pi Zero (v1.3, 512 MB) through the rig ([docs/RIG.md](docs/RIG.md))
 - [x] Apps from the SD card's `apps` folder, checked and hashed at boot; sealed builds with every app built in
 - [x] Simulator (native and WebAssembly) running the same runtime, a browser IDE, an API description checked against the runtime, and a guide for coding agents
 - [x] Step 6: hardening: USB drivers cut to hub, keyboard and mouse, with control-transfer timeouts; no serial port in production; W^X memory protection, stack canaries and a stack guard; reproducible builds with a pinned compiler and firmware; the kernel's hash on screen ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model))
-- [x] Clock with trim and UTC offset (`zg:clock`), the Clock and Authenticator (TOTP) apps
-- [x] Native SHA-1, SHA-512 and HMAC (`zg:crypto`); a per-app session store in RAM (`zg:session`)
-- [x] Bitcoin's primitives in `zg:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
+- [x] Clock with trim and UTC offset (`gk:clock`), the Clock and Authenticator (TOTP) apps
+- [x] Native SHA-1, SHA-512 and HMAC (`gk:crypto`); a per-app session store in RAM (`gk:session`)
+- [x] Bitcoin's primitives in `gk:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
 - [x] The Signer (`apps/signer`): BIP-174/370 PSBTs from Electrum's QR codes, explained; the transaction first, then the keys (codex32 shares, BIP-39 words, xprv, WIF); merges PSBTs; checks change
 - [ ] Experimental: colour QR codes (`"qr-color"`, `apps/colorqr`, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)): read on the simulator, QEMU and a Pi Zero's synthetic camera; the real camera next
 

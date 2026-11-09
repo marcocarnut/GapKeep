@@ -1,10 +1,10 @@
-// Runtime self-test. Exercises the zg:ui object model, timers, promises,
+// Runtime self-test. Exercises the gk:ui object model, timers, promises,
 // modules and permissions. Returns { passed, failed: [names] }.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as crypto from "zg:crypto";
-import * as session from "zg:session";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as crypto from "gk:crypto";
+import * as session from "gk:session";
 import { double } from "./lib/util.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -234,11 +234,11 @@ export async function runSelfTest(parent) {
   await test("permissions", async () => {
     let err = null;
     try {
-      await import("zg:apps");
+      await import("gk:apps");
     } catch (e) {
       err = e;
     }
-    if (!err || !/permission/.test(err.message)) throw new Error("zg:apps was importable: " + err);
+    if (!err || !/permission/.test(err.message)) throw new Error("gk:apps was importable: " + err);
   });
 
   await test("bare imports rejected", async () => {

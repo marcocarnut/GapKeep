@@ -1,21 +1,21 @@
 // The zerogap launcher: lists the apps (built in, then those from the SD
 // card's /apps folder) and starts the chosen one. It is an ordinary app with
-// one extra permission ("apps" in manifest.json), which gives it the zg:apps
+// one extra permission ("apps" in manifest.json), which gives it the gk:apps
 // module.
 //
 // Below the tiles it shows where the focused app came from and its SHA-256
 // (docs/APPS.md, "App hashes"), so it can be checked against a published
 // one before the app is opened, and any app on the card that was not loaded.
 //
-// Its text is translated (zg:i18n, lang/<language>.json). Its catalogs are
+// Its text is translated (gk:i18n, lang/<language>.json). Its catalogs are
 // also the system's: they translate the runtime's own messages, like
-// zg:i18n's parseBtc errors (docs/APPS.md, "Languages").
+// gk:i18n's parseBtc errors (docs/APPS.md, "Languages").
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as apps from "zg:apps";
-import { rngStatus } from "zg:crypto";
-import { t, plural, formatNumber } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as apps from "gk:apps";
+import { rngStatus } from "gk:crypto";
+import { t, plural, formatNumber } from "gk:i18n";
 
 const list = apps.list();
 const card = apps.card();

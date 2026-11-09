@@ -9,13 +9,13 @@
 // Never logged: shares, the secret, the seed, the words. The log goes to the
 // serial port in test builds; it gets counts and sizes only.
 //
-// The text is translated (zg:i18n, lang/<language>.json): the page's in
+// The text is translated (gk:i18n, lang/<language>.json): the page's in
 // lib/strings.js, the library's errors in lib/messages.js. The log stays in
 // English.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import { t, plural } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import { t, plural } from "gk:i18n";
 import "./lib/cryptoshim.js";
 import { RECOVER_SIZES, wordsFromEntropy, hex, SEEDQR_ECC, seedQrDigits } from "./vendor/recover.js";
 import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32.js";
@@ -30,7 +30,7 @@ const ACCEPT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "
 
 const state = {
   page: null,
-  texts: [""],        // what is typed in each box (kept here, never in zg:session)
+  texts: [""],        // what is typed in each box (kept here, never in gk:session)
   committed: [],      // box i was left or submitted: show all of its errors
   fields: [],         // { row, ta, note } of the boxes on screen
   focused: -1,        // the box with the keyboard focus
@@ -333,7 +333,7 @@ function showResult() {
 }
 
 // The place for what a wallet derives from the seed: the master key
-// fingerprint and the xpub, once zg:crypto has PBKDF2 and secp256k1. Mind
+// fingerprint and the xpub, once gk:crypto has PBKDF2 and secp256k1. Mind
 // which seed: these shares (dice39's) carry BIP-39 entropy, so the BIP-32
 // master seed is PBKDF2 of r.words (BIP-39), not r.seed. Shares that follow
 // BIP-93 to the letter carry the BIP-32 master seed itself.

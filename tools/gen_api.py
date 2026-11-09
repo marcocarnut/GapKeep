@@ -58,8 +58,8 @@ def gen_md(spec):
     ui = spec['ui']
     out = ['# ' + spec['title'], '', '<!-- %s -->' % GENERATED, '', spec['intro'].rstrip(), '', '---', '']
 
-    # zg:ui
-    out += ['## zg:ui', '', '```js', ui['import'], '```', '', '### Exports', '',
+    # gk:ui
+    out += ['## gk:ui', '', '```js', ui['import'], '```', '', '### Exports', '',
             '| Name | Type | Description |', '| --- | --- | --- |']
     widget_names = [w['name'] for w in ui['widgets']]
     for e in ui['exports']:
@@ -216,7 +216,7 @@ def gen_ts(spec):
         out.append('type %s = %s;' % (name, body.rstrip().replace('\n', '\n')))
         out.append('')
 
-    out.append('declare module "zg:ui" {')
+    out.append('declare module "gk:ui" {')
     I = '  '
     for t in ui['types']:
         out += doc(t['md'], I) + [I + 'export type %s = %s;' % (t['name'], t['ts'])]

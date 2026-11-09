@@ -1,7 +1,7 @@
 //
 // js_session.cpp
 //
-// The "zg:session" module: values an app keeps across its runs, in RAM,
+// The "gk:session" module: values an app keeps across its runs, in RAM,
 // until the device is switched off (session.h). See docs/API.md.
 //
 // Values are serialized with QuickJS's object writer, without bytecode or

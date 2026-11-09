@@ -1,10 +1,10 @@
-// zg:i18n on the device: its catalog (lang/pt-BR.json over lang/pt.json),
+// gk:i18n on the device: its catalog (lang/pt-BR.json over lang/pt.json),
 // where the runtime refuses some translations, each for its own reason,
 // and the rest of the module, logged for tests/i18n.txt. Test builds only.
-import * as ui from "zg:ui";
-import * as i from "zg:i18n";
-import { tm } from "zg:i18n";
-import * as sys from "zg:sys";
+import * as ui from "gk:ui";
+import * as i from "gk:i18n";
+import { tm } from "gk:i18n";
+import * as sys from "gk:sys";
 
 const show = (s) => JSON.stringify(s);
 const log = (what, value) => console.log(`i18ntest ${what}: ${show(value)}`);
@@ -53,7 +53,7 @@ try {
   log("setLanguage", `${e.name}: ${e.message}`);
 }
 try {
-  await import("zg:i18n-native");
+  await import("gk:i18n-native");
 } catch (e) {
   log("native", `${e.name}: ${e.message}`);
 }

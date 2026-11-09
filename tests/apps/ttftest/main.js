@@ -2,8 +2,8 @@
 // for what TinyTTF's bold and italic cost (tests/ttf.txt): the memory LVGL
 // holds after each is drawn, logged; the drawing times come from the
 // kernel ("#fonts", "#redraw": src/testshot.h).
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
 
 const TEXT = "Pay 0.00123456 BTC to the address below, and check it on another screen " +
   "before you sign: ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789 ç á ã é ü ₿.";

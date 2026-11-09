@@ -1,5 +1,5 @@
 // Tests apps/signer/lib/psbt under Node, with Node's SHA-256 and RIPEMD-160 in
-// place of zg:crypto's, against tests/psbt/vectors.json (sources in
+// place of gk:crypto's, against tests/psbt/vectors.json (sources in
 // tests/psbt/README.md):
 //   node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
 // (the flag: apps/signer has no package.json saying its .js files are modules)
@@ -349,7 +349,7 @@ for (const m of (V.electrum_made && V.electrum_made.made) || []) {
   });
 }
 
-// without RIPEMD-160 (zg:crypto may not have it): the same, with key checks
+// without RIPEMD-160 (gk:crypto may not have it): the same, with key checks
 // reported as not done
 setHashes({ sha256: withRipemd.sha256 });
 for (const m of (V.electrum_made && V.electrum_made.made) || []) {

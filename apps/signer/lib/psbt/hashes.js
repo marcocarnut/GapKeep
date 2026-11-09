@@ -1,4 +1,4 @@
-// The hashes the other modules need, given by the caller (zg:crypto's
+// The hashes the other modules need, given by the caller (gk:crypto's
 // native ones in the app, node:crypto's in the tests), as apps/totp's
 // setHmac does:
 //

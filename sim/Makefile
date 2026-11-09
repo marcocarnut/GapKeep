@@ -143,7 +143,7 @@ ifeq ($(strip $(TEST)),1)
 endif
 	@python3 $(ROOT)/tools/bundle_apps.py $@ $(BUNDLE)
 
-# zg:i18n's JavaScript
+# gk:i18n's JavaScript
 $(OBJDIR)/i18n_js.c: $(ROOT)/src/runtime/i18n.js $(ROOT)/tools/embed_js.py
 	@mkdir -p $(dir $@)
 	@python3 $(ROOT)/tools/embed_js.py $@ gk_i18n_js $<

@@ -125,7 +125,7 @@ ifeq ($(strip $(TEST)),1)
 endif
 	@python3 ../tools/bundle_apps.py $@ $(BUNDLE)
 
-# zg:i18n's JavaScript (src/runtime/i18n.js)
+# gk:i18n's JavaScript (src/runtime/i18n.js)
 generated/i18n_js.c: runtime/i18n.js ../tools/embed_js.py
 	@python3 ../tools/embed_js.py $@ gk_i18n_js runtime/i18n.js
 

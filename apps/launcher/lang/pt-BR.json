@@ -37,8 +37,8 @@
     "sealed": "The SD card's state in a sealed build: every app is built in and the card is not read.",
     "ZeroGap {version} ({build} build)": "{build} is production, sealed, test or simulator, not translated.",
     "apps/{folder} not loaded: {error}": "{error} is the runtime's reason, in English.",
-    "“{text}” could be read two ways. Leave out the thousands separator, and write decimals with {d}: 1000 or 1{d}5.": "zg:i18n's parseNumber and parseBtc: {text} is what the person typed, {d} the decimal mark.",
-    "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "zg:i18n's parseNumber and parseBtc: {d} is the decimal mark, {g} the thousands separator.",
+    "“{text}” could be read two ways. Leave out the thousands separator, and write decimals with {d}: 1000 or 1{d}5.": "gk:i18n's parseNumber and parseBtc: {text} is what the person typed, {d} the decimal mark.",
+    "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "gk:i18n's parseNumber and parseBtc: {d} is the decimal mark, {g} the thousands separator.",
     "Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):": "In the system info (key i); the hash follows on the next line."
   }
 }

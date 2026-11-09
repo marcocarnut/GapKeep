@@ -595,15 +595,15 @@ int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)
 
 // --- modules ----------------------------------------------------------------
 //
-// "zg:..." names are system modules. Everything else must be a relative path
+// "gk:..." names are system modules. Everything else must be a relative path
 // ("./util.js", "../lib/x.js") resolved inside the app's own files.
 
 char *CAppHost::ModuleNormalize (JSContext *pContext, const char *pBase, const char *pName, void *pParam)
 {
-	if (strncmp (pName, "zg:", 3) == 0)
+	if (strncmp (pName, "gk:", 3) == 0)
 	{
-		// zg:i18n's own native half
-		if (strcmp (pName, "zg:i18n-native") == 0 && strcmp (pBase, "zg:i18n") != 0)
+		// gk:i18n's own native half
+		if (strcmp (pName, "gk:i18n-native") == 0 && strcmp (pBase, "gk:i18n") != 0)
 		{
 			JS_ThrowReferenceError (pContext, "no system module '%s'", pName);
 			return 0;
@@ -616,7 +616,7 @@ char *CAppHost::ModuleNormalize (JSContext *pContext, const char *pBase, const c
 	{
 		JS_ThrowReferenceError (pContext,
 			"cannot import '%s': use a relative path ('./%s') for the app's own files "
-			"or 'zg:...' for system modules", pName, pName);
+			"or 'gk:...' for system modules", pName, pName);
 		return 0;
 	}
 
@@ -687,45 +687,45 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	TGkApp *pApp = GetApp (pContext);
 	assert (pApp != 0);
 
-	if (strcmp (pName, "zg:ui") == 0)
+	if (strcmp (pName, "gk:ui") == 0)
 	{
 		return GkInitUIModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:sys") == 0)
+	if (strcmp (pName, "gk:sys") == 0)
 	{
 		return GkInitSysModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:crypto") == 0)
+	if (strcmp (pName, "gk:crypto") == 0)
 	{
 		return GkInitCryptoModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:clock") == 0)
+	if (strcmp (pName, "gk:clock") == 0)
 	{
 		return GkInitClockModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:session") == 0)
+	if (strcmp (pName, "gk:session") == 0)
 	{
 		return GkInitSessionModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:i18n") == 0)
+	if (strcmp (pName, "gk:i18n") == 0)
 	{
 		return GkInitI18nModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:i18n-native") == 0)	// only for zg:i18n (ModuleNormalize)
+	if (strcmp (pName, "gk:i18n-native") == 0)	// only for gk:i18n (ModuleNormalize)
 	{
 		return GkInitI18nNativeModule (pContext, pName);
 	}
-	if (strcmp (pName, "zg:apps") == 0)
+	if (strcmp (pName, "gk:apps") == 0)
 	{
 		if (!(pApp->pBundle->permissions & GK_PERM_APPS))
 		{
 			JS_ThrowReferenceError (pContext,
-				"'zg:apps' requires the \"apps\" permission in manifest.json");
+				"'gk:apps' requires the \"apps\" permission in manifest.json");
 			return 0;
 		}
 		return GkInitAppsModule (pContext, pName);
 	}
-	if (strncmp (pName, "zg:", 3) == 0)
+	if (strncmp (pName, "gk:", 3) == 0)
 	{
 		JS_ThrowReferenceError (pContext, "no system module '%s'", pName);
 		return 0;

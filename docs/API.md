@@ -7,13 +7,13 @@ modules below, imported by name:
 
 | Module | Available to | Purpose |
 | --- | --- | --- |
-| [`zg:ui`](#zgui) | every app | Widgets, layout, input, alerts |
-| [`zg:sys`](#zgsys) | every app | App info, versions, uptime, memory, exit |
-| [`zg:crypto`](#zgcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
-| [`zg:clock`](#zgclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
-| [`zg:session`](#zgsession) | every app | Values kept across the app's runs, in RAM, until power-off |
-| [`zg:i18n`](#zgi18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
-| [`zg:apps`](#zgapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
+| [`gk:ui`](#gkui) | every app | Widgets, layout, input, alerts |
+| [`gk:sys`](#gksys) | every app | App info, versions, uptime, memory, exit |
+| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
+| [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
+| [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
+| [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
+| [`gk:apps`](#gkapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
 `clearTimeout` and `clearInterval`, and the standard JavaScript library
@@ -24,10 +24,10 @@ Paths are resolved inside the app's directory; `..` cannot leave it.
 
 ---
 
-## zg:ui
+## gk:ui
 
 ```js
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 ```
 
 ### Exports
@@ -44,7 +44,7 @@ import * as ui from "zg:ui";
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |
 | `theme(options)` | function | Change colors. [Details](#uitheme). |
-| `escapeMarkup(text)` | function | The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `zg:i18n`'s `tm()`. |
+| `escapeMarkup(text)` | function | The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`'s `tm()`. |
 
 ### Creating widgets
 
@@ -196,7 +196,7 @@ Text: one line or wrapped; with `markup: true`, in several styles.
 | --- | --- | --- |
 | `text` | string | *Readable*. May contain `\n` and `ui.symbols`. With `markup`, it is markup (below), and reads back as it was set. |
 | `overflow` | `"wrap"`, `"clip"`, `"dots"`, `"scroll"`, `"scroll-circular"` | What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). |
-| `markup` | boolean | *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`'s `tm()`. [Markup](APPS.md#markup). |
+| `markup` | boolean | *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). |
 
 #### Button
 
@@ -410,10 +410,10 @@ names are valid for `icon` in `manifest.json`.
 
 ---
 
-## zg:sys
+## gk:sys
 
 ```js
-import * as sys from "zg:sys";
+import * as sys from "gk:sys";
 ```
 
 | Name | Description |
@@ -429,10 +429,10 @@ import * as sys from "zg:sys";
 
 ---
 
-## zg:crypto
+## gk:crypto
 
 ```js
-import * as crypto from "zg:crypto";
+import * as crypto from "gk:crypto";
 ```
 
 | Name | Description |
@@ -502,20 +502,20 @@ supplement to entropy the person provides (dice, coins), not a replacement.
 To run code written for WebCrypto unchanged, give it a small adapter:
 
 ```js
-import * as zgcrypto from "zg:crypto";
+import * as gkcrypto from "gk:crypto";
 globalThis.crypto = {
-  getRandomValues: zgcrypto.getRandomValues,
-  subtle: { digest: async (alg, data) => ({ "SHA-1": zgcrypto.sha1, "SHA-256": zgcrypto.sha256,
-                                             "SHA-512": zgcrypto.sha512 })[alg](data).buffer },
+  getRandomValues: gkcrypto.getRandomValues,
+  subtle: { digest: async (alg, data) => ({ "SHA-1": gkcrypto.sha1, "SHA-256": gkcrypto.sha256,
+                                             "SHA-512": gkcrypto.sha512 })[alg](data).buffer },
 };
 ```
 
 ---
 
-## zg:clock
+## gk:clock
 
 ```js
-import * as clock from "zg:clock";
+import * as clock from "gk:clock";
 ```
 
 The wall clock, kept by the system whatever app runs. A Pi Zero has no
@@ -539,10 +539,10 @@ saving rules). Every app may read it; setting it needs
 
 ---
 
-## zg:session
+## gk:session
 
 ```js
-import * as session from "zg:session";
+import * as session from "gk:session";
 ```
 
 Values an app keeps across its runs: leave it, use other apps, come back,
@@ -581,10 +581,10 @@ a way to forget them (`clear()`).
 
 ---
 
-## zg:i18n
+## gk:i18n
 
 ```js
-import { t, plural } from "zg:i18n";
+import { t, plural } from "gk:i18n";
 
 new ui.Label({ text: t("Sign this transaction?") });
 ui.alert(t("Signed {n} of {total} inputs.", { n, total }));
@@ -625,13 +625,13 @@ the change, and at once to the app that made it, through
 | `formatBtc(sats, { decimals = 8 }?)` | Satoshis as BTC, never through floating point: `1.23456789`, `20.999.999,97690000`. `decimals` (0 to 8) is the least shown: trailing zeros beyond it are left out, other digits never are (`formatBtc(120000000, { decimals: 0 })` is `1.2`). No unit: write `"{amount} BTC"` in the text, so a translation can move it. |
 | `parseNumber(text)` | A number as typed, with a sign if any. What could be read two ways is refused (`"1.000"` in Portuguese, `"1,000"` in English: one or a thousand?); a lone mark that can't be a thousands separator (`0.001`, `1,5`) is the decimal mark in any language; several marks must be the language's thousands, properly grouped. Refusals are a `RangeError` whose message, translated, says what to type. |
 | `parseBtc(text)` | An amount in BTC as typed, in whole satoshis (a Number: 21 million BTC fit exactly), with the rules of `parseNumber`; no sign, at most 8 decimals, at most 21,000,000 BTC. |
-| `formatDateTime(seconds, { utc }?)` | ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock's local time ([`zg:clock`](#zgclock)'s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped. |
+| `formatDateTime(seconds, { utc }?)` | ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock's local time ([`gk:clock`](#gkclock)'s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped. |
 | `formatDate(seconds, { utc }?)` | `2026-11-08`, as `formatDateTime`. |
 | `formatTime(seconds, { utc }?)` | `14:03:05`, as `formatDateTime`. |
 
 ---
 
-## zg:apps
+## gk:apps
 
 Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
 throws a `ReferenceError`. Used by the launcher.
@@ -653,9 +653,9 @@ throws a `ReferenceError`. Used by the launcher.
 | `clearTimeout(id)`, `clearInterval(id)` | Unknown ids are ignored. |
 
 Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage` (see
-[`zg:session`](#zgsession)),
+[`gk:session`](#gksession)),
 `require`, `process`, the DOM, and the global `crypto` object (use
-[`zg:crypto`](#zgcrypto)).
+[`gk:crypto`](#gkcrypto)).
 
 ---
 

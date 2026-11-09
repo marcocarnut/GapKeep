@@ -465,7 +465,7 @@ const MANIFEST_SCHEMA = {
       ],
     },
     entry: { type: "string", description: "Entry module (default main.js)." },
-    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc"] }, description: "Extra rights: \"apps\" (zg:apps), \"camera\" (ui.Scanner), \"rtc\" (setting zg:clock)." },
+    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc"] }, description: "Extra rights: \"apps\" (gk:apps), \"camera\" (ui.Scanner), \"rtc\" (setting gk:clock)." },
     hidden: { type: "boolean", description: "true: not listed in the launcher." },
   },
 };
@@ -474,7 +474,7 @@ async function setupEditor () {
   monaco = await loadMonaco ();
 
   // JavaScript as zerogap runs it: ES2023 modules on QuickJS, no DOM. The
-  // zg:* modules and the few globals (console, timers) come from
+  // gk:* modules and the few globals (console, timers) come from
   // zerogap.d.ts. (monaco.typescript is new in 0.55; older: languages.typescript.)
   const ts = monaco.typescript || monaco.languages.typescript;
   const js = ts.javascriptDefaults;
@@ -494,7 +494,7 @@ async function setupEditor () {
     if (!r.ok) throw new Error (r.status + " " + r.statusText);
     js.addExtraLib (await r.text (), "file:///types/zerogap.d.ts");
   } catch (e) {
-    ideLog (`could not load types/zerogap.d.ts (${e.message}): no zg:* completions`, true);
+    ideLog (`could not load types/zerogap.d.ts (${e.message}): no gk:* completions`, true);
   }
 
   const json = monaco.json || monaco.languages.json;
@@ -753,7 +753,7 @@ function template (id) {
     [`apps/${id}/main.js`]:
 `// ${name}: a new zerogap app. See docs/APPS.md and docs/API.md.
 
-import * as ui from "zg:ui";
+import * as ui from "gk:ui";
 
 const label = new ui.Label({ text: "Hello from ${id}!", font: 24 });
 
@@ -802,7 +802,7 @@ async function newFile () {
   if (files.has (path)) return alert (`${path} exists already.`);
   if (pathsUnder (path).length) return alert (`${path} is a folder.`);
   if (!/\.(js|json|txt)$/.test (rel)) ideLog (`note: zerogap ignores files other than .js, .json and .txt (${rel})`);
-  await addFiles ({ [path]: /\.js$/.test (rel) ? "import * as ui from \"zg:ui\";\n\n" : "" });
+  await addFiles ({ [path]: /\.js$/.test (rel) ? "import * as ui from \"gk:ui\";\n\n" : "" });
   openFile (path);
 }
 

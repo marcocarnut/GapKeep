@@ -1,7 +1,7 @@
 //
 // js_ui.cpp
 //
-// The "zg:ui" module: a small, generic JavaScript widget API on top of LVGL.
+// The "gk:ui" module: a small, generic JavaScript widget API on top of LVGL.
 // See docs/API.md for the JavaScript-side documentation; keep the two in sync.
 //
 // Design

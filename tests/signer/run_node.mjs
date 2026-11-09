@@ -1,5 +1,5 @@
 // Tests apps/signer/lib (BIP-39, BIP-32, sighashes, signing PSBTs) under
-// Node, with tests/signer/crypto_ref.mjs in place of zg:crypto, against
+// Node, with tests/signer/crypto_ref.mjs in place of gk:crypto, against
 // tests/signer/vectors.json, tests/signer/electrum.json and BIP-174's
 // vectors in tests/psbt/vectors.json (sources: tests/signer/README.md):
 //

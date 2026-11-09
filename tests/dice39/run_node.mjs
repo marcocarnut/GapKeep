@@ -4,7 +4,7 @@
 import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-// the public key's BIP-39 and BIP-32 get the signer tests' stand-in for zg:crypto
+// the public key's BIP-39 and BIP-32 get the signer tests' stand-in for gk:crypto
 const ref = await import("../signer/crypto_ref.mjs");
 const { setCrypto } = await import("../../apps/dice39/lib/crypto.js");
 setCrypto(ref);

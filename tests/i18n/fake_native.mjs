@@ -1,4 +1,4 @@
-// A stand-in for "zg:i18n-native" (src/runtime/i18n.cpp), for running
+// A stand-in for "gk:i18n-native" (src/runtime/i18n.cpp), for running
 // src/runtime/i18n.js under Node (run_node.mjs). The catalogs are taken as
 // they are: checking them is the runtime's (and tools/i18n.py's) job.
 //

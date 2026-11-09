@@ -2,8 +2,8 @@
 // exceptions are reported, runaway scripts are stopped, and leftovers
 // (timers, handlers, widgets) are cleaned up when the app exits.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
 
 const actions = {
   "Throw in handler": () => {

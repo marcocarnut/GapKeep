@@ -6,7 +6,7 @@ timer, and someone sets it after each boot: the **Clock** app
 (`apps/clock`). Until then it counts from 1970-01-01 at boot.
 
 The clock runs whatever app is open. Every app can read it (`Date.now()`,
-`new Date()`, `zg:clock`); only apps with `"permissions": ["rtc"]` can set
+`new Date()`, `gk:clock`); only apps with `"permissions": ["rtc"]` can set
 it: in practice only the Clock app.
 
 ## Setting it
@@ -66,7 +66,7 @@ it.
 ## For apps
 
 ```js
-import * as clock from "zg:clock";
+import * as clock from "gk:clock";
 
 if (!clock.status().set) {
   // tell the person to set the clock in the Clock app
@@ -79,7 +79,7 @@ clock.every(30, ({ time, changed }) => redraw(time));   // at :00 and :30, and w
 - `every(seconds, fn)` calls `fn` on the clock's marks (UTC multiples of the
   period) and at once when the clock is set or its trim or offset change,
   so codes that depend on the time (TOTP) are redrawn right away.
-- The details: [API.md](API.md#zgclock).
+- The details: [API.md](API.md#gkclock).
 
 ## How it works
 

@@ -15,7 +15,7 @@
     "A number": 5,
     "Not translated yet": "",
     "i18n test": "teste de i18n",
-    "Test app: zg:i18n and the checks on catalogs (tests/i18n.txt).": "Aplicativo de teste‮",
+    "Test app: gk:i18n and the checks on catalogs (tests/i18n.txt).": "Aplicativo de teste‮",
     "Pay <tt>{address}</tt> <u>now</u>": "<u>Agora</u>, pague <tt>{address}</tt>",
     "Send <span color='#ffb300'>{amount}</span>": "Enviar {amount}",
     "Just text": "Só <span color='#f00'>texto</span>",

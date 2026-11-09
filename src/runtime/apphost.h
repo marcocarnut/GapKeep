@@ -47,8 +47,8 @@ struct TGkApp
 	TGkNode *pDeferredDelete;	// widgets to delete outside LVGL event processing
 
 	JSValue KeyHandler;		// ui.onKey() handler or JS_UNDEFINED
-	TGkUIState *pUI;		// zg:ui state, 0 until the app imports it
-	struct TGkClockState *pClock;	// zg:clock alarms, 0 until the first every()
+	TGkUIState *pUI;		// gk:ui state, 0 until the app imports it
+	struct TGkClockState *pClock;	// gk:clock alarms, 0 until the first every()
 	struct TGkI18nState *pI18n;	// its translations (i18n.h), from its start
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
@@ -134,7 +134,7 @@ private:
 
 // --- shared with the JS modules (js_ui.cpp, js_sys.cpp) ---
 
-// Creates the "zg:ui", "zg:sys", "zg:apps" and "zg:crypto" native modules.
+// Creates the "gk:ui", "gk:sys", "gk:apps" and "gk:crypto" native modules.
 JSModuleDef *GkInitUIModule (JSContext *pContext, const char *pName);
 JSModuleDef *GkInitSysModule (JSContext *pContext, const char *pName);
 JSModuleDef *GkInitAppsModule (JSContext *pContext, const char *pName);

@@ -2,7 +2,7 @@
 # Electrum's QR codes of transactions, through the simulated camera. The codes are Electrum's own to_qr_data() output
 # (tests/psbt/electrum_made.json, made by tests/psbt/make_electrum_psbts.py
 # from the BIP-39 test mnemonic "abandon ... about": test coins only).
-# Warning counts vary: without zg:crypto's ripemd160 (older systems) the
+# Warning counts vary: without gk:crypto's ripemd160 (older systems) the
 # summary adds a note that some keys were not checked.
 # Made from tests/psbt/signer_read.txt.in by tests/psbt/make_scenario.py.
 expect launcher ready 60

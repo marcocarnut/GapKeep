@@ -33,7 +33,7 @@ type AppInfo = {
   readonly experimental: boolean;
 };
 
-declare module "zg:ui" {
+declare module "gk:ui" {
   /**
    * A **size** is a number of pixels, a percentage of the parent as a string
    * (`"50%"`), or `"content"` (fit the children).
@@ -156,7 +156,7 @@ declare module "zg:ui" {
     text?: string;
     /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow?: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
-    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
     markup?: boolean;
   }
   export interface ButtonProps extends CommonProps {
@@ -370,7 +370,7 @@ declare module "zg:ui" {
     text: string;
     /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
-    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `zg:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
     markup: boolean;
   }
   /** A button: clicked with the mouse, or Enter or Space while focused. */
@@ -549,11 +549,11 @@ declare module "zg:ui" {
   export function onKey(handler: ((ev: KeyEvent) => boolean | void) | null): void;
   /** Change colors. [Details]. */
   export function theme(options: { dark?: boolean; primary?: Color; secondary?: Color }): void;
-  /** The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `zg:i18n`'s `tm()`. */
+  /** The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`'s `tm()`. */
   export function escapeMarkup(text: string): string;
 }
 
-declare module "zg:sys" {
+declare module "gk:sys" {
   /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
   export const kernel: { readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" };
   /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)). */
@@ -572,7 +572,7 @@ declare module "zg:sys" {
   export function exit(): void;
 }
 
-declare module "zg:crypto" {
+declare module "gk:crypto" {
   /** SHA-1, a `Uint8Array(20)`. Broken for collisions: for HMAC-SHA1 (TOTP) and protocols that require it, not to identify data. */
   export function sha1(data: BytesLike): Uint8Array;
   /** SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous. */
@@ -621,7 +621,7 @@ declare module "zg:crypto" {
   export function rngStatus(): { healthy: boolean; failure: string | null; rawBytes: number };
 }
 
-declare module "zg:clock" {
+declare module "gk:clock" {
   /** Milliseconds since 1970-01-01 UTC: the same as `Date.now()`. */
   export function now(): number;
   /** `{ set, time, trimPpm, utcOffset, drift }`: whether the time was set since boot; the time (ms, as `now()`); the trim correcting the crystal, in parts per million (+ runs faster); local time's offset from UTC in minutes (-180 for UTC-03:00); and `drift`, `null` or what the last `set()` measured: `{ correction, over, trimPpm, uncertaintyPpm }`: the clock was `correction` seconds off (+: fast) after `over` seconds, so `trimPpm` would have kept it right, give or take `uncertaintyPpm` (half a second's error in each setting). Measured only when the sets are at least an hour apart. */
@@ -638,7 +638,7 @@ declare module "zg:clock" {
   export function cancel(id: number): void;
 }
 
-declare module "zg:session" {
+declare module "gk:session" {
   /** Stores a copy of `value` under `key` (1 to 64 bytes of UTF-8), replacing what was there; `undefined` removes the key. A `RangeError` if the app's values would take over 64 KiB (or the store is full), and nothing changes. */
   export function set(key: string, value: SessionValue | undefined): void;
   /** A fresh copy of the value, or `undefined`. */
@@ -653,7 +653,7 @@ declare module "zg:session" {
   export function usage(): { used: number; limit: number };
 }
 
-declare module "zg:i18n" {
+declare module "gk:i18n" {
   /** The translation of `text`, or `text` itself. `{name}` is replaced by `params.name`: numbers as `formatNumber` writes them, other values as strings; a BigInt throws a `TypeError` (format amounts first). A `{name}` not in `params` stays as written; `{{` and `}}` are braces. `$context` tells apart the same English in two meanings: `t("Open", { $context: "verb" })` is the catalog key `"verb\u0004Open"`. Keys should be string literals, so `tools/i18n.py` finds them. */
   export function t(text: string, params?: { [name: string]: string | number | boolean; $context?: string }): string;
   /** As `t`, for a Label with `markup: true`: every param is escaped (`ui.escapeMarkup`), so a name, an address or a scanned text never becomes a tag. If `text` has a tag or an entity it is markup (its translation keeps the same tags: checked on load), else plain text, escaped too. */
@@ -688,7 +688,7 @@ declare module "zg:i18n" {
   export function parseNumber(text: string): number;
   /** An amount in BTC as typed, in whole satoshis (a Number: 21 million BTC fit exactly), with the rules of `parseNumber`; no sign, at most 8 decimals, at most 21,000,000 BTC. */
   export function parseBtc(text: string): number;
-  /** ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock's local time ([`zg:clock`]'s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped. */
+  /** ISO 8601 with a space, in every language: `2026-11-08 14:03:05`, in the clock's local time ([`gk:clock`]'s UTC offset); with `{ utc: true }`, in UTC and followed by ` UTC`. `seconds` since 1970; fractions are dropped. */
   export function formatDateTime(seconds: number, options?: { utc?: boolean }): string;
   /** `2026-11-08`, as `formatDateTime`. */
   export function formatDate(seconds: number, options?: { utc?: boolean }): string;
@@ -696,7 +696,7 @@ declare module "zg:i18n" {
   export function formatTime(seconds: number, options?: { utc?: boolean }): string;
 }
 
-declare module "zg:apps" {
+declare module "gk:apps" {
   /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
   export function list(): AppInfo[];
   /** Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. */

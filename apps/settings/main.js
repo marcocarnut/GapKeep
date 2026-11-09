@@ -8,11 +8,11 @@
 // named in themselves ("Português (Brasil)"). It logs each change, never
 // what is typed in the box for trying the keyboard.
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as session from "zg:session";
-import * as i18n from "zg:i18n";
-import { t } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as session from "gk:session";
+import * as i18n from "gk:i18n";
+import { t } from "gk:i18n";
 
 // The marks on offer: the language's own, or one of these. [decimal, group]
 const MARKS = [null, [".", ","], [",", "."], [".", ""], [",", ""]];

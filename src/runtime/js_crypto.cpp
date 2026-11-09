@@ -1,7 +1,7 @@
 //
 // js_crypto.cpp
 //
-// The "zg:crypto" module: SHA-1, SHA-256, SHA-512, RIPEMD-160, HMAC,
+// The "gk:crypto" module: SHA-1, SHA-256, SHA-512, RIPEMD-160, HMAC,
 // PBKDF2, secp256k1 (ECDSA, BIP-340 Schnorr, BIP-32 and Taproot key
 // tweaks), and health-checked hardware random bytes.
 // See docs/API.md.

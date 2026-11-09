@@ -1,6 +1,6 @@
 /*
  * hmac.h - HMAC (RFC 2104, FIPS 198-1) over SHA-1, SHA-256 and SHA-512,
- * and the hashes behind one interface (gk_hash_t), for zg:crypto and for
+ * and the hashes behind one interface (gk_hash_t), for gk:crypto and for
  * what will be built on them (PBKDF2, BIP-32, ...).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later

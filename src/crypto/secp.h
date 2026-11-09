@@ -1,5 +1,5 @@
 /*
- * secp.h - secp256k1 for zg:crypto: ECDSA, BIP-340 Schnorr signatures and
+ * secp.h - secp256k1 for gk:crypto: ECDSA, BIP-340 Schnorr signatures and
  * the key arithmetic of BIP-32 and Taproot (BIP-341), on byte arrays, over
  * libsecp256k1 (third_party/secp256k1, lib/secp256k1/secp256k1.mk).
  *

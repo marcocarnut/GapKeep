@@ -18,7 +18,7 @@
 // the signing library (lib/bip39.js, bip32.js, keys.js, sign.js, combine.js,
 // review.js; tested under Node by tests/signer/run_node.mjs).
 //
-// The text on screen is translated (zg:i18n, lang/<language>.json; the
+// The text on screen is translated (gk:i18n, lang/<language>.json; the
 // libraries' text through tr(), lib/psbt/view.js). Amounts, addresses,
 // fees, txids, fingerprints and paths are always {placeholders}. The log
 // stays in English.
@@ -26,14 +26,14 @@
 // Never logged: shares, words, the passphrase, the seed, keys, public keys.
 // The log goes to the serial port in test builds; it gets counts and sizes
 // only. Keys live in this app's memory until they are forgotten or the app
-// ends; never in zg:session or on the card.
+// ends; never in gk:session or on the card.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import * as crypto from "zg:crypto";
-import { t, plural } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import * as crypto from "gk:crypto";
+import { t, plural } from "gk:i18n";
 import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { electrumQrText } from "./lib/psbt/transport.js";
@@ -80,7 +80,7 @@ function bip39Message(e) {
 
 const state = {
   page: null,
-  // what is being typed (kept here only, never in zg:session)
+  // what is being typed (kept here only, never in gk:session)
   texts: [""],        // the shares
   meaning: "bip39",   // what the shares hold: "bip39" (dice39) or "bip32" (BIP-93)
   words: "",

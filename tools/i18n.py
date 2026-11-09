@@ -28,7 +28,7 @@ sys.app those translations (docs/APPS.md, "Languages").
 
 The keys are the first argument of t() and the second and third of
 plural() (or i18n.t(), ...), and of N_(), which marks text for t()
-in code that can't import zg:i18n (const N_ = (s) => s; apps/totp), string literals (or literals joined with +), with t()'s
+in code that can't import gk:i18n (const N_ = (s) => s; apps/totp), string literals (or literals joined with +), with t()'s
 { $context: "..." } if it has one ("verb\\u0004Open"). The launcher's
 catalogs are also the system's: its keys include those of the runtime's
 own JavaScript (src/runtime/*.js, ts()).

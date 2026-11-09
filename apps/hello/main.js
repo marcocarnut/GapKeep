@@ -1,9 +1,9 @@
 // Hello: the example from docs/APPS.md, in more than one language
-// (zg:i18n, lang/<language>.json; docs/APPS.md, "Languages").
+// (gk:i18n, lang/<language>.json; docs/APPS.md, "Languages").
 
-import * as ui from "zg:ui";
-import * as sys from "zg:sys";
-import { t, plural } from "zg:i18n";
+import * as ui from "gk:ui";
+import * as sys from "gk:sys";
+import { t, plural } from "gk:i18n";
 
 new ui.Label({ text: t("Hello, air gap!"), font: 28 });
 

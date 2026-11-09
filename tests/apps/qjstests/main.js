@@ -1,7 +1,7 @@
 // Runs QuickJS's own test scripts (third_party/quickjs/tests) on the
 // target, unmodified, with the two host objects they expect: std.gc and
 // os.setTimeout. Each suite throws on its first failed assertion.
-import * as sys from "zg:sys";
+import * as sys from "gk:sys";
 import { suites } from "./suites.js";
 
 globalThis.std = { gc: sys.gc };

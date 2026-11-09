@@ -7,7 +7,7 @@
 // BIP-39, BIP-32 and descriptors are the signer's (./bip39.js, ./bip32.js,
 // ./descriptor.js and what they import are copies made by
 // tools/share_libs.py; their home is apps/signer).
-// The caller gives them the cryptography first: setCrypto(zg:crypto), or a
+// The caller gives them the cryptography first: setCrypto(gk:crypto), or a
 // stand-in under Node.
 //
 // Nothing here logs. The keys and the fingerprint identify the wallet: the
