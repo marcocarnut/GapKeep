@@ -622,7 +622,7 @@ function publicKeySection() {
     new ui.Label(side, { text: t("Account {path}, native segwit", { path: k.path }), font: 14, color: MUTED,
       width: "100%" });
     new ui.Label(side, { text: f.what, font: 12, color: MUTED, width: "100%" });
-    new ui.Label(side, { text, font: 14, width: "100%" });
+    new ui.Label(side, { text, font: 14, width: "100%", mono: true });
     // lengths only: the key identifies the wallet
     console.log(`dice39: key QR: ${state.keyForm === 0 ? "descriptor" : "zpub"} of ${text.length} characters`);
   };
@@ -761,7 +761,7 @@ function showSplit(focusShare) {
     sp.shares.forEach((share, i) => {
       const line = new ui.Container(out, { layout: "row", gap: 8, alignItems: "center", width: "100%" });
       shareButtons.push(new ui.Button(line, { text: "QR", padding: [4, 10], onClick: () => showShareQR(i) }));
-      new ui.Label(line, { text: share.toUpperCase(), font: 12, grow: 1, overflow: "wrap" });
+      new ui.Label(line, { text: share.toUpperCase(), font: 12, grow: 1, overflow: "wrap", mono: true });
     });
   };
 
@@ -799,7 +799,7 @@ function showShareQR(i) {
   const size = Math.min(ui.height - 200, ui.width - 40);
   // uppercase: canonical for codex32, and fits QR's compact alphanumeric mode
   const qr = new ui.QRCode({ size, data: share, ecc: "M" });
-  new ui.Label({ text: share, font: 12, width: "100%" });
+  new ui.Label({ text: share, font: 12, width: "100%", mono: true });
   paragraph(ui.screen, ui.symbols.warning + " " + S.shareQrWarning, { color: AMBER, font: 12 });
   console.log(`dice39: share QR ${qr.modules}x${qr.modules}`);
   new ui.Button({ text: t("Done"), onClick: () => showSplit(i) }).focus();

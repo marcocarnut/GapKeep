@@ -44,6 +44,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 
 # the fonts (tools/make_fonts.py)
 OBJS	+= $(patsubst %,runtime/fonts/zg_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
+OBJS	+= $(patsubst %,runtime/fonts/zg_mono_%.o,12 14 16 18 20 24 28)
 
 ifeq ($(strip $(TEST)),1)
 BUNDLE	= ../apps ../tests/apps

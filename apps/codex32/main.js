@@ -135,6 +135,7 @@ function makeBox(i) {
     oneLine: true, grow: 1, maxLength: 160, accept: ACCEPT, text: state.texts[i] || "",
     placeholder: i === 0 ? "ms1..." : "",
     font: wide ? 20 : 16,
+    mono: true,
   });
   const note = new ui.Label(row, { text: "", font: wide ? 16 : 12, width: "100%", padding: [0, 0, 0, 32] });
   ta.onChange = (ev) => {

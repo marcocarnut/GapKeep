@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates zerogap's fonts, src/runtime/fonts/zg_montserrat_*.c.
+"""Regenerates zerogap's fonts, src/runtime/fonts/zg_montserrat_*.c and zg_mono_*.c.
 
 The ten sizes zg:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
 Montserrat Medium for text and Font Awesome Free for LVGL's icons
@@ -40,9 +40,17 @@ FONTTOOLS_VERSION; Debian's python3-fonttools), which makes its tables
 small enough for plain lookups, and the Extension lookups are unwrapped.
 The outlines and hinting are kept: the glyphs are the same.
 
+The monospaced font (zg:ui's "mono", for addresses, keys, hex and code):
+JetBrains Mono 2.304 Medium, the weight whose stems match Montserrat
+Medium's (1.57 px against 1.60 at 16 px; Regular's are 1.43), in
+MONO_SIZES, with Basic Latin and Latin-1. It has the same line height and
+baseline as Montserrat of the same size, so the two mix on a row, and
+falls back to it (LVGL's font fallback) for everything else: the icons,
+Latin Extended-A, € and ₿.
+
 The fonts' licences are copied next to them (LICENCE.montserrat, the
 SIL OFL 1.1; LICENCE.fontawesome, Font Awesome Free's, whose fonts are
-under the OFL too).
+under the OFL too; LICENCE.jetbrainsmono, the OFL).
 
 The output is the same on every run with the same inputs and the same
 lv_font_conv: the command line is written at the top of every file.
@@ -56,6 +64,7 @@ SYMBOLS_H = os.path.join(ROOT, "circle", "addon", "lvgl", "lvgl", "src", "font",
 LV_FONT_CONV_VERSION = "1.5.3"
 FONTTOOLS_VERSION = "4.46.0"
 SIZES = [12, 14, 16, 18, 20, 22, 24, 28, 32, 40]
+MONO_SIZES = [12, 14, 16, 18, 20, 24, 28]
 
 # The sources: (zip or member, sha256).
 MONTSERRAT_ZIP = ("Montserrat.zip",
@@ -74,6 +83,14 @@ FA_BRANDS = (FA_DIR + "otfs/Font Awesome 5 Brands-Regular-400.otf",
              "70da961ebca3c012db6c9bf3788153d690357d94226a4009103f7073414706ba")
 FA_LICENCE = (FA_DIR + "LICENSE.txt",
               "e779748dfe75e84f974df3c7bc07f842011a100159158b0f1f49b2f2a5a515cb")
+
+MONO_ZIP = ("JetBrainsMono-2.304.zip",
+            "6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf")
+MONO_TTF = ("fonts/ttf/JetBrainsMono-Medium.ttf",        # version 2.304
+            "31c92d01a8a08528b718a43addf0ad3df0af2ca4b7b3290a452f70f358e14d3d")
+MONO_LICENCE = ("OFL.txt",
+                "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad")
+MONO_RANGES = ["0x20-0x7E", "0xA0-0xFF"]
 
 TEXT_RANGES = ["0x20-0x7E", "0xA0-0xAC", "0xAE-0xFF", "0x100-0x17F"]
 TEXT_EXTRA = [0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D,  # – — ‘ ’ “ ”
@@ -158,9 +175,9 @@ def codepoints(ranges):
     return out
 
 
-def extract(zpath, member, dest):
+def extract(zpath, member, dest, name=None):
     with zipfile.ZipFile(zpath) as z:
-        out = os.path.join(dest, os.path.basename(member))
+        out = os.path.join(dest, name or os.path.basename(member))
         with z.open(member) as src, open(out, "wb") as dst:
             shutil.copyfileobj(src, dst)
     return out
@@ -173,8 +190,10 @@ def main():
 
     mzip = os.path.join(args.packages, MONTSERRAT_ZIP[0])
     fzip = os.path.join(args.packages, FA_ZIP[0])
+    jzip = os.path.join(args.packages, MONO_ZIP[0])
     check(mzip, MONTSERRAT_ZIP[1])
     check(fzip, FA_ZIP[1])
+    check(jzip, MONO_ZIP[1])
 
     tmp = tempfile.mkdtemp(prefix="zg-fonts-")
     try:
@@ -185,9 +204,12 @@ def main():
         check(solid, FA_SOLID[1])
         check(brands, FA_BRANDS[1])
         licences = []
+        mono = extract(jzip, MONO_TTF[0], tmp)
+        check(mono, MONO_TTF[1])
         for zp, (member, want), name in ((mzip, MONTSERRAT_LICENCE, "LICENCE.montserrat"),
-                                         (fzip, FA_LICENCE, "LICENCE.fontawesome")):
-            path = extract(zp, member, tmp)
+                                         (fzip, FA_LICENCE, "LICENCE.fontawesome"),
+                                         (jzip, MONO_LICENCE, "LICENCE.jetbrainsmono")):
+            path = extract(zp, member, tmp, name)	# two are OFL.txt
             check(path, want)
             licences.append((path, name))
 
@@ -205,6 +227,7 @@ def main():
         ttf = kerned
 
         os.makedirs(OUT, exist_ok=True)
+        lines = {}			# size: (line_height, base_line), for the mono font
         for size in SIZES:
             name = f"zg_montserrat_{size}"
             # Relative paths, run from tmp: the command line lands in the
@@ -235,6 +258,29 @@ def main():
                 sys.exit(f"make_fonts: {name}: line_height or base_line not found")
             open(path, "w").write(src)
             shutil.copy(os.path.join(tmp, name + ".c"), os.path.join(OUT, name + ".c"))
+            print(f"make_fonts: {name}.c")
+            lines[size] = (top + base, base)
+
+        for size in MONO_SIZES:
+            name = f"zg_mono_{size}"
+            cmd = ["lv_font_conv", "--no-compress", "--no-prefilter", "--bpp", "4",
+                   "--size", str(size), "--format", "lvgl",
+                   "--lv-include", "lvgl/lvgl/lvgl.h", "--lv-font-name", name,
+                   "--lv-fallback", f"zg_montserrat_{size}",
+                   "--font", os.path.basename(mono), "-r", ",".join(MONO_RANGES),
+                   "-o", name + ".c"]
+            run(cmd, tmp)
+            path = os.path.join(tmp, name + ".c")
+            src = open(path).read()
+            # Montserrat's line, so they mix on a row (see above)
+            lh, base = lines[size]
+            src, n1 = re.subn(r"\.line_height = \d+,.*", f".line_height = {lh},          "
+                              f"/*zg_montserrat_{size}'s: tools/make_fonts.py*/", src)
+            src, n2 = re.subn(r"\.base_line = \d+,.*", f".base_line = {base},             "
+                              "/*Baseline measured from the bottom of the line*/", src)
+            if n1 != 1 or n2 != 1:
+                sys.exit(f"make_fonts: {name}: line_height or base_line not found")
+            open(os.path.join(OUT, name + ".c"), "w").write(src)
             print(f"make_fonts: {name}.c")
         # tools/make_sdcard.sh puts these on the cards, with kernel.img
         for path, name in licences:

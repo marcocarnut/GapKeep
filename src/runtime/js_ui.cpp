@@ -124,6 +124,8 @@ struct TZgNode
 	lv_image_dsc_t *pImage;		// Image: the picture (pixels follow the descriptor)
 	struct TZgScan *pScan;		// Scanner
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
+	int nFontSize;			// "font", 0 if not set
+	boolean bMono;			// "mono"
 };
 
 struct TZgQR
@@ -657,6 +659,16 @@ static const lv_font_t *Fonts[] =
 };
 static const unsigned FontCount = sizeof FontSizes / sizeof FontSizes[0];
 
+// "mono": JetBrains Mono, with Montserrat's line at the same size
+// (tools/make_fonts.py), falling back to it for icons and the rest
+static const int MonoSizes[] = {12, 14, 16, 18, 20, 24, 28};
+static const lv_font_t *MonoFonts[] =
+{
+	&zg_mono_12, &zg_mono_14, &zg_mono_16, &zg_mono_18, &zg_mono_20,
+	&zg_mono_24, &zg_mono_28
+};
+static const unsigned MonoCount = sizeof MonoSizes / sizeof MonoSizes[0];
+
 // --- properties -------------------------------------------------------------
 
 typedef int TSetter (JSContext *ctx, TZgNode *pNode, JSValueConst v, const char *pProp);
@@ -825,6 +837,79 @@ SETTER (SetOpacity)
 	return 0;
 }
 
+// The font from "font" and "mono", whichever came first: the size is
+// "font", else the one the widget has (inherited); mono takes the mono
+// font of that size, or, for an inherited size it lacks, the next smaller.
+static int ApplyFont (JSContext *ctx, TZgNode *pNode, const char *pProp)
+{
+	if (!pNode->bMono)
+	{
+		for (unsigned i = 0; i < FontCount; i++)
+		{
+			if (FontSizes[i] == pNode->nFontSize)
+			{
+				lv_obj_set_style_text_font (OBJ, Fonts[i], 0);
+				return 0;
+			}
+		}
+		// mono: false: the inherited font, or the normal one of its size if
+		// that is mono (inside a mono container)
+		lv_obj_remove_local_style_prop (OBJ, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
+		const lv_font_t *pFont = lv_obj_get_style_text_font (OBJ, LV_PART_MAIN);
+		for (unsigned i = 0; i < MonoCount; i++)
+		{
+			if (MonoFonts[i] == pFont)
+			{
+				lv_obj_set_style_text_font (OBJ, pFont->fallback, 0);
+			}
+		}
+		return 0;
+	}
+
+	int nSize = pNode->nFontSize;
+	if (nSize == 0)
+	{
+		lv_obj_remove_local_style_prop (OBJ, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
+		const lv_font_t *pFont = lv_obj_get_style_text_font (OBJ, LV_PART_MAIN);
+		nSize = 16;			// the theme's
+		for (unsigned i = 0; i < FontCount; i++)
+		{
+			if (Fonts[i] == pFont)
+			{
+				nSize = FontSizes[i];
+			}
+		}
+		for (unsigned i = 0; i < MonoCount; i++)	// inside a mono container
+		{
+			if (MonoFonts[i] == pFont)
+			{
+				nSize = MonoSizes[i];
+			}
+		}
+	}
+	int nChosen = -1;
+	for (unsigned i = 0; i < MonoCount; i++)
+	{
+		if (   MonoSizes[i] == nSize
+		    || (pNode->nFontSize == 0 && MonoSizes[i] < nSize))
+		{
+			nChosen = (int) i;
+		}
+	}
+	if (nChosen < 0 && pNode->nFontSize == 0)
+	{
+		nChosen = 0;
+	}
+	if (nChosen < 0)
+	{
+		JS_ThrowRangeError (ctx, "%s: no monospaced font of size %d: one of ui.monoFonts (12 14 16 18 20 24 28)",
+				    pProp, nSize);
+		return -1;
+	}
+	lv_obj_set_style_text_font (OBJ, MonoFonts[nChosen], 0);
+	return 0;
+}
+
 SETTER (SetFont)
 {
 	int32_t n;
@@ -834,14 +919,26 @@ SETTER (SetFont)
 		{
 			if (FontSizes[i] == n)
 			{
-				lv_obj_set_style_text_font (OBJ, Fonts[i], 0);
-				return 0;
+				pNode->nFontSize = n;
+				return ApplyFont (ctx, pNode, pProp);
 			}
 		}
 	}
 	JS_ThrowTypeError (ctx, "%s: one of the sizes in ui.fonts expected (12 14 16 18 20 22 24 28 32 40)", pProp);
 	return -1;
 }
+
+SETTER (SetMono)
+{
+	if (!JS_IsBool (v))
+	{
+		JS_ThrowTypeError (ctx, "%s: boolean expected", pProp);
+		return -1;
+	}
+	pNode->bMono = JS_ToBool (ctx, v);
+	return ApplyFont (ctx, pNode, pProp);
+}
+GETTER (GetMono)	{ return JS_NewBool (ctx, pNode->bMono); }
 
 SETTER (SetTextAlign)
 {
@@ -1666,6 +1763,7 @@ static const TProp Props[] =
 	{"bg",          ALL, SetBg, 0},
 	{"color",       ALL, SetColor, 0},
 	{"font",        ALL, SetFont, 0},
+	{"mono",        ALL, SetMono, GetMono},
 	{"textAlign",   ALL, SetTextAlign, 0},
 	{"radius",      ALL, SetRadius, 0},
 	{"borderWidth", ALL, SetBorderWidth, 0},
@@ -2846,7 +2944,7 @@ static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
 	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
-	"screen", "width", "height", "fonts", "symbols", "alert", "onKey", "theme"
+	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme"
 };
 
 static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
@@ -2962,6 +3060,12 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 		JS_SetPropertyUint32 (ctx, FontList, i, JS_NewInt32 (ctx, FontSizes[i]));
 	}
 	JS_SetModuleExport (ctx, m, "fonts", FontList);
+	JSValue MonoList = JS_NewArray (ctx);
+	for (unsigned i = 0; i < MonoCount; i++)
+	{
+		JS_SetPropertyUint32 (ctx, MonoList, i, JS_NewInt32 (ctx, MonoSizes[i]));
+	}
+	JS_SetModuleExport (ctx, m, "monoFonts", MonoList);
 
 	JSValue SymbolObj = JS_NewObject (ctx);
 	for (unsigned i = 0; i < sizeof Symbols / sizeof Symbols[0]; i++)
