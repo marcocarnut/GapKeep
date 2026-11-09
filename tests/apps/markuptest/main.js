@@ -44,16 +44,18 @@ for (const h of hostile) {
 }
 log("hostile:", JSON.stringify(shown));
 
-// the cost: 100 labels each, plain, markup without tags, and markup with
+// the cost: N labels each, plain, markup without tags, and markup with
 // three styles; creation time (sys.uptime) and LVGL's memory
 // (sys.memory().ui) and the JS heap's, per label
+const N = 1000;
 function cost(what, props) {
   sys.gc();
   const box = new ui.Container({ hidden: true });
   const m0 = sys.memory(), t0 = sys.uptime();
-  for (let n = 0; n < 100; n++) new ui.Label(box, props);
+  for (let n = 0; n < N; n++) new ui.Label(box, props);
   const t1 = sys.uptime(), m1 = sys.memory();
-  log(`cost ${what}: ${((t1 - t0) * 10).toFixed(0)} us, ui ${((m1.ui - m0.ui) / 100).toFixed(0)} bytes, js ${((m1.used - m0.used) / 100).toFixed(0)} bytes per label`);
+  // (QEMU's uptime() moves in steps of 10 ms: hence 1000 labels)
+  log(`cost ${what}: ${((t1 - t0) * 1000 / N).toFixed(0)} us, ui ${((m1.ui - m0.ui) / N).toFixed(0)} bytes, js ${((m1.used - m0.used) / N).toFixed(0)} bytes per label`);
   box.delete();
 }
 const ADDRESS = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
