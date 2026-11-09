@@ -8,12 +8,12 @@
 static char s_Root[1024];		// "SD:"
 static char s_BuiltinRoot[1024];	// "SIM:", the built-in app replacements (appstore.cpp)
 
-void ZgSimSetCardRoot (const char *pRoot)
+void GkSimSetCardRoot (const char *pRoot)
 {
 	snprintf (s_Root, sizeof s_Root, "%s", pRoot ? pRoot : "");
 }
 
-void ZgSimSetBuiltinRoot (const char *pRoot)
+void GkSimSetBuiltinRoot (const char *pRoot)
 {
 	snprintf (s_BuiltinRoot, sizeof s_BuiltinRoot, "%s", pRoot ? pRoot : "");
 }

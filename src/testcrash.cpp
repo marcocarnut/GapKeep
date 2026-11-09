@@ -55,13 +55,13 @@ static void __attribute__ ((noinline)) Smash (const char *pSource)
 	CLogger::Get ()->Write (From, LogNotice, "%c", Buffer[0]);
 }
 
-void ZgTestCrash (const char *pKind)
+void GkTestCrash (const char *pKind)
 {
 	CLogger::Get ()->Write (From, LogNotice, "%s", pKind);
 
 	if (strcmp (pKind, "write-code") == 0)
 	{
-		Write ((volatile u32 *) (uintptr) &ZgTestCrash);
+		Write ((volatile u32 *) (uintptr) &GkTestCrash);
 	}
 	else if (strcmp (pKind, "write-rodata") == 0)
 	{

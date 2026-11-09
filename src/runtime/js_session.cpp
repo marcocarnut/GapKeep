@@ -22,7 +22,7 @@ static const size_t MaxOwner = 128;
 // "<id>:<hash>"
 static void GetOwner (JSContext *ctx, char *pOwner)
 {
-	const zg_app_t *pBundle = CAppHost::GetApp (ctx)->pBundle;
+	const gk_app_t *pBundle = CAppHost::GetApp (ctx)->pBundle;
 	size_t nID = strlen (pBundle->id);
 	size_t nHash = pBundle->hash ? strlen (pBundle->hash) : 0;
 	if (nID + 1 + nHash + 1 > MaxOwner)
@@ -50,11 +50,11 @@ static const char *GetKey (JSContext *ctx, int argc, JSValueConst *argv, const c
 	{
 		return 0;
 	}
-	if (nLength == 0 || nLength > CZgSession::MaxKeyLength || strlen (pKey) != nLength)
+	if (nLength == 0 || nLength > CGkSession::MaxKeyLength || strlen (pKey) != nLength)
 	{
 		JS_FreeCString (ctx, pKey);
 		JS_ThrowRangeError (ctx, "session.%s: the key must be 1 to %u bytes, without NUL",
-				    pFunction, (unsigned) CZgSession::MaxKeyLength);
+				    pFunction, (unsigned) CGkSession::MaxKeyLength);
 		return 0;
 	}
 	return pKey;
@@ -74,7 +74,7 @@ static JSValue js_session_set (JSContext *ctx, JSValueConst this_val, int argc, 
 	JSValueConst Value = argc > 1 ? argv[1] : JS_UNDEFINED;
 	if (JS_IsUndefined (Value))
 	{
-		CZgSession::Remove (Owner, pKey);
+		CGkSession::Remove (Owner, pKey);
 		JS_FreeCString (ctx, pKey);
 		return JS_UNDEFINED;
 	}
@@ -87,18 +87,18 @@ static JSValue js_session_set (JSContext *ctx, JSValueConst this_val, int argc, 
 		return JS_EXCEPTION;	// "unsupported object class", "circular reference", ...
 	}
 
-	CZgSession::TResult Result = CZgSession::Set (Owner, pKey, pData, nSize);
+	CGkSession::TResult Result = CGkSession::Set (Owner, pKey, pData, nSize);
 	js_free (ctx, pData);		// the heap overwrites it
 	JS_FreeCString (ctx, pKey);
 
 	switch (Result)
 	{
-	case CZgSession::TooBig:
+	case CGkSession::TooBig:
 		return JS_ThrowRangeError (ctx, "session.set: over this app's %u KiB (the value takes %u bytes)",
-					   (unsigned) (CZgSession::MaxPerApp / 1024), (unsigned) nSize);
-	case CZgSession::Full:
+					   (unsigned) (CGkSession::MaxPerApp / 1024), (unsigned) nSize);
+	case CGkSession::Full:
 		return JS_ThrowRangeError (ctx, "session.set: the session store is full (%u KiB for all apps)",
-					   (unsigned) (CZgSession::MaxTotal / 1024));
+					   (unsigned) (CGkSession::MaxTotal / 1024));
 	default:
 		return JS_UNDEFINED;
 	}
@@ -116,7 +116,7 @@ static JSValue js_session_get (JSContext *ctx, JSValueConst this_val, int argc, 
 	GetOwner (ctx, Owner);
 
 	size_t nSize;
-	const u8 *pData = CZgSession::Get (Owner, pKey, &nSize);
+	const u8 *pData = CGkSession::Get (Owner, pKey, &nSize);
 	JS_FreeCString (ctx, pKey);
 	if (pData == 0)
 	{
@@ -137,7 +137,7 @@ static JSValue js_session_remove (JSContext *ctx, JSValueConst this_val, int arg
 	char Owner[MaxOwner];
 	GetOwner (ctx, Owner);
 
-	boolean bRemoved = CZgSession::Remove (Owner, pKey);
+	boolean bRemoved = CGkSession::Remove (Owner, pKey);
 	JS_FreeCString (ctx, pKey);
 
 	return JS_NewBool (ctx, bRemoved);
@@ -147,7 +147,7 @@ static JSValue js_session_clear (JSContext *ctx, JSValueConst this_val, int argc
 {
 	char Owner[MaxOwner];
 	GetOwner (ctx, Owner);
-	CZgSession::Clear (Owner);
+	CGkSession::Clear (Owner);
 
 	return JS_UNDEFINED;
 }
@@ -160,8 +160,8 @@ static JSValue js_session_keys (JSContext *ctx, JSValueConst this_val, int argc,
 
 	JSValue Array = JS_NewArray (ctx);
 	uint32_t n = 0;
-	for (const char *pKey = CZgSession::NextKey (Owner, 0); pKey != 0;
-	     pKey = CZgSession::NextKey (Owner, pKey))
+	for (const char *pKey = CGkSession::NextKey (Owner, 0); pKey != 0;
+	     pKey = CGkSession::NextKey (Owner, pKey))
 	{
 		JS_SetPropertyUint32 (ctx, Array, n++, JS_NewString (ctx, pKey));
 	}
@@ -176,8 +176,8 @@ static JSValue js_session_usage (JSContext *ctx, JSValueConst this_val, int argc
 	GetOwner (ctx, Owner);
 
 	JSValue Obj = JS_NewObject (ctx);
-	JS_SetPropertyStr (ctx, Obj, "used", JS_NewInt64 (ctx, (int64_t) CZgSession::GetUsed (Owner)));
-	JS_SetPropertyStr (ctx, Obj, "limit", JS_NewInt64 (ctx, (int64_t) CZgSession::MaxPerApp));
+	JS_SetPropertyStr (ctx, Obj, "used", JS_NewInt64 (ctx, (int64_t) CGkSession::GetUsed (Owner)));
+	JS_SetPropertyStr (ctx, Obj, "limit", JS_NewInt64 (ctx, (int64_t) CGkSession::MaxPerApp));
 
 	return Obj;
 }
@@ -198,7 +198,7 @@ static int SessionModuleInit (JSContext *ctx, JSModuleDef *m)
 				       sizeof SessionFunctions / sizeof SessionFunctions[0]);
 }
 
-JSModuleDef *ZgInitSessionModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitSessionModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, SessionModuleInit);
 	if (m == 0)

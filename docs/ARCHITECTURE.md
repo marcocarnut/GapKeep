@@ -69,7 +69,7 @@ freed, so a leak in the runtime shows up as a crash in testing rather than
 slow memory loss.
 
 Apps come from two places (`src/runtime/appstore.*`), with the same checks
-and the same description (`zg_app_t`):
+and the same description (`gk_app_t`):
 
 - **Built in**, at build time (`tools/bundle_apps.py` →
   `src/generated/apps_bundle.c`): the launcher always; every app in sealed
@@ -86,7 +86,7 @@ other than their own modules, which are already in memory.
 
 ### Widgets (`src/runtime/js_ui.cpp`)
 
-Each widget is a JS object linked to an LVGL object through a `TZgNode`.
+Each widget is a JS object linked to an LVGL object through a `TGkNode`.
 While the LVGL object exists, the node keeps the JS object alive, so the same
 JS object is returned every time (`label.parent === container`). LVGL's
 delete event releases it. JS never deletes LVGL objects directly:
@@ -128,7 +128,7 @@ frames and automatic exposure). See [CAMERA.md](CAMERA.md).
 ### Cryptography (`src/crypto/`)
 
 SHA-1, SHA-256 and SHA-512 written from FIPS 180-4, and HMAC from RFC 2104
-(`hmac.*`, generic over the three through `zg_hash_t`), all plain C that
+(`hmac.*`, generic over the three through `gk_hash_t`), all plain C that
 also builds on the development machine: `tests/native/test_sha256.c`, and
 `tools/check_hashes.py`, which runs every self-test and compares thousands
 of random inputs with Python's `hashlib`. SHA-256's self-test runs at boot;
@@ -140,7 +140,7 @@ every raw byte and conditions output through SHA-256; see `zg:crypto` in
 [API.md](API.md).
 
 RIPEMD-160 (`ripemd160.*`, from its authors' paper, with HASH160) and
-PBKDF2 (`pbkdf2.*`, RFC 8018, over `zg_hash_t`) are checked the same way
+PBKDF2 (`pbkdf2.*`, RFC 8018, over `gk_hash_t`) are checked the same way
 (`tools/check_hashes.py`). secp256k1 is Bitcoin Core's libsecp256k1
 (`third_party/secp256k1`, pinned to a release; built by
 `lib/secp256k1/secp256k1.mk` with the extrakeys and schnorrsig modules and
@@ -255,7 +255,7 @@ build.
 | `apps/` | The apps: built in (the launcher, or all in sealed builds) or copied to the card's `/apps`. |
 | `circle/` | Circle (submodule) plus the fixes in `patches/circle/`, applied by `tools/build.sh`. Its LVGL submodule supplies the LVGL sources. |
 | `third_party/quickjs/` | QuickJS (submodule, unmodified). |
-| `lib/lvgl/` | Builds LVGL with `zg_lv_conf.h`. |
+| `lib/lvgl/` | Builds LVGL with `gk_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
 | `src/` | Kernel and runtime. `src/generated/` is build output. `src/runtime/` is also compiled into the simulator. |

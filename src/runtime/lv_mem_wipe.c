@@ -92,7 +92,7 @@ void *lv_realloc_core (void *ptr, size_t new_size)
 }
 
 /* bytes LVGL holds now (sys.memory().ui) */
-size_t zg_lv_mem_used (void)
+size_t gk_lv_mem_used (void)
 {
 	return s_used;
 }

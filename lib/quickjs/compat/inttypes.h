@@ -7,8 +7,8 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#ifndef ZG_COMPAT_INTTYPES_H
-#define ZG_COMPAT_INTTYPES_H
+#ifndef GK_COMPAT_INTTYPES_H
+#define GK_COMPAT_INTTYPES_H
 
 #include_next <inttypes.h>
 

@@ -13,7 +13,7 @@
 // Set from zerogap.txt ("keyboard = br-abnt2", settings.cpp), from the
 // build (make KEYBOARD=br-abnt2, the default before zerogap.txt; the only
 // way for sealed builds, which read no card), from a test build's serial
-// line ("#keyboard br-abnt2"), and while running by ZgKeyLayoutSet (for
+// line ("#keyboard br-abnt2"), and while running by GkKeyLayoutSet (for
 // zg:i18n's setKeyboard). A change lasts until reboot: nothing is written.
 //
 // What apps get is UTF-8: ui.onKey's key names, and the text typed into a
@@ -27,27 +27,27 @@
 #include <circle/types.h>
 
 // The layouts' names, in a fixed order, then 0.
-const char *const *ZgKeyLayouts (void);
+const char *const *GkKeyLayouts (void);
 
-// The current layout's name: one of ZgKeyLayouts().
-const char *ZgKeyLayoutGet (void);
+// The current layout's name: one of GkKeyLayouts().
+const char *GkKeyLayoutGet (void);
 
 // Switches to the layout pName, at once (a dead key pending is dropped).
 // pFrom says who asks, for the log ("zerogap.txt", "settings app"...).
 // FALSE, logged, nothing changed: no such layout.
-boolean ZgKeyLayoutSet (const char *pName, const char *pFrom);
+boolean GkKeyLayoutSet (const char *pName, const char *pFrom);
 
 // zerogap.txt's "keyboard = <layout>": TRUE if pKey is "keyboard" (the
 // value is then taken or refused, with a log line), FALSE for other keys.
-boolean ZgKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLine);
+boolean GkKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLine);
 
 // --- for src/kbdindev.cpp -------------------------------------------------------
 
 // Circle's keymap for the current layout ("US", "BR"), and a number that
-// changes with every ZgKeyLayoutSet, so the keyboard can tell it must load
+// changes with every GkKeyLayoutSet, so the keyboard can tell it must load
 // it again.
-const char *ZgKeyLayoutCircleMap (void);
-unsigned ZgKeyLayoutGeneration (void);
+const char *GkKeyLayoutCircleMap (void);
+unsigned GkKeyLayoutGeneration (void);
 
 // Dead keys. Feed every character the keymap gives (a Unicode code point;
 // 0 for a key that types none: Enter, an arrow...), in order. Returns how
@@ -56,10 +56,10 @@ unsigned ZgKeyLayoutGeneration (void);
 // if they don't compose. *pbConsumed is TRUE when a non-character key only
 // cancelled a pending dead key (Backspace and Escape do) and must not act.
 // Called from interrupt context: no allocation, no logging.
-class CZgDeadKeys
+class CGkDeadKeys
 {
 public:
-	CZgDeadKeys (void) : m_nPending (0) {}
+	CGkDeadKeys (void) : m_nPending (0) {}
 
 	unsigned Feed (u32 nChar, boolean bRepeat, boolean bCancelKey,
 		       u32 pOut[2], boolean *pbConsumed);
@@ -72,6 +72,6 @@ private:
 
 // UTF-8 for a code point (at most 4 bytes and a NUL into pBuf[5]); the
 // number of bytes.
-unsigned ZgUtf8Encode (u32 nChar, char pBuf[5]);
+unsigned GkUtf8Encode (u32 nChar, char pBuf[5]);
 
 #endif

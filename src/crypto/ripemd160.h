@@ -6,8 +6,8 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-#ifndef ZG_RIPEMD160_H
-#define ZG_RIPEMD160_H
+#ifndef GK_RIPEMD160_H
+#define GK_RIPEMD160_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,8 +16,8 @@
 extern "C" {
 #endif
 
-#define ZG_RIPEMD160_DIGEST_SIZE	20
-#define ZG_RIPEMD160_BLOCK_SIZE		64
+#define GK_RIPEMD160_DIGEST_SIZE	20
+#define GK_RIPEMD160_BLOCK_SIZE		64
 
 typedef struct
 {
@@ -26,20 +26,20 @@ typedef struct
 	uint8_t block[64];
 	size_t fill;			/* bytes in block */
 }
-zg_ripemd160_t;
+gk_ripemd160_t;
 
-void zg_ripemd160_init (zg_ripemd160_t *ctx);
-void zg_ripemd160_update (zg_ripemd160_t *ctx, const void *data, size_t len);
-void zg_ripemd160_final (zg_ripemd160_t *ctx, uint8_t digest[ZG_RIPEMD160_DIGEST_SIZE]);	/* wipes ctx */
+void gk_ripemd160_init (gk_ripemd160_t *ctx);
+void gk_ripemd160_update (gk_ripemd160_t *ctx, const void *data, size_t len);
+void gk_ripemd160_final (gk_ripemd160_t *ctx, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE]);	/* wipes ctx */
 
-void zg_ripemd160 (const void *data, size_t len, uint8_t digest[ZG_RIPEMD160_DIGEST_SIZE]);
+void gk_ripemd160 (const void *data, size_t len, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE]);
 
 /* RIPEMD-160(SHA-256(data)) */
-void zg_hash160 (const void *data, size_t len, uint8_t digest[ZG_RIPEMD160_DIGEST_SIZE]);
+void gk_hash160 (const void *data, size_t len, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE]);
 
 /* The authors' test vectors; full: also a million 'a' (about 15600
    compressions). 0: OK. */
-int zg_ripemd160_selftest (int full);
+int gk_ripemd160_selftest (int full);
 
 #ifdef __cplusplus
 }

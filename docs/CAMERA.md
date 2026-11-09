@@ -53,7 +53,7 @@ detectors. JavaScript gets their results, and only when something was found:
 ## How a scan works
 
 ```
-camera (camera.h) -> greyscale frames -> CZgScanner (scanner.cpp) -> onDetect({ kind, ... })
+camera (camera.h) -> greyscale frames -> CGkScanner (scanner.cpp) -> onDetect({ kind, ... })
                                            |  preview, drawn by the widget
                                            |  detectors: "qr" = zxing-cpp (qrdecode.cpp)
 ```
@@ -160,7 +160,7 @@ in 122 (at 640 px: 349 and 216), and it was faster too.
   library that is not in headers comes from `lib/zxing/cxxrt.cpp` and two
   small, self-contained objects of the toolchain's `libstdc++.a` (`tree.o`,
   `list.o`), not from `libstdc++.a` itself, which would bring the exception
-  runtime. Only what `ZgDecodeQR` reaches is kept (`ld -r --gc-sections`):
+  runtime. Only what `GkDecodeQR` reaches is kept (`ld -r --gc-sections`):
   about 195 KiB of code, against quirc's 20 KiB; the production kernel grew
   from 1985 to 2161 KiB.
 - **The simulator** (`sim/Makefile`, native and WebAssembly) and the fuzzer

@@ -36,25 +36,25 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o \
-	  runtime/zg_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
+	  runtime/gk_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
 	  runtime/session.o runtime/js_session.o runtime/i18n.o runtime/markup.o generated/i18n_js.o runtime/keylayout.o runtime/wheel.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 
 # the fonts (tools/make_fonts.py)
-OBJS	+= $(patsubst %,runtime/fonts/zg_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
-OBJS	+= $(patsubst %,runtime/fonts/zg_mono_%.o,12 14 16 18 20 24 28)
-OBJS	+= runtime/fonts/zg_ttf_bold.o runtime/fonts/zg_ttf_italic.o runtime/fonts/zg_ttf_bolditalic.o runtime/ttfstyles.o
+OBJS	+= $(patsubst %,runtime/fonts/gk_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
+OBJS	+= $(patsubst %,runtime/fonts/gk_mono_%.o,12 14 16 18 20 24 28)
+OBJS	+= runtime/fonts/gk_ttf_bold.o runtime/fonts/gk_ttf_italic.o runtime/fonts/gk_ttf_bolditalic.o runtime/ttfstyles.o
 
 ifeq ($(strip $(TEST)),1)
 BUNDLE	= ../apps ../tests/apps
 OBJS	+= testshot.o testcrash.o runtime/synthcam.o generated/testpictures.o
-DEFINE	+= -DZG_TEST
+DEFINE	+= -DGK_TEST
 BUILDMODE = test
 else ifeq ($(strip $(SEALED)),1)
 BUNDLE	= ../apps
-DEFINE	+= -DZG_SEALED
+DEFINE	+= -DGK_SEALED
 BUILDMODE = sealed
 else
 BUNDLE	= --only launcher ../apps
@@ -66,7 +66,7 @@ endif
 # shell's LANGUAGE (gettext's, "en_US:en") is something else.
 ifeq ($(origin LANGUAGE),command line)
 ifneq ($(strip $(LANGUAGE)),)
-DEFINE	+= -DZG_LANGUAGE=\"$(strip $(LANGUAGE))\"
+DEFINE	+= -DGK_LANGUAGE=\"$(strip $(LANGUAGE))\"
 BUILDMODE := $(BUILDMODE)-$(strip $(LANGUAGE))
 endif
 endif
@@ -76,14 +76,14 @@ ifneq ($(filter-out us br-abnt2,$(strip $(KEYBOARD)))$(word 2,$(KEYBOARD)),)
 $(error KEYBOARD=$(KEYBOARD): us or br-abnt2 expected)
 endif
 ifneq ($(strip $(KEYBOARD)),us)
-DEFINE	+= -DZG_KEYBOARD=\"$(strip $(KEYBOARD))\"
+DEFINE	+= -DGK_KEYBOARD=\"$(strip $(KEYBOARD))\"
 BUILDMODE := $(BUILDMODE)-keyboard-$(strip $(KEYBOARD))
 endif
 
 ifeq ($(strip $(TEST)),1)
-DEFINE	+= -DZG_SERIAL_LOG
+DEFINE	+= -DGK_SERIAL_LOG
 else ifeq ($(strip $(LOG)),serial)
-DEFINE	+= -DZG_SERIAL_LOG
+DEFINE	+= -DGK_SERIAL_LOG
 BUILDMODE := $(BUILDMODE)-log
 endif
 
@@ -110,7 +110,7 @@ LIBS	+= ../lib/secp256k1/libsecp256k1.a ../lib/colorqr/libcolorqr.a \
 	  $(CIRCLEHOME)/lib/libcircle.a
 
 # every file including LVGL headers must see the same configuration
-DEFINE += -DLV_CONF_PATH="<zg_lv_conf.h>"
+DEFINE += -DLV_CONF_PATH="<gk_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
 EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src -I ../third_party/secp256k1/include \
 	       -I ../lib/colorqr/include
@@ -127,7 +127,7 @@ endif
 
 # zg:i18n's JavaScript (src/runtime/i18n.js)
 generated/i18n_js.c: runtime/i18n.js ../tools/embed_js.py
-	@python3 ../tools/embed_js.py $@ zg_i18n_js runtime/i18n.js
+	@python3 ../tools/embed_js.py $@ gk_i18n_js runtime/i18n.js
 
 # the synthetic camera's test pictures (test builds)
 generated/testpictures.c: FORCE
@@ -135,7 +135,7 @@ generated/testpictures.c: FORCE
 
 FORCE:
 
-# Recompile what depends on ZG_TEST / ZG_SEALED / ZG_LANGUAGE / ZG_KEYBOARD when switching builds.
+# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
 main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o: .buildmode

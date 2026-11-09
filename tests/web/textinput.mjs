@@ -28,7 +28,7 @@ function check (name, got, want) {
 
 // --- 1. the decisions --------------------------------------------------------
 
-// Zerogap's methods on a stub: what reaches zg_sim_key_down_dom
+// Zerogap's methods on a stub: what reaches gk_sim_key_down_dom
 function stubMachine () {
   const z = Object.create (Zerogap.prototype);
   z.sent = [];
@@ -37,7 +37,7 @@ function stubMachine () {
     stringToNewUTF8: (s) => s,
     _free: () => {},
     // as sim/src/sim.cpp's: specials by name, one ASCII or Latin-1 character
-    _zg_sim_key_down_dom: (key, mods) => {
+    _gk_sim_key_down_dom: (key, mods) => {
       const special = ["Enter", "Tab", "Escape", "Backspace", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
         "Home", "End", "Delete", "Insert", "PageUp", "PageDown", "Meta", "OS", " "].includes (key) || /^F[1-9]$/.test (key);
       const c = [...key].length === 1 ? key.codePointAt (0) : -1;
@@ -45,7 +45,7 @@ function stubMachine () {
       z.sent.push (mods ? `${key}+${mods}` : key);
       return 0;
     },
-    _zg_sim_key_up: () => {},
+    _gk_sim_key_up: () => {},
   };
   return z;
 }

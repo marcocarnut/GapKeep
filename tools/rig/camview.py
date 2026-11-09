@@ -9,7 +9,7 @@ the 640x480 grey picture the scanner works on, over the serial line.
                                       scanner open: show at once
 
 The lines mark the middle of the picture. s saves the frame as camview-N.pgm
-here; q or Esc quits. The rig: $ZG_RIG, default mac@five.local (docs/RIG.md).
+here; q or Esc quits. The rig: $GK_RIG, default mac@five.local (docs/RIG.md).
 """
 import argparse
 import os
@@ -42,7 +42,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--no-flash', action='store_true', help='use the kernel running on the rig')
     args = ap.parse_args()
-    rig = os.environ.get('ZG_RIG', 'mac@five.local')
+    rig = os.environ.get('GK_RIG', 'mac@five.local')
 
     if args.no_flash:
         hexfile = ''

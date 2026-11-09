@@ -35,10 +35,10 @@ extern "C" {
 #include <quickjs.h>
 }
 
-struct TZgApp;
+struct TGkApp;
 #include "bundle.h"
 
-class CZgI18n
+class CGkI18n
 {
 public:
 	// After the built-in apps are registered, before zerogap.txt: the
@@ -61,19 +61,19 @@ public:
 	static const char *GetGroup (void)	{ return s_Group; }
 
 	// The keyboard layout: keylayout.h's, which also lists the layouts and
-	// switches them (ZgKeyLayouts, ZgKeyLayoutSet)
-	static const char *GetKeyboard (void)	{ return ZgKeyLayoutGet (); }
+	// switches them (GkKeyLayouts, GkKeyLayoutSet)
+	static const char *GetKeyboard (void)	{ return GkKeyLayoutGet (); }
 
 	// The app's catalog, at its start and when the language changes;
 	// returns the time it took, in microseconds
-	static unsigned LoadCatalog (TZgApp *pApp);
-	static void FreeApp (TZgApp *pApp);
+	static unsigned LoadCatalog (TGkApp *pApp);
+	static void FreeApp (TGkApp *pApp);
 
 	// An app's name or description in the language: the manifest's English
 	// is the key in the app's own catalog, checked as any translation.
 	// Cached until the language changes (a catalog is parsed once for both).
-	static const char *GetAppName (JSContext *pContext, const zg_app_t *pApp);
-	static const char *GetAppDescription (JSContext *pContext, const zg_app_t *pApp);
+	static const char *GetAppName (JSContext *pContext, const gk_app_t *pApp);
+	static const char *GetAppDescription (JSContext *pContext, const gk_app_t *pApp);
 
 private:
 	static boolean IsKnown (const char *pTag);
@@ -85,7 +85,7 @@ private:
 	static boolean s_bDecimalSet, s_bGroupSet;
 };
 
-JSModuleDef *ZgInitI18nModule (JSContext *pContext, const char *pName);		// "zg:i18n"
-JSModuleDef *ZgInitI18nNativeModule (JSContext *pContext, const char *pName);	// "zg:i18n-native"
+JSModuleDef *GkInitI18nModule (JSContext *pContext, const char *pName);		// "zg:i18n"
+JSModuleDef *GkInitI18nNativeModule (JSContext *pContext, const char *pName);	// "zg:i18n-native"
 
 #endif

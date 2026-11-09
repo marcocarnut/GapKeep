@@ -21,7 +21,7 @@ import base64
 import json
 import sys
 
-MAX_SIDE = 128      # ZG_ICON_MAX_SIDE in src/runtime/bundle.h
+MAX_SIDE = 128      # GK_ICON_MAX_SIDE in src/runtime/bundle.h
 
 
 def main():

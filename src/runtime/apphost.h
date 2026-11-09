@@ -26,30 +26,30 @@ extern "C" {
 #include <quickjs.h>
 }
 
-struct TZgTimer;
-struct TZgNode;
-struct TZgUIState;
+struct TGkTimer;
+struct TGkNode;
+struct TGkUIState;
 
 // State of the running app. Reachable from any JSContext via
 // JS_GetContextOpaque().
-struct TZgApp
+struct TGkApp
 {
-	const zg_app_t *pBundle;
+	const gk_app_t *pBundle;
 	JSRuntime *pRuntime;
 	JSContext *pContext;
 
 	lv_obj_t *pScreen;		// root of everything the app shows
 	lv_group_t *pGroup;		// focus group for the app's widgets
 
-	TZgTimer *pTimers;		// setTimeout / setInterval
+	TGkTimer *pTimers;		// setTimeout / setInterval
 	unsigned nNextTimerID;
 
-	TZgNode *pDeferredDelete;	// widgets to delete outside LVGL event processing
+	TGkNode *pDeferredDelete;	// widgets to delete outside LVGL event processing
 
 	JSValue KeyHandler;		// ui.onKey() handler or JS_UNDEFINED
-	TZgUIState *pUI;		// zg:ui state, 0 until the app imports it
-	struct TZgClockState *pClock;	// zg:clock alarms, 0 until the first every()
-	struct TZgI18nState *pI18n;	// its translations (i18n.h), from its start
+	TGkUIState *pUI;		// zg:ui state, 0 until the app imports it
+	struct TGkClockState *pClock;	// zg:clock alarms, 0 until the first every()
+	struct TGkI18nState *pI18n;	// its translations (i18n.h), from its start
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;
@@ -82,7 +82,7 @@ public:
 	// --- services for the JS modules ---
 
 	static CAppHost *Get (void);
-	static TZgApp *GetApp (JSContext *pContext);
+	static TGkApp *GetApp (JSContext *pContext);
 
 	// Requests to switch to another app (by id) or back to the launcher
 	// (pID == 0). Performed in Update(), never inside a JS call.
@@ -103,7 +103,7 @@ public:
 	static JSRuntime *NewRuntime (void);
 
 private:
-	boolean StartApp (const zg_app_t *pApp);
+	boolean StartApp (const gk_app_t *pApp);
 	void StopApp (void);
 	void RunJobs (void);
 
@@ -111,7 +111,7 @@ private:
 	void ClearError (void);
 	static void ErrorBannerEvent (lv_event_t *e);
 
-	static boolean KeyHook (const TZgKey &rKey, void *pParam);
+	static boolean KeyHook (const TGkKey &rKey, void *pParam);
 	static void HomeHandler (void *pParam);
 	static int InterruptHandler (JSRuntime *pRuntime, void *pParam);
 
@@ -121,11 +121,11 @@ private:
 private:
 	CKeyboardIndev *m_pKeyboard;
 
-	TZgApp m_App;			// the running app (pBundle == 0: none)
+	TGkApp m_App;			// the running app (pBundle == 0: none)
 	lv_obj_t *m_pIdleScreen;	// shown while switching apps
 	lv_obj_t *m_pErrorBanner;	// on the top layer, survives app switches
 
-	const zg_app_t *m_pPendingLaunch;
+	const gk_app_t *m_pPendingLaunch;
 	volatile boolean m_bHomeRequested;	// set from IRQ context
 	boolean m_bInterrupted;			// the pending exception is our interrupt
 
@@ -135,34 +135,34 @@ private:
 // --- shared with the JS modules (js_ui.cpp, js_sys.cpp) ---
 
 // Creates the "zg:ui", "zg:sys", "zg:apps" and "zg:crypto" native modules.
-JSModuleDef *ZgInitUIModule (JSContext *pContext, const char *pName);
-JSModuleDef *ZgInitSysModule (JSContext *pContext, const char *pName);
-JSModuleDef *ZgInitAppsModule (JSContext *pContext, const char *pName);
-JSModuleDef *ZgInitCryptoModule (JSContext *pContext, const char *pName);
-JSModuleDef *ZgInitClockModule (JSContext *pContext, const char *pName);
-void ZgClockFree (TZgApp *pApp);		// js_clock.cpp: the app's alarms
-JSModuleDef *ZgInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
+JSModuleDef *GkInitUIModule (JSContext *pContext, const char *pName);
+JSModuleDef *GkInitSysModule (JSContext *pContext, const char *pName);
+JSModuleDef *GkInitAppsModule (JSContext *pContext, const char *pName);
+JSModuleDef *GkInitCryptoModule (JSContext *pContext, const char *pName);
+JSModuleDef *GkInitClockModule (JSContext *pContext, const char *pName);
+void GkClockFree (TGkApp *pApp);		// js_clock.cpp: the app's alarms
+JSModuleDef *GkInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
-void ZgInitGlobals (JSContext *pContext);
+void GkInitGlobals (JSContext *pContext);
 
 // Called by the host while tearing an app down.
-void ZgUIAppStopping (TZgApp *pApp);	// before its screen is deleted
-void ZgUIFree (TZgApp *pApp);		// after its screen is deleted
-void ZgTimersFree (TZgApp *pApp);
-void ZgUIProcessDeferred (TZgApp *pApp);
+void GkUIAppStopping (TGkApp *pApp);	// before its screen is deleted
+void GkUIFree (TGkApp *pApp);		// after its screen is deleted
+void GkTimersFree (TGkApp *pApp);
+void GkUIProcessDeferred (TGkApp *pApp);
 
 // Delivers a key to the app's ui.onKey handler. TRUE: consumed.
-boolean ZgUIDispatchKey (TZgApp *pApp, const TZgKey &rKey);
+boolean GkUIDispatchKey (TGkApp *pApp, const TGkKey &rKey);
 
 // Focus callback for every focus group: shows the focus ring however focus
 // moved (keyboard, mouse or code). zerogap is keyboard-first.
-void ZgGroupFocusCallback (lv_group_t *pGroup);
+void GkGroupFocusCallback (lv_group_t *pGroup);
 
 // The UTF-8 symbol for an icon name in ui.symbols ("home", ...), or 0.
-const char *ZgSymbolByName (const char *pName);
+const char *GkSymbolByName (const char *pName);
 
 // Applies the system theme (dark, teal/amber).
-void ZgUIApplyDefaultTheme (void);
+void GkUIApplyDefaultTheme (void);
 
 #endif

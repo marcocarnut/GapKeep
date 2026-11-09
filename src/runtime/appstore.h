@@ -25,13 +25,13 @@
 #include <circle/types.h>
 #include "bundle.h"
 
-enum TZgCardStatus
+enum TGkCardStatus
 {
-	ZgCardDisabled,		// sealed build: the card is not read
-	ZgCardNone,		// no card, or the card did not initialize
-	ZgCardUnreadable,	// no FAT file system
-	ZgCardNoApps,		// no /apps folder
-	ZgCardOK		// /apps was read (see the problems for apps not loaded)
+	GkCardDisabled,		// sealed build: the card is not read
+	GkCardNone,		// no card, or the card did not initialize
+	GkCardUnreadable,	// no FAT file system
+	GkCardNoApps,		// no /apps folder
+	GkCardOK		// /apps was read (see the problems for apps not loaded)
 };
 
 class CAppStore
@@ -42,13 +42,13 @@ public:
 	static void Initialize (boolean bCardPresent);
 
 	static unsigned GetCount (void);
-	static const zg_app_t *Get (unsigned nIndex);
-	static const zg_app_t *Find (const char *pID);
+	static const gk_app_t *Get (unsigned nIndex);
+	static const gk_app_t *Find (const char *pID);
 	// FALSE for an experimental app without "experimental = yes" (settings.h):
 	// not listed, not launched
-	static boolean IsAvailable (const zg_app_t *pApp);
+	static boolean IsAvailable (const gk_app_t *pApp);
 
-	static TZgCardStatus GetCardStatus (void);
+	static TGkCardStatus GetCardStatus (void);
 	static const char *GetCardStatusName (void);	// "none", "ok", ...
 
 	// apps in /apps that were not loaded

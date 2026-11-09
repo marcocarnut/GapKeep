@@ -16,8 +16,8 @@
 //               colours (lib/colorqr), with the code's own. Reported apart
 //               from "qr", never merged into it (docs/EXPERIMENTAL.md).
 //
-// To add one (say "aruco", for dice): a ZG_DETECT_* bit and its name in
-// scanner.cpp, a decoder like qrdecode.*, a case in CZgScanner::Poll, and
+// To add one (say "aruco", for dice): a GK_DETECT_* bit and its name in
+// scanner.cpp, a decoder like qrdecode.*, a case in CGkScanner::Poll, and
 // its event fields in js_ui.cpp and docs/api/zerogap-api.yaml.
 //
 // One scanner at a time has the camera. A QR code is reported when it
@@ -34,26 +34,26 @@
 #include "qrdecode.h"
 #include "camera.h"
 
-#define ZG_DETECT_QR		(1u << 0)
-#define ZG_DETECT_QR_COLOR	(1u << 1)
+#define GK_DETECT_QR		(1u << 0)
+#define GK_DETECT_QR_COLOR	(1u << 1)
 
 // What a "qr-color" detection found (GetColour)
-enum TZgColourStatus
+enum TGkColourStatus
 {
-	ZgColourOK,		// the colour layer was read
-	ZgColourPlain,		// a plain QR code: no colour layer
-	ZgColourUnreadable	// a colour layer, or a code, it could not read
+	GkColourOK,		// the colour layer was read
+	GkColourPlain,		// a plain QR code: no colour layer
+	GkColourUnreadable	// a colour layer, or a code, it could not read
 };
 
-class CZgCamera;
+class CGkCamera;
 
-class CZgScanner
+class CGkScanner
 {
 public:
-	CZgScanner (void);
-	~CZgScanner (void);			// stops
+	CGkScanner (void);
+	~CGkScanner (void);			// stops
 
-	// Detectors by name ("qr"): the ZG_DETECT_* bit, or 0 if this build has
+	// Detectors by name ("qr"): the GK_DETECT_* bit, or 0 if this build has
 	// no such detector. GetDetectorName (i) lists them (0 after the last).
 	static unsigned GetDetector (const char *pName);
 	static const char *GetDetectorName (unsigned nIndex, unsigned *pBit = 0);
@@ -61,8 +61,8 @@ public:
 	void SetDetectors (unsigned nDetectors)	{ m_nDetectors = nDetectors; }
 
 	// The camera's field (camera.h), from the next Start().
-	void SetField (TZgCameraField Field)		{ m_Field = Field; }
-	TZgCameraField GetField (void) const		{ return m_Field; }
+	void SetField (TGkCameraField Field)		{ m_Field = Field; }
+	TGkCameraField GetField (void) const		{ return m_Field; }
 	unsigned GetDetectors (void) const	{ return m_nDetectors; }
 
 	// FALSE: the camera can't start (GetError says why)
@@ -79,12 +79,12 @@ public:
 	unsigned Poll (void);
 
 	// What was found, one detection at a time (a poll can find a QR code
-	// and its colour layer): the ZG_DETECT_* bit and its data (the QR
+	// and its colour layer): the GK_DETECT_* bit and its data (the QR
 	// code's bytes), 0 when there are no more. Valid until the next Poll.
 	unsigned GetDetection (const u8 **ppData, unsigned *pLength);
-	// For a ZG_DETECT_QR_COLOR detection: what the colours held (0 unless
-	// the status is ZgColourOK)
-	TZgColourStatus GetColour (const u8 **ppColour, unsigned *pLength) const;
+	// For a GK_DETECT_QR_COLOR detection: what the colours held (0 unless
+	// the status is GkColourOK)
+	TGkColourStatus GetColour (const u8 **ppColour, unsigned *pLength) const;
 	const char *GetError (void) const		{ return m_pError; }
 
 	// The last frame scaled to fit (letterboxed) into nWidth x nHeight
@@ -94,14 +94,14 @@ public:
 
 private:
 	unsigned PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight);
-	unsigned PollColour (const TZgQRCode &rCode, unsigned nWidth, unsigned nHeight,
+	unsigned PollColour (const TGkQRCode &rCode, unsigned nWidth, unsigned nHeight,
 			     boolean bNewAppearance, unsigned long long nNow);
 	void FreeColour (void);
 
 private:
-	unsigned m_nDetectors;			// ZG_DETECT_* bits
-	TZgCameraField m_Field;
-	CZgCamera *m_pCamera;			// while scanning
+	unsigned m_nDetectors;			// GK_DETECT_* bits
+	TGkCameraField m_Field;
+	CGkCamera *m_pCamera;			// while scanning
 	const char *m_pError;
 	unsigned m_nFrameSerial;
 	u8 *m_pPreviewFrame;			// a copy for the preview
@@ -109,7 +109,7 @@ private:
 	unsigned long long m_nNextDecodeAt;	// clock ticks
 
 	unsigned long long m_nMissedSince;	// the first decode without the code, or 0
-	unsigned m_nPending;			// ZG_DETECT_* bits GetDetection hands out
+	unsigned m_nPending;			// GK_DETECT_* bits GetDetection hands out
 
 	u8 *m_pLast;				// the last QR code reported
 	unsigned m_nLastLength;
@@ -121,8 +121,8 @@ private:
 	boolean m_bColourFailReported;
 	unsigned m_nColourTries;
 	unsigned long long m_nColourSince;	// the first try, this appearance
-	TZgColourStatus m_ColourStatus;
-	u8 *m_pColour;				// its payload, ZG_QR_MAX_COLOUR bytes
+	TGkColourStatus m_ColourStatus;
+	u8 *m_pColour;				// its payload, GK_QR_MAX_COLOUR bytes
 	unsigned m_nColourLength;
 	u64 *m_pWork;				// colorqr's scratch memory, m_nWorkSize bytes
 	unsigned m_nWorkSize;
@@ -136,7 +136,7 @@ private:
 	unsigned long long m_nSideSum;		// their sides, in frame pixels
 	unsigned long long m_nDecodeTicks, m_nMaxDecodeTicks;
 
-	static CZgScanner *s_pActive;		// the scanner that has the camera
+	static CGkScanner *s_pActive;		// the scanner that has the camera
 };
 
 #endif

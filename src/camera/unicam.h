@@ -30,19 +30,19 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-#ifndef _zg_unicam_h
-#define _zg_unicam_h
+#ifndef _gk_unicam_h
+#define _gk_unicam_h
 
 #include <circle/gpioclock.h>
 #include <circle/types.h>
 
-class CZgUnicam
+class CGkUnicam
 {
 public:
 	static const unsigned Buffers = 4;
 
-	CZgUnicam (void);
-	~CZgUnicam (void);
+	CGkUnicam (void);
+	~CGkUnicam (void);
 
 	// The power domain and the CAM1 ("lp") clock. FALSE: the block does
 	// not answer with its reset values (unpowered or unclocked).

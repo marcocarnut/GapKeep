@@ -116,8 +116,8 @@ export class Zerogap {
     this.width = width;
     this.height = height;
     const card = this.hasCard ? this.m.stringToNewUTF8 ("/card") : 0;
-    if (this.hasBuiltin) this.m._zg_sim_set_builtin_dir (this.m.stringToNewUTF8 ("/builtin"));
-    if (this.m._zg_sim_boot (width, height, card) !== 0) {
+    if (this.hasBuiltin) this.m._gk_sim_set_builtin_dir (this.m.stringToNewUTF8 ("/builtin"));
+    if (this.m._gk_sim_boot (width, height, card) !== 0) {
       throw new Error ("zerogap did not boot (see the log)");
     }
   }
@@ -137,7 +137,7 @@ export class Zerogap {
   step () {
     if (this.halted) return;
     try {
-      this.m._zg_web_run ();
+      this.m._gk_web_run ();
     } catch (e) {
       // exit() (a halt) unwinds as an exception
       this.halted = true;
@@ -153,13 +153,13 @@ export class Zerogap {
   // browser's own repeats (event.repeat).
   keyDown (key, mods = 0) {
     const p = this.m.stringToNewUTF8 (key);
-    const ok = this.m._zg_sim_key_down_dom (p, mods) === 0;
+    const ok = this.m._gk_sim_key_down_dom (p, mods) === 0;
     this.m._free (p);
     return ok;
   }
 
   keyUp () {
-    this.m._zg_sim_key_up ();
+    this.m._gk_sim_key_up ();
   }
 
   // Types text as key presses (Ctrl+V on the IDE's screen): printable ASCII
@@ -198,19 +198,19 @@ export class Zerogap {
   // launcher). False if there is no such app.
   launch (id) {
     const p = id ? this.m.stringToNewUTF8 (id) : 0;
-    const ok = this.m._zg_sim_launch (p) === 0;
+    const ok = this.m._gk_sim_launch (p) === 0;
     if (p) this.m._free (p);
     return ok;
   }
 
   // Mouse at (x, y) in screen pixels, left button pressed or not.
   pointer (x, y, pressed) {
-    this.m._zg_sim_pointer (Math.round (x), Math.round (y), pressed ? 1 : 0);
+    this.m._gk_sim_pointer (Math.round (x), Math.round (y), pressed ? 1 : 0);
   }
 
   // The mouse wheel where the pointer is: notches > 0 scroll down.
   wheel (notches) {
-    this.m._zg_sim_wheel (notches | 0);
+    this.m._gk_sim_wheel (notches | 0);
   }
 
   // The camera (after boot). What it films: "none" (no camera) or
@@ -222,7 +222,7 @@ export class Zerogap {
   // large).
   camera (mode) {
     const p = this.m.stringToNewUTF8 (mode);
-    const ok = this.m._zg_sim_camera (p) === 0;
+    const ok = this.m._gk_sim_camera (p) === 0;
     this.m._free (p);
     return ok;
   }
@@ -230,7 +230,7 @@ export class Zerogap {
   // quiet: not logged (for the parts of an animated code)
   cameraQR (data, quiet = false) {
     const bytes = typeof data === "string" ? new TextEncoder ().encode (data) : data;
-    return this.withBytes (bytes, (p) => this.m._zg_sim_camera_qr (p, bytes.length, quiet ? 1 : 0) === 0);
+    return this.withBytes (bytes, (p) => this.m._gk_sim_camera_qr (p, bytes.length, quiet ? 1 : 0) === 0);
   }
 
   // RGBA goes in colour (the experimental "qr-color" detector sees the
@@ -239,7 +239,7 @@ export class Zerogap {
   // An older simulator (sim/build/web, from before colour) has no RGB entry
   // points: such a page sends grey and says once that it needs a rebuild.
   hasColour () {
-    if (typeof this.m._zg_sim_camera_push_rgb === "function") return true;
+    if (typeof this.m._gk_sim_camera_push_rgb === "function") return true;
     if (!this.warnedColour) {
       this.warnedColour = true;
       console.warn ("zerogap: the simulator (zgsim.wasm) is older than this page: the camera sends grey;"
@@ -251,19 +251,19 @@ export class Zerogap {
   cameraPicture (pixels, width, height) {
     if (pixels.length === width * height * 4 && width <= 2048 && height <= 2048 && this.hasColour ()) {
       const rgb = toRGB (pixels);
-      return this.withBytes (rgb, (p) => this.m._zg_sim_camera_picture_rgb (p, width, height) === 0);
+      return this.withBytes (rgb, (p) => this.m._gk_sim_camera_picture_rgb (p, width, height) === 0);
     }
     const grey = toGrey (pixels, width, height);
-    return this.withBytes (grey, (p) => this.m._zg_sim_camera_picture (p, width, height) === 0);
+    return this.withBytes (grey, (p) => this.m._gk_sim_camera_picture (p, width, height) === 0);
   }
 
   cameraPush (pixels, width, height) {
     if (pixels.length === width * height * 4 && this.hasColour ()) {
       const rgb = toRGB (pixels);
-      return this.withBytes (rgb, (p) => this.m._zg_sim_camera_push_rgb (p, width, height) === 0);
+      return this.withBytes (rgb, (p) => this.m._gk_sim_camera_push_rgb (p, width, height) === 0);
     }
     const grey = toGrey (pixels, width, height);
-    return this.withBytes (grey, (p) => this.m._zg_sim_camera_push (p, width, height) === 0);
+    return this.withBytes (grey, (p) => this.m._gk_sim_camera_push (p, width, height) === 0);
   }
 
   withBytes (bytes, fn) {
@@ -278,13 +278,13 @@ export class Zerogap {
 
   // Bumped whenever the screen changed.
   get frameSerial () {
-    return this.m._zg_sim_frame_serial ();
+    return this.m._gk_sim_frame_serial ();
   }
 
   // The screen as RGBA (an ImageData-compatible Uint8ClampedArray).
   pixels () {
     const w = this.width, h = this.height;
-    const f = this.m._zg_web_frame () >> 1;
+    const f = this.m._gk_web_frame () >> 1;
     const src = this.m.HEAPU16.subarray (f, f + w * h);
     const out = new Uint8ClampedArray (w * h * 4);
     for (let i = 0, o = 0; i < src.length; i++, o += 4) {

@@ -3,7 +3,7 @@
  * neither Circle, newlib's libm nor libgcc provide.
  *
  * Kept deliberately tiny so it can be audited at a glance. The C++ side
- * (logging, clock) is reached through zg_bridge.h.
+ * (logging, clock) is reached through gk_bridge.h.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -15,7 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
-#include "zg_bridge.h"
+#include "gk_bridge.h"
 
 /* LVGL's built-in printf (LV_USE_STDLIB_SPRINTF = LV_STDLIB_BUILTIN). It
  * supports everything QuickJS formats (%d %u %x %s %.*s, ll modifiers).
@@ -46,7 +46,7 @@ static void put_char (char c)
 	if (c == '\n' || s_len == sizeof s_line - 1)
 	{
 		s_line[s_len] = '\0';
-		zg_log_line ("qjs", s_line);
+		gk_log_line ("qjs", s_line);
 		s_len = 0;
 		if (c == '\n')
 			return;
@@ -83,7 +83,7 @@ int fprintf (FILE *stream, const char *fmt, ...)
 
 void abort (void)
 {
-	zg_fatal ("abort() called");
+	gk_fatal ("abort() called");
 }
 
 int abs (int x)
@@ -132,7 +132,7 @@ int gettimeofday (struct timeval *tv, void *tz)
 {
 	(void) tz;
 	unsigned sec, usec;
-	zg_time_now (&sec, &usec);
+	gk_time_now (&sec, &usec);
 	tv->tv_sec = sec;
 	tv->tv_usec = usec;
 	return 0;
@@ -142,7 +142,7 @@ int clock_gettime (int clock_id, struct timespec *tp)
 {
 	(void) clock_id;
 	unsigned sec, usec;
-	zg_time_now (&sec, &usec);
+	gk_time_now (&sec, &usec);
 	tp->tv_sec = sec;
 	tp->tv_nsec = (long) usec * 1000;
 	return 0;
@@ -152,7 +152,7 @@ int clock_gettime (int clock_id, struct timespec *tp)
  * daylight saving rules). */
 struct tm *localtime_r (const time_t *t, struct tm *tm)
 {
-	long nOffset = (long) zg_utc_offset_minutes () * 60;
+	long nOffset = (long) gk_utc_offset_minutes () * 60;
 	long long secs = *t + nOffset;
 	long long days = secs / 86400;
 	long rem = (long) (secs % 86400);

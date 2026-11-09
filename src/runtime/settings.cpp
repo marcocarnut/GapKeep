@@ -9,24 +9,24 @@
 #include "keylayout.h"
 #include <circle/logger.h>
 #include <circle/util.h>
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 #include <ff.h>
 #endif
 
 static const char From[] = "settings";
 
-boolean CZgSettings::s_bExperimental = FALSE;
+boolean CGkSettings::s_bExperimental = FALSE;
 
-void CZgSettings::SetExperimental (boolean bOn, const char *pFrom)
+void CGkSettings::SetExperimental (boolean bOn, const char *pFrom)
 {
 	s_bExperimental = bOn;
 	CLogger::Get ()->Write (From, bOn ? LogWarning : LogNotice, "experimental features %s (%s)",
 				bOn ? "on" : "off", pFrom);
 }
 
-void CZgSettings::Load (void)
+void CGkSettings::Load (void)
 {
-#ifndef ZG_SEALED
+#ifndef GK_SEALED
 	FIL File;
 	if (f_open (&File, "SD:/zerogap.txt", FA_READ) != FR_OK)
 	{
@@ -83,15 +83,15 @@ void CZgSettings::Load (void)
 		}
 		*pValue++ = '\0';
 
-		if (CZgClock::Configure (Clean, pValue, nLine))
+		if (CGkClock::Configure (Clean, pValue, nLine))
 		{
 			continue;
 		}
-		if (CZgI18n::Configure (Clean, pValue, nLine))	// language, decimal_mark, group_mark
+		if (CGkI18n::Configure (Clean, pValue, nLine))	// language, decimal_mark, group_mark
 		{
 			continue;
 		}
-		if (ZgKeyLayoutConfigure (Clean, pValue, nLine))
+		if (GkKeyLayoutConfigure (Clean, pValue, nLine))
 		{
 			continue;
 		}

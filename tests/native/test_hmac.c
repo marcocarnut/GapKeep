@@ -17,12 +17,12 @@ static void hex (const uint8_t *p, size_t n)
 
 int main (int argc, char **argv)
 {
-	int r = zg_sha1_selftest ();
-	if (r == 0) r = zg_sha256_selftest () ? 2000 : 0;
-	if (r == 0) r = zg_sha512_selftest () ? 3000 : 0;
-	if (r == 0) r = zg_hmac_selftest ();
-	if (r == 0) r = zg_ripemd160_selftest (1) ? 4000 + zg_ripemd160_selftest (1) : 0;
-	if (r == 0) r = zg_pbkdf2_selftest (1) ? 5000 + zg_pbkdf2_selftest (1) : 0;
+	int r = gk_sha1_selftest ();
+	if (r == 0) r = gk_sha256_selftest () ? 2000 : 0;
+	if (r == 0) r = gk_sha512_selftest () ? 3000 : 0;
+	if (r == 0) r = gk_hmac_selftest ();
+	if (r == 0) r = gk_ripemd160_selftest (1) ? 4000 + gk_ripemd160_selftest (1) : 0;
+	if (r == 0) r = gk_pbkdf2_selftest (1) ? 5000 + gk_pbkdf2_selftest (1) : 0;
 	printf ("hash and hmac selftests: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	if (r != 0 || argc < 2)
 	{
@@ -31,22 +31,22 @@ int main (int argc, char **argv)
 
 	/* "random N": N cases as lines "hash keyhex msghex digest hmac" */
 	int cases = atoi (argv[1]);
-	static const zg_hash_t *const hashes[] = { &zg_hash_sha1, &zg_hash_sha256, &zg_hash_sha512 };
+	static const gk_hash_t *const hashes[] = { &gk_hash_sha1, &gk_hash_sha256, &gk_hash_sha512 };
 	srand (1);
 	for (int c = 0; c < cases; c++)
 	{
-		const zg_hash_t *h = hashes[c % 3];
+		const gk_hash_t *h = hashes[c % 3];
 		size_t kl = (size_t) rand () % 300, ml = (size_t) rand () % 600;
 		static uint8_t k[300], m[600];
 		for (size_t i = 0; i < kl; i++) k[i] = (uint8_t) rand ();
 		for (size_t i = 0; i < ml; i++) m[i] = (uint8_t) rand ();
 
 		uint8_t d[64], mac[64];
-		zg_hash_ctx_t ctx;
+		gk_hash_ctx_t ctx;
 		h->init (&ctx);
 		h->update (&ctx, m, ml);
 		h->final (&ctx, d);
-		zg_hmac (h, k, kl, m, ml, mac);
+		gk_hmac (h, k, kl, m, ml, mac);
 
 		printf ("%s ", h->name);
 		for (size_t i = 0; i < kl; i++) printf ("%02x", k[i]);
@@ -60,8 +60,8 @@ int main (int argc, char **argv)
 
 		/* "RIPEMD-160 - msghex digest hash160" */
 		uint8_t r160[20], h160[20];
-		zg_ripemd160 (m, ml, r160);
-		zg_hash160 (m, ml, h160);
+		gk_ripemd160 (m, ml, r160);
+		gk_hash160 (m, ml, h160);
 		printf ("RIPEMD-160 - ");
 		hex (m, ml); printf (" "); hex (r160, 20); printf (" "); hex (h160, 20);
 		printf ("\n");
@@ -72,7 +72,7 @@ int main (int argc, char **argv)
 			uint32_t it = 1 + (uint32_t) rand () % 50;
 			size_t dl = 1 + (size_t) rand () % 150, pl = kl % 150, sl = ml % 80;
 			uint8_t dk[150];
-			zg_pbkdf2 (h, k, pl, m, sl, it, dk, dl);
+			gk_pbkdf2 (h, k, pl, m, sl, it, dk, dl);
 			printf ("PBKDF2 %s ", h->name);
 			hex (k, pl); printf (" "); hex (m, sl); printf (" %u ", (unsigned) it); hex (dk, dl);
 			printf ("\n");

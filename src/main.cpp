@@ -25,7 +25,7 @@
 __attribute__ ((no_stack_protector))
 int main (void)
 {
-	ZgInitStackGuard ();
+	GkInitStackGuard ();
 
 	// cannot return here because some destructors used in CKernel are not implemented
 

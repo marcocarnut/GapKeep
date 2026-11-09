@@ -24,7 +24,7 @@
 
 #include <circle/types.h>
 
-class CZgSettings
+class CGkSettings
 {
 public:
 	static void Load (void);	// from the mounted card, if there is one

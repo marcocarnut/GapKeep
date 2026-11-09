@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Size: 14 px
  * Bpp: 4
- * Opts: --no-compress --no-prefilter --bpp 4 --size 14 --format lvgl --lv-include lvgl/lvgl/lvgl.h --lv-font-name zg_mono_14 --lv-fallback zg_montserrat_14 --font JetBrainsMono-Medium.ttf -r 0x20-0x7E,0xA0-0xFF -o zg_mono_14.c
+ * Opts: --no-compress --no-prefilter --bpp 4 --size 14 --format lvgl --lv-include lvgl/lvgl/lvgl.h --lv-font-name gk_mono_14 --lv-fallback gk_montserrat_14 --font JetBrainsMono-Medium.ttf -r 0x20-0x7E,0xA0-0xFF -o gk_mono_14.c
  ******************************************************************************/
 
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE
@@ -10,11 +10,11 @@
 #include "lvgl/lvgl/lvgl.h"
 #endif
 
-#ifndef ZG_MONO_14
-#define ZG_MONO_14 1
+#ifndef GK_MONO_14
+#define GK_MONO_14 1
 #endif
 
-#if ZG_MONO_14
+#if GK_MONO_14
 
 /*-----------------
  *    BITMAPS
@@ -1581,7 +1581,7 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
 #endif
 };
 
-extern const lv_font_t zg_montserrat_14;
+extern const lv_font_t gk_montserrat_14;
 
 
 /*-----------------
@@ -1590,13 +1590,13 @@ extern const lv_font_t zg_montserrat_14;
 
 /*Initialize a public general font descriptor*/
 #if LVGL_VERSION_MAJOR >= 8
-const lv_font_t zg_mono_14 = {
+const lv_font_t gk_mono_14 = {
 #else
-lv_font_t zg_mono_14 = {
+lv_font_t gk_mono_14 = {
 #endif
     .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt,    /*Function pointer to get glyph's data*/
     .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt,    /*Function pointer to get glyph's bitmap*/
-    .line_height = 16,          /*zg_montserrat_14's: tools/make_fonts.py*/
+    .line_height = 16,          /*gk_montserrat_14's: tools/make_fonts.py*/
     .base_line = 3,             /*Baseline measured from the bottom of the line*/
 #if !(LVGL_VERSION_MAJOR == 6 && LVGL_VERSION_MINOR == 0)
     .subpx = LV_FONT_SUBPX_NONE,
@@ -1607,12 +1607,12 @@ lv_font_t zg_mono_14 = {
 #endif
     .dsc = &font_dsc,          /*The custom font data. Will be accessed by `get_glyph_bitmap/dsc` */
 #if LV_VERSION_CHECK(8, 2, 0) || LVGL_VERSION_MAJOR >= 9
-    .fallback = &zg_montserrat_14,
+    .fallback = &gk_montserrat_14,
 #endif
     .user_data = NULL,
 };
 
 
 
-#endif /*#if ZG_MONO_14*/
+#endif /*#if GK_MONO_14*/
 

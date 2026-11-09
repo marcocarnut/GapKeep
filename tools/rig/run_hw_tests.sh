@@ -7,15 +7,15 @@
 # line, which production builds never read.
 #
 # Usage: tools/rig/run_hw_tests.sh [-o output-dir] [scenario.txt ...]
-#        (default: every scenario; rig from $ZG_RIG, default mac@five.local)
+#        (default: every scenario; rig from $GK_RIG, default mac@five.local)
 #
 # Scenarios that need the test SD card (tests/sdcard: "Needs ... the test SD
-# card") are skipped unless ZG_RIG_SDAPPS=1 says the rig's card has its
+# card") are skipped unless GK_RIG_SDAPPS=1 says the rig's card has its
 # apps/ folder (tools/make_sdcard.sh puts it on the development card).
 #
 set -e
 cd "$(dirname "$0")/../.."
-RIG=${ZG_RIG:-mac@five.local}
+RIG=${GK_RIG:-mac@five.local}
 OUT=
 if [ "$1" = "-o" ]; then OUT=$2; shift 2; fi
 OUT=${OUT:-$(mktemp -d -t zerogap-hw-XXXXXX)}
@@ -32,8 +32,8 @@ scp -q $SCENARIOS "$RIG:zerogap-rig/tests/"
 FAILED=0
 for t in $SCENARIOS; do
 	name=$(basename "$t" .txt)
-	if head -2 "$t" | grep -q "the test SD card" && [ "$ZG_RIG_SDAPPS" != 1 ]; then
-		echo "SKIP  hw:$name   (set ZG_RIG_SDAPPS=1 once the rig's card has tests/sdcard/apps)"
+	if head -2 "$t" | grep -q "the test SD card" && [ "$GK_RIG_SDAPPS" != 1 ]; then
+		echo "SKIP  hw:$name   (set GK_RIG_SDAPPS=1 once the rig's card has tests/sdcard/apps)"
 		continue
 	fi
 	if grep -q "^launch " "$t"; then

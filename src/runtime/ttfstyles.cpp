@@ -10,8 +10,8 @@
 
 extern "C"
 {
-	extern const unsigned char zg_ttf_bold[], zg_ttf_italic[], zg_ttf_bolditalic[];
-	extern const size_t zg_ttf_bold_size, zg_ttf_italic_size, zg_ttf_bolditalic_size;
+	extern const unsigned char gk_ttf_bold[], gk_ttf_italic[], gk_ttf_bolditalic[];
+	extern const size_t gk_ttf_bold_size, gk_ttf_italic_size, gk_ttf_bolditalic_size;
 }
 
 static const char From[] = "fonts";
@@ -33,14 +33,14 @@ static struct
 }
 Styles[3] =		// index: bBold | bItalic << 1, less one
 {
-	{"bold", zg_ttf_bold, &zg_ttf_bold_size, {}},
-	{"italic", zg_ttf_italic, &zg_ttf_italic_size, {}},
-	{"bold italic", zg_ttf_bolditalic, &zg_ttf_bolditalic_size, {}},
+	{"bold", gk_ttf_bold, &gk_ttf_bold_size, {}},
+	{"italic", gk_ttf_italic, &gk_ttf_italic_size, {}},
+	{"bold italic", gk_ttf_bolditalic, &gk_ttf_bolditalic_size, {}},
 };
 
 static unsigned s_nMade = 0;
 
-// TinyTTF's get_glyph_bitmap, counted and timed (ZgStyledFontStats)
+// TinyTTF's get_glyph_bitmap, counted and timed (GkStyledFontStats)
 static const void *GetBitmap (lv_font_glyph_dsc_t *pGlyph, lv_draw_buf_t *pBuffer)
 {
 	for (auto &Style : Styles)
@@ -60,7 +60,7 @@ static const void *GetBitmap (lv_font_glyph_dsc_t *pGlyph, lv_draw_buf_t *pBuffe
 	return 0;
 }
 
-void ZgStyledFontStats (void)
+void GkStyledFontStats (void)
 {
 	for (auto &Style : Styles)
 	{
@@ -75,7 +75,7 @@ void ZgStyledFontStats (void)
 	}
 }
 
-const lv_font_t *ZgStyledFont (const lv_font_t *pNormal, int nSize, boolean bBold, boolean bItalic)
+const lv_font_t *GkStyledFont (const lv_font_t *pNormal, int nSize, boolean bBold, boolean bItalic)
 {
 	if (!bBold && !bItalic)
 	{
@@ -120,7 +120,7 @@ const lv_font_t *ZgStyledFont (const lv_font_t *pNormal, int nSize, boolean bBol
 	return pFont;
 }
 
-unsigned ZgStyledFontCount (void)
+unsigned GkStyledFontCount (void)
 {
 	return s_nMade;
 }

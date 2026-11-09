@@ -1,4 +1,4 @@
-// halt(): used by LVGL's assert handler (zg_lv_conf.h) and zg_fatal().
+// halt(): used by LVGL's assert handler (gk_lv_conf.h) and gk_fatal().
 #ifndef _circle_startup_h
 #define _circle_startup_h
 #ifdef __cplusplus

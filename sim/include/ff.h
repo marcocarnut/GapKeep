@@ -1,10 +1,10 @@
 // The part of FatFs's API the app loader (src/runtime/appstore.cpp) uses,
 // on a host folder instead of the SD card: "SD:/apps/x" is <root>/apps/x,
-// where <root> is set with ZgSimSetCardRoot(). Read-only, like zerogap's
+// where <root> is set with GkSimSetCardRoot(). Read-only, like zerogap's
 // FatFs. Symbolic links and anything but plain files and folders are not
 // visible (a FAT card has none).
-#ifndef ZG_SIM_FF_H
-#define ZG_SIM_FF_H
+#ifndef GK_SIM_FF_H
+#define GK_SIM_FF_H
 
 #include <stdint.h>
 
@@ -40,9 +40,9 @@ FRESULT f_read (FIL *fp, void *buff, UINT btr, UINT *br);
 FRESULT f_close (FIL *fp);
 
 // simulator: the folder that plays the SD card (0: no card)
-void ZgSimSetCardRoot (const char *pRoot);
+void GkSimSetCardRoot (const char *pRoot);
 // "SIM:/x" is <root>/x: replacements for built-in apps (appstore.cpp, simulator only)
-void ZgSimSetBuiltinRoot (const char *pRoot);
+void GkSimSetBuiltinRoot (const char *pRoot);
 
 #ifdef __cplusplus
 }

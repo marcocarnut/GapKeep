@@ -9,8 +9,8 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#ifndef ZG_COMPAT_PTHREAD_H
-#define ZG_COMPAT_PTHREAD_H
+#ifndef GK_COMPAT_PTHREAD_H
+#define GK_COMPAT_PTHREAD_H
 
 #include <time.h>
 #include <sys/types.h>	/* newlib already declares the pthread_*_t types */

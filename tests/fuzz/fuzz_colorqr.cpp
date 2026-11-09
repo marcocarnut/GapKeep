@@ -7,7 +7,7 @@
 // Each round takes one of the real colour codes (tests/colorqr, as PPM),
 // damages it (noise, rectangles of random colour, swapped or scaled
 // channels, blur, crops, mirroring, random sizes), finds the code with the
-// real QR decoder (ZgDecodeQR, zxing-cpp) on its grey, and calls
+// real QR decoder (GkDecodeQR, zxing-cpp) on its grey, and calls
 // cq_decode_base or cq_decode with:
 //
 //  - what zxing-cpp found (as the scanner does),
@@ -35,7 +35,7 @@
 #include <string>
 
 // what the runtime would provide
-extern "C" void zg_fatal (const char *pMessage)
+extern "C" void gk_fatal (const char *pMessage)
 {
 	fprintf (stderr, "fuzz_colorqr: fatal error: %s\n", pMessage);
 	abort ();
@@ -270,9 +270,9 @@ int main (int argc, char **argv)
 		std::vector<unsigned char> Grey ((size_t) F.w * F.h);
 		for (size_t i = 0; i < Grey.size (); i++)
 			Grey[i] = (unsigned char) ((F.rgb[3 * i] + 2 * F.rgb[3 * i + 1] + F.rgb[3 * i + 2]) / 4);
-		TZgQRCode Code;
+		TGkQRCode Code;
 		memset (&Code, 0, sizeof Code);
-		int nFound = ZgDecodeQR (Grey.data (), F.w, F.h, &Code, 1);
+		int nFound = GkDecodeQR (Grey.data (), F.w, F.h, &Code, 1);
 		if (nFound > 0) s_nBaseFound++;
 
 		// a stride with padding sometimes
@@ -326,7 +326,7 @@ int main (int argc, char **argv)
 
 		size_t nWork = cq_work_size (F.w, F.h, nVersion >= 1 && nVersion <= 40 ? nVersion : 40);
 		if (Rand (6) == 0) nWork = Rand ((unsigned) nWork + 1);
-		size_t nCap = Rand (5) == 0 ? Rand (600) : ZG_QR_MAX_COLOUR;
+		size_t nCap = Rand (5) == 0 ? Rand (600) : GK_QR_MAX_COLOUR;
 		unsigned nFlags = Rand (2) ? CQ_FLAG_LINEAR : 0;
 		if (Rand (50) == 0) nFlags = Rand ();
 

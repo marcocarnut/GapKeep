@@ -148,7 +148,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 | --- | --- |
 | `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `signer` (shows what a transaction does, then signs it with keys from codex32 shares, seed words, an xprv or a WIF), `colorqr` (experimental: colour QR codes, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
-| `lib/` | Builds of LVGL (with `zg_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs; `lib/colorqr`, the colour QR decoder, vendored (not a submodule: its project is not published). |
+| `lib/` | Builds of LVGL (with `gk_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs; `lib/colorqr`, the colour QR decoder, vendored (not a submodule: its project is not published). |
 | `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
 | `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
 | `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |

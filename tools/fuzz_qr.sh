@@ -22,7 +22,7 @@ SAN="-fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=all 
 SOURCES=$(make -s --no-print-directory -f "$ROOT/lib/zxing/zxing.mk" --eval='print:;@echo $(ZXING_SOURCES)' print)
 DEFINES=$(make -s --no-print-directory -f "$ROOT/lib/zxing/zxing.mk" --eval='print:;@echo $(ZXING_DEFINES)' print)
 INC="-I $ROOT/src/runtime -I $ROOT/sim/include -I $ROOT/lib/lvgl -idirafter $ROOT/circle/addon -I $ROOT/lib/zxing -I $ZX"
-DEF="-DZG_SIM -DZG_HAVE_ZXING -DLV_CONF_PATH=<zg_lv_conf.h> $DEFINES"
+DEF="-DGK_SIM -DGK_HAVE_ZXING -DLV_CONF_PATH=<gk_lv_conf.h> $DEFINES"
 # as the simulator and the kernel build them: C++20, no exceptions, no RTTI;
 # ZXING_BUILD_FOR_TEST exports the payload decoder, for the direct rounds
 CXX="g++ -std=c++20 -fno-exceptions -fno-rtti $SAN $DEF -DZXING_BUILD_FOR_TEST"

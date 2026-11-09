@@ -8,6 +8,6 @@
 
 // Sets the stack canary from the hardware RNG. Call first thing in main(),
 // which must itself be compiled without stack protection.
-void ZgInitStackGuard (void);
+void GkInitStackGuard (void);
 
 #endif

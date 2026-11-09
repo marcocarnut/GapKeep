@@ -11,6 +11,6 @@
 
 // kind: write-code, write-rodata, write-vectors, exec-data, exec-heap,
 // exec-stack, stack-overflow, smash. Returns only for an unknown kind.
-void ZgTestCrash (const char *pKind);
+void GkTestCrash (const char *pKind);
 
 #endif

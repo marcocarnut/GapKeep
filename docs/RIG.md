@@ -37,7 +37,7 @@ bootloader (921600 baud), a `config.txt` and the test card's `apps` folder
 (`tests/sdcard`); copy all of it to a FAT32 card. This is done once.
 Test kernels sent over serial read that `apps` folder like a real system;
 `tests/sdapps.txt` checks it, and runs on the rig only with
-`ZG_RIG_SDAPPS=1` (cards made before the folder existed lack it).
+`GK_RIG_SDAPPS=1` (cards made before the folder existed lack it).
 
 ## Setting up the rig
 
@@ -76,7 +76,7 @@ From the development machine:
 ```sh
 tools/rig/run_hw_tests.sh                      # every scenario in tests/
 tools/rig/run_hw_tests.sh tests/dice39.txt     # one scenario
-ZG_RIG=user@host tools/rig/run_hw_tests.sh     # another rig (default mac@five.local)
+GK_RIG=user@host tools/rig/run_hw_tests.sh     # another rig (default mac@five.local)
 ```
 
 This builds a test kernel for the Pi (`tools/build.sh pi TEST=1`), copies it

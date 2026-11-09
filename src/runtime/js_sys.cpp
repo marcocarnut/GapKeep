@@ -78,7 +78,7 @@ static void FormatArgs (JSContext *ctx, int argc, JSValueConst *argv, CString *p
 // magic: TLogSeverity
 static JSValue js_console_log (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 
 	CString Text;
 	FormatArgs (ctx, argc, argv, &Text);
@@ -92,19 +92,19 @@ static JSValue js_console_log (JSContext *ctx, JSValueConst this_val, int argc, 
 
 // --- timers -----------------------------------------------------------------
 
-struct TZgTimer
+struct TGkTimer
 {
-	TZgTimer *pNext;
-	TZgApp *pApp;
+	TGkTimer *pNext;
+	TGkApp *pApp;
 	unsigned nID;
 	boolean bRepeat;
 	lv_timer_t *pLVTimer;
 	JSValue Func;
 };
 
-static void TimerUnlink (TZgApp *pApp, TZgTimer *pTimer)
+static void TimerUnlink (TGkApp *pApp, TGkTimer *pTimer)
 {
-	for (TZgTimer **pp = &pApp->pTimers; *pp != 0; pp = &(*pp)->pNext)
+	for (TGkTimer **pp = &pApp->pTimers; *pp != 0; pp = &(*pp)->pNext)
 	{
 		if (*pp == pTimer)
 		{
@@ -114,16 +114,16 @@ static void TimerUnlink (TZgApp *pApp, TZgTimer *pTimer)
 	}
 }
 
-static void TimerFree (TZgTimer *pTimer)
+static void TimerFree (TGkTimer *pTimer)
 {
 	lv_timer_delete (pTimer->pLVTimer);
 	JS_FreeValue (pTimer->pApp->pContext, pTimer->Func);
 	delete pTimer;
 }
 
-static TZgTimer *TimerFind (TZgApp *pApp, unsigned nID)
+static TGkTimer *TimerFind (TGkApp *pApp, unsigned nID)
 {
-	for (TZgTimer *p = pApp->pTimers; p != 0; p = p->pNext)
+	for (TGkTimer *p = pApp->pTimers; p != 0; p = p->pNext)
 	{
 		if (p->nID == nID)
 		{
@@ -136,8 +136,8 @@ static TZgTimer *TimerFind (TZgApp *pApp, unsigned nID)
 
 static void TimerCallback (lv_timer_t *pLVTimer)
 {
-	TZgTimer *pTimer = (TZgTimer *) lv_timer_get_user_data (pLVTimer);
-	TZgApp *pApp = pTimer->pApp;
+	TGkTimer *pTimer = (TGkTimer *) lv_timer_get_user_data (pLVTimer);
+	TGkApp *pApp = pTimer->pApp;
 	JSContext *ctx = pApp->pContext;
 
 	// the callback may clear this very timer: hold what we need
@@ -160,7 +160,7 @@ static void TimerCallback (lv_timer_t *pLVTimer)
 // magic: 1 = setInterval
 static JSValue js_set_timer (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 
 	if (argc < 1 || !JS_IsFunction (ctx, argv[0]))
 	{
@@ -186,7 +186,7 @@ static JSValue js_set_timer (JSContext *ctx, JSValueConst this_val, int argc, JS
 		fDelay = 1;		// no busy intervals
 	}
 
-	TZgTimer *pTimer = new TZgTimer;
+	TGkTimer *pTimer = new TGkTimer;
 	pTimer->pApp = pApp;
 	pTimer->nID = pApp->nNextTimerID++;
 	pTimer->bRepeat = magic ? TRUE : FALSE;
@@ -200,7 +200,7 @@ static JSValue js_set_timer (JSContext *ctx, JSValueConst this_val, int argc, JS
 
 static JSValue js_clear_timer (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 
 	uint32_t nID;
 	if (argc < 1 || JS_ToUint32 (ctx, &nID, argv[0]))
@@ -208,7 +208,7 @@ static JSValue js_clear_timer (JSContext *ctx, JSValueConst this_val, int argc, 
 		return JS_UNDEFINED;
 	}
 
-	TZgTimer *pTimer = TimerFind (pApp, nID);
+	TGkTimer *pTimer = TimerFind (pApp, nID);
 	if (pTimer != 0)
 	{
 		TimerUnlink (pApp, pTimer);
@@ -218,17 +218,17 @@ static JSValue js_clear_timer (JSContext *ctx, JSValueConst this_val, int argc, 
 	return JS_UNDEFINED;
 }
 
-void ZgTimersFree (TZgApp *pApp)
+void GkTimersFree (TGkApp *pApp)
 {
 	while (pApp->pTimers != 0)
 	{
-		TZgTimer *pTimer = pApp->pTimers;
+		TGkTimer *pTimer = pApp->pTimers;
 		pApp->pTimers = pTimer->pNext;
 		TimerFree (pTimer);
 	}
 }
 
-void ZgInitGlobals (JSContext *ctx)
+void GkInitGlobals (JSContext *ctx)
 {
 	JSValue Global = JS_GetGlobalObject (ctx);
 
@@ -258,7 +258,7 @@ static JSValue js_sys_uptime (JSContext *ctx, JSValueConst this_val, int argc, J
 	return JS_NewFloat64 (ctx, nSec * 1000.0 + nUsec / 1000.0);	// microsecond resolution
 }
 
-extern "C" size_t zg_lv_mem_used (void);	// lv_mem_wipe.c
+extern "C" size_t gk_lv_mem_used (void);	// lv_mem_wipe.c
 
 static JSValue js_sys_memory (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -269,7 +269,7 @@ static JSValue js_sys_memory (JSContext *ctx, JSValueConst this_val, int argc, J
 	JS_SetPropertyStr (ctx, Obj, "used", JS_NewInt64 (ctx, Usage.malloc_size));
 	JS_SetPropertyStr (ctx, Obj, "limit", JS_NewInt64 (ctx, Usage.malloc_limit));
 	JS_SetPropertyStr (ctx, Obj, "objects", JS_NewInt64 (ctx, Usage.obj_count));
-	JS_SetPropertyStr (ctx, Obj, "ui", JS_NewInt64 (ctx, zg_lv_mem_used ()));
+	JS_SetPropertyStr (ctx, Obj, "ui", JS_NewInt64 (ctx, gk_lv_mem_used ()));
 
 	return Obj;
 }
@@ -294,8 +294,8 @@ static JSValue js_sys_gc (JSContext *ctx, JSValueConst this_val, int argc, JSVal
 // first (__data_start - 0x8000) bytes of kernel.img. Computed once.
 static JSValue KernelInfo (JSContext *ctx)
 {
-	static char s_Hash[2 * ZG_SHA256_DIGEST_SIZE + 1];
-#ifdef ZG_SIM
+	static char s_Hash[2 * GK_SHA256_DIGEST_SIZE + 1];
+#ifdef GK_SIM
 	// the simulator (sim/) has no kernel image: no hash to show
 	const char *pBuild = "simulator";
 	strcpy (s_Hash, "0000000000000000000000000000000000000000000000000000000000000000");
@@ -307,9 +307,9 @@ static JSValue KernelInfo (JSContext *ctx)
 
 	if (s_Hash[0] == '\0')
 	{
-		u8 Digest[ZG_SHA256_DIGEST_SIZE];
-		zg_sha256 (pStart, nSize, Digest);
-		for (unsigned i = 0; i < ZG_SHA256_DIGEST_SIZE; i++)
+		u8 Digest[GK_SHA256_DIGEST_SIZE];
+		gk_sha256 (pStart, nSize, Digest);
+		for (unsigned i = 0; i < GK_SHA256_DIGEST_SIZE; i++)
 		{
 			static const char Digits[] = "0123456789abcdef";
 			s_Hash[2 * i] = Digits[Digest[i] >> 4];
@@ -321,10 +321,10 @@ static JSValue KernelInfo (JSContext *ctx)
 	JSValue Obj = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, s_Hash));
 	JS_SetPropertyStr (ctx, Obj, "hashedBytes", JS_NewUint32 (ctx, nSize));
-#ifdef ZG_SIM
-#elif defined (ZG_TEST)
+#ifdef GK_SIM
+#elif defined (GK_TEST)
 	const char *pBuild = "test";
-#elif defined (ZG_SEALED)
+#elif defined (GK_SEALED)
 	const char *pBuild = "sealed";
 #else
 	const char *pBuild = "production";
@@ -334,17 +334,17 @@ static JSValue KernelInfo (JSContext *ctx)
 	return Obj;
 }
 
-static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
+static JSValue AppInfo (JSContext *ctx, const gk_app_t *pApp)
 {
 	JSValue Obj = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Obj, "id", JS_NewString (ctx, pApp->id));
 	// in the language (the app's catalog), as everything the person reads
-	JS_SetPropertyStr (ctx, Obj, "name", JS_NewString (ctx, CZgI18n::GetAppName (ctx, pApp)));
+	JS_SetPropertyStr (ctx, Obj, "name", JS_NewString (ctx, CGkI18n::GetAppName (ctx, pApp)));
 	JS_SetPropertyStr (ctx, Obj, "version", JS_NewString (ctx, pApp->version));
-	JS_SetPropertyStr (ctx, Obj, "description", JS_NewString (ctx, CZgI18n::GetAppDescription (ctx, pApp)));
+	JS_SetPropertyStr (ctx, Obj, "description", JS_NewString (ctx, CGkI18n::GetAppDescription (ctx, pApp)));
 	JS_SetPropertyStr (ctx, Obj, "icon", JS_NewString (ctx, pApp->icon));
 	JS_SetPropertyStr (ctx, Obj, "source",
-			   JS_NewString (ctx, pApp->source == ZG_APP_SDCARD ? "sdcard" : "builtin"));
+			   JS_NewString (ctx, pApp->source == GK_APP_SDCARD ? "sdcard" : "builtin"));
 	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, pApp->hash));
 	JS_SetPropertyStr (ctx, Obj, "experimental", JS_NewBool (ctx, pApp->experimental != 0));
 
@@ -367,19 +367,19 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 
 	JSValue Perms = JS_NewArray (ctx);
 	unsigned nPerms = 0;
-	if (pApp->permissions & ZG_PERM_APPS)
+	if (pApp->permissions & GK_PERM_APPS)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "apps"));
 	}
-	if (pApp->permissions & ZG_PERM_CAMERA)
+	if (pApp->permissions & GK_PERM_CAMERA)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "camera"));
 	}
-	if (pApp->permissions & ZG_PERM_RTC)
+	if (pApp->permissions & GK_PERM_RTC)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "rtc"));
 	}
-	if (pApp->permissions & ZG_PERM_SETTINGS)
+	if (pApp->permissions & GK_PERM_SETTINGS)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "settings"));
 	}
@@ -390,7 +390,7 @@ static JSValue AppInfo (JSContext *ctx, const zg_app_t *pApp)
 
 static int SysModuleInit (JSContext *ctx, JSModuleDef *m)
 {
-	TZgApp *pApp = CAppHost::GetApp (ctx);
+	TGkApp *pApp = CAppHost::GetApp (ctx);
 
 	JSValue Version = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Version, "zerogap", JS_NewString (ctx, ZEROGAP_VERSION));
@@ -412,7 +412,7 @@ static int SysModuleInit (JSContext *ctx, JSModuleDef *m)
 	return 0;
 }
 
-JSModuleDef *ZgInitSysModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitSysModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, SysModuleInit);
 	if (m == 0)
@@ -437,7 +437,7 @@ static JSValue js_apps_list (JSContext *ctx, JSValueConst this_val, int argc, JS
 	unsigned n = 0;
 	for (unsigned i = 0; i < CAppStore::GetCount (); i++)
 	{
-		const zg_app_t *pApp = CAppStore::Get (i);
+		const gk_app_t *pApp = CAppStore::Get (i);
 		if (!pApp->hidden && CAppStore::IsAvailable (pApp))
 		{
 			JS_SetPropertyUint32 (ctx, Array, n++, AppInfo (ctx, pApp));
@@ -495,7 +495,7 @@ static int AppsModuleInit (JSContext *ctx, JSModuleDef *m)
 	return 0;
 }
 
-JSModuleDef *ZgInitAppsModule (JSContext *ctx, const char *pName)
+JSModuleDef *GkInitAppsModule (JSContext *ctx, const char *pName)
 {
 	JSModuleDef *m = JS_NewCModule (ctx, pName, AppsModuleInit);
 	if (m == 0)

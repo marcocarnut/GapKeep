@@ -1,5 +1,5 @@
-#ifndef ZG_SIM_HOSTDIR_H
-#define ZG_SIM_HOSTDIR_H
+#ifndef GK_SIM_HOSTDIR_H
+#define GK_SIM_HOSTDIR_H
 #include <stddef.h>
 #ifdef __cplusplus
 extern "C" {

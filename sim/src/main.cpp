@@ -49,13 +49,13 @@
 #include <string.h>
 #include <unistd.h>
 
-void ZgSimLogLine (const char *pLine)
+void GkSimLogLine (const char *pLine)
 {
 	printf ("%s\n", pLine);
 	fflush (stdout);
 }
 
-void ZgSimHalted (void)
+void GkSimHalted (void)
 {
 }
 
@@ -109,7 +109,7 @@ static void CameraCommand (char *pArgs)
 
 	if (strcmp (pArgs, "qr") == 0)
 	{
-		if (zg_sim_camera_qr ((const uint8_t *) pRest, strlen (pRest), 0) != 0)
+		if (gk_sim_camera_qr ((const uint8_t *) pRest, strlen (pRest), 0) != 0)
 		{
 			printf ("#error camera qr: too long\n");
 		}
@@ -128,7 +128,7 @@ static void CameraCommand (char *pArgs)
 			}
 			pData[i] = (uint8_t) b;
 		}
-		if (i != n || strlen (pRest) % 2 != 0 || zg_sim_camera_qr (pData, n, 0) != 0)
+		if (i != n || strlen (pRest) % 2 != 0 || gk_sim_camera_qr (pData, n, 0) != 0)
 		{
 			printf ("#error camera qrhex <hex>: bad hex or too long\n");
 		}
@@ -139,15 +139,15 @@ static void CameraCommand (char *pArgs)
 		unsigned w, h, nChannels;
 		uint8_t *pPixels = ReadPicture (pRest, &w, &h, &nChannels);
 		if (   pPixels == 0
-		    || (nChannels == 3 ? zg_sim_camera_picture_rgb (pPixels, w, h)
-				       : zg_sim_camera_picture (pPixels, w, h)) != 0)
+		    || (nChannels == 3 ? gk_sim_camera_picture_rgb (pPixels, w, h)
+				       : gk_sim_camera_picture (pPixels, w, h)) != 0)
 		{
 			printf ("#error camera picture %s: not a binary PGM or PPM file (8 bits),"
 				" or too large\n", pRest);
 		}
 		free (pPixels);
 	}
-	else if (zg_sim_camera (pArgs) != 0)
+	else if (gk_sim_camera (pArgs) != 0)
 	{
 		printf ("#error camera qr <text> | qrhex <hex> | picture <file> | scene | none\n");
 	}
@@ -167,7 +167,7 @@ static int Command (char *pLine)
 
 	if (strcmp (pLine, "key") == 0 || strcmp (pLine, "keydown") == 0)
 	{
-		if (zg_sim_key_down_qemu (pArgs) != 0)
+		if (gk_sim_key_down_qemu (pArgs) != 0)
 		{
 			printf ("#error unknown key %s\n", pArgs);
 		}
@@ -179,14 +179,14 @@ static int Command (char *pLine)
 	}
 	else if (strcmp (pLine, "keyup") == 0)
 	{
-		zg_sim_key_up ();
+		gk_sim_key_up ();
 	}
 	else if (strcmp (pLine, "pointer") == 0)
 	{
 		int x, y, b;
 		if (sscanf (pArgs, "%d %d %d", &x, &y, &b) == 3)
 		{
-			zg_sim_pointer (x, y, b);
+			gk_sim_pointer (x, y, b);
 		}
 		else
 		{
@@ -198,7 +198,7 @@ static int Command (char *pLine)
 		int n;
 		if (sscanf (pArgs, "%d", &n) == 1)
 		{
-			zg_sim_wheel (n);
+			gk_sim_wheel (n);
 		}
 		else
 		{
@@ -212,11 +212,11 @@ static int Command (char *pLine)
 		{
 			lv_refr_now (0);
 		}
-		printf (zg_sim_screenshot (pArgs) == 0 ? "#shot %s\n" : "#error shot %s\n", pArgs);
+		printf (gk_sim_screenshot (pArgs) == 0 ? "#shot %s\n" : "#error shot %s\n", pArgs);
 	}
 	else if (strcmp (pLine, "launch") == 0)
 	{
-		if (zg_sim_launch (pArgs[0] ? pArgs : 0) != 0)
+		if (gk_sim_launch (pArgs[0] ? pArgs : 0) != 0)
 		{
 			printf ("#error no app %s\n", pArgs);
 		}
@@ -227,14 +227,14 @@ static int Command (char *pLine)
 	}
 	else if (strcmp (pLine, "language") == 0)
 	{
-		if (zg_sim_language (pArgs) != 0)
+		if (gk_sim_language (pArgs) != 0)
 		{
 			printf ("#error no language %s\n", pArgs);
 		}
 	}
 	else if (strcmp (pLine, "keyboard") == 0)
 	{
-		if (zg_sim_keyboard (pArgs) != 0)
+		if (gk_sim_keyboard (pArgs) != 0)
 		{
 			printf ("#error no keyboard layout %s\n", pArgs);
 		}
@@ -268,7 +268,7 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--app") == 0 && i + 1 < argc)	pApp = argv[++i];
 		else if (strcmp (argv[i], "--for") == 0 && i + 1 < argc)	fFor = atof (argv[++i]);
 		else if (strcmp (argv[i], "--shot") == 0 && i + 1 < argc)	pShot = argv[++i];
-		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	zg_sim_set_language (argv[++i]);
+		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	gk_sim_set_language (argv[++i]);
 		else
 		{
 			fprintf (stderr, "usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]\n");
@@ -281,12 +281,12 @@ int main (int argc, char **argv)
 		return 2;
 	}
 
-	zg_sim_set_builtin_dir (pBuiltin);
-	if (zg_sim_boot (nWidth, nHeight, pCard) != 0)
+	gk_sim_set_builtin_dir (pBuiltin);
+	if (gk_sim_boot (nWidth, nHeight, pCard) != 0)
 	{
 		return 1;
 	}
-	if (pApp != 0 && zg_sim_launch (pApp) != 0)
+	if (pApp != 0 && gk_sim_launch (pApp) != 0)
 	{
 		fprintf (stderr, "zgsim: no app %s\n", pApp);
 		return 1;
@@ -297,11 +297,11 @@ int main (int argc, char **argv)
 	int bInput = fFor < 0;		// with --for, stdin is not read
 	for (;;)
 	{
-		zg_sim_step ();
+		gk_sim_step ();
 
 		if (s_bReleasePending && (int) (CTimer::GetClockTicks () - s_nReleaseAt) >= 0)
 		{
-			zg_sim_key_up ();
+			gk_sim_key_up ();
 			s_bReleasePending = 0;
 		}
 
@@ -310,7 +310,7 @@ int main (int argc, char **argv)
 			if (pShot != 0)
 			{
 				lv_refr_now (0);
-				if (zg_sim_screenshot (pShot) != 0)
+				if (gk_sim_screenshot (pShot) != 0)
 				{
 					fprintf (stderr, "zgsim: cannot write %s\n", pShot);
 					return 1;

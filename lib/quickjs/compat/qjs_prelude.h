@@ -6,8 +6,8 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#ifndef ZG_QJS_PRELUDE_H
-#define ZG_QJS_PRELUDE_H
+#ifndef GK_QJS_PRELUDE_H
+#define GK_QJS_PRELUDE_H
 
 #include <stddef.h>
 #include <time.h>

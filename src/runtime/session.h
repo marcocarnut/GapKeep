@@ -21,9 +21,9 @@
 #include <circle/types.h>
 #include <stddef.h>
 
-struct TZgSessionEntry;
+struct TGkSessionEntry;
 
-class CZgSession
+class CGkSession
 {
 public:
 	static const size_t MaxKeyLength = 64;		// bytes of UTF-8
@@ -48,11 +48,11 @@ public:
 	static size_t GetUsed (const char *pOwner);	// keys and values, bytes
 
 private:
-	static TZgSessionEntry *Find (const char *pOwner, const char *pKey, TZgSessionEntry ***pppLink);
-	static void Free (TZgSessionEntry *pEntry);
+	static TGkSessionEntry *Find (const char *pOwner, const char *pKey, TGkSessionEntry ***pppLink);
+	static void Free (TGkSessionEntry *pEntry);
 
 private:
-	static TZgSessionEntry *s_pFirst;
+	static TGkSessionEntry *s_pFirst;
 	static size_t s_nTotal;
 };
 
