@@ -217,10 +217,11 @@ where it is: markup is never shown half-parsed.
 
 Bold and italic are drawn from TrueType outlines (LVGL's TinyTTF), not
 from bitmaps: the first label to use a style at a size makes its font
-(about a millisecond on a Pi Zero, logged as `fonts: bold 16 px: made`),
-and each glyph is drawn once and then kept (up to 96 per style and size).
-So a style costs nothing until it is used, and its first screen is a
-little slower than the next. They lack the bitmap fonts' hinting: at 12
+(logged as `fonts: bold 16 px: made`), and each glyph is rasterized the
+first time it is drawn and then kept (up to 96 per style and size, about
+25 KB at 16 px). So a style costs nothing until it is used, and its first
+screen is slower than the next: on QEMU, about 10 ms more for a paragraph
+in bold. They lack the bitmap fonts' hinting: at 12
 and 14 px they look a little softer.
 
 **Data is never markup.** A name, an address or a scanned text could hold
