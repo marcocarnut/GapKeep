@@ -321,8 +321,14 @@ function showResult() {
   new ui.Button(buttons, { text: ui.symbols.left + "  " + t("Back to the shares"), onClick: () => backToEntry() });
   new ui.Button(buttons, { text: ui.symbols.trash + "  " + S.clearBtn, onClick: clearAll });
 
-  paragraph(ui.screen, FL(S.entropyLabel) + "\n" + hex(r.seed), { font: wide ? 16 : 14 });
-  paragraph(ui.screen, S.secretLabel + "\n" + r.secret, { font: wide ? 16 : 14 });
+  // the values in mono, as the shares: 0/O and 1/l/I apart
+  const value = (label, text) => {
+    const box = new ui.Container(ui.screen, { layout: "column", width: "100%" });
+    paragraph(box, label);
+    paragraph(box, text, { mono: true });
+  };
+  value(FL(S.entropyLabel), hex(r.seed));
+  value(S.secretLabel, r.secret);
   paragraph(ui.screen, FL(S.resultNote), { color: MUTED });
 
   showKeys(ui.screen, r);
