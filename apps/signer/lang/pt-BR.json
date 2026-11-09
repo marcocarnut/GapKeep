@@ -92,6 +92,7 @@
     "Scan another": "Ler outra",
     "Home": "Início",
     "It is signed already: there is nothing to sign here.": "Ela já está assinada: não há nada para assinar aqui.",
+    "Transaction ID: <tt>{txid}</tt>": "ID da transação: <tt>{txid}</tt>",
     "Transaction ID: {txid}": "ID da transação: {txid}",
     "network\u0004chosen": "escolhida",
     "as the transaction before: a signed one doesn't say": "como a transação anterior: uma assinada não diz",

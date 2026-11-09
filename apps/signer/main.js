@@ -33,7 +33,7 @@
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 import * as crypto from "gk:crypto";
-import { t, plural } from "gk:i18n";
+import { t, tm, plural } from "gk:i18n";
 import { setHashes } from "./lib/psbt/hashes.js";
 import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { electrumQrText } from "./lib/psbt/transport.js";
@@ -810,7 +810,8 @@ function showFinished() {
   paragraph(ui.screen, t("It is signed already: there is nothing to sign here."), { color: MUTED });
   // to compare with what the wallet or a block explorer shows
   const txid = txidOf(l.tx);
-  paragraph(ui.screen, t("Transaction ID: {txid}", { txid: group4(txid) }), { font: FONT.small, mono: true });
+  // only the ID in mono: 0/O and 1/l/I apart
+  paragraph(ui.screen, tm("Transaction ID: <tt>{txid}</tt>", { txid: group4(txid) }), { font: FONT.small, markup: true });
   showAnalysis(reviewList(), page.rows, a, l, {
     networkNote: state.network ? t("chosen", { $context: "network" })
       : inherited ? t("as the transaction before: a signed one doesn't say") : null,
@@ -963,7 +964,7 @@ function showSigned(form) {
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1 });
   const note = paragraph(side, "", { color: MUTED, font: FONT.small });
   // to compare with what the wallet says it broadcast
-  if (s.txid) paragraph(side, t("Transaction ID: {txid}", { txid: group4(s.txid) }), { font: FONT.small, mono: true });
+  if (s.txid) paragraph(side, tm("Transaction ID: <tt>{txid}</tt>", { txid: group4(s.txid) }), { font: FONT.small, markup: true });
   else paragraph(side, t("No transaction ID yet: it isn't final until all its signatures are in."), { color: AMBER, font: FONT.small });
   const buttons = buttonRow(side);
   const done = new ui.Button(buttons, { text: ui.symbols.ok + " " + (state.keys.length ? t("Done, forget the keys") : t("Done")),
