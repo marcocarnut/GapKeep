@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "kbdindev.h"
+#include "runtime/wheel.h"
 #include <circle/devicenameservice.h>
 #include <circle/logger.h>
 #include <circle/util.h>
@@ -265,6 +266,17 @@ void CKeyboardIndev::ReadCallback (lv_indev_t *pIndev, lv_indev_data_t *pData)
 		DataMemBarrier ();
 		TGkKey Key = pThis->m_Queue[pThis->m_nTail];
 		pThis->m_nTail = (pThis->m_nTail + 1) & (QueueSize-1);
+
+		// Shift+PageUp/PageDown scroll a page, as the mouse wheel does:
+		// the system's, before the app sees them (runtime/wheel.h), so
+		// every app can be read without a mouse
+		if (   (Key.nMods & GK_MOD_SHIFT) && !(Key.nMods & (GK_MOD_CTRL | GK_MOD_ALT))
+		    && (strcmp (Key.Name, "PageUp") == 0 || strcmp (Key.Name, "PageDown") == 0))
+		{
+			lv_group_t *pGroup = lv_indev_get_group (pIndev);
+			GkScrollPage (pGroup ? lv_group_get_focused (pGroup) : 0, Key.Name[4] == 'U' ? -1 : 1);
+			continue;
+		}
 
 		if (   pThis->m_pKeyHook != 0
 		    && (*pThis->m_pKeyHook) (Key, pThis->m_pKeyHookParam))

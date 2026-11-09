@@ -105,7 +105,7 @@ export const S = {
   step2Body: t("Press and drag inside the box below, or tap it repeatedly, until the bar fills. Only real drags " +
     "and taps count: moving the pointer across it without pressing does nothing, and neither does jiggling in " +
     "place. This mixes with this device's own random generator to source words beyond what you typed. " +
-    "Without a mouse: Tab to the box and press Space, again and again (holding it down counts once)."),
-  padText: t("press and drag here, or tap repeatedly"),
+    "Without a mouse: Tab to the box and type on it, any keys, again and again (holding a key down counts once)."),
+  padText: t("press and drag here, tap repeatedly, or type on it"),
   bitsLabel: (bits, target, percent) => t("collected: {bits} of {target} bits   {percent}%", { bits, target, percent }),
 };

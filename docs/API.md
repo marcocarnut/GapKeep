@@ -382,6 +382,9 @@ for Shift+Tab), `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`,
 `"Home"`, `"End"`, `"PageUp"`, `"PageDown"`, `"Insert"`, `"F1"`...`"F9"`.
 
 The Windows/Super key is reserved: it always returns to the launcher.
+Shift+PageUp and Shift+PageDown are the system's too: they scroll the
+focused widget's nearest scrollable ancestor by a page, as the mouse
+wheel scrolls what is under the pointer, and never reach `ui.onKey`.
 
 ### ui.theme
 

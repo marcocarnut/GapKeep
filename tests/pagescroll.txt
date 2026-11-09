@@ -1,0 +1,26 @@
+# Shift+PageDown/PageUp scroll a page, as the mouse wheel does
+# (src/runtime/wheel.cpp, GkScrollPage): the focused widget's nearest
+# scrollable ancestor, by its height less a line. Keyboard only, so the rig
+# runs it too.
+expect Keyboard attached 60
+expect launcher ready 60
+wait 1
+mark
+key shift-pgdn
+expect wheel: page 1: scrolled \d+ px 10
+wait 0.5
+shot 01-launcher-page-down
+# to the end, then nothing more
+key shift-pgdn
+key shift-pgdn
+key shift-pgdn
+expect wheel: page 1: nothing to scroll there 10
+mark
+key shift-pgup
+expect wheel: page -1: scrolled -\d+ px 10
+key shift-pgup
+key shift-pgup
+key shift-pgup
+expect wheel: page -1: nothing to scroll there 10
+wait 0.5
+shot 02-launcher-top
