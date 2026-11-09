@@ -1,5 +1,5 @@
 //
-// main.cpp - zgsim, the zerogap simulator on the command line.
+// main.cpp - gksim, the zerogap simulator on the command line.
 //
 // Runs zerogap (the launcher and apps) on the host, drawing into memory.
 // The log goes to stdout, as the Pi's goes to the serial port. Commands,
@@ -25,7 +25,7 @@
 //                           (pt-BR, qps...), as a settings app sets it
 //   quit                    exit
 //
-// Usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]
+// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]
 //   --card DIR      DIR plays the SD card: apps load from DIR/apps
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
 //                   a launcher to try out; see docs/SIMULATOR.md)
@@ -35,7 +35,7 @@
 //   --for SECONDS   run that long, then exit (default: until "quit" or EOF)
 //   --shot FILE     with --for: take a screenshot before exiting
 //
-// tools/zgsim wraps it for app development, tools/qemu_harness.py --sim
+// tools/gksim wraps it for app development, tools/qemu_harness.py --sim
 // plays test scenarios on it.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -271,13 +271,13 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	gk_sim_set_language (argv[++i]);
 		else
 		{
-			fprintf (stderr, "usage: zgsim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]\n");
+			fprintf (stderr, "usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}
 	}
 	if (nWidth < 320 || nHeight < 240 || nWidth > 4096 || nHeight > 4096)
 	{
-		fprintf (stderr, "zgsim: --size from 320x240 to 4096x4096\n");
+		fprintf (stderr, "gksim: --size from 320x240 to 4096x4096\n");
 		return 2;
 	}
 
@@ -288,7 +288,7 @@ int main (int argc, char **argv)
 	}
 	if (pApp != 0 && gk_sim_launch (pApp) != 0)
 	{
-		fprintf (stderr, "zgsim: no app %s\n", pApp);
+		fprintf (stderr, "gksim: no app %s\n", pApp);
 		return 1;
 	}
 
@@ -312,7 +312,7 @@ int main (int argc, char **argv)
 				lv_refr_now (0);
 				if (gk_sim_screenshot (pShot) != 0)
 				{
-					fprintf (stderr, "zgsim: cannot write %s\n", pShot);
+					fprintf (stderr, "gksim: cannot write %s\n", pShot);
 					return 1;
 				}
 			}

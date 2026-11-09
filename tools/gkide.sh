@@ -6,7 +6,7 @@
 # 127.0.0.1 with Python's static file server. No server code: the IDE is
 # static files, and everything it saves stays in the browser (IndexedDB).
 #
-#   tools/zgide.sh [port]        (default 8039)
+#   tools/gkide.sh [port]        (default 8039)
 #
 # (bash, not sh: emsdk_env.sh needs bash to find its own folder.)
 #
@@ -22,10 +22,10 @@ fi
 if command -v emcc >/dev/null 2>&1; then
 	# a failed build stops here: an older simulator would look current
 	make -s -C sim web
-elif [ -f sim/build/web/zgsim.js ]; then
-	echo "zgide: no emsdk (emcc) found, using the existing sim/build/web/zgsim.js" >&2
+elif [ -f sim/build/web/gksim.js ]; then
+	echo "gkide: no emsdk (emcc) found, using the existing sim/build/web/gksim.js" >&2
 else
-	echo "zgide: needs emsdk to build the simulator (source ~/emsdk/emsdk_env.sh)" >&2
+	echo "gkide: needs emsdk to build the simulator (source ~/emsdk/emsdk_env.sh)" >&2
 	exit 1
 fi
 
@@ -54,7 +54,7 @@ for app in ids:
 json.dump({"apps": apps}, sys.stdout, indent=1)
 EOF
 
-# 4. Serve sim/: the IDE is /web/index.html, and zerogap.js finds the
-#    simulator at ../build/web/zgsim.js.
-echo "zgide: open http://127.0.0.1:$PORT/web/index.html  (Ctrl+C stops)"
+# 4. Serve sim/: the IDE is /web/index.html, and gapkeep.js finds the
+#    simulator at ../build/web/gksim.js.
+echo "gkide: open http://127.0.0.1:$PORT/web/index.html  (Ctrl+C stops)"
 exec python3 -m http.server "$PORT" --bind 127.0.0.1 --directory sim

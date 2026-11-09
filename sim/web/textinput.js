@@ -19,7 +19,7 @@
 //
 // Text is typed as key presses at once, in order with the special keys
 // (printable ASCII and Latin-1, newlines as Enter, tabs as Tab); a paste,
-// which can be long, through Zerogap.type, which paces it. What zerogap
+// which can be long, through Gapkeep.type, which paces it. What zerogap
 // can't type is dropped, with one warning.
 // Held text keys repeat as the OS repeats them (each repeat is an input
 // event); held special keys repeat in zerogap, as on the device.

@@ -3,7 +3,7 @@
 # Turns the rig's USB-C port into a USB keyboard + mouse (boot protocol)
 # for the Pi Zero, through Linux configfs. Run as root. Afterwards
 # /dev/hidg0 is the keyboard (8-byte reports) and /dev/hidg1 the mouse
-# (3-byte reports: buttons, dx, dy); zgrig.py writes them.
+# (3-byte reports: buttons, dx, dy); gkrig.py writes them.
 #
 #   gadget.sh up | down
 #

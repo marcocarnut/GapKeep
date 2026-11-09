@@ -7,10 +7,10 @@ manifest; it runs on QuickJS (ES2023) and draws with LVGL through the
 order you need it. The details are in:
 
 - [API.md](API.md): every module, widget, property and event. Generated
-  from [api/zerogap-api.yaml](api/zerogap-api.yaml), which a test checks
+  from [api/gapkeep-api.yaml](api/gapkeep-api.yaml), which a test checks
   against the runtime: what it says exists, exists.
 - [APPS.md](APPS.md): the manifest, installing, hashes, layout, input.
-- [`sim/web/types/zerogap.d.ts`](../sim/web/types/zerogap.d.ts): the same API
+- [`sim/web/types/gapkeep.d.ts`](../sim/web/types/gapkeep.d.ts): the same API
   as TypeScript declarations, if types help you.
 
 ## The loop: write, run, look
@@ -19,7 +19,7 @@ You can't see a screen, but the simulator can show you one. Run the app,
 take a screenshot, look at it, and read the log:
 
 ```sh
-tools/zgsim --for 2 --shot /tmp/shot.png apps/myapp     # then look at /tmp/shot.png
+tools/gksim --for 2 --shot /tmp/shot.png apps/myapp     # then look at /tmp/shot.png
 ```
 
 To press keys and click, write a scenario and play it:
@@ -40,7 +40,7 @@ shot after-entry
 ```sh
 mkdir -p /tmp/card/apps && cp -r apps/myapp /tmp/card/apps/
 make -C sim -s
-python3 tools/qemu_harness.py --sim sim/build/zgsim --card /tmp/card --out /tmp/out myapp.txt
+python3 tools/qemu_harness.py --sim sim/build/gksim --card /tmp/card --out /tmp/out myapp.txt
 ```
 
 Screenshots land in `--out`; the log is in `/tmp/out/serial.log`. A run
@@ -113,7 +113,7 @@ amounts: `formatNumber`, `formatBtc` (satoshis in, never floats),
 `parseBtc`; dates: `formatDateTime` (ISO, the same in every language).
 Translations go in `lang/<language>.json`: `python3 tools/i18n.py extract
 apps/myapp --lang pt-BR`, fill them in, `python3 tools/i18n.py check
-apps/myapp`. Look at the app with `tools/zgsim --lang pt-BR` and `--lang qps`
+apps/myapp`. Look at the app with `tools/gksim --lang pt-BR` and `--lang qps`
 (text that missed `t()` stays plain; text that overflows shows). Example:
 `apps/clock`. Details: [APPS.md](APPS.md#languages).
 Styled words in a label (`<tt>`, `<span color=...>`): `new ui.Label({

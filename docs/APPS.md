@@ -390,8 +390,8 @@ the system's own text.
 To see an app in another language, or find text that missed `t()`:
 
 ```sh
-tools/zgsim --lang pt-BR apps/myapp
-tools/zgsim --lang qps apps/myapp     # every translated text [Åççéñţéď ·····]
+tools/gksim --lang pt-BR apps/myapp
+tools/gksim --lang qps apps/myapp     # every translated text [Åççéñţéď ·····]
 ```
 
 `qps` is a pseudo-language: what went through `t()` comes out accented,
@@ -436,8 +436,8 @@ The quickest way: the simulator runs your app on your machine, the same
 runtime as on the Pi ([SIMULATOR.md](SIMULATOR.md)):
 
 ```sh
-tools/zgsim apps/counter                                 # the log on stdout
-tools/zgsim --for 2 --shot /tmp/counter.png apps/counter # a screenshot
+tools/gksim apps/counter                                 # the log on stdout
+tools/gksim --for 2 --shot /tmp/counter.png apps/counter # a screenshot
 ```
 
 Or in the browser, with an editor that knows the API: [IDE.md](IDE.md).

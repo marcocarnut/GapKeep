@@ -66,7 +66,7 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
   the camera's view on 2026-11-04: it showed the ceiling
   (docs/camera/IMPLEMENTATION.md).
 - Test commands on the serial line (`#camera ...`, `#crash ...`) are read
-  by polling the UART's 16-byte FIFO from the main loop, so `zgrig.py`
+  by polling the UART's 16-byte FIFO from the main loop, so `gkrig.py`
   sends long lines in pieces of 12 bytes, 0.6 s apart.
 
 ## Using it
@@ -89,15 +89,15 @@ on the development machine, a 640x480 grey frame every 3.5 s or so, with lines
 marking the middle. It builds and sends a test kernel and opens the scanner
 (about a minute); `--no-flash` skips that when the scanner is already open.
 
-On the rig itself, `zgrig.py` does the individual steps:
+On the rig itself, `gkrig.py` does the individual steps:
 
 ```sh
-python3 zgrig.py reset                  # reset the Zero
-python3 zgrig.py flash kernel.hex --log 20   # upload, run, print the log for 20 s
-python3 zgrig.py log 10                 # print the serial log for 10 s
-python3 zgrig.py shot screen.png        # screenshot (test builds)
-python3 zgrig.py peek [kernel.hex]      # the camera's grey frames, as PGM on stdout
-python3 zgrig.py run kernel.hex scenario.txt --out DIR
+python3 gkrig.py reset                  # reset the Zero
+python3 gkrig.py flash kernel.hex --log 20   # upload, run, print the log for 20 s
+python3 gkrig.py log 10                 # print the serial log for 10 s
+python3 gkrig.py shot screen.png        # screenshot (test builds)
+python3 gkrig.py peek [kernel.hex]      # the camera's grey frames, as PGM on stdout
+python3 gkrig.py run kernel.hex scenario.txt --out DIR
 ```
 
 Scenarios are the same files QEMU runs (`tests/*.txt`, see
@@ -127,7 +127,7 @@ no commands while it sends the screenshot.
 - **Reset:** `pinctrl set 17 op dl`, 100 ms, then `pinctrl set 17 ip pn`
   (floating again: RUN has its own pull-up on the Zero).
 - **Upload:** Circle's bootloader (`circle/tools/bootloader`) announces
-  `IHEX-F`. `zgrig.py` first sends `R` (noise during reset can leave the
+  `IHEX-F`. `gkrig.py` first sends `R` (noise during reset can leave the
   bootloader in its error state, which only `R` leaves), then the kernel as
   the bootloader's binary records (`=` and the Intel HEX record's bytes: half
   the size of HEX text), waits for `#EOF:ok` and sends `g`.
@@ -136,7 +136,7 @@ no commands while it sends the screenshot.
   (`src/testshot.*`, `tools/serialshot.py`).
 - **Keyboard and mouse:** `tools/rig/gadget.sh` (configfs; boot-protocol
   keyboard with 8-byte reports and a 3-button mouse with relative 8-bit
-  X/Y). `zgrig.py` translates the scenarios' QEMU key names to HID usage
+  X/Y). `gkrig.py` translates the scenarios' QEMU key names to HID usage
   codes.
 
 ## Known issues

@@ -11,7 +11,7 @@ its TextArea. tests/web/textinput.mjs tests the same logic under Node.
 Not run by tools/run_sim_tests.sh: it needs Google Chrome, Python's
 websockets, Monaco (sim/web/vendor, tools/fetch_monaco.sh) and the
 WebAssembly build (make -C sim web). It serves the IDE itself, on PORT,
-with the example apps and typetest (into sim/build/web, as tools/zgide.sh
+with the example apps and typetest (into sim/build/web, as tools/gkide.sh
 does), in a Chrome profile of its own that it deletes afterwards.
 
 What it can't show: real dead keys and AltGr from a real keyboard layout
@@ -144,7 +144,7 @@ async def run():
 
 
 def examples():
-    """The IDE's example apps, and typetest, as tools/zgide.sh puts them."""
+    """The IDE's example apps, and typetest, as tools/gkide.sh puts them."""
     out = os.path.join(ROOT, "sim", "build", "web", "examples")
     shutil.rmtree(out, ignore_errors=True)
     apps = {}
@@ -161,13 +161,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--chrome", default=shutil.which("google-chrome") or shutil.which("chromium"))
     args = ap.parse_args()
-    for need in ("sim/build/web/zgsim.js", "sim/web/vendor/monaco/vs/loader.js"):
+    for need in ("sim/build/web/gksim.js", "sim/web/vendor/monaco/vs/loader.js"):
         if not os.path.exists(os.path.join(ROOT, need)):
             sys.exit(f"ide_typing: no {need} (make -C sim web; tools/fetch_monaco.sh)")
     if not args.chrome:
         sys.exit("ide_typing: no Chrome (--chrome PATH)")
     examples()
-    profile = tempfile.mkdtemp(prefix="zg-ide-chrome-")
+    profile = tempfile.mkdtemp(prefix="gk-ide-chrome-")
     server = subprocess.Popen([sys.executable, "-m", "http.server", str(PORT), "--bind", "127.0.0.1",
                                "--directory", os.path.join(ROOT, "sim")],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

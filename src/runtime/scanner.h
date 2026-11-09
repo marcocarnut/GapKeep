@@ -18,7 +18,7 @@
 //
 // To add one (say "aruco", for dice): a GK_DETECT_* bit and its name in
 // scanner.cpp, a decoder like qrdecode.*, a case in CGkScanner::Poll, and
-// its event fields in js_ui.cpp and docs/api/zerogap-api.yaml.
+// its event fields in js_ui.cpp and docs/api/gapkeep-api.yaml.
 //
 // One scanner at a time has the camera. A QR code is reported when it
 // differs from the last one reported, or when it comes back after being

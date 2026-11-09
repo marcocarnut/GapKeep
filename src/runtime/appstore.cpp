@@ -979,7 +979,7 @@ static void LoadCard (void)
 #ifdef GK_SIM
 
 // The simulator can replace a built-in app with a folder of the same name
-// in its "builtin" folder (zgsim --builtin DIR, the IDE's copy of the
+// in its "builtin" folder (gksim --builtin DIR, the IDE's copy of the
 // launcher), to work on the launcher without rebuilding. The replacement
 // gets the built-in app's rights; if it fails a check, the built-in app
 // stays. The Pi has no such folder: built-in apps come only from the

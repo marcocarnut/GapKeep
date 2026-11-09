@@ -1,6 +1,6 @@
 // Dumps the JavaScript API this runtime really has, as JSON log lines
 // ("apiinfo <part>: ..."), for tools/check_api.py to compare with
-// docs/api/zerogap-api.yaml. Test builds only.
+// docs/api/gapkeep-api.yaml. Test builds only.
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 import * as crypto from "gk:crypto";

@@ -25,7 +25,7 @@ SCENARIOS=${*:-$(ls tests/*.txt)}
 tools/build.sh pi TEST=1
 make -C src -s kernel.hex TEST=1 >/dev/null
 ssh "$RIG" 'mkdir -p zerogap-rig/tests'
-scp -q src/kernel.hex tools/rig/zgrig.py tools/rig/gadget.sh tools/serialshot.py \
+scp -q src/kernel.hex tools/rig/gkrig.py tools/rig/gadget.sh tools/serialshot.py \
 	tools/qemu_harness.py "$RIG:zerogap-rig/"
 scp -q $SCENARIOS "$RIG:zerogap-rig/tests/"
 
@@ -44,7 +44,7 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
 	fi
-	if ssh "$RIG" "cd zerogap-rig && rm -rf out/$name && python3 -u zgrig.py run kernel.hex tests/$name.txt --out out/$name" \
+	if ssh "$RIG" "cd zerogap-rig && rm -rf out/$name && python3 -u gkrig.py run kernel.hex tests/$name.txt --out out/$name" \
 		> "$OUT/$name.log" 2>&1; then
 		echo "PASS  hw:$name"
 	else

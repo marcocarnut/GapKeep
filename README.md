@@ -35,7 +35,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 
 - [Writing apps](docs/APPS.md): start here.
 - [API reference](docs/API.md): `gk:ui`, `gk:sys`, `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:apps`, globals.
-  Generated from [docs/api/zerogap-api.yaml](docs/api/zerogap-api.yaml), which a
+  Generated from [docs/api/gapkeep-api.yaml](docs/api/gapkeep-api.yaml), which a
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
 - [Browser IDE](docs/IDE.md): edit and run apps in the browser.
@@ -84,7 +84,7 @@ the card too.
 ## Running in the simulator
 
 ```sh
-tools/zgsim apps/dice39                     # an app on your machine (sim/, gcc)
+tools/gksim apps/dice39                     # an app on your machine (sim/, gcc)
 tools/run_sim_tests.sh                      # the scenarios on the simulator, plus the API check
 ```
 

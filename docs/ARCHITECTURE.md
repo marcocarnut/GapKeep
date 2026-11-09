@@ -262,4 +262,4 @@ build.
 | `sim/` | The simulator ([SIMULATOR.md](SIMULATOR.md)): stand-ins for the Circle headers the runtime uses, its main loop, and the browser IDE (`sim/web/`). |
 | `tests/` | QEMU scenarios; `tests/apps/` holds test-only apps (`make TEST=1`); `tests/sdcard/` the test SD card; `tests/native`, `tests/dice39` host tests. |
 | `tools/` | App bundler, QEMU harness, test runner. |
-| `docs/` | This file, the guides, and the API reference generated from `docs/api/zerogap-api.yaml`. |
+| `docs/` | This file, the guides, and the API reference generated from `docs/api/gapkeep-api.yaml`. |

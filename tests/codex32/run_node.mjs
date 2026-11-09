@@ -75,7 +75,7 @@ console.log(`codex32: dice39 threshold-0 bug ${upstream}`);
 //
 // gk:i18n is the runtime's src/runtime/i18n.js with tests/i18n/fake_native.mjs
 // (as tests/i18n/run_node.mjs runs it), and lib/messages.js imports it.
-const dir = mkdtempSync(join(tmpdir(), "zg-codex32-"));
+const dir = mkdtempSync(join(tmpdir(), "gk-codex32-"));
 const native = new URL("../i18n/fake_native.mjs", import.meta.url);
 writeFileSync(join(dir, "i18n.mjs"), readFileSync(new URL("../../src/runtime/i18n.js", import.meta.url), "utf8")
   .replace(`from "gk:i18n-native"`, `from ${JSON.stringify(native.href)}`));

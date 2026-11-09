@@ -2,14 +2,14 @@
 #
 # tools/gen_api.py generates from this file:
 #   docs/API.md                    the reference (humans and agents)
-#   sim/web/types/zerogap.d.ts     TypeScript declarations (editor completions)
+#   sim/web/types/gapkeep.d.ts     TypeScript declarations (editor completions)
 # tools/check_api.py compares it with the API the runtime really has (an
 # introspection app run on the simulator), so the two cannot drift apart.
 #
 # Edit this file, then run: python3 tools/gen_api.py
 #
 # Conventions: `md` fields are Markdown. `ts` fields are TypeScript types
-# or signatures, as they go into zerogap.d.ts. A property is `readable` if
+# or signatures, as they go into gapkeep.d.ts. A property is `readable` if
 # reading it returns its current value; others are write-only (they can only
 # be set), except `readonly` ones, which can only be read.
 
@@ -742,7 +742,7 @@ modules:
         ts: '() => { status: "ok" | "none" | "unreadable" | "no-apps" | "disabled"; problems: { folder: string; error: string }[] }'
         md: 'The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16.'
 
-# shared types for zerogap.d.ts
+# shared types for gapkeep.d.ts
 shared_ts:
   BytesLike: |
     ArrayBufferView | ArrayBuffer | string

@@ -8,7 +8,7 @@ is no server code, and the page needs no network once it is set up.
 ## Starting it
 
 ```sh
-tools/zgide.sh          # or: tools/zgide.sh 8080
+tools/gkide.sh          # or: tools/gkide.sh 8080
 ```
 
 It builds the simulator if needed (`make -C sim web`, with emsdk from
@@ -39,7 +39,7 @@ console (and its camera sends grey).
 - **Editor** (middle): Monaco, as in VS Code. JavaScript is checked as
   zerogap runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
   with completions and hovers for `gk:ui`, `gk:sys`, `gk:crypto` and
-  `gk:apps` from `sim/web/types/zerogap.d.ts`. `manifest.json` is checked
+  `gk:apps` from `sim/web/types/gapkeep.d.ts`. `manifest.json` is checked
   against the manifest's rules (keys, id, icon names).
 - **Screen** (right): zerogap's screen at its true size, scaled to fit in
   whole steps when it fits. **Run** saves everything, boots a fresh machine
@@ -108,9 +108,9 @@ written to the repository. To keep an app, or move it to the repository,
 **Export .zip** it. The IDE warns before leaving the page with unsaved
 edits.
 
-For scripts and agents, the page exposes `window.zgide`: `run(id)`,
+For scripts and agents, the page exposes `window.gkide`: `run(id)`,
 `openFile(path, line)`, `home()`, `files` (path to contents), `machine` (the
-`Zerogap` instance of `sim/web/zerogap.js`), `editor`, `monaco`.
+`Gapkeep` instance of `sim/web/gapkeep.js`), `editor`, `monaco`.
 
 ## The camera
 

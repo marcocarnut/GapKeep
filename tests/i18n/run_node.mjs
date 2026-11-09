@@ -13,7 +13,7 @@ const native = new URL("./fake_native.mjs", import.meta.url);
 const source = readFileSync(new URL("../../src/runtime/i18n.js", import.meta.url), "utf8")
   .replace(`from "gk:i18n-native"`, `from ${JSON.stringify(native.href)}`);
 assert.ok(source.includes(native.href), "the import of gk:i18n-native");
-const dir = mkdtempSync(join(tmpdir(), "zg-i18n-"));
+const dir = mkdtempSync(join(tmpdir(), "gk-i18n-"));
 writeFileSync(join(dir, "i18n.mjs"), source);
 const i = await import(join(dir, "i18n.mjs"));
 rmSync(dir, { recursive: true });

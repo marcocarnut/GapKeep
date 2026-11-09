@@ -2,19 +2,19 @@
 // web.cpp - the simulator's browser front end (built with Emscripten, see
 // sim/Makefile "make web"). JavaScript drives it:
 //
-//   const zg = await createZerogap ({ onLog, onHalt });
+//   const gk = await createGapkeep ({ onLog, onHalt });
 //   // the SD card: Emscripten's in-memory file system, apps in /card/apps
-//   zg.FS.mkdirTree ("/card/apps/myapp"); zg.FS.writeFile (..., text);
-//   zg._gk_sim_boot (640, 480, cardPathPtr)      // or 0: no card
-//   setInterval (() => zg._gk_web_run (), 4)      // main loop
-//   zg._gk_web_frame () -> pointer to RGB565 pixels (zg.HEAPU16)
-//   zg._gk_sim_key_down_dom (keyPtr, mods), zg._gk_sim_key_up ()
-//   zg._gk_sim_pointer (x, y, pressed)
+//   gk.FS.mkdirTree ("/card/apps/myapp"); gk.FS.writeFile (..., text);
+//   gk._gk_sim_boot (640, 480, cardPathPtr)      // or 0: no card
+//   setInterval (() => gk._gk_web_run (), 4)      // main loop
+//   gk._gk_web_frame () -> pointer to RGB565 pixels (gk.HEAPU16)
+//   gk._gk_sim_key_down_dom (keyPtr, mods), gk._gk_sim_key_up ()
+//   gk._gk_sim_pointer (x, y, pressed)
 //
 // To restart (Run again, Reset), JavaScript makes a new instance: every
 // boot starts from a fresh machine, as on the device.
 //
-// sim/web/zerogap.js wraps all of this in a small class.
+// sim/web/gapkeep.js wraps all of this in a small class.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //

@@ -19,17 +19,17 @@ const $ = (id) => document.getElementById (id);
 const FRAME_MS = 1000 / 15;
 const PART_MS = 500;
 // Webcam frames go to zerogap at their own resolution, up to 1920 a side
-// (zerogap.js / synthcam.h), and zerogap makes each frame as the Pi camera
+// (gapkeep.js / synthcam.h), and zerogap makes each frame as the Pi camera
 // would: the middle 640x480 pixel for pixel, or the whole picture averaged
 // down (the scanner's "field").
 const WEBCAM_W = 1920, WEBCAM_H = 1080, MAX_SIDE = 1920;
 
 export class CameraBar {
-  // getMachine: () => the running Zerogap or null; log: (text, isError) => void
+  // getMachine: () => the running Gapkeep or null; log: (text, isError) => void
   constructor (getMachine, log) {
     this.getMachine = getMachine;
     this.log = log;
-    this.mode = localStorage.getItem ("zgide.camera") || "scene";
+    this.mode = localStorage.getItem ("gkide.camera") || "scene";
     if (this.mode === "webcam" || this.mode === "picture") this.mode = "scene";  // ask again
     this.picture = null;        // { data, width, height }
     this.stream = null;         // webcam MediaStream
@@ -37,17 +37,17 @@ export class CameraBar {
     this.timer = null;
     this.part = 0;
 
-    $("camera-text").value = localStorage.getItem ("zgide.cameraText") || "";
-    $("camera-animate").checked = localStorage.getItem ("zgide.cameraAnimate") === "1";
+    $("camera-text").value = localStorage.getItem ("gkide.cameraText") || "";
+    $("camera-animate").checked = localStorage.getItem ("gkide.cameraAnimate") === "1";
     $("camera-mode").value = this.mode;
     $("camera-mode").onchange = () => this.setMode ($("camera-mode").value);
     $("camera-text").oninput = () => {
-      localStorage.setItem ("zgide.cameraText", $("camera-text").value);
+      localStorage.setItem ("gkide.cameraText", $("camera-text").value);
       this.fitText ();
       this.apply ();
     };
     $("camera-animate").onchange = () => {
-      localStorage.setItem ("zgide.cameraAnimate", $("camera-animate").checked ? "1" : "0");
+      localStorage.setItem ("gkide.cameraAnimate", $("camera-animate").checked ? "1" : "0");
       this.apply ();
     };
     $("camera-file").onchange = (e) => this.loadPicture (e.target.files[0]);
@@ -74,7 +74,7 @@ export class CameraBar {
     }
     this.stopWebcam ();
     this.mode = mode;
-    localStorage.setItem ("zgide.camera", mode);
+    localStorage.setItem ("gkide.camera", mode);
     this.showControls ();
     if (mode === "webcam") await this.startWebcam ();
     this.apply ();
@@ -140,29 +140,29 @@ export class CameraBar {
   apply () {
     clearInterval (this.timer);
     this.timer = null;
-    const zg = this.getMachine ();
-    if (!zg) return;
+    const gk = this.getMachine ();
+    if (!gk) return;
 
     switch (this.mode) {
     case "none":
     case "scene":
-      zg.camera (this.mode);
+      gk.camera (this.mode);
       break;
     case "picture":
-      if (this.picture) zg.cameraPicture (this.picture.data, this.picture.width, this.picture.height);
-      else zg.camera ("scene");
+      if (this.picture) gk.cameraPicture (this.picture.data, this.picture.width, this.picture.height);
+      else gk.camera ("scene");
       break;
     case "qr": {
       const text = $("camera-text").value;
       const parts = $("camera-animate").checked ? text.split ("\n").filter ((l) => l !== "") : [text];
       if (parts.length === 0 || (parts.length === 1 && parts[0] === "")) {
-        zg.camera ("scene");
+        gk.camera ("scene");
         $("camera-info").textContent = "";
         break;
       }
       const show = () => {
         const i = this.part++ % parts.length;
-        const ok = zg.cameraQR (parts[i], this.part > parts.length);   // each part logged once
+        const ok = gk.cameraQR (parts[i], this.part > parts.length);   // each part logged once
         $("camera-info").textContent = !ok ? "too long for a QR code"
           : parts.length > 1 ? `part ${i + 1} of ${parts.length}` : "";
       };
@@ -173,13 +173,13 @@ export class CameraBar {
     }
     case "webcam": {
       if (!this.video) {
-        zg.camera ("scene");
+        gk.camera ("scene");
         break;
       }
       let canvas = null, ctx = null;
       this.timer = setInterval (() => {
         const v = this.video;
-        if (!v || v.readyState < 2 || !v.videoWidth || this.getMachine () !== zg) return;
+        if (!v || v.readyState < 2 || !v.videoWidth || this.getMachine () !== gk) return;
         // the webcam's own resolution (scaled down only beyond MAX_SIDE)
         const s = Math.min (1, MAX_SIDE / Math.max (v.videoWidth, v.videoHeight));
         const w = Math.round (v.videoWidth * s), h = Math.round (v.videoHeight * s);
@@ -189,7 +189,7 @@ export class CameraBar {
           $("camera-info").textContent = `${v.videoWidth}x${v.videoHeight}`;
         }
         ctx.drawImage (v, 0, 0, w, h);
-        zg.cameraPush (ctx.getImageData (0, 0, w, h).data, w, h);
+        gk.cameraPush (ctx.getImageData (0, 0, w, h).data, w, h);
       }, FRAME_MS);
       break;
     }

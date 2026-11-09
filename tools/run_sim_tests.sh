@@ -44,9 +44,9 @@ for t in $SCENARIOS; do
 		continue
 	fi
 	if head -1 "$t" | grep -q "Needs a test build"; then
-		sim=sim/build/zgsim-test; card=tests/sdcard
+		sim=sim/build/gksim-test; card=tests/sdcard
 	else
-		sim=sim/build/zgsim; card=$OUT/card-apps
+		sim=sim/build/gksim; card=$OUT/card-apps
 	fi
 	# "# Card: empty": an SD card without apps (a screen that depends on nothing else)
 	if grep -q "^# Card: empty" "$t"; then
@@ -122,8 +122,8 @@ else
 	echo "FAIL  sim:i18n_tool   (see $OUT/i18n_tool.log)"; FAILED=1
 fi
 
-# the API description (docs/api/zerogap-api.yaml) against the real runtime
-if python3 tools/check_api.py sim/build/zgsim-test > "$OUT/check_api.log" 2>&1; then
+# the API description (docs/api/gapkeep-api.yaml) against the real runtime
+if python3 tools/check_api.py sim/build/gksim-test > "$OUT/check_api.log" 2>&1; then
 	echo "PASS  sim:check_api"
 else
 	echo "FAIL  sim:check_api   (see $OUT/check_api.log)"; FAILED=1
@@ -144,7 +144,7 @@ if command -v node >/dev/null; then
 		echo "FAIL  sim:i18n_node   (see $OUT/i18n_node.log)"; FAILED=1
 	fi
 	# the browser IDE's keyboard (sim/web/textinput.js; end to end with
-	# sim/build/web/zgsim-test.js if it was built)
+	# sim/build/web/gksim-test.js if it was built)
 	if node --experimental-default-type=module tests/web/textinput.mjs > "$OUT/web_textinput.log" 2>&1; then
 		echo "PASS  sim:web_textinput"
 	else

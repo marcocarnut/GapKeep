@@ -2,13 +2,13 @@
 # The zerogap simulator: src/runtime, the keyboard device, LVGL and QuickJS
 # compiled for a host instead of the Pi, with sim/ standing in for Circle.
 #
-#   make                 build/zgsim, native, for scripts, tests and agents
-#   make web             build/web/zgsim.{js,wasm}, for the browser IDE
+#   make                 build/gksim, native, for scripts, tests and agents
+#   make web             build/web/gksim.{js,wasm}, for the browser IDE
 #                        (Emscripten: emcc on PATH, or EMSDK=~/emsdk)
 #
 # Built-in apps, as the kernel's build modes (../src/Makefile):
 #   (default)            the launcher only; apps come from the "SD card"
-#                        (zgsim --card DIR: DIR/apps)
+#                        (gksim --card DIR: DIR/apps)
 #   TEST=1               every app in ../apps and ../tests/apps
 #
 # Objects go to build/<native|web>-<mode>/, so builds don't mix.
@@ -117,21 +117,21 @@ CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 
 .PHONY: all web clean FORCE
-all: build/zgsim$(if $(filter test,$(MODE)),-test)
+all: build/gksim$(if $(filter test,$(MODE)),-test)
 
-build/zgsim build/zgsim-test: $(OBJS)
+build/gksim build/gksim-test: $(OBJS)
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) -o $@ $(OBJS) -lm
 
-web: build/web/zgsim$(if $(filter test,$(MODE)),-test).js
+web: build/web/gksim$(if $(filter test,$(MODE)),-test).js
 
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
-	    -sMODULARIZE=1 -sEXPORT_NAME=createZerogap -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
+	    -sMODULARIZE=1 -sEXPORT_NAME=createGapkeep -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
 	    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAPU16,UTF8ToString,stringToNewUTF8 \
 	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
-build/web/zgsim.js build/web/zgsim-test.js: $(OBJS)
+build/web/gksim.js build/web/gksim-test.js: $(OBJS)
 	@mkdir -p build/web
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) $(WEBFLAGS) -o $@ $(OBJS)

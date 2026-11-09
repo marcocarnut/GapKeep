@@ -1,11 +1,11 @@
 // ide.js - the zerogap browser IDE (docs/IDE.md): a file tree of the apps
 // on a simulated SD card, a Monaco editor, the zerogap screen (the
-// simulator compiled to WebAssembly, through zerogap.js) and its log.
+// simulator compiled to WebAssembly, through gapkeep.js) and its log.
 // Static files only; the work is kept in the browser's IndexedDB.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { Zerogap } from "./zerogap.js";
+import { Gapkeep } from "./gapkeep.js";
 import { TextInput } from "./textinput.js";
 import { Store } from "./store.js";
 import { makeZip } from "./zip.js";
@@ -21,10 +21,10 @@ const SIZES = [[640, 480], [800, 480], [800, 600], [1024, 600], [1024, 768], [12
 const BUILTIN = new Set (["launcher"]);
 // Fetched with cache: "no-cache": a hard reload doesn't refresh what a page
 // fetches later, and http.server sends no cache headers, so a browser would
-// otherwise keep an old copy after tools/zgide.sh rebuilds them.
-const EXAMPLES_URL = here ("../build/web/examples.json");   // written by tools/zgide.sh
+// otherwise keep an old copy after tools/gkide.sh rebuilds them.
+const EXAMPLES_URL = here ("../build/web/examples.json");   // written by tools/gkide.sh
 const EXAMPLES_DIR = here ("../build/web/examples/");
-const TYPES_URL = here ("types/zerogap.d.ts");
+const TYPES_URL = here ("types/gapkeep.d.ts");
 const MONACO_VS = here ("vendor/monaco/vs");
 
 // What docs/APPS.md allows: app ids, and file and folder names.
@@ -41,16 +41,16 @@ const models = new Map ();  // path -> Monaco model (text files)
 const savedVersion = new Map ();  // path -> model version id when last saved
 let current = null;         // path of the file in the editor
 let selected = null;        // { path, kind: "app" | "dir" | "file" }
-const expanded = new Set (JSON.parse (localStorage.getItem ("zgide.expanded") || "[]"));
+const expanded = new Set (JSON.parse (localStorage.getItem ("gkide.expanded") || "[]"));
 let binaryModel = null;     // read-only stand-in shown for binary files
 
-let machine = null;         // the running Zerogap instance
+let machine = null;         // the running Gapkeep instance
 let camera = null;          // CameraBar: what the camera films
 let runToken = 0;           // the latest run() wins when several overlap
 let runningApp = null;      // the app zerogap says it started (from the log)
 let lastApp = null;         // what Run launched last (for screen size changes)
 const sizeName = ([w, h]) => `${w}x${h}`;
-let size = SIZES.find ((s) => sizeName (s) === localStorage.getItem ("zgide.size")) || SIZES[0];
+let size = SIZES.find ((s) => sizeName (s) === localStorage.getItem ("gkide.size")) || SIZES[0];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -371,7 +371,7 @@ function renderTree () {
 function toggle (path, open = !expanded.has (path)) {
   if (open) expanded.add (path);
   else expanded.delete (path);
-  localStorage.setItem ("zgide.expanded", JSON.stringify ([...expanded]));
+  localStorage.setItem ("gkide.expanded", JSON.stringify ([...expanded]));
 }
 
 // Expands the folders down to path.
@@ -389,7 +389,7 @@ function openFile (path, line, col = 1) {
     return;
   }
   current = path;
-  localStorage.setItem ("zgide.open", path || "");
+  localStorage.setItem ("gkide.open", path || "");
   if (!path) {
     editor.setModel (null);
   } else if (isText (files.get (path))) {
@@ -475,7 +475,7 @@ async function setupEditor () {
 
   // JavaScript as zerogap runs it: ES2023 modules on QuickJS, no DOM. The
   // gk:* modules and the few globals (console, timers) come from
-  // zerogap.d.ts. (monaco.typescript is new in 0.55; older: languages.typescript.)
+  // gapkeep.d.ts. (monaco.typescript is new in 0.55; older: languages.typescript.)
   const ts = monaco.typescript || monaco.languages.typescript;
   const js = ts.javascriptDefaults;
   js.setCompilerOptions ({
@@ -492,9 +492,9 @@ async function setupEditor () {
   try {
     const r = await fetch (TYPES_URL, { cache: "no-cache" });
     if (!r.ok) throw new Error (r.status + " " + r.statusText);
-    js.addExtraLib (await r.text (), "file:///types/zerogap.d.ts");
+    js.addExtraLib (await r.text (), "file:///types/gapkeep.d.ts");
   } catch (e) {
-    ideLog (`could not load types/zerogap.d.ts (${e.message}): no gk:* completions`, true);
+    ideLog (`could not load types/gapkeep.d.ts (${e.message}): no gk:* completions`, true);
   }
 
   const json = monaco.json || monaco.languages.json;
@@ -522,7 +522,7 @@ async function setupEditor () {
     tabSize: 2,
     scrollBeyondLastLine: false,
   });
-  binaryModel = monaco.editor.createModel ("", "plaintext", monaco.Uri.parse ("zgide:binary"));
+  binaryModel = monaco.editor.createModel ("", "plaintext", monaco.Uri.parse ("gkide:binary"));
 }
 
 // ---------------------------------------------------------------------------
@@ -551,19 +551,19 @@ async function run (appId, { focus = true } = {}) {
   stopMachine ();
   updateStatus ("booting...");
   const [w, h] = size;
-  let zg;
+  let gk;
   try {
-    zg = await Zerogap.create ({
-      onLog: (line) => { if (machine === zg) onLog (line); },
-      onHalt: () => { if (machine === zg) { updateStatus (); renderTree (); } },
+    gk = await Gapkeep.create ({
+      onLog: (line) => { if (machine === gk) onLog (line); },
+      onHalt: () => { if (machine === gk) { updateStatus (); renderTree (); } },
     });
   } catch (e) {
-    ideLog (`could not load the simulator (${e.message}); build it with tools/zgide.sh`, true);
+    ideLog (`could not load the simulator (${e.message}); build it with tools/gkide.sh`, true);
     updateStatus ("no simulator");
     return;
   }
   if (token !== runToken) return;   // a later run() took over
-  machine = zg;
+  machine = gk;
   logApp = null;
   const card = {}, builtin = {};
   for (const [path, data] of files) {
@@ -572,16 +572,16 @@ async function run (appId, { focus = true } = {}) {
     else card[path] = data;
   }
   // the card's zerogap.txt: only the experimental switch (docs/EXPERIMENTAL.md)
-  if (localStorage.getItem ("zgide.experimental") === "yes") card["zerogap.txt"] = "experimental = yes\n";
-  if (Object.keys (card).length) zg.writeCard (card);
-  if (Object.keys (builtin).length) zg.writeBuiltin (builtin);
+  if (localStorage.getItem ("gkide.experimental") === "yes") card["zerogap.txt"] = "experimental = yes\n";
+  if (Object.keys (card).length) gk.writeCard (card);
+  if (Object.keys (builtin).length) gk.writeBuiltin (builtin);
   const canvas = $("screen");
   canvas.width = w;
   canvas.height = h;
   fitScreen ();
   ideLog (`boot ${w}x${h}` + (appId ? `, then start ${appId}` : ""));
   try {
-    zg.boot (w, h);
+    gk.boot (w, h);
   } catch (e) {
     ideLog (e.message, true);
     if (builtin["launcher/main.js"] !== undefined) {
@@ -592,10 +592,10 @@ async function run (appId, { focus = true } = {}) {
     updateStatus ();
     return;
   }
-  zg.start ();
+  gk.start ();
   camera.apply ();
   lastApp = appId;
-  if (appId && !zg.launch (appId)) {
+  if (appId && !gk.launch (appId)) {
     ideLog (`${appId} did not start (see "not loaded" above); staying on the launcher`, true);
   }
   updateStatus ();
@@ -639,13 +639,13 @@ function setupScreen () {
   sel.value = SIZES.indexOf (size);
   sel.onchange = () => {
     size = SIZES[sel.value];
-    localStorage.setItem ("zgide.size", sizeName (size));
+    localStorage.setItem ("gkide.size", sizeName (size));
     run (machine ? lastApp : null);
   };
   const experimental = $("experimental");
-  experimental.checked = localStorage.getItem ("zgide.experimental") === "yes";
+  experimental.checked = localStorage.getItem ("gkide.experimental") === "yes";
   experimental.onchange = () => {
-    localStorage.setItem ("zgide.experimental", experimental.checked ? "yes" : "no");
+    localStorage.setItem ("gkide.experimental", experimental.checked ? "yes" : "no");
     run (machine ? lastApp : null);
   };
 
@@ -900,11 +900,11 @@ async function exportApp () {
     : `exported ${id}.zip (${entries.length} files): unzip it into the card's apps/ folder`);
 }
 
-// The example apps that tools/zgide.sh copies to sim/build/web/examples.
+// The example apps that tools/gkide.sh copies to sim/build/web/examples.
 // only: the apps to add (default: all).
 async function fetchExamples (only = null) {
   const r = await fetch (EXAMPLES_URL, { cache: "no-cache" });
-  if (!r.ok) throw new Error (`${EXAMPLES_URL}: ${r.status} (start the IDE with tools/zgide.sh)`);
+  if (!r.ok) throw new Error (`${EXAMPLES_URL}: ${r.status} (start the IDE with tools/gkide.sh)`);
   const index = (await r.json ()).apps;
   const add = {};
   for (const [id, list] of Object.entries (index)) {
@@ -999,7 +999,7 @@ async function main () {
     }
   }
   for (const path of files.keys ()) ensureModel (path);
-  const last = localStorage.getItem ("zgide.open");
+  const last = localStorage.getItem ("gkide.open");
   if (last && files.has (last)) openFile (last);
   else if (files.has ("apps/hello/main.js")) openFile ("apps/hello/main.js");
   else renderTree ();
@@ -1007,8 +1007,8 @@ async function main () {
   await run (null, { focus: false });
 }
 
-// For scripts and tests: window.zgide.run("hello"), .open("apps/x/main.js", 3)...
-window.zgide = {
+// For scripts and tests: window.gkide.run("hello"), .open("apps/x/main.js", 3)...
+window.gkide = {
   run, home, openFile, files, stop: () => $("stop").click (),
   get camera () { return camera; },
   get machine () { return machine; },

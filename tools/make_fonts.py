@@ -216,7 +216,7 @@ def main():
     check(fzip, FA_ZIP[1])
     check(jzip, MONO_ZIP[1])
 
-    tmp = tempfile.mkdtemp(prefix="zg-fonts-")
+    tmp = tempfile.mkdtemp(prefix="gk-fonts-")
     try:
         ttf = extract(mzip, MONTSERRAT_TTF[0], tmp)
         solid = extract(fzip, FA_SOLID[0], tmp)

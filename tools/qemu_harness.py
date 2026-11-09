@@ -68,7 +68,7 @@ Scenario file: one command per line, '#' starts a comment.
 Usage:
     qemu_harness.py [--kernel K] [--sd IMG] [--out DIR] [--keep] scenario.txt
     qemu_harness.py --kernel K --interactive     # just boot, print serial, Ctrl-C to stop
-    qemu_harness.py --sim sim/build/zgsim [--card DIR] [--size WxH] scenario.txt
+    qemu_harness.py --sim sim/build/gksim [--card DIR] [--size WxH] scenario.txt
         plays the scenario on the simulator (sim/) instead of QEMU: the same
         runtime, natively, in a fraction of the time; DIR plays the SD card
         (apps in DIR/apps). "send" and "serialshot" need a serial port, which
@@ -333,7 +333,7 @@ class Machine:
 
 
 class SimMachine:
-    """The simulator (sim/build/zgsim): log on stdout, commands on stdin."""
+    """The simulator (sim/build/gksim): log on stdout, commands on stdin."""
 
     def __init__(self, binary, workdir, card=None, size=None):
         self.binary = os.path.abspath(binary)
@@ -656,7 +656,7 @@ def main():
     ap.add_argument('--interactive', action='store_true')
     ap.add_argument('--keep', action='store_true', help='leave QEMU running at the end')
     ap.add_argument('--sd', help='SD card image (tools/make_sd_image.sh); default: no card')
-    ap.add_argument('--sim', help='run on the simulator binary (sim/build/zgsim) instead of QEMU')
+    ap.add_argument('--sim', help='run on the simulator binary (sim/build/gksim) instead of QEMU')
     ap.add_argument('--card', help='with --sim: folder that plays the SD card (apps in DIR/apps)')
     ap.add_argument('--size', help='with --sim: screen size, e.g. 1824x984 (default 640x480)')
     args = ap.parse_args()

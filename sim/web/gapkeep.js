@@ -1,26 +1,26 @@
-// zerogap.js - the zerogap simulator in the browser (or Node): a small
+// gapkeep.js - the zerogap simulator in the browser (or Node): a small
 // wrapper around the WebAssembly build (sim/Makefile "make web").
 //
-//   import { Zerogap } from "./zerogap.js";
-//   const zg = await Zerogap.create ({ onLog: (line) => ..., onHalt: () => ... });
-//   zg.writeCard ({ "apps/hello/manifest.json": "...", "apps/hello/main.js": "..." });
-//   zg.boot (640, 480);              // starts the launcher
-//   zg.start ();                     // runs the main loop
-//   zg.draw (canvas);                // paint the screen (call per animation frame)
-//   zg.keyDown (event.key, mods); zg.keyUp ();
-//   zg.type (text);                  // typed as key presses (pasting)
-//   zg.pointer (x, y, pressed);
-//   zg.wheel (notches);              // > 0 scrolls down, where the pointer is
-//   zg.stop ();
+//   import { Gapkeep } from "./gapkeep.js";
+//   const gk = await Gapkeep.create ({ onLog: (line) => ..., onHalt: () => ... });
+//   gk.writeCard ({ "apps/hello/manifest.json": "...", "apps/hello/main.js": "..." });
+//   gk.boot (640, 480);              // starts the launcher
+//   gk.start ();                     // runs the main loop
+//   gk.draw (canvas);                // paint the screen (call per animation frame)
+//   gk.keyDown (event.key, mods); gk.keyUp ();
+//   gk.type (text);                  // typed as key presses (pasting)
+//   gk.pointer (x, y, pressed);
+//   gk.wheel (notches);              // > 0 scrolls down, where the pointer is
+//   gk.stop ();
 //
 // One instance is one boot of one machine. To run again, make a new one
-// (Zerogap.create): nothing carries over, as on the device.
+// (Gapkeep.create): nothing carries over, as on the device.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export const MOD_SHIFT = 1, MOD_CTRL = 2, MOD_ALT = 4;
 
-let factory = null;     // createZerogap, loaded once
+let factory = null;     // createGapkeep, loaded once
 
 // Grey (one byte a pixel) from RGBA, or as is if already grey.
 function toGrey (pixels, width, height) {
@@ -34,7 +34,7 @@ function toGrey (pixels, width, height) {
 }
 
 // The simulator's build date, from the server, goes into the URLs of
-// zgsim.js and zgsim.wasm: the page loads them after it starts, so a hard
+// gksim.js and gksim.wasm: the page loads them after it starts, so a hard
 // reload doesn't refresh them, and Python's http.server sends no cache
 // headers. Without it a browser can keep running an old build after
 // "make web".
@@ -63,28 +63,28 @@ function toRGB (rgba) {
   return rgb;
 }
 
-export class Zerogap {
-  // options: { onLog(line), onHalt(), moduleUrl } - moduleUrl: zgsim.js
+export class Gapkeep {
+  // options: { onLog(line), onHalt(), moduleUrl } - moduleUrl: gksim.js
   // (default: next to this file, as "make web" puts it in sim/build/web)
   static async create (options = {}) {
     if (!factory) {
-      const url = options.moduleUrl || new URL ("../build/web/zgsim.js", import.meta.url).href;
+      const url = options.moduleUrl || new URL ("../build/web/gksim.js", import.meta.url).href;
       buildTag = await buildDate (url);
       factory = (await import (withTag (url))).default;
     }
-    const zg = new Zerogap ();
-    zg.onLog = options.onLog || ((line) => console.log (line));
-    zg.onHalt = options.onHalt || (() => {});
-    zg.halted = false;
-    zg.m = await factory ({
+    const gk = new Gapkeep ();
+    gk.onLog = options.onLog || ((line) => console.log (line));
+    gk.onHalt = options.onHalt || (() => {});
+    gk.halted = false;
+    gk.m = await factory ({
       locateFile: (path, prefix) => withTag (prefix + path),
-      onLog: (line) => zg.onLog (line),
-      onHalt: () => { zg.halted = true; zg.stop (); zg.onHalt (); },
+      onLog: (line) => gk.onLog (line),
+      onHalt: () => { gk.halted = true; gk.stop (); gk.onHalt (); },
     });
-    zg.timer = null;
-    zg.lastSerial = -1;
-    zg.image = null;
-    return zg;
+    gk.timer = null;
+    gk.lastSerial = -1;
+    gk.image = null;
+    return gk;
   }
 
   // The SD card's contents: { "apps/<id>/<path>": string or Uint8Array }.
@@ -242,8 +242,8 @@ export class Zerogap {
     if (typeof this.m._gk_sim_camera_push_rgb === "function") return true;
     if (!this.warnedColour) {
       this.warnedColour = true;
-      console.warn ("zerogap: the simulator (zgsim.wasm) is older than this page: the camera sends grey;"
-                    + " rebuild it (make -C sim web, or restart tools/zgide.sh) and reload");
+      console.warn ("zerogap: the simulator (gksim.wasm) is older than this page: the camera sends grey;"
+                    + " rebuild it (make -C sim web, or restart tools/gkide.sh) and reload");
     }
     return false;
   }

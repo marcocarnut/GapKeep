@@ -5,14 +5,14 @@ zerogap hardware rig: runs on the Raspberry Pi wired to the Pi Zero.
 Wiring (see docs/RIG.md): Zero's UART on /dev/ttyAMA0, Zero's RUN pad on
 GPIO17 (pulled low to reset, otherwise left floating).
 
-  zgrig.py reset                       reset the Zero (into the bootloader)
-  zgrig.py flash kernel.hex [--log N]  reset, load a kernel, run it, log N s
-  zgrig.py log [N] [--until REGEX]     print serial output
-  zgrig.py shot out.png                screenshot (test builds only)
-  zgrig.py run kernel.hex scenario.txt [--out DIR]
+  gkrig.py reset                       reset the Zero (into the bootloader)
+  gkrig.py flash kernel.hex [--log N]  reset, load a kernel, run it, log N s
+  gkrig.py log [N] [--until REGEX]     print serial output
+  gkrig.py shot out.png                screenshot (test builds only)
+  gkrig.py run kernel.hex scenario.txt [--out DIR]
                                        flash, then play a QEMU harness
                                        scenario (tests/*.txt) on the Zero
-  zgrig.py peek [kernel.hex]           the Pi Camera's grey frames, one after
+  gkrig.py peek [kernel.hex]           the Pi Camera's grey frames, one after
                                        another, as PGM on stdout: with a kernel,
                                        flash it and open the scanner first;
                                        without, one is running. For camview.py
@@ -97,7 +97,7 @@ def flash(port, hexfile):
     port.write(data)
     port.flush()
     read_until(port, rb'#EOF:ok|#ERR:\w+', 30 + len(data) * 10 / BAUD)
-    print('zgrig: %d KB loaded in %.1f s' % (len(data) // 1024, time.time() - t), file=sys.stderr)
+    print('gkrig: %d KB loaded in %.1f s' % (len(data) // 1024, time.time() - t), file=sys.stderr)
     time.sleep(0.1)
     port.write(b'g')
 
@@ -302,12 +302,12 @@ def peek(port, hexfile):
         here = os.path.dirname(os.path.abspath(__file__))
         if qemu_harness.run_scenario(m, os.path.join(here, 'peek.txt'), '/tmp'):
             print(m.serial()[-2000:])
-            sys.exit('zgrig: the camera did not start')
+            sys.exit('gkrig: the camera did not start')
     while True:
         try:
             info, grey = m.grey()
         except serialshot.ShotError as e:	# a log line in the frame: the next one
-            print('zgrig: %s' % e)
+            print('gkrig: %s' % e)
             continue
         try:
             out.write(b'P5\n%d %d\n255\n' % (info['width'], info['height']) + grey)
@@ -373,4 +373,4 @@ if __name__ == '__main__':
     try:
         main()
     except (TimeoutError, serialshot.ShotError) as e:
-        sys.exit('zgrig: %s' % e)
+        sys.exit('gkrig: %s' % e)
