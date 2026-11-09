@@ -143,6 +143,13 @@ if command -v node >/dev/null; then
 	else
 		echo "FAIL  sim:i18n_node   (see $OUT/i18n_node.log)"; FAILED=1
 	fi
+	# the browser IDE's keyboard (sim/web/textinput.js; end to end with
+	# sim/build/web/zgsim-test.js if it was built)
+	if node --experimental-default-type=module tests/web/textinput.mjs > "$OUT/web_textinput.log" 2>&1; then
+		echo "PASS  sim:web_textinput"
+	else
+		echo "FAIL  sim:web_textinput   (see $OUT/web_textinput.log)"; FAILED=1
+	fi
 	if node --experimental-default-type=module tests/bbqr/run_node.mjs > "$OUT/bbqr.log" 2>&1 \
 		&& python3 tests/bbqr/check_capacity.py >> "$OUT/bbqr.log" 2>&1; then
 		echo "PASS  sim:bbqr"

@@ -96,6 +96,7 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 /* Screen: the canvas is the true size; CSS scales it (integer steps when
    it fits) and keeps the pixels sharp. zerogap draws its own cursor. */
 #screen-box {
+  position: relative;
   flex: 1; min-height: 0; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   background: #111015;
@@ -105,7 +106,13 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
   cursor: none; outline: none; background: #000;
   outline: 2px solid transparent;
 }
-#screen:focus { outline-color: var(--focus); }
+#screen.focused { outline-color: var(--focus); }
+/* The keyboard's: it has the focus while typing into the screen (ide.js,
+   textinput.js); there, but not seen. */
+#screen-input {
+  position: absolute; left: 0; top: 0; width: 1px; height: 1px;
+  opacity: 0; border: 0; padding: 0; resize: none; overflow: hidden;
+}
 #screen-foot {
   display: flex; justify-content: space-between; gap: 8px; flex: none;
   padding: 2px 8px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line);
