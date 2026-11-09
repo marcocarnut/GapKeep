@@ -1,0 +1,87 @@
+From: zerogap
+Subject: lvgl addon: count the mouse wheel's notches
+
+The addon fed LVGL the pointer and the left button, and dropped the
+wheel. It now adds up the notches (Circle's MouseEventMouseWheel, from
+the USB mouse's report) in the event handler, in interrupt context, and
+CLVGL::TakeWheelMove() hands them to the main loop, which scrolls what
+is under the pointer (zerogap's src/runtime/wheel.cpp). Mice in the
+boot protocol report no wheel: nothing changes for them.
+
+diff --git a/addon/lvgl/lvgl.h b/addon/lvgl/lvgl.h
+--- a/addon/lvgl/lvgl.h
++++ b/addon/lvgl/lvgl.h
+@@ -43,6 +43,10 @@
+ 
+ 	void Update (boolean bPlugAndPlayUpdated = FALSE);
+ 
++	// zerogap: the mouse wheel's notches since the last call (> 0: turned
++	// away from the user, "up"), for the caller to scroll with
++	int TakeWheelMove (void);
++
+ private:
+ 	static void DisplayFlush (lv_display_t *pDisplay, const lv_area_t *pArea, u8 *pBuffer);
+ 	static void DisplayFlushComplete (void *pParam);
+@@ -70,6 +74,7 @@
+ 	unsigned m_nLastUpdate;
+ 
+ 	CMouseDevice * volatile m_pMouseDevice;
++	volatile int m_nWheelMove;		// zerogap: see TakeWheelMove()
+ 	CTouchScreenDevice *m_pTouchScreen;
+ 	unsigned m_nLastTouchUpdate;
+ 	lv_indev_data_t m_PointerData;
+diff --git a/addon/lvgl/lvgl.cpp b/addon/lvgl/lvgl.cpp
+--- a/addon/lvgl/lvgl.cpp
++++ b/addon/lvgl/lvgl.cpp
+@@ -24,6 +24,7 @@
+ #include <circle/logger.h>
+ #include <circle/string.h>
+ #include <circle/util.h>
++#include <circle/synchronize.h>
+ #include <circle/new.h>
+ 
+ CLVGL *CLVGL::s_pThis = 0;
+@@ -35,6 +36,7 @@
+ 	m_pDisplay (0),
+ 	m_nLastUpdate (0),
+ 	m_pMouseDevice (0),
++	m_nWheelMove (0),
+ 	m_pTouchScreen (0),
+ 	m_nLastTouchUpdate (0),
+ 	m_pIndev (0),
+@@ -55,6 +57,7 @@
+ 	m_pDisplay (pDisplay),
+ 	m_nLastUpdate (0),
+ 	m_pMouseDevice (0),
++	m_nWheelMove (0),
+ 	m_pTouchScreen (0),
+ 	m_nLastTouchUpdate (0),
+ 	m_pIndev (0),
+@@ -297,12 +300,27 @@
+ 		}
+ 		break;
+ 
++	case MouseEventMouseWheel:		// zerogap
++		s_pThis->m_nWheelMove += nWheelMove;
++		break;
++
+ 	case MouseEventMouseMove:
+ 	default:
+ 		break;
+ 	}
+ }
+ 
++int CLVGL::TakeWheelMove (void)
++{
++	// the mouse's events come in interrupt context
++	EnterCritical (IRQ_LEVEL);
++	int nMove = m_nWheelMove;
++	m_nWheelMove = 0;
++	LeaveCritical ();
++
++	return nMove;
++}
++
+ void CLVGL::TouchScreenEventHandler (TTouchScreenEvent Event, unsigned nID,
+ 				     unsigned nPosX, unsigned nPosY)
+ {

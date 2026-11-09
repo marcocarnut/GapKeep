@@ -10,6 +10,7 @@
 //   zg.keyDown (event.key, mods); zg.keyUp ();
 //   zg.type (text);                  // typed as key presses (pasting)
 //   zg.pointer (x, y, pressed);
+//   zg.wheel (notches);              // > 0 scrolls down, where the pointer is
 //   zg.stop ();
 //
 // One instance is one boot of one machine. To run again, make a new one
@@ -205,6 +206,11 @@ export class Zerogap {
   // Mouse at (x, y) in screen pixels, left button pressed or not.
   pointer (x, y, pressed) {
     this.m._zg_sim_pointer (Math.round (x), Math.round (y), pressed ? 1 : 0);
+  }
+
+  // The mouse wheel where the pointer is: notches > 0 scroll down.
+  wheel (notches) {
+    this.m._zg_sim_wheel (notches | 0);
   }
 
   // The camera (after boot). What it films: "none" (no camera) or

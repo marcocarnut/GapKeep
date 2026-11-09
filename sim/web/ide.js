@@ -728,6 +728,20 @@ function setupScreen () {
     if (e.button === 0) machine?.pointer (...toScreen (e), false);
   });
   canvas.addEventListener ("contextmenu", (e) => e.preventDefault ());
+  // The wheel: notches, as a mouse's (a pixel delta of 100, or 3 lines, is
+  // one; trackpads add up). Over the screen only: elsewhere the page scrolls.
+  let wheelRest = 0;
+  canvas.addEventListener ("wheel", (e) => {
+    if (!machine) return;
+    e.preventDefault ();
+    const perNotch = e.deltaMode === 1 ? 3 : e.deltaMode === 2 ? 1 / 3 : 100;
+    wheelRest += e.deltaY / perNotch;
+    const notches = Math.trunc (wheelRest);
+    if (notches === 0) return;
+    wheelRest -= notches;
+    machine.pointer (...toScreen (e), (e.buttons & 1) !== 0);
+    machine.wheel (notches);
+  }, { passive: false });
 
   const paint = () => {
     if (machine) machine.draw (canvas);

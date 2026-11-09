@@ -1,0 +1,39 @@
+# The mouse wheel (src/runtime/wheel.cpp): it scrolls what is under the
+# pointer, three lines a notch, as far as that can go, and nothing where
+# nothing scrolls. On the Settings page, then the launcher's tiles. On
+# QEMU a USB mouse's wheel (patches/circle/0006), one report a notch; the
+# rig's mouse has no wheel, so the rig doesn't run this.
+expect Keyboard attached 60
+expect launcher ready 60
+wait 1
+# the Settings app: its page is taller than the screen
+tile settings
+expect settings ready
+wait 1
+moveto 50% 70%
+wheel 2
+expect wheel: 1: scrolled \d+ px 10
+wait 0.5
+shot 01-settings-down
+mark
+key meta_l
+expect launcher ready
+wait 1
+# the launcher's tiles: a notch is three lines of 16 px text, 57 px
+moveto 50% 50%
+mark
+wheel 1
+expect wheel: 1: scrolled 57 px 10
+wait 0.5
+shot 02-launcher-down
+# past the end: it stops there
+wheel 20
+expect wheel: 1: nothing to scroll there 10
+wait 0.5
+shot 03-launcher-end
+mark
+wheel -30
+expect wheel: -1: scrolled -\d+ px 10
+expect wheel: -1: nothing to scroll there 10
+wait 0.5
+shot 04-launcher-top
