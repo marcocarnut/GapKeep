@@ -10,8 +10,8 @@
 //               dead keys: ´ ` ~ ^ ¨ and then a letter type the accented
 //               letter (á à ã â ä...), and then a space the accent itself
 //
-// Set from zerogap.txt ("keyboard = br-abnt2", settings.cpp), from the
-// build (make KEYBOARD=br-abnt2, the default before zerogap.txt; the only
+// Set from gapkeep.txt ("keyboard = br-abnt2", settings.cpp), from the
+// build (make KEYBOARD=br-abnt2, the default before gapkeep.txt; the only
 // way for sealed builds, which read no card), from a test build's serial
 // line ("#keyboard br-abnt2"), and while running by GkKeyLayoutSet (for
 // gk:i18n's setKeyboard). A change lasts until reboot: nothing is written.
@@ -33,11 +33,11 @@ const char *const *GkKeyLayouts (void);
 const char *GkKeyLayoutGet (void);
 
 // Switches to the layout pName, at once (a dead key pending is dropped).
-// pFrom says who asks, for the log ("zerogap.txt", "settings app"...).
+// pFrom says who asks, for the log ("gapkeep.txt", "settings app"...).
 // FALSE, logged, nothing changed: no such layout.
 boolean GkKeyLayoutSet (const char *pName, const char *pFrom);
 
-// zerogap.txt's "keyboard = <layout>": TRUE if pKey is "keyboard" (the
+// gapkeep.txt's "keyboard = <layout>": TRUE if pKey is "keyboard" (the
 // value is then taken or refused, with a log line), FALSE for other keys.
 boolean GkKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLine);
 

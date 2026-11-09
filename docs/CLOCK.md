@@ -1,6 +1,6 @@
 # The clock
 
-A Pi Zero has no battery-backed clock, and zerogap has no network to ask
+A Pi Zero has no battery-backed clock, and GapKeep has no network to ask
 for the time. So the kernel keeps a clock in software, from the system
 timer, and someone sets it after each boot: the **Clock** app
 (`apps/clock`). Until then it counts from 1970-01-01 at boot.
@@ -43,25 +43,29 @@ between the two settings is long:
 again over a week. The crystal's error also changes a little with
 temperature, so a few ppm is about as good as it gets.
 
-## zerogap.txt: keeping the trim and offset
+## gapkeep.txt: keeping the trim and offset
 
-zerogap never writes to the SD card, so the clock's settings can't be saved
+GapKeep never writes to the SD card, so the clock's settings can't be saved
 by the device. Instead, put them in a text file at the top of the card,
-`zerogap.txt`, from another computer; the Clock app shows the lines to
+`gapkeep.txt`, from another computer; the Clock app shows the lines to
 copy:
 
 ```
-# zerogap's settings
+# GapKeep's settings
 clock_trim_ppm = -21.4
 utc_offset = -03:00
 ```
 
-zerogap reads it at boot (the log shows each setting, and a warning for
+GapKeep reads it at boot (the log shows each setting, and a warning for
 anything it doesn't understand). The same file can turn on experimental
 features: [EXPERIMENTAL.md](EXPERIMENTAL.md), and set the language and the
 way numbers are written: [APPS.md](APPS.md#languages). The time itself can't be kept this way:
 set it after each boot. Sealed builds have no SD card code and don't read
 it.
+
+GapKeep was called ZeroGap, and the file `zerogap.txt`. On a card made
+before the rename, rename `zerogap.txt` to `gapkeep.txt`: the old name is
+not read.
 
 ## For apps
 

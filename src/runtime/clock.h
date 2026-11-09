@@ -2,13 +2,13 @@
 // clock.h
 //
 // The wall clock, kept by the kernel whatever app runs. A Pi Zero has no
-// real-time clock (and zerogap no network), so the time is lost at every
+// real-time clock (and GapKeep no network), so the time is lost at every
 // power-off: until an app with the "rtc" permission sets it, the clock
 // counts from the Unix epoch at boot, as before. Set, it counts UTC from
 // the system timer, corrected by a trim for its crystal's error.
 //
 // The trim (parts per million, + makes the clock run faster) and the UTC
-// offset of local time come from the card's zerogap.txt at boot (see
+// offset of local time come from the card's gapkeep.txt at boot (see
 // docs/CLOCK.md), and can be changed while running. The card is never
 // written: the clock app shows the line to copy there.
 //
@@ -57,7 +57,7 @@ public:
 	// Bumped by every change (time, trim, offset): alarms reschedule.
 	static unsigned GetSerial (void)		{ return s_nSerial; }
 
-	// A setting from the card's zerogap.txt (settings.h): "clock_trim_ppm =
+	// A setting from the card's gapkeep.txt (settings.h): "clock_trim_ppm =
 	// <ppm>" or "utc_offset = [+-]HH:MM". FALSE: not a clock setting. Logs
 	// what it takes and what it refuses.
 	static boolean Configure (const char *pKey, const char *pValue, unsigned nLine);

@@ -1,5 +1,5 @@
 /*
- * inttypes.h wrapper for zerogap.
+ * inttypes.h wrapper for GapKeep.
  *
  * Some arm-none-eabi toolchains (e.g. Debian/Ubuntu gcc-arm-none-eabi) use
  * GCC's own stdint.h instead of newlib's. newlib's inttypes.h then omits the

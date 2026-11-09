@@ -6,6 +6,6 @@
 #ifndef _gk_version_h
 #define _gk_version_h
 
-#define ZEROGAP_VERSION		"0.1.0"
+#define GAPKEEP_VERSION		"0.1.0"
 
 #endif

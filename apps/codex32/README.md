@@ -32,8 +32,8 @@ Escape leaves the camera, the QR pages and About.
 
 ## Differences from the web page
 
-- No clipboard (ZeroGap has none), so no copy button.
-- Languages are ZeroGap's (`language` in `zerogap.txt`, or the Settings
+- No clipboard (GapKeep has none), so no copy button.
+- Languages are GapKeep's (`language` in `gapkeep.txt`, or the Settings
   app), not a button on the page. The Brazilian Portuguese catalog
   (`lang/pt-BR.json`) has the page's own Portuguese for its strings.
 - One box per share instead of one text area, with the checks above as you

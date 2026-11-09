@@ -9,9 +9,9 @@
 #
 # ECMULT_WINDOW_SIZE 8: the table for verifying and tweaking public keys is
 # 16 KiB instead of the default 1 MiB (window 15), for verification about
-# 30 % slower; zerogap verifies little. Signing uses the separate comb
+# 30 % slower; GapKeep verifies little. Signing uses the separate comb
 # table (default size, 22 KiB). The default callbacks (illegal argument,
-# internal error) are zerogap's: src/crypto/secp.c, which halts.
+# internal error) are GapKeep's: src/crypto/secp.c, which halts.
 #
 SECP_DIR     = $(ROOT)/third_party/secp256k1
 SECP_SOURCES = src/secp256k1.c src/precomputed_ecmult.c src/precomputed_ecmult_gen.c

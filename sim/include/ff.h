@@ -1,6 +1,6 @@
 // The part of FatFs's API the app loader (src/runtime/appstore.cpp) uses,
 // on a host folder instead of the SD card: "SD:/apps/x" is <root>/apps/x,
-// where <root> is set with GkSimSetCardRoot(). Read-only, like zerogap's
+// where <root> is set with GkSimSetCardRoot(). Read-only, like GapKeep's
 // FatFs. Symbolic links and anything but plain files and folders are not
 // visible (a FAT card has none).
 #ifndef GK_SIM_FF_H

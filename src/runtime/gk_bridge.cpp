@@ -15,6 +15,6 @@ void gk_log_line (const char *source, const char *line)
 
 void gk_fatal (const char *message)
 {
-	CLogger::Get ()->Write ("zerogap", LogPanic, "%s", message);	// LogPanic halts
+	CLogger::Get ()->Write ("gapkeep", LogPanic, "%s", message);	// LogPanic halts
 	halt ();
 }

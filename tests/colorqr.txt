@@ -1,4 +1,4 @@
-# Needs a test build (make TEST=1) and the test SD card, whose zerogap.txt
+# Needs a test build (make TEST=1) and the test SD card, whose gapkeep.txt
 # says "experimental = yes": the experimental "qr-color" detector
 # (docs/EXPERIMENTAL.md), through apps/colorqr. The synthetic camera films
 # colour codes made by the colorqr project (tests/colorqr: version 10 and

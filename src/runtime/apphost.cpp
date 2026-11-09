@@ -182,7 +182,7 @@ boolean CAppHost::RequestLaunch (const char *pID)
 	if (!CAppStore::IsAvailable (pApp))
 	{
 		CLogger::Get ()->Write (FromHost, LogWarning, "%s is experimental:"
-					" it needs \"experimental = yes\" in zerogap.txt", pApp->id);
+					" it needs \"experimental = yes\" in gapkeep.txt", pApp->id);
 		return FALSE;
 	}
 

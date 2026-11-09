@@ -1,7 +1,7 @@
 /*
- * zerogap's FatFs configuration: Circle's addon/fatfs/ffconf.h with
- * FF_FS_READONLY 1 (no write code is compiled at all: zerogap never writes
- * the SD card), and without the functions zerogap does not use (find,
+ * GapKeep's FatFs configuration: Circle's addon/fatfs/ffconf.h with
+ * FF_FS_READONLY 1 (no write code is compiled at all: GapKeep never writes
+ * the SD card), and without the functions GapKeep does not use (find,
  * chmod, string functions, relative paths), the RTC and locking.
  */
 /*---------------------------------------------------------------------------/

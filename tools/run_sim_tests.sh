@@ -14,7 +14,7 @@ set -e
 cd "$(dirname "$0")/.."
 OUT=
 if [ "$1" = "-o" ]; then OUT=$2; shift 2; fi
-OUT=${OUT:-$(mktemp -d -t zerogap-sim-XXXXXX)}
+OUT=${OUT:-$(mktemp -d -t gapkeep-sim-XXXXXX)}
 mkdir -p "$OUT"
 SCENARIOS=${*:-$(ls tests/*.txt)}
 FAILED=0

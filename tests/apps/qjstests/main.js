@@ -5,7 +5,7 @@ import * as sys from "gk:sys";
 import { suites } from "./suites.js";
 
 globalThis.std = { gc: sys.gc };
-globalThis.os = { setTimeout, platform: "zerogap" };
+globalThis.os = { setTimeout, platform: "gapkeep" };
 
 let failed = 0;
 for (const [name, source] of Object.entries(suites)) {

@@ -59,7 +59,7 @@ namespace std
 }
 
 // From the C library, which the kernel does not have (zxing-cpp's text
-// conversion: zerogap takes QR payloads as bytes, but the code is linked)
+// conversion: GapKeep takes QR payloads as bytes, but the code is linked)
 extern "C" int tolower (int c)
 {
 	return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c;

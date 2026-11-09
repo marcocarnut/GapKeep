@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bundle zerogap apps into the kernel image.
+Bundle GapKeep apps into the kernel image.
 
 Reads every apps/<id>/manifest.json, validates it, and writes a C file
 holding each app's metadata, hash and the contents of its files (.js, .json,

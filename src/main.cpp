@@ -21,7 +21,7 @@
 #include "runtime/stackguard.h"
 #include <circle/startup.h>
 
-// zerogap: no stack canary in main(), which sets it (runtime/stackguard.cpp)
+// GapKeep: no stack canary in main(), which sets it (runtime/stackguard.cpp)
 __attribute__ ((no_stack_protector))
 int main (void)
 {

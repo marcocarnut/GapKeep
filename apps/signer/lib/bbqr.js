@@ -2,8 +2,8 @@
 // https://github.com/coinkite/BBQr, BBQr.md). Coldcard, Sparrow and others
 // use it for PSBTs and transactions too big for one QR code.
 //
-// One file, pure JavaScript, no dependencies: it runs in zerogap apps
-// (QuickJS), in Node and in browsers. Its home is zerogap's lib/js/; apps get
+// One file, pure JavaScript, no dependencies: it runs in GapKeep apps
+// (QuickJS), in Node and in browsers. Its home is GapKeep's lib/js/; apps get
 // copies made by tools/share_libs.py, other projects copy it byte for byte
 // with its SHA-256. Tested by tests/bbqr/run_node.mjs.
 //

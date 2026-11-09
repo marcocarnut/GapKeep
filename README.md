@@ -1,8 +1,8 @@
-# zerogap
+# GapKeep
 
-**The minimalistic OS for air-gapped apps.**
+**A tiny bare-metal OS for air-gapped apps.**
 
-zerogap is a tiny bare-metal system for the Raspberry Pi Zero (the plain one,
+GapKeep is a tiny bare-metal system for the Raspberry Pi Zero (the plain one,
 with no radio). It boots in about two seconds into a graphical app launcher.
 Apps are written in JavaScript and run on [QuickJS](https://bellard.org/quickjs/),
 with an [LVGL](https://lvgl.io) interface driven by a USB keyboard and mouse.
@@ -65,14 +65,14 @@ tools/build.sh pi TEST=1     # ... with the test-only apps and serial screenshot
 tools/build.sh pi SEALED=1   # ... with every app built in and no SD card code
 ```
 
-`build.sh` applies zerogap's changes to Circle and zxing-cpp (`patches/`),
+`build.sh` applies GapKeep's changes to Circle and zxing-cpp (`patches/`),
 configures Circle for the target (QEMU lacks a few peripherals, so the two
 need different Circle libraries) and builds Circle, LVGL, QuickJS, the QR
 decoder (zxing-cpp, [docs/CAMERA.md](docs/CAMERA.md#the-qr-decoder)) and the
 kernel. zxing-cpp's own submodule (zint, for writing barcodes) is not needed.
 Switching targets rebuilds everything (about 40 s); otherwise builds are
 incremental. Builds are reproducible: `tools/check_reproducible.sh` builds
-the current commit twice, in fresh checkouts, and compares the images. zerogap needs Circle's 8 MB kernel limit and a 1 MB stack, which
+the current commit twice, in fresh checkouts, and compares the images. GapKeep needs Circle's 8 MB kernel limit and a 1 MB stack, which
 `build.sh` sets.
 
 Normal builds have only the launcher built in; the other apps are read from
@@ -88,7 +88,7 @@ tools/gksim apps/dice39                     # an app on your machine (sim/, gcc)
 tools/run_sim_tests.sh                      # the scenarios on the simulator, plus the API check
 ```
 
-The simulator is zerogap's runtime compiled for the host, natively or as
+The simulator is GapKeep's runtime compiled for the host, natively or as
 WebAssembly for the browser IDE: see [docs/SIMULATOR.md](docs/SIMULATOR.md).
 
 ## Running and testing in QEMU
@@ -105,12 +105,14 @@ development and testing needs no hardware.
 
 ## Running on a Pi Zero
 
-`tools/make_sdcard.sh --standalone` builds zerogap for the Pi Zero and puts
+`tools/make_sdcard.sh --standalone` builds GapKeep for the Pi Zero and puts
 everything the card needs in `sdcard-standalone/`: the Pi firmware,
 `config.txt`, `kernel.img` and the `apps` folder. Copy all of it to the root
 of a FAT32 card. Add or remove apps by changing `apps` on the card.
 `--sealed` makes `sdcard-sealed/` instead, with every app inside
-`kernel.img`.
+`kernel.img`. The settings file at the top of the card is `gapkeep.txt`
+([docs/CLOCK.md](docs/CLOCK.md)); on a card from before the rename from
+ZeroGap, rename `zerogap.txt` to `gapkeep.txt`.
 Production builds leave the serial port (GPIO 14/15) alone: there is no log.
 Test builds (`tools/build.sh pi TEST=1`) log to it at 921600 baud.
 
@@ -149,7 +151,7 @@ activates, and the Windows (Super) key always returns to the launcher.
 | `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `signer` (shows what a transaction does, then signs it with keys from codex32 shares, seed words, an xprv or a WIF), `colorqr` (experimental: colour QR codes, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
 | `lib/` | Builds of LVGL (with `gk_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs; `lib/colorqr`, the colour QR decoder, vendored (not a submodule: its project is not published). |
-| `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get zerogap's changes in `patches/`. |
+| `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get GapKeep's changes in `patches/`. |
 | `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
 | `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |
 | `tools/` | Build script, app bundler, QEMU harness, test runner; `tools/rig/` drives real hardware. |

@@ -1,5 +1,5 @@
 /*
- * sim.h - the zerogap simulator's core: the real runtime (src/runtime, the
+ * sim.h - the GapKeep simulator's core: the real runtime (src/runtime, the
  * keyboard device, LVGL, QuickJS) on a host instead of the Pi. Two front
  * ends drive it: the native command-line runner (main.cpp) and the browser
  * (web.cpp, compiled with Emscripten).
@@ -27,8 +27,8 @@ int gk_sim_boot (int width, int height, const char *card);
  * <dir>/launcher, to work on the launcher). 0: none. */
 void gk_sim_set_builtin_dir (const char *dir);
 
-/* Before gk_sim_boot: the language, over the card's zerogap.txt (0: as
- * zerogap.txt says). gk_sim_boot fails if the system has no such language. */
+/* Before gk_sim_boot: the language, over the card's gapkeep.txt (0: as
+ * gapkeep.txt says). gk_sim_boot fails if the system has no such language. */
 void gk_sim_set_language (const char *tag);
 
 /* After boot: the language for the apps started from now on, as a

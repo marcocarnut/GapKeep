@@ -1,4 +1,4 @@
-// How transactions travel in QR codes between zerogap and Electrum.
+// How transactions travel in QR codes between GapKeep and Electrum.
 //
 // Electrum shows a PSBT (or a signed transaction) as one QR code: the
 // bytes in Base43 (PartialTransaction.to_qr_data(), electrum/transaction.py),

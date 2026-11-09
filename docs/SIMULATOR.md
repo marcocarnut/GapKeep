@@ -1,6 +1,6 @@
 # The simulator
 
-`sim/` runs zerogap on a development machine: the same runtime as on the Pi
+`sim/` runs GapKeep on a development machine: the same runtime as on the Pi
 (`src/runtime`, the keyboard device, LVGL, QuickJS), compiled for the host,
 with a folder standing in for the SD card. Apps behave as on the device:
 same widgets, fonts, focus rings, checks on the card's apps, hashes, error
@@ -46,7 +46,7 @@ formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 
 `sim/build/gksim` itself takes `--card DIR` (DIR plays the SD card: apps in
 `DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`, `--lang TAG` (the
-language, over the card's `zerogap.txt`; `qps` is the pseudo-language of
+language, over the card's `gapkeep.txt`; `qps` is the pseudo-language of
 [APPS.md](APPS.md#languages)),
 `--for SECONDS` and `--shot FILE`.
 
@@ -123,7 +123,7 @@ before the first screen. The device logs the work too, without the estimate.
   (`#shot`, `#crash`) are unavailable.
 - **No USB events**: the keyboard and mouse are always there.
 - **The clock** runs on the host's timer but otherwise as on the device:
-  `Date` counts from 1970 until the Clock app sets it, and `zerogap.txt` on
+  `Date` counts from 1970 until the Clock app sets it, and `gapkeep.txt` on
   the card is read at boot ([CLOCK.md](CLOCK.md)).
 - **The camera** is synthetic (above); the Pi's has no driver yet
   ([CAMERA.md](CAMERA.md#status)).

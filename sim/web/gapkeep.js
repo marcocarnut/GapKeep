@@ -1,4 +1,4 @@
-// gapkeep.js - the zerogap simulator in the browser (or Node): a small
+// gapkeep.js - the GapKeep simulator in the browser (or Node): a small
 // wrapper around the WebAssembly build (sim/Makefile "make web").
 //
 //   import { Gapkeep } from "./gapkeep.js";
@@ -118,7 +118,7 @@ export class Gapkeep {
     const card = this.hasCard ? this.m.stringToNewUTF8 ("/card") : 0;
     if (this.hasBuiltin) this.m._gk_sim_set_builtin_dir (this.m.stringToNewUTF8 ("/builtin"));
     if (this.m._gk_sim_boot (width, height, card) !== 0) {
-      throw new Error ("zerogap did not boot (see the log)");
+      throw new Error ("GapKeep did not boot (see the log)");
     }
   }
 
@@ -148,7 +148,7 @@ export class Gapkeep {
   }
 
   // Keys as the browser names them (KeyboardEvent.key), mods MOD_* bits.
-  // Returns false for keys zerogap has no use for (Shift alone, dead keys).
+  // Returns false for keys GapKeep has no use for (Shift alone, dead keys).
   // The key auto-repeats, as Circle does, until keyUp(): ignore the
   // browser's own repeats (event.repeat).
   keyDown (key, mods = 0) {
@@ -165,7 +165,7 @@ export class Gapkeep {
   // Types text as key presses (Ctrl+V on the IDE's screen): printable ASCII
   // and Latin-1 (á, ç, £), newlines as Enter, tabs as Tab; other characters
   // are skipped. Paced:
-  // zerogap's key queue holds 64 keys and LVGL reads it every 33 ms or so.
+  // GapKeep's key queue holds 64 keys and LVGL reads it every 33 ms or so.
   // Returns the number of keys it will type.
   type (text) {
     const keys = [];
@@ -242,7 +242,7 @@ export class Gapkeep {
     if (typeof this.m._gk_sim_camera_push_rgb === "function") return true;
     if (!this.warnedColour) {
       this.warnedColour = true;
-      console.warn ("zerogap: the simulator (gksim.wasm) is older than this page: the camera sends grey;"
+      console.warn ("GapKeep: the simulator (gksim.wasm) is older than this page: the camera sends grey;"
                     + " rebuild it (make -C sim web, or restart tools/gkide.sh) and reload");
     }
     return false;

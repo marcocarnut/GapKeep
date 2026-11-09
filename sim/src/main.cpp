@@ -1,7 +1,7 @@
 //
-// main.cpp - gksim, the zerogap simulator on the command line.
+// main.cpp - gksim, the GapKeep simulator on the command line.
 //
-// Runs zerogap (the launcher and apps) on the host, drawing into memory.
+// Runs GapKeep (the launcher and apps) on the host, drawing into memory.
 // The log goes to stdout, as the Pi's goes to the serial port. Commands,
 // one per line on stdin, drive it; answers start with "#" on stdout:
 //
@@ -30,7 +30,7 @@
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
 //                   a launcher to try out; see docs/SIMULATOR.md)
 //   --app ID        start that app right after boot
-//   --lang TAG      the language (over the card's zerogap.txt): en, pt-BR,
+//   --lang TAG      the language (over the card's gapkeep.txt): en, pt-BR,
 //                   qps (the pseudo-language: shows untranslated text)...
 //   --for SECONDS   run that long, then exit (default: until "quit" or EOF)
 //   --shot FILE     with --for: take a screenshot before exiting

@@ -85,9 +85,9 @@ new ui.Label(tablePage, {
 // --- QR code ------------------------------------------------------------
 const qrPage = tabs.addTab(t("QR"));
 qrPage.set({ layout: "row", gap: 16 });
-const qr = new ui.QRCode(qrPage, { size: 180, data: "zerogap" });
+const qr = new ui.QRCode(qrPage, { size: 180, data: "gapkeep" });
 const qrText = new ui.TextArea(qrPage, {
-  text: "zerogap",
+  text: "gapkeep",
   width: 280,
   height: 120,
   onChange: (ev) => {

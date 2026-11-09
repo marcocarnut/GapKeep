@@ -1,8 +1,8 @@
 # Needs a test build (make TEST=1) and the test SD card (tests/sdcard, with
-# its zerogap.txt): the clock's settings at boot, and apps/clock setting it.
+# its gapkeep.txt): the clock's settings at boot, and apps/clock setting it.
 expect clock: trim -12.500 ppm 60
 expect clock: UTC offset \+05:30 5
-expect zerogap.txt:4: unknown key "no_such_key" 5
+expect gapkeep.txt:4: unknown key "no_such_key" 5
 expect Keyboard attached 60
 expect launcher ready 60
 tile clock

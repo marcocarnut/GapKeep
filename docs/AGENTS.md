@@ -1,6 +1,6 @@
-# Writing zerogap apps: a guide for coding agents
+# Writing GapKeep apps: a guide for coding agents
 
-You are writing an app for zerogap, a small operating system for air-gapped
+You are writing an app for GapKeep, a small operating system for air-gapped
 Raspberry Pi Zeros. An app is a folder of JavaScript modules plus a
 manifest; it runs on QuickJS (ES2023) and draws with LVGL through the
 `gk:ui` module. This page is the short version of what you need, in the

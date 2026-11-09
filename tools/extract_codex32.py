@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Extract dice39's codex32 recombiner logic from codex32_recover.html into ES
-modules for the zerogap codex32 app (apps/codex32/vendor/).
+modules for the GapKeep codex32 app (apps/codex32/vendor/).
 
 The sibling of extract_dice39.py, and built on it: the code is copied byte
 for byte, each module gets a header naming the source file and its SHA-256,

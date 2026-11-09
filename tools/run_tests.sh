@@ -11,7 +11,7 @@
 #
 set -e
 cd "$(dirname "$0")/.."
-OUT=${1:-$(mktemp -d -t zerogap-tests-XXXXXX)}
+OUT=${1:-$(mktemp -d -t gapkeep-tests-XXXXXX)}
 mkdir -p "$OUT"
 FAILED=0
 

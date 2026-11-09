@@ -1,6 +1,6 @@
 // dice39's code was written for the browser: wordsFromEntropy calls
 // crypto.subtle.digest('SHA-256', ...). Give it exactly that, backed by
-// zerogap's native SHA-256, so the extracted code runs unmodified (as
+// GapKeep's native SHA-256, so the extracted code runs unmodified (as
 // apps/dice39/lib/cryptoshim.js does). Only the app imports this: the
 // codex32 module itself needs no crypto.
 

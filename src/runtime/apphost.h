@@ -1,7 +1,7 @@
 //
 // apphost.h
 //
-// The app host runs zerogap apps: JavaScript programs built into the kernel
+// The app host runs GapKeep apps: JavaScript programs built into the kernel
 // image or loaded from the SD card (see appstore.h), each with its own
 // QuickJS runtime, its own LVGL screen and its own keyboard focus group.
 //
@@ -156,7 +156,7 @@ void GkUIProcessDeferred (TGkApp *pApp);
 boolean GkUIDispatchKey (TGkApp *pApp, const TGkKey &rKey);
 
 // Focus callback for every focus group: shows the focus ring however focus
-// moved (keyboard, mouse or code). zerogap is keyboard-first.
+// moved (keyboard, mouse or code). GapKeep is keyboard-first.
 void GkGroupFocusCallback (lv_group_t *pGroup);
 
 // The UTF-8 symbol for an icon name in ui.symbols ("home", ...), or 0.

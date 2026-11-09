@@ -1,9 +1,9 @@
 #
-# Makefile for the zerogap kernel (Raspberry Pi Zero, bare metal on Circle)
+# Makefile for the GapKeep kernel (Raspberry Pi Zero, bare metal on Circle)
 #
 # Prerequisites (built once, see README.md):
 #   ../circle            Circle libraries (./makeall)
-#   ../lib/lvgl          LVGL with zerogap's configuration
+#   ../lib/lvgl          LVGL with GapKeep's configuration
 #   ../lib/quickjs       QuickJS engine
 #   ../lib/fatfs         FatFs, read-only (not for SEALED=1)
 #   ../lib/secp256k1     libsecp256k1 (third_party/secp256k1)
@@ -18,7 +18,7 @@
 #   make TEST=1     every app in ../apps and ../tests/apps, plus test
 #                   features (serial screenshots); /apps is read too
 #
-# The keyboard layout before zerogap.txt is read (the only one for SEALED=1,
+# The keyboard layout before gapkeep.txt is read (the only one for SEALED=1,
 # which reads no card): make KEYBOARD=br-abnt2 (runtime/keylayout.h);
 # default us.
 #
@@ -61,7 +61,7 @@ BUNDLE	= --only launcher ../apps
 BUILDMODE = production
 endif
 
-# The language a build starts in (before zerogap.txt; the only one for
+# The language a build starts in (before gapkeep.txt; the only one for
 # sealed builds): make LANGUAGE=pt-BR. Only from the command line: the
 # shell's LANGUAGE (gettext's, "en_US:en") is something else.
 ifeq ($(origin LANGUAGE),command line)

@@ -84,7 +84,7 @@ enum TEventSlot
 	EvCount
 };
 
-// zerogap's own events, fired by the widget rather than by LVGL
+// GapKeep's own events, fired by the widget rather than by LVGL
 #define GK_EVENT	LV_EVENT_LAST
 
 static const struct
@@ -2401,7 +2401,7 @@ static void DefineGetter (JSContext *ctx, JSValueConst Obj, const char *pName, J
 
 // --- QR scanner -------------------------------------------------------------
 
-// Calls the handler of a zerogap event (EvCode, EvError) with an event
+// Calls the handler of a GapKeep event (EvCode, EvError) with an event
 // object; Ev is consumed.
 static void FireEvent (TGkNode *pNode, unsigned nSlot, JSValue Ev)
 {
@@ -3036,7 +3036,7 @@ static JSValue js_ui_on_key (JSContext *ctx, JSValueConst this_val, int argc, JS
 	return JS_UNDEFINED;
 }
 
-// zerogap's theme = LVGL's default theme plus a clearly visible focus ring
+// GapKeep's theme = LVGL's default theme plus a clearly visible focus ring
 // in the secondary color, applied on top as a child theme.
 static lv_theme_t s_FocusTheme;
 

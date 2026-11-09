@@ -22,7 +22,7 @@ with open(img, 'r+b') as f:
     f.seek(446); f.write(entry)
     f.seek(510); f.write(b'\x55\xaa')
 PY
-mkfs.vfat -F 32 --offset 2048 -n ZEROGAP "$IMG" $(( (SIZE_MB - 1) * 1024 )) >/dev/null
+mkfs.vfat -F 32 --offset 2048 -n GAPKEEP "$IMG" $(( (SIZE_MB - 1) * 1024 )) >/dev/null
 if [ -n "$DIR" ] && [ -n "$(ls -A "$DIR")" ]; then
 	MTOOLS_SKIP_CHECK=1 mcopy -s -Q -i "$IMG@@1M" "$DIR"/* ::/
 fi

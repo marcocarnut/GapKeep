@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Draw zerogap's mouse pointer and write it as C (src/runtime/cursor.c).
+Draw GapKeep's mouse pointer and write it as C (src/runtime/cursor.c).
 
 An arrow with a white body, a dark outline and a soft shadow, drawn 8 times
 larger and scaled down, so its edges are smooth (anti-aliased) rather than

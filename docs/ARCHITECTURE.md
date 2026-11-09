@@ -1,6 +1,6 @@
-# zerogap architecture
+# GapKeep architecture
 
-zerogap is a single-purpose, bare-metal system for the Raspberry Pi Zero
+GapKeep is a single-purpose, bare-metal system for the Raspberry Pi Zero
 (BCM2835, one ARM1176 core, 512 MB). It boots straight into a JavaScript app
 runtime with a graphical interface. There is no Linux, no network stack and
 no radio; the SD card is read once at boot, for the apps, and never written.
@@ -27,7 +27,7 @@ no radio; the SD card is read once at boot, for the apps, and never written.
    `start.elf`. Both are Broadcom's closed firmware; every OS on the Pi
    depends on them.
 2. `start.elf` sets up HDMI, reads `config.txt`, and loads `kernel.img`
-   (zerogap) to 0x8000 on the ARM core.
+   (GapKeep) to 0x8000 on the ARM core.
 3. Circle's startup code sets up the stack (1 MB), MMU and caches, and calls
    `main()` → `CKernel` (`src/kernel.cpp`).
 4. The kernel brings up the screen, the serial log, interrupts, the timer and
@@ -108,7 +108,7 @@ QuickJS's object writer (plain data only: no bytecode, no references) and
 copied in and out. Every byte is overwritten before it is freed.
 
 Languages (`i18n.cpp`, `gk:i18n`): the language and number marks are the
-system's (`zerogap.txt`, or the Settings app until power-off). When an app
+system's (`gapkeep.txt`, or the Settings app until power-off). When an app
 starts, its catalog (`lang/<language>.json`, with `lang/pt.json` under
 `lang/pt-BR.json`) is parsed with `JSON.parse`, never evaluated, and each
 translation checked (the same `{names}` as its key, no control or bidi
@@ -161,7 +161,7 @@ left to apps, in JavaScript on these primitives.
 
 ### C runtime
 
-QuickJS is a hosted C program. zerogap provides only what it needs:
+QuickJS is a hosted C program. GapKeep provides only what it needs:
 
 - Circle: `malloc`/`free`/`realloc`, `mem*`, `str*` basics.
 - newlib (from the toolchain): `libm` math functions and headers.
@@ -195,7 +195,7 @@ for them to leave, other than what a person reads off the screen.
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at boot, then by zerogap, once, for `/apps` and `zerogap.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
+| SD card | Read by the firmware at boot, then by GapKeep, once, for `/apps` and `gapkeep.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **What is absent by design:** network stack, Wi-Fi and Bluetooth (the
@@ -225,7 +225,7 @@ kernel is mapped with 4 KB pages, so that
 - the unused memory below the kernel stack is unmapped, so a stack
   overflow faults instead of running into the data below it.
 
-Every C and C++ file (Circle, LVGL, QuickJS, zerogap) is compiled with
+Every C and C++ file (Circle, LVGL, QuickJS, GapKeep) is compiled with
 `-fstack-protector-strong`, with the canary taken from the hardware RNG at
 boot (`src/runtime/stackguard.cpp`). A violation of any of these stops the
 system; `tests/memprotect.txt` makes each one happen on purpose

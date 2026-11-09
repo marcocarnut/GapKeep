@@ -1,4 +1,4 @@
-// codex32 for zerogap: recombine codex32 (BIP-93) shares into the BIP-39
+// codex32 for GapKeep: recombine codex32 (BIP-93) shares into the BIP-39
 // phrase they were split from. A port of dice39's codex32_recover.html.
 //
 // The codex32 arithmetic, the strings and entropy-to-words are dice39's own
@@ -497,7 +497,7 @@ function clearAll() {
 function showAbout() {
   newPage("about", t("About"));
   paragraph(ui.screen, t(
-    "This is dice39's codex32 recombiner (codex32_recover.html) running on ZeroGap. It takes the shares " +
+    "This is dice39's codex32 recombiner (codex32_recover.html) running on GapKeep. It takes the shares " +
     "dice39 splits a phrase into, any k of a k-of-n split, and gives the phrase back."));
   paragraph(ui.screen, t(
     "The codex32 arithmetic, the messages and the step from entropy to words are dice39's own JavaScript, " +
@@ -510,8 +510,8 @@ function showAbout() {
     "Different from the web page: no clipboard (this device has none), so no copy button; Escape leaves the " +
     "camera and the QR pages; a single unshared secret (threshold 0) is accepted. The shares and the result " +
     "are only ever in this app's memory, never in the session store or on the card."), { color: MUTED });
-  paragraph(ui.screen, t("dice39 is licensed under the GNU AGPL v3. ZeroGap {zerogap}, QuickJS {quickjs}, " +
-    "LVGL {lvgl}.", { zerogap: sys.version.zerogap, quickjs: sys.version.quickjs, lvgl: sys.version.lvgl }),
+  paragraph(ui.screen, t("dice39 is licensed under the GNU AGPL v3. GapKeep {gapkeep}, QuickJS {quickjs}, " +
+    "LVGL {lvgl}.", { gapkeep: sys.version.gapkeep, quickjs: sys.version.quickjs, lvgl: sys.version.lvgl }),
   { color: MUTED, font: 12 });
   new ui.Button({ text: ui.symbols.left + "  " + t("Back"), onClick: () => showEntry(0) }).focus();
 }

@@ -1,6 +1,6 @@
-# Writing zerogap apps
+# Writing GapKeep apps
 
-A zerogap app is a small JavaScript program with a manifest, in a folder of
+A GapKeep app is a small JavaScript program with a manifest, in a folder of
 its own. It is either copied to the `apps` folder of the SD card or built
 into the system image, shows up in the launcher, and talks to the system only
 through a few documented modules (`gk:ui`, `gk:sys`, ...). This guide walks
@@ -86,9 +86,9 @@ handlers and timers.
 | `entry` | no | Entry module (default `"main.js"`). |
 | `permissions` | no | Extra rights: `"apps"` (import `gk:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
-| `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `zerogap.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
+| `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `gapkeep.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 
-zerogap checks every manifest, and refuses an app with unknown keys, a bad
+GapKeep checks every manifest, and refuses an app with unknown keys, a bad
 id, an unknown or malformed icon, an unknown permission, or a missing entry
 module. The build does
 it for built-in apps (`tools/bundle_apps.py`); for apps on the SD card the
@@ -113,7 +113,7 @@ px. `tools/make_icon.py` turns a PNG or any other image into this:
 python3 tools/make_icon.py logo.png --manifest apps/myapp/manifest.json
 ```
 
-Why not a PNG? zerogap would need a PNG decoder (zlib and all) to read it,
+Why not a PNG? GapKeep would need a PNG decoder (zlib and all) to read it,
 on data that comes from the SD card. Plain pixels only need decoding from
 base64 and checking for length, which is easy to get right. The icon is part
 of manifest.json, so the app's hash covers it.
@@ -141,7 +141,7 @@ after its id, laid out exactly like the repository's `apps/`:
 ```
 
 `tools/make_sdcard.sh --standalone` makes such a card, with every app in
-`apps/`. zerogap reads the apps once, at boot, into memory, and never writes
+`apps/`. GapKeep reads the apps once, at boot, into memory, and never writes
 to the card (its FAT driver is compiled read-only). To install or remove an
 app, change the card and restart.
 
@@ -158,7 +158,7 @@ ever run one set of apps.
 Whoever can change the card can change the apps on it, so the launcher shows
 the SHA-256 of the focused app below the tiles (as `sys.app.hash` and in
 `apps.list()`). Compare it with the hash published for the app before you
-open it. It covers exactly what zerogap loads, so it is the same on any card
+open it. It covers exactly what GapKeep loads, so it is the same on any card
 and for the built-in copy:
 
 ```sh
@@ -259,7 +259,7 @@ ui.onKey((ev) => {
 });
 ```
 
-Characters come as the keyboard layout types them, in UTF-8: `zerogap.txt`
+Characters come as the keyboard layout types them, in UTF-8: `gapkeep.txt`
 chooses `keyboard = us` (the default) or `br-abnt2` (Brazilian, with dead
 keys: ´ then a is á). A TextArea's text and `ev.key` can hold any letter of
 Latin-1 and Latin Extended-A, which every font size draws. A shortcut is
@@ -369,9 +369,9 @@ floating point, and the text carries the unit (`"{amount} BTC"`), so a
 translation can move it. Dates and times are ISO 8601 with a space in every
 language (`formatDateTime`: `2026-11-08 14:03:05`). Files and protocols are
 not written the language's way: the clock app shows `+1,5 ppm` on screen,
-and `clock_trim_ppm = +1.5` for `zerogap.txt`.
+and `clock_trim_ppm = +1.5` for `gapkeep.txt`.
 
-**The language** comes from `zerogap.txt` on the card:
+**The language** comes from `gapkeep.txt` on the card:
 
 ```
 language = pt-BR

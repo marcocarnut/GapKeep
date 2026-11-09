@@ -1,12 +1,12 @@
 # Needs a test build (make TEST=1) and the test SD card (tests/sdcard, with
-# its zerogap.txt): languages (docs/plans/I18N.md). The card asks for a
+# its gapkeep.txt): languages (docs/plans/I18N.md). The card asks for a
 # language the system doesn't have and a decimal mark it refuses; then the
 # language is set to pt-BR as the Settings app would, and the test app
 # tests/apps/i18ntest checks its catalog, where the runtime refuses some
 # translations; then the launcher and the clock, translated.
-expect i18n: no language "xx-YY" \(zerogap.txt\) 60
-expect zerogap.txt:8: language: English instead 5
-expect zerogap.txt:9: decimal_mark: \. or , expected 5
+expect i18n: no language "xx-YY" \(gapkeep.txt\) 60
+expect gapkeep.txt:8: language: English instead 5
+expect gapkeep.txt:9: decimal_mark: \. or , expected 5
 expect Keyboard attached 60
 expect launcher ready 60
 language pt-BR

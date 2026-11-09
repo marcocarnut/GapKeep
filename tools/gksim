@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Runs an app in the zerogap simulator (sim/), for development: builds the
+# Runs an app in the GapKeep simulator (sim/), for development: builds the
 # simulator if needed, puts the app(s) on a temporary "SD card" and starts
 # the first one. The log goes to stdout; type commands on stdin (see
 # sim/src/main.cpp: key <name>, pointer <x> <y> <0|1>, shot <file.png>,

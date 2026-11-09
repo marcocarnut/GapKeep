@@ -163,7 +163,7 @@ boolean CGkRandom::Get (void *pBuffer, unsigned nLength)
 		}
 
 		gk_sha256_t Ctx;
-		static const char Label[] = "zerogap hwrng v1";
+		static const char Label[] = "gapkeep hwrng v1";
 		gk_sha256_init (&Ctx);
 		gk_sha256_update (&Ctx, Label, sizeof Label);
 		gk_sha256_update (&Ctx, &m_nBlocks, sizeof m_nBlocks);

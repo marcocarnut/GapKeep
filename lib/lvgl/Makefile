@@ -1,6 +1,6 @@
 #
 # Builds LVGL (from Circle's addon submodule) plus Circle's CLVGL glue with
-# zerogap's own configuration (gk_lv_conf.h). Every file that includes LVGL
+# GapKeep's own configuration (gk_lv_conf.h). Every file that includes LVGL
 # headers must be compiled with the same LV_CONF_PATH: see ../../src/Makefile.
 #
 

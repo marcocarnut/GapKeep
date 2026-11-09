@@ -17,7 +17,7 @@
     "SD card, apps/{id}": "cartão SD, apps/{id}",
     "built in": "embutido",
     "No apps installed.": "Nenhum aplicativo instalado.",
-    "ZeroGap {version} ({build} build)": "ZeroGap {version} (build {build})",
+    "GapKeep {version} ({build} build)": "GapKeep {version} (build {build})",
     "Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):": "Kernel: SHA-256 dos primeiros {bytes} bytes do kernel.img\n(o código e as constantes dele, como estão rodando agora):",
     "Check on another computer:": "Confira em outro computador:",
     "Random number generator: healthy": "Gerador de números aleatórios: íntegro",
@@ -35,7 +35,7 @@
   "notes": {
     "{n} app": "In the launcher's header, before the SD card's state.",
     "sealed": "The SD card's state in a sealed build: every app is built in and the card is not read.",
-    "ZeroGap {version} ({build} build)": "{build} is production, sealed, test or simulator, not translated.",
+    "GapKeep {version} ({build} build)": "{build} is production, sealed, test or simulator, not translated.",
     "apps/{folder} not loaded: {error}": "{error} is the runtime's reason, in English.",
     "“{text}” could be read two ways. Leave out the thousands separator, and write decimals with {d}: 1000 or 1{d}5.": "gk:i18n's parseNumber and parseBtc: {text} is what the person typed, {d} the decimal mark.",
     "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "gk:i18n's parseNumber and parseBtc: {d} is the decimal mark, {g} the thousands separator.",

@@ -51,13 +51,13 @@ def main():
         subprocess.run(['tools/build.sh', 'pi', 'TEST=1'], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
         subprocess.run(['make', '-C', 'src', '-s', 'kernel.hex', 'TEST=1'], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
         hexfile = 'kernel.hex'
-    subprocess.run(['ssh', rig, 'mkdir -p zerogap-rig'], check=True)
+    subprocess.run(['ssh', rig, 'mkdir -p gapkeep-rig'], check=True)
     files = ['tools/rig/gkrig.py', 'tools/rig/peek.txt', 'tools/serialshot.py', 'tools/qemu_harness.py']
     if hexfile:
         files.insert(0, 'src/kernel.hex')
-    subprocess.run(['scp', '-q'] + files + [rig + ':zerogap-rig/'], cwd=ROOT, check=True)
+    subprocess.run(['scp', '-q'] + files + [rig + ':gapkeep-rig/'], cwd=ROOT, check=True)
     print('starting the camera on the rig' + (' (about a minute)...' if hexfile else '...'))
-    proc = subprocess.Popen(['ssh', rig, 'cd zerogap-rig && exec python3 gkrig.py peek ' + hexfile],
+    proc = subprocess.Popen(['ssh', rig, 'cd gapkeep-rig && exec python3 gkrig.py peek ' + hexfile],
                             stdout=subprocess.PIPE)
 
     win = tkinter.Tk()

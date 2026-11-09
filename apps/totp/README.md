@@ -64,7 +64,7 @@ the last whole byte are ignored, as other authenticators do.
 
 ## Security notes
 
-- **Nothing is written to the card.** zerogap never writes to the SD card.
+- **Nothing is written to the card.** GapKeep never writes to the SD card.
   The accounts are kept in RAM, in the app's session store
   ([`gk:session`](../../docs/API.md#gksession)): they are still there when
   you come back after using other apps, and gone when you switch off. No

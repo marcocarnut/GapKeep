@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- The zerogap IDE: static files, no server code. Start it with
+<!-- The GapKeep IDE: static files, no server code. Start it with
      tools/gkide.sh; see docs/IDE.md. SPDX-License-Identifier: GPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>zerogap IDE</title>
+<title>GapKeep IDE</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="ide.css">
 <link rel="stylesheet" href="vendor/monaco/vs/editor/editor.main.css">
@@ -12,7 +12,7 @@
 </head>
 <body>
 <header id="top">
-  <span class="brand">zerogap <b>IDE</b></span>
+  <span class="brand">GapKeep <b>IDE</b></span>
   <span id="status">loading...</span>
   <span class="spacer"></span>
   <span class="hint"><kbd>Ctrl</kbd>+<kbd>S</kbd> save &middot; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> run</span>
@@ -50,12 +50,12 @@
       <button id="home" title="The Windows key: back to the launcher">Home</button>
       <button id="restart" title="Boot again, into the launcher">Restart</button>
       <span class="spacer"></span>
-      <label title="experimental = yes in the card's zerogap.txt: experimental features, such as Color QR (docs/EXPERIMENTAL.md); reboots"><input type="checkbox" id="experimental"> Experimental</label>
+      <label title="experimental = yes in the card's gapkeep.txt: experimental features, such as Color QR (docs/EXPERIMENTAL.md); reboots"><input type="checkbox" id="experimental"> Experimental</label>
       <select id="size" title="Screen size (reboots)"></select>
     </div>
-    <div id="screen-box"><canvas id="screen" width="640" height="480"></canvas><textarea id="screen-input" aria-label="Keyboard for zerogap's screen" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0"></textarea></div>
+    <div id="screen-box"><canvas id="screen" width="640" height="480"></canvas><textarea id="screen-input" aria-label="Keyboard for GapKeep's screen" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0"></textarea></div>
     <div id="screen-foot"><span id="screen-info"></span><span id="screen-hint"></span></div>
-    <div id="camera-bar" title="What zerogap's camera sees (for apps with ui.Scanner)">
+    <div id="camera-bar" title="What GapKeep's camera sees (for apps with ui.Scanner)">
       <span class="label">Camera</span>
       <select id="camera-mode">
         <option value="scene">Empty scene</option>

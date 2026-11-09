@@ -1,5 +1,5 @@
 #
-# zxing-cpp's QR code reader (third_party/zxing-cpp, pinned), as zerogap
+# zxing-cpp's QR code reader (third_party/zxing-cpp, pinned), as GapKeep
 # builds it: the sources, in core/src, and the defines. Included by
 # lib/zxing/Makefile (the kernel) and sim/Makefile; read by
 # tools/fuzz_qr.sh. Together with Version.h (the configuration: readers,

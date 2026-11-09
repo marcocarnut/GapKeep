@@ -1,5 +1,5 @@
 #
-# Builds FatFs (from Circle's addon) read-only, with zerogap's ffconf.h.
+# Builds FatFs (from Circle's addon) read-only, with GapKeep's ffconf.h.
 #
 # ff.h includes "ffconf.h" relative to itself, so the sources are copied
 # next to our ffconf.h (into src/) rather than compiled in place.

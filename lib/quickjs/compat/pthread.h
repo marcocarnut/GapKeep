@@ -1,9 +1,9 @@
 /*
- * Minimal pthread.h for QuickJS on zerogap.
+ * Minimal pthread.h for QuickJS on GapKeep.
  *
  * quickjs.c always enables CONFIG_ATOMICS (except on Emscripten), which uses
  * a mutex to guard class-ID allocation and a mutex/condition pair for
- * Atomics.wait/notify. zerogap is single-core with a single JS thread, so the
+ * Atomics.wait/notify. GapKeep is single-core with a single JS thread, so the
  * mutexes are no-ops. Waiting is not allowed (JS_SetCanBlock is never enabled),
  * so the condition functions are never reached in practice; they fail safely.
  *

@@ -2,7 +2,7 @@
 // imx219.h
 //
 // The Sony IMX219 sensor of the Raspberry Pi Camera Module v2.1, over I2C
-// (CCI): identification, the modes zerogap uses (RAW8 on two CSI-2 lanes,
+// (CCI): identification, the modes GapKeep uses (RAW8 on two CSI-2 lanes,
 // 30 frame/s, windows centred on the array, binned 2x2 or not), exposure and
 // gain, and the test patterns. Written from docs/camera/SPEC.md (section 4);
 // docs/camera/IMPLEMENTATION.md has the decisions.

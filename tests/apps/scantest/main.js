@@ -83,7 +83,7 @@ const second = new ui.Scanner({
       check("binary code", () => eq(Array.from (ev.bytes), [0, 255, 0xc3, 0x28], "bytes"));
       console.log(`scantest done: ${failed} failed`);
     } else {
-      check("text code", () => eq(ev.text, "zerogap \u{1F3B2}", "text"));
+      check("text code", () => eq(ev.text, "gapkeep \u{1F3B2}", "text"));
       console.log("scantest: text ok");
     }
   },

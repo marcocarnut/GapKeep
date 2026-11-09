@@ -223,7 +223,7 @@ export async function runSelfTest(parent) {
   });
 
   await test("sys", () => {
-    eq(typeof sys.version.zerogap, "string");
+    eq(typeof sys.version.gapkeep, "string");
     eq(sys.app.id, "gallery");
     const m = sys.memory();
     if (!(m.used > 0 && m.limit > m.used)) throw new Error("memory: " + JSON.stringify(m));

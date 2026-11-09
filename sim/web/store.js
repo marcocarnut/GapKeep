@@ -4,7 +4,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-const DB_NAME = "zerogap-ide", DB_VERSION = 1;
+const DB_NAME = "gapkeep-ide", DB_VERSION = 1;
 
 function request (r) {
   return new Promise ((resolve, reject) => {

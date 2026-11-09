@@ -3,7 +3,7 @@
 //
 // Health-checked random bytes from the BCM2835 hardware RNG.
 //
-// The BCM2835 RNG is undocumented hardware, so zerogap treats it as a noise
+// The BCM2835 RNG is undocumented hardware, so GapKeep treats it as a noise
 // source of unknown quality, not as a finished random number generator:
 //
 //  - Every raw byte passes the two continuous health tests of NIST SP 800-90B

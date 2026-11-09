@@ -1,4 +1,4 @@
-// Stand-in for Circle's CString (the members zerogap uses), on the host C
+// Stand-in for Circle's CString (the members GapKeep uses), on the host C
 // library's vsnprintf.
 #ifndef _circle_string_h
 #define _circle_string_h

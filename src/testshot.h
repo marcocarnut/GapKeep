@@ -44,10 +44,10 @@
 // screen drawn again at once, logged with the time it took.
 //
 // "#keyboard <layout>": the keyboard layout (runtime/keylayout.h), as
-// "keyboard = <layout>" in zerogap.txt would, or a settings app.
+// "keyboard = <layout>" in gapkeep.txt would, or a settings app.
 //
 // "#experimental on": experimental features on (runtime/settings.h), as
-// "experimental = yes" in zerogap.txt would, for the rig, whose card never
+// "experimental = yes" in gapkeep.txt would, for the rig, whose card never
 // changes. The launcher lists the experimental apps from its next start.
 //
 // "#camera grey": the grey frame the running Pi Camera made last, at once, for

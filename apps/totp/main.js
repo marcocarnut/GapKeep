@@ -4,7 +4,7 @@
 // Accounts come from QR codes (otpauth://totp/... or Google Authenticator's
 // export, otpauth-migration://...) or are typed in. They are kept in RAM
 // only, in the app's session store (gk:session): they survive leaving the
-// app for another, and are gone at power-off. zerogap never writes to the
+// app for another, and are gone at power-off. GapKeep never writes to the
 // card. The codes need the right time: the clock app sets it after each
 // boot; until then (clock.status().set false) no code is shown.
 //
@@ -165,7 +165,7 @@ function update(ms) {
       a.ui.code.text = groupCode(a.code);
       // For tests: a tag only the account's key can check. (A plain hash
       // of a 6-digit code is reversed by trying all million of them.)
-      const tag = a.hmac.mac(Uint8Array.from("zerogap log " + a.code, (c) => c.charCodeAt(0)));
+      const tag = a.hmac.mac(Uint8Array.from("gapkeep log " + a.code, (c) => c.charCodeAt(0)));
       console.log(`totp: account ${a.n}, step ${counter}, code tag ${hex(tag).slice(0, 16)}`);
       tag.fill(0);
     }

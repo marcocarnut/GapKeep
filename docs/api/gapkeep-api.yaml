@@ -1,4 +1,4 @@
-# zerogap's JavaScript API: the single description of it.
+# GapKeep's JavaScript API: the single description of it.
 #
 # tools/gen_api.py generates from this file:
 #   docs/API.md                    the reference (humans and agents)
@@ -13,7 +13,7 @@
 # reading it returns its current value; others are write-only (they can only
 # be set), except `readonly` ones, which can only be read.
 
-title: zerogap JavaScript API reference
+title: GapKeep JavaScript API reference
 
 intro: |
   Apps are ES modules running on QuickJS. They reach the system through the
@@ -387,7 +387,7 @@ ui:
         a Compact SeedQR (32 bytes at `"L"`) is 25×25.
 
     - name: Image
-      md: A picture from pixels the app supplies (zerogap decodes no image formats).
+      md: A picture from pixels the app supplies (GapKeep decodes no image formats).
       props:
         - name: src
           ts: ImageSource
@@ -413,7 +413,7 @@ ui:
           ts: 'Detector[]'
           readable: true
           value: 'list of detector names'
-          md: '*Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code''s colour layer, only with `experimental = yes` in the card''s `zerogap.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
+          md: '*Readable*. Required. What to look for: `"qr"` (QR codes); `"qr-color"` (experimental: a colour QR code''s colour layer, only with `experimental = yes` in the card''s `gapkeep.txt`, otherwise an unknown name). An unknown name throws, listing those this system has. More detectors (e.g. ArUco markers) will come under new names, each with its own `"detect"` event fields. May be changed while scanning.'
         - name: field
           ts: '"center" | "full"'
           readable: true
@@ -484,7 +484,7 @@ ui:
         #### Key names
 
         Printable characters are themselves (`"a"`, `"A"`, `"7"`, `" "`, `"ç"`), as
-        the keyboard layout types them (`keyboard` in `zerogap.txt`: `us` or
+        the keyboard layout types them (`keyboard` in `gapkeep.txt`: `us` or
         `br-abnt2`); an accent typed with a dead key arrives once, composed with
         the letter (`"á"`). Others:
         `"Enter"`, `"Escape"`, `"Backspace"`, `"Delete"`, `"Tab"` (check `shift`
@@ -532,8 +532,8 @@ modules:
         ts: AppInfo
         md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `name` and `description` are in the language (the app''s catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)).'
       - name: version
-        ts: '{ readonly zerogap: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
-        md: '`{ zerogap, quickjs, lvgl, circle }` version strings.'
+        ts: '{ readonly gapkeep: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
+        md: '`{ gapkeep, quickjs, lvgl, circle }` version strings.'
       - {name: log, signature: log(...args), ts: '(...args: any[]) => void', md: Same as `console.log`.}
       - {name: uptime, signature: uptime(), ts: '() => number', md: 'Milliseconds since boot, as a float with microsecond resolution.'}
       - {name: memory, signature: memory(), ts: '() => { used: number; limit: number; objects: number; ui: number }', md: "`{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's)."}
@@ -638,8 +638,8 @@ modules:
         ts: '() => ClockStatus'
         md: '`{ set, time, trimPpm, utcOffset, drift }`: whether the time was set since boot; the time (ms, as `now()`); the trim correcting the crystal, in parts per million (+ runs faster); local time''s offset from UTC in minutes (-180 for UTC-03:00); and `drift`, `null` or what the last `set()` measured: `{ correction, over, trimPpm, uncertaintyPpm }`: the clock was `correction` seconds off (+: fast) after `over` seconds, so `trimPpm` would have kept it right, give or take `uncertaintyPpm` (half a second''s error in each setting). Measured only when the sets are at least an hour apart.'
       - {name: set, signature: set(time), ts: '(time: number | Date) => ClockStatus', md: '*Needs "rtc".* Sets the time (ms since 1970, or a `Date`; from 2000 to 2099) and returns `status()`, with the drift measured since the last `set()`.'}
-      - {name: setTrim, signature: setTrim(ppm), ts: '(ppm: number) => void', md: '*Needs "rtc".* The trim, -500 to 500 ppm. Takes effect from now, without changing the time. At boot it comes from `clock_trim_ppm` in the card''s `zerogap.txt`.'}
-      - {name: setUtcOffset, signature: setUtcOffset(minutes), ts: '(minutes: number) => void', md: '*Needs "rtc".* Local time''s offset, -720 to 840 minutes (UTC-12:00 to UTC+14:00). At boot it comes from `utc_offset` in `zerogap.txt`.'}
+      - {name: setTrim, signature: setTrim(ppm), ts: '(ppm: number) => void', md: '*Needs "rtc".* The trim, -500 to 500 ppm. Takes effect from now, without changing the time. At boot it comes from `clock_trim_ppm` in the card''s `gapkeep.txt`.'}
+      - {name: setUtcOffset, signature: setUtcOffset(minutes), ts: '(minutes: number) => void', md: '*Needs "rtc".* Local time''s offset, -720 to 840 minutes (UTC-12:00 to UTC+14:00). At boot it comes from `utc_offset` in `gapkeep.txt`.'}
       - {name: every, signature: 'every(seconds, fn)', ts: '(seconds: number, fn: (ev: { time: number; changed: boolean }) => void) => number', md: 'Calls `fn` on the clock''s marks: whenever the UTC time is a multiple of `seconds` (whole, 1 to 86400), e.g. at :00 and :30 for 30, and at once (`changed: true`) whenever the clock is set or its trim or offset change. `fn` gets `{ time, changed }`. Returns an id for `cancel`. Ends with the app.'}
       - {name: cancel, signature: cancel(id), ts: '(id: number) => void', md: 'Stops an `every`.'}
 
@@ -701,7 +701,7 @@ modules:
       build (QuickJS has no `Intl`).
 
       The language, the number marks and the keyboard layout come from
-      `zerogap.txt` at boot (`language = pt-BR`, `decimal_mark`, `group_mark`)
+      `gapkeep.txt` at boot (`language = pt-BR`, `decimal_mark`, `group_mark`)
       and can be changed until power-off by an app with
       `"permissions": ["settings"]` (the Settings app); without it the setters
       throw a `TypeError`. A new language applies to the apps started after
@@ -717,7 +717,7 @@ modules:
       - {name: onLanguageChange, signature: onLanguageChange(fn), ts: '(fn: (ev: { language: string; marks: { decimal: string; group: string } }) => void) => () => void', md: 'Calls `fn` after the language or the marks change, to redraw. Returns a function that removes it.'}
       - {name: marks, signature: marks(), ts: '() => { decimal: string; group: string }', md: 'The marks numbers are written with: `{ decimal: ".", group: "," }` in English, `{ decimal: ",", group: "." }` in Portuguese, unless set otherwise. `group` may be `""` (no grouping). For apps that draw numbers themselves.'}
       - {name: setMarks, signature: setMarks(marks), ts: '(marks: { decimal?: "." | ","; group?: "." | "," | "" } | null) => void', md: '*Needs "settings".* The marks, until power-off; `null` or a mark left out: the language''s own. If only one is given and the language''s other mark is the same, the other is the other one (`{ decimal: "," }` in English: 1.234,5). A `RangeError` if both are given and the same.'}
-      - {name: keyboard, signature: keyboard(), ts: '() => string', md: 'The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `zerogap.txt`).'}
+      - {name: keyboard, signature: keyboard(), ts: '() => string', md: 'The keyboard layout: `"us"` or `"br-abnt2"` (`keyboard` in `gapkeep.txt`).'}
       - {name: keyboards, signature: keyboards(), ts: '() => string[]', md: 'The layouts there are: `["us", "br-abnt2"]`.'}
       - {name: setKeyboard, signature: setKeyboard(layout), ts: '(layout: string) => void', md: '*Needs "settings".* The layout, from `keyboards()`, at once for every app, until power-off. A dead key pending is dropped. `RangeError` for a layout not in `keyboards()`.'}
       - {name: formatNumber, signature: 'formatNumber(x, { decimals }?)', ts: '(x: number | bigint, options?: { decimals?: number }) => string', md: 'Thousands grouped, the language''s decimal mark: `1,234,567.5` or `1.234.567,5`. `decimals` (0 to 20): exactly that many, rounded; otherwise as many as the number has. Never an exponent.'}
@@ -735,7 +735,7 @@ modules:
       Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
       throws a `ReferenceError`. Used by the launcher.
     exports:
-      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app''s own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card''s `zerogap.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
+      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app''s own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card''s `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id).'}
       - {name: launch, signature: launch(id), ts: '(id: string) => void', md: 'Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off.'}
       - name: card
         signature: card()

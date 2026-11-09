@@ -16,7 +16,7 @@ fact can be trusted:
   `vc4-regs-unicam.h`, `imx219.c`, or rsta2/libcamera), with no public document;
   restated here as bare facts. Expect less certainty about meaning.
 - **[CIRCLE]**: available in the Circle tree vendored in this repository (GPLv3,
-  the same licence as zerogap), so it can be used directly.
+  the same licence as GapKeep), so it can be used directly.
 - **[UNCERTAIN]**: inferred; check on hardware.
 
 All addresses are ARM physical addresses on the BCM2835 (peripheral base
@@ -134,7 +134,7 @@ Notes:
 
 ### 3.1 Firmware
 
-- The SD card boots `start.elf` (not `start_x.elf`). zerogap's config.txt does
+- The SD card boots `start.elf` (not `start_x.elf`). GapKeep's config.txt does
   not set `start_x`, `camera_auto_detect` or `gpu_mem` for the camera. The GPU
   firmware therefore does not drive the camera or I2C0, and the ARM owns both.
   Keep it that way: with `start_x.elf` the GPU's own camera stack may access

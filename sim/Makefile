@@ -1,5 +1,5 @@
 #
-# The zerogap simulator: src/runtime, the keyboard device, LVGL and QuickJS
+# The GapKeep simulator: src/runtime, the keyboard device, LVGL and QuickJS
 # compiled for a host instead of the Pi, with sim/ standing in for Circle.
 #
 #   make                 build/gksim, native, for scripts, tests and agents
@@ -155,7 +155,7 @@ $(OBJDIR)/apps_bundle.c.o: $(OBJDIR)/apps_bundle.c
 	@$(CC) $(CFLAGS) -I $(ROOT)/src/runtime -c -o $@ $<
 
 # QuickJS asks the C library for the time: in the simulator too, that is
-# zerogap's clock (src/runtime/clock.cpp), not the host's (platform.cpp).
+# GapKeep's clock (src/runtime/clock.cpp), not the host's (platform.cpp).
 $(call obj,$(QJS)/quickjs.c): CFLAGS += -Dgettimeofday=gk_gettimeofday -Dlocaltime_r=gk_localtime_r
 $(call obj,$(QJS)/quickjs.c): Makefile		# flags above: rebuild when they change
 

@@ -1,4 +1,4 @@
-// The zerogap launcher: lists the apps (built in, then those from the SD
+// The GapKeep launcher: lists the apps (built in, then those from the SD
 // card's /apps folder) and starts the chosen one. It is an ordinary app with
 // one extra permission ("apps" in manifest.json), which gives it the gk:apps
 // module.
@@ -25,9 +25,9 @@ ui.screen.set({ padding: [20, 28], gap: 16 });
 
 // header
 const header = new ui.Container({ width: "100%", layout: "row", alignItems: "end", gap: 12 });
-new ui.Label(header, { text: "ZeroGap", font: 32 });
+new ui.Label(header, { text: "GapKeep", font: 32 });
 new ui.Label(header, {
-  text: "v" + sys.version.zerogap,
+  text: "v" + sys.version.gapkeep,
   color: "#8a9199",
   font: 14,
   grow: 1,
@@ -138,7 +138,7 @@ function showSystem() {
   const k = sys.kernel;
   // the command stays as it is typed: its number is not written the language's way
   ui.alert(
-    t("ZeroGap {version} ({build} build)", { version: sys.version.zerogap, build: k.build }) + "\n\n" +
+    t("GapKeep {version} ({build} build)", { version: sys.version.gapkeep, build: k.build }) + "\n\n" +
       t("Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):",
         { bytes: formatNumber(k.hashedBytes) }) + "\n" + k.hash + "\n\n" +
       t("Check on another computer:") + "\n" +

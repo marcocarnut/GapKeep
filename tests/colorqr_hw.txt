@@ -1,7 +1,7 @@
 # Needs a test build. The experimental colour QR layer on the real Pi
 # Zero, for its timing: tests/colorqr.txt as the rig can play it
 # Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip it.
-# (its card has no zerogap.txt, so experimental features are turned on over
+# (its card has no gapkeep.txt, so experimental features are turned on over
 # the serial line, and the launcher started again to list Color QR). The
 # synthetic camera shows the test pictures built into test kernels.
 expect Keyboard attached 60

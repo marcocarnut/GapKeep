@@ -1,5 +1,5 @@
-// ide.js - the zerogap browser IDE (docs/IDE.md): a file tree of the apps
-// on a simulated SD card, a Monaco editor, the zerogap screen (the
+// ide.js - the GapKeep browser IDE (docs/IDE.md): a file tree of the apps
+// on a simulated SD card, a Monaco editor, the GapKeep screen (the
 // simulator compiled to WebAssembly, through gapkeep.js) and its log.
 // Static files only; the work is kept in the browser's IndexedDB.
 //
@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById (id);
 const here = (rel) => new URL (rel, import.meta.url).href;
 
 const SIZES = [[640, 480], [800, 480], [800, 600], [1024, 600], [1024, 768], [1280, 720], [1824, 984]];
-// Apps built into zerogap. The IDE's copy of one replaces it in the
+// Apps built into GapKeep. The IDE's copy of one replaces it in the
 // simulator (its "builtin" folder), so the launcher can be worked on here;
 // on the device, built-in apps come from the kernel image only.
 const BUILTIN = new Set (["launcher"]);
@@ -47,7 +47,7 @@ let binaryModel = null;     // read-only stand-in shown for binary files
 let machine = null;         // the running Gapkeep instance
 let camera = null;          // CameraBar: what the camera films
 let runToken = 0;           // the latest run() wins when several overlap
-let runningApp = null;      // the app zerogap says it started (from the log)
+let runningApp = null;      // the app GapKeep says it started (from the log)
 let lastApp = null;         // what Run launched last (for screen size changes)
 const sizeName = ([w, h]) => `${w}x${h}`;
 let size = SIZES.find ((s) => sizeName (s) === localStorage.getItem ("gkide.size")) || SIZES[0];
@@ -148,7 +148,7 @@ function linkify (div, text) {
   div.append (text.slice (last));
 }
 
-// A line from zerogap's log.
+// A line from GapKeep's log.
 function onLog (line) {
   let m;
   if ((m = line.match (/ apphost: Starting (\S+)/))) {
@@ -334,7 +334,7 @@ function renderTree () {
       meta.className = "meta";
       meta.textContent = appName (node.name) + (BUILTIN.has (node.name) ? " (built in)" : "");
       if (BUILTIN.has (node.name)) {
-        meta.title = "Built into zerogap. This copy replaces it in the simulator; " +
+        meta.title = "Built into GapKeep. This copy replaces it in the simulator; " +
           "on the device, change apps/" + node.name + " in the repository and rebuild the kernel.";
       }
       row.append (meta);
@@ -397,7 +397,7 @@ function openFile (path, line, col = 1) {
     editor.updateOptions ({ readOnly: false });
   } else {
     binaryModel.setValue (`(${relOf (path)}: binary, ${files.get (path).length} bytes; ` +
-      "zerogap only reads .js, .json and .txt files)");
+      "GapKeep only reads .js, .json and .txt files)");
     editor.setModel (binaryModel);
     editor.updateOptions ({ readOnly: true });
   }
@@ -435,7 +435,7 @@ function loadMonaco () {
 }
 
 // The manifest's keys and values, as docs/APPS.md lists them, for checks and
-// completions in manifest.json. zerogap checks it again at boot.
+// completions in manifest.json. GapKeep checks it again at boot.
 const ICONS = ("audio video list ok close power settings home download drive refresh mute " +
   "volume-mid volume-max image tint prev play pause stop next eject left right plus minus " +
   "eye-open eye-close warning shuffle up down loop directory upload call cut copy save bars " +
@@ -473,7 +473,7 @@ const MANIFEST_SCHEMA = {
 async function setupEditor () {
   monaco = await loadMonaco ();
 
-  // JavaScript as zerogap runs it: ES2023 modules on QuickJS, no DOM. The
+  // JavaScript as GapKeep runs it: ES2023 modules on QuickJS, no DOM. The
   // gk:* modules and the few globals (console, timers) come from
   // gapkeep.d.ts. (monaco.typescript is new in 0.55; older: languages.typescript.)
   const ts = monaco.typescript || monaco.languages.typescript;
@@ -500,10 +500,10 @@ async function setupEditor () {
   const json = monaco.json || monaco.languages.json;
   json.jsonDefaults.setDiagnosticsOptions ({
     validate: true,
-    schemas: [{ uri: "zerogap://manifest.schema.json", fileMatch: ["**/manifest.json"], schema: MANIFEST_SCHEMA }],
+    schemas: [{ uri: "gapkeep://manifest.schema.json", fileMatch: ["**/manifest.json"], schema: MANIFEST_SCHEMA }],
   });
 
-  monaco.editor.defineTheme ("zerogap", {
+  monaco.editor.defineTheme ("gapkeep", {
     base: "vs-dark", inherit: true, rules: [],
     colors: {
       "editor.background": "#292831",
@@ -515,7 +515,7 @@ async function setupEditor () {
   });
   editor = monaco.editor.create ($("editor"), {
     model: null,
-    theme: "zerogap",
+    theme: "gapkeep",
     automaticLayout: true,
     minimap: { enabled: false },
     fontSize: 13,
@@ -571,8 +571,8 @@ async function run (appId, { focus = true } = {}) {
     if (BUILTIN.has (appOf (path))) builtin[path.slice (5)] = data;
     else card[path] = data;
   }
-  // the card's zerogap.txt: only the experimental switch (docs/EXPERIMENTAL.md)
-  if (localStorage.getItem ("gkide.experimental") === "yes") card["zerogap.txt"] = "experimental = yes\n";
+  // the card's gapkeep.txt: only the experimental switch (docs/EXPERIMENTAL.md)
+  if (localStorage.getItem ("gkide.experimental") === "yes") card["gapkeep.txt"] = "experimental = yes\n";
   if (Object.keys (card).length) gk.writeCard (card);
   if (Object.keys (builtin).length) gk.writeBuiltin (builtin);
   const canvas = $("screen");
@@ -585,7 +585,7 @@ async function run (appId, { focus = true } = {}) {
   } catch (e) {
     ideLog (e.message, true);
     if (builtin["launcher/main.js"] !== undefined) {
-      ideLog ("zerogap starts with the launcher, and that is the copy in apps/launcher: " +
+      ideLog ("GapKeep starts with the launcher, and that is the copy in apps/launcher: " +
         "fix it (see the error above), or delete apps/launcher to use the built-in one", true);
     }
     stopMachine ();
@@ -608,7 +608,7 @@ const appToRun = () => appOf (current) || appOf (selected?.path);
 
 function home () {
   if (!machine) return;
-  // zerogap's Home is the Windows key, which browsers and desktops keep
+  // GapKeep's Home is the Windows key, which browsers and desktops keep
   // for themselves; the button sends it.
   machine.keyDown ("Meta");
   setTimeout (() => machine?.keyUp (), 50);
@@ -667,7 +667,7 @@ function setupScreen () {
   const hint = () => {
     const focused = document.activeElement === input;
     canvas.classList.toggle ("focused", focused);
-    $("screen-hint").textContent = focused ? "keyboard goes to zerogap" : "click the screen to type into it";
+    $("screen-hint").textContent = focused ? "keyboard goes to GapKeep" : "click the screen to type into it";
     $("screen-hint").classList.toggle ("focused", focused);
   };
   input.addEventListener ("focus", hint);
@@ -693,14 +693,14 @@ function setupScreen () {
   input.addEventListener ("input", (e) => {
     if (keys.input ({ isComposing: e.isComposing, inputType: e.inputType }, input.value)) input.value = "";
   });
-  // Pasting types the clipboard's text into zerogap, a key at a time (a
+  // Pasting types the clipboard's text into GapKeep, a key at a time (a
   // simulator convenience: the device has no clipboard).
   input.addEventListener ("paste", (e) => {
     e.preventDefault ();
     if (machine) keys.paste (e.clipboardData.getData ("text/plain"));
   });
 
-  // Mouse: CSS pixels on the scaled canvas -> zerogap's screen pixels.
+  // Mouse: CSS pixels on the scaled canvas -> GapKeep's screen pixels.
   const toScreen = (e) => {
     const r = canvas.getBoundingClientRect ();
     const x = (e.clientX - r.left) * canvas.width / r.width;
@@ -751,7 +751,7 @@ function template (id) {
       id, name, version: "0.1.0", description: "A new app.", icon: "file",
     }, null, 2) + "\n",
     [`apps/${id}/main.js`]:
-`// ${name}: a new zerogap app. See docs/APPS.md and docs/API.md.
+`// ${name}: a new GapKeep app. See docs/APPS.md and docs/API.md.
 
 import * as ui from "gk:ui";
 
@@ -801,7 +801,7 @@ async function newFile () {
   const path = `${folder}/${rel}`;
   if (files.has (path)) return alert (`${path} exists already.`);
   if (pathsUnder (path).length) return alert (`${path} is a folder.`);
-  if (!/\.(js|json|txt)$/.test (rel)) ideLog (`note: zerogap ignores files other than .js, .json and .txt (${rel})`);
+  if (!/\.(js|json|txt)$/.test (rel)) ideLog (`note: GapKeep ignores files other than .js, .json and .txt (${rel})`);
   await addFiles ({ [path]: /\.js$/.test (rel) ? "import * as ui from \"gk:ui\";\n\n" : "" });
   openFile (path);
 }
@@ -874,7 +874,7 @@ async function importFolder (list) {
       ideLog (`import: skipped ${id}/ (no manifest.json)`, true);
       continue;
     }
-    if (!APP_ID.test (id)) ideLog (`import: "${id}" is not a valid app id; zerogap will refuse it until renamed`, true);
+    if (!APP_ID.test (id)) ideLog (`import: "${id}" is not a valid app id; GapKeep will refuse it until renamed`, true);
     if (appIds ().has (id)) {
       if (!confirm (`Replace the app "${id}" with the imported one?`)) continue;
       await deletePaths (pathsUnder (`apps/${id}`));
@@ -955,7 +955,7 @@ function setupUi () {
   $("clear").onclick = () => $("console").replaceChildren ();
 
   // Ctrl/Cmd+S and Ctrl/Cmd+Enter everywhere except on the screen, where
-  // every key belongs to zerogap. Capture phase, so Monaco doesn't see them.
+  // every key belongs to GapKeep. Capture phase, so Monaco doesn't see them.
   window.addEventListener ("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target === $("screen-input")) return;
     if (e.key === "s" || e.key === "S") {

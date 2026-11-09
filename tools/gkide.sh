@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Starts the zerogap browser IDE (docs/IDE.md): builds the WebAssembly
+# Starts the GapKeep browser IDE (docs/IDE.md): builds the WebAssembly
 # simulator if needed, fetches the pinned Monaco editor if it is missing,
 # copies the example apps where the IDE can fetch them, and serves sim/ on
 # 127.0.0.1 with Python's static file server. No server code: the IDE is

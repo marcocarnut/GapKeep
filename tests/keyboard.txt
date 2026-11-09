@@ -2,7 +2,7 @@
 # (src/runtime/keylayout.h, patches/circle/0005). Keys are named by their
 # place on a US keyboard (QEMU's sendkey names): with br-abnt2, "semicolon"
 # is the Ç key. tests/apps/typetest logs what is typed as code points.
-expect zerogap.txt:10: keyboard: one of us, br-abnt2 expected 60
+expect gapkeep.txt:10: keyboard: one of us, br-abnt2 expected 60
 expect Keyboard attached \(layout us\) 60
 expect launcher ready 60
 tile typetest

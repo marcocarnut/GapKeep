@@ -71,7 +71,7 @@ boolean CTimer::GetUptime (unsigned *pSeconds, unsigned *pMicroSeconds)
 	return TRUE;
 }
 
-// The Pi has no real-time clock, and zerogap sets none: like the device,
+// The Pi has no real-time clock, and GapKeep sets none: like the device,
 // the simulator has no time of day (Date counts from 1970 + uptime).
 boolean CTimer::GetUniversalTime (unsigned *pSeconds, unsigned *pMicroSeconds)
 {
@@ -161,7 +161,7 @@ void halt (void)
 	exit (3);
 }
 
-// QuickJS's time (sim/Makefile renames its calls): zerogap's clock, as on
+// QuickJS's time (sim/Makefile renames its calls): GapKeep's clock, as on
 // the device, rather than the host's.
 extern "C" int gk_gettimeofday (struct timeval *tv, void *tz)
 {

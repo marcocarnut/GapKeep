@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate zerogap's API documents from docs/api/gapkeep-api.yaml, the one
+Generate GapKeep's API documents from docs/api/gapkeep-api.yaml, the one
 description of the JavaScript API:
 
     docs/API.md                    the reference
@@ -210,7 +210,7 @@ def all_props(items):
 def gen_ts(spec):
     ui = spec['ui']
     out = ['// ' + GENERATED,
-           '// zerogap\'s system modules (docs/API.md), for editors: completions and hovers.',
+           '// GapKeep\'s system modules (docs/API.md), for editors: completions and hovers.',
            '']
     for name, body in spec['shared_ts'].items():
         out.append('type %s = %s;' % (name, body.rstrip().replace('\n', '\n')))

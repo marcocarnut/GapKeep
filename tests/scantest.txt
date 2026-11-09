@@ -4,7 +4,7 @@ expect Keyboard attached 60
 expect launcher ready 60
 launch scantest
 expect scantest ready
-camera qr zerogap 🎲
+camera qr gapkeep 🎲
 expect scantest: text ok 20
 # 0xc3 0x28 is not UTF-8: the text is null
 camera qrhex 00ffc328

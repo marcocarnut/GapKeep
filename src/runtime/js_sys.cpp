@@ -393,7 +393,7 @@ static int SysModuleInit (JSContext *ctx, JSModuleDef *m)
 	TGkApp *pApp = CAppHost::GetApp (ctx);
 
 	JSValue Version = JS_NewObject (ctx);
-	JS_SetPropertyStr (ctx, Version, "zerogap", JS_NewString (ctx, ZEROGAP_VERSION));
+	JS_SetPropertyStr (ctx, Version, "gapkeep", JS_NewString (ctx, GAPKEEP_VERSION));
 	JS_SetPropertyStr (ctx, Version, "quickjs", JS_NewString (ctx, QJS_VERSION));
 	CString LVGL;
 	LVGL.Format ("%u.%u.%u", LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR, LVGL_VERSION_PATCH);

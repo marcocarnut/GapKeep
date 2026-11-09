@@ -1,5 +1,5 @@
 /*
- * cursor_install.c - puts zerogap's pointer image (cursor.c) on the mouse
+ * cursor_install.c - puts GapKeep's pointer image (cursor.c) on the mouse
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */

@@ -9,7 +9,7 @@
 #                                         arrive over the serial line. Its
 #                                         apps/ holds the test card's apps
 #                                         (tests/sdcard, tests/sdapps.txt).
-#   tools/make_sdcard.sh --standalone  -> sdcard-standalone/: zerogap itself
+#   tools/make_sdcard.sh --standalone  -> sdcard-standalone/: GapKeep itself
 #                                         (production build), boots on its
 #                                         own; the apps are in apps/ on the
 #                                         card, one folder each, as in the
@@ -57,10 +57,10 @@ if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
 		done
 	fi
 	cat > $OUT/config.txt <<'CFG'
-# zerogap standalone card (Raspberry Pi Zero)
+# GapKeep standalone card (Raspberry Pi Zero)
 arm_64bit=0
 initial_turbo=0
-# zerogap never uses the serial port: the firmware leaves it off too
+# GapKeep never uses the serial port: the firmware leaves it off too
 enable_uart=0
 # HDMI is output only: ignore CEC, so the TV can't send anything back
 hdmi_ignore_cec=1
@@ -76,7 +76,7 @@ else
 		cp "circle/boot/$f" $OUT/
 	done
 	cat > $OUT/config.txt <<'CFG'
-# zerogap development card: boots Circle's serial bootloader, which waits
+# GapKeep development card: boots Circle's serial bootloader, which waits
 # for a kernel on GPIO 14/15.
 arm_64bit=0
 initial_turbo=0

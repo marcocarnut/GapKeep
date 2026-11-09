@@ -1,5 +1,5 @@
 /*
- * secp.c - zerogap's interface to libsecp256k1 (see secp.h).
+ * secp.c - GapKeep's interface to libsecp256k1 (see secp.h).
  *
  * The library does the curve arithmetic, constant-time for secrets; this
  * file only converts between its opaque structures and bytes, and wipes

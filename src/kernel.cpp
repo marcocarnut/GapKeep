@@ -1,7 +1,7 @@
 //
 // kernel.cpp
 //
-// zerogap kernel: brings up the hardware (HDMI framebuffer, USB keyboard and
+// GapKeep kernel: brings up the hardware (HDMI framebuffer, USB keyboard and
 // mouse), LVGL, and the app host, then runs the main loop.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -108,7 +108,7 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		// the exception and interrupt vectors are in place: no more writes
-		// to the vector page (circle/lib/pagetable.cpp, zerogap's W^X map)
+		// to the vector page (circle/lib/pagetable.cpp, GapKeep's W^X map)
 		CPageTable::ProtectVectorPage ();
 	}
 
@@ -149,7 +149,7 @@ boolean CKernel::Initialize (void)
 	{
 		m_Keyboard.Initialize ();
 
-		m_Logger.Write (FromKernel, LogNotice, "zerogap " ZEROGAP_VERSION ", built " __DATE__ " " __TIME__);
+		m_Logger.Write (FromKernel, LogNotice, "gapkeep " GAPKEEP_VERSION ", built " __DATE__ " " __TIME__);
 		m_Logger.Write (FromKernel, LogNotice, "Screen %ux%u", m_Screen.GetWidth (), m_Screen.GetHeight ());
 		LogClocks ();
 
@@ -203,7 +203,7 @@ TShutdownMode CKernel::Run (void)
 void CKernel::ShowLoading (void)
 {
 	static const char *Lines[] = {
-		"ZeroGap is loading.",
+		"GapKeep is loading.",
 		"It will come up in a few seconds."
 	};
 	const unsigned nLines = sizeof Lines / sizeof Lines[0];

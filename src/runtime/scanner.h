@@ -11,7 +11,7 @@
 // Detectors, by the name apps use (manifest-free: "detect" in the widget):
 //
 //   "qr"        QR codes, decoded with zxing-cpp (qrdecode.h)
-//   "qr-color"  experimental, only with "experimental = yes" in zerogap.txt
+//   "qr-color"  experimental, only with "experimental = yes" in gapkeep.txt
 //               (settings.h): the data a colour QR code carries in its
 //               colours (lib/colorqr), with the code's own. Reported apart
 //               from "qr", never merged into it (docs/EXPERIMENTAL.md).

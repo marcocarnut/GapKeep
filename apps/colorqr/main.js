@@ -5,7 +5,7 @@
 // the colours hold.
 //
 // Only listed and started with "experimental = yes" in the card's
-// zerogap.txt. The log gets lengths and the start of each SHA-256, never
+// gapkeep.txt. The log gets lengths and the start of each SHA-256, never
 // the contents: either part may hold a secret.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later

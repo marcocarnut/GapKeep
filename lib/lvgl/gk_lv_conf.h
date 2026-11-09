@@ -1,5 +1,5 @@
 /**
- * zerogap LVGL configuration, derived from circle/addon/lvgl/lv_conf.h.
+ * GapKeep LVGL configuration, derived from circle/addon/lvgl/lv_conf.h.
  * Changes: QR codes on, Montserrat 28/32/40 on, widgets demo off, dark theme,
  * custom allocator that wipes freed memory (src/runtime/lv_mem_wipe.c).
  *
@@ -618,7 +618,7 @@
  *   FONT USAGE
  *===================*/
 
-/* LVGL's built-in Montserrat fonts (ASCII and the icons) are off: zerogap
+/* LVGL's built-in Montserrat fonts (ASCII and the icons) are off: GapKeep
  * has its own, with Latin-1, Latin Extended-A, some punctuation, the euro
  * and bitcoin signs and the same icons (src/runtime/fonts/, made by
  * tools/make_fonts.py), declared below as gk_montserrat_<size>. */

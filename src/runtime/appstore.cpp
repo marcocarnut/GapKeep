@@ -932,7 +932,7 @@ static void LoadCard (void)
 		return;
 	}
 
-	CGkSettings::Load ();		// zerogap.txt, while the card is mounted
+	CGkSettings::Load ();		// gapkeep.txt, while the card is mounted
 
 	DIR Dir;
 	if (f_opendir (&Dir, "SD:/apps") != FR_OK)

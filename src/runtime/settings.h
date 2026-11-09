@@ -1,7 +1,7 @@
 //
 // settings.h
 //
-// The card's zerogap.txt: "key = value" lines, read once at boot while the
+// The card's gapkeep.txt: "key = value" lines, read once at boot while the
 // card is mounted (appstore.cpp), "#" comments, spaces ignored. Sealed
 // builds don't read the card, so they have none of these.
 //

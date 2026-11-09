@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-zerogap hardware rig: runs on the Raspberry Pi wired to the Pi Zero.
+GapKeep hardware rig: runs on the Raspberry Pi wired to the Pi Zero.
 
 Wiring (see docs/RIG.md): Zero's UART on /dev/ttyAMA0, Zero's RUN pad on
 GPIO17 (pulled low to reset, otherwise left floating).

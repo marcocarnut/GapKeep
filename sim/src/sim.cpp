@@ -121,7 +121,7 @@ void gk_sim_set_builtin_dir (const char *dir)
 	GkSimSetBuiltinRoot (dir);
 }
 
-static const char *s_pLanguage;		// --lang, over zerogap.txt
+static const char *s_pLanguage;		// --lang, over gapkeep.txt
 
 void gk_sim_set_language (const char *tag)
 {
@@ -154,7 +154,7 @@ int gk_sim_boot (int width, int height, const char *card)
 	s_pKeyboard = new CKeyboardIndev;
 	s_pKeyboard->Initialize ();
 
-	CLogger::Get ()->Write (From, LogNotice, "zerogap " ZEROGAP_VERSION " (simulator), built " __DATE__ " " __TIME__);
+	CLogger::Get ()->Write (From, LogNotice, "gapkeep " GAPKEEP_VERSION " (simulator), built " __DATE__ " " __TIME__);
 	CLogger::Get ()->Write (From, LogNotice, "Screen %ux%u", (unsigned) width, (unsigned) height);
 
 	s_pCamera = new CGkSynthCamera;

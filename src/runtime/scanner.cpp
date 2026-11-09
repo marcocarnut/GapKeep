@@ -63,7 +63,7 @@ static void LogStages (const char *pWhat)
 	CLogger::Get ()->Write ("scanner", LogNotice, "colour layer %s: stages (ms)%s", pWhat, (const char *) Text);
 }
 
-// the detectors this system has: experimental ones only if zerogap.txt says so
+// the detectors this system has: experimental ones only if gapkeep.txt says so
 static boolean Available (unsigned i)
 {
 	return !Detectors[i].bExperimental || CGkSettings::IsExperimental ();

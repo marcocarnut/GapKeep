@@ -28,7 +28,7 @@ void CGkSettings::Load (void)
 {
 #ifndef GK_SEALED
 	FIL File;
-	if (f_open (&File, "SD:/zerogap.txt", FA_READ) != FR_OK)
+	if (f_open (&File, "SD:/gapkeep.txt", FA_READ) != FR_OK)
 	{
 		return;
 	}
@@ -42,7 +42,7 @@ void CGkSettings::Load (void)
 	f_close (&File);
 	if (Result != FR_OK || !bWhole)
 	{
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt: unreadable or larger than %u bytes",
+		CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt: unreadable or larger than %u bytes",
 					(unsigned) sizeof Text - 1);
 		return;
 	}
@@ -78,7 +78,7 @@ void CGkSettings::Load (void)
 		char *pValue = strchr (Clean, '=');
 		if (pValue == 0)
 		{
-			CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: \"key = value\" expected", nLine);
+			CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt:%u: \"key = value\" expected", nLine);
 			continue;
 		}
 		*pValue++ = '\0';
@@ -99,16 +99,16 @@ void CGkSettings::Load (void)
 		{
 			if (strcmp (pValue, "yes") == 0 || strcmp (pValue, "no") == 0)
 			{
-				SetExperimental (strcmp (pValue, "yes") == 0, "zerogap.txt");
+				SetExperimental (strcmp (pValue, "yes") == 0, "gapkeep.txt");
 			}
 			else
 			{
 				CLogger::Get ()->Write (From, LogWarning,
-					"zerogap.txt:%u: experimental: yes or no expected", nLine);
+					"gapkeep.txt:%u: experimental: yes or no expected", nLine);
 			}
 			continue;
 		}
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: unknown key \"%s\"", nLine, Clean);
+		CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt:%u: unknown key \"%s\"", nLine, Clean);
 	}
 #endif
 }

@@ -1,6 +1,6 @@
 // dice39's core code was written for the browser and calls WebCrypto:
 // crypto.subtle.digest('SHA-256', ...) and crypto.getRandomValues(...).
-// Give it exactly those two, backed by zerogap's native SHA-256 and
+// Give it exactly those two, backed by GapKeep's native SHA-256 and
 // health-checked hardware RNG, so the extracted code runs unmodified.
 
 import * as gkcrypto from "gk:crypto";

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Scripted QEMU runner for zerogap.
+Scripted QEMU runner for GapKeep.
 
 Boots a kernel image on QEMU's raspi0 machine (the Pi Zero emulation) with a
 USB keyboard and mouse attached, then plays a scenario against it: type text,
@@ -661,7 +661,7 @@ def main():
     ap.add_argument('--size', help='with --sim: screen size, e.g. 1824x984 (default 640x480)')
     args = ap.parse_args()
 
-    outdir = args.out or tempfile.mkdtemp(prefix='zerogap-qemu-')
+    outdir = args.out or tempfile.mkdtemp(prefix='gapkeep-qemu-')
     os.makedirs(outdir, exist_ok=True)
     extra = []
     if args.sd:

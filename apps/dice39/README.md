@@ -1,4 +1,4 @@
-# dice39 on ZeroGap
+# dice39 on GapKeep
 
 [dice39](https://bip39.postcogito.org) turns physical dice rolls into a
 BIP-39 seed phrase: you supply most of the words with dice and a coin, the
@@ -34,11 +34,11 @@ and only drags that really moved count. Two additions:
 
 - Without a mouse, Space or Enter on the focused pad is a press without a
   position and scores 3 bits, the clock part of a tap. Holding the key down
-  counts once: ZeroGap never delivers auto-repeated Enter to widgets.
+  counts once: GapKeep never delivers auto-repeated Enter to widgets.
 - The timing of every key pressed in the app is hashed in after the pad
   samples. It is not credited on the bar.
 
-The 32 random bytes come from ZeroGap's hardware random generator
+The 32 random bytes come from GapKeep's hardware random generator
 (`gk:crypto`, health-checked and SHA-256 conditioned) instead of
 `crypto.getRandomValues`.
 
@@ -76,7 +76,7 @@ first.
 Not ported: printing the dice tables (print them from the web page on any
 computer; they hold no secret), the clipboard export, the network probe
 (there is no network), and the page's language button: languages are
-ZeroGap's (`language` in `zerogap.txt`, or the Settings app). The Brazilian
+GapKeep's (`language` in `gapkeep.txt`, or the Settings app). The Brazilian
 Portuguese catalog (`lang/pt-BR.json`) follows the page's own Portuguese
 where the text is the same.
 

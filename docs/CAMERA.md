@@ -1,6 +1,6 @@
 # The camera and QR codes
 
-zerogap can read data off QR codes with a camera: the one way in for data
+GapKeep can read data off QR codes with a camera: the one way in for data
 other than the keyboard. Apps use one widget, `ui.Scanner`: they say what
 to look for, and get what the kernel found, nothing else:
 
@@ -124,15 +124,15 @@ in 122 (at 640 px: 349 and 216), and it was faster too.
   The Zero's own timings are in the scanner's log (`scanner: ... ms each on
   average`) and come from the rig.
 - **Safety.** zxing-cpp is C++20 and throws exceptions; the kernel has no
-  exception runtime. zerogap's patches (`patches/zxing-cpp/`) make the QR
+  exception runtime. GapKeep's patches (`patches/zxing-cpp/`) make the QR
   payload decoder report malformed data as an error instead of throwing
   (a code is just not read), and turn every other throw into a call to
   `ZXing::Fatal()`, which stops the system with a message in the log, as a
   failed assertion does (so do the C++ library's own checks,
   `lib/zxing/cxxrt.cpp`). Those are internal errors, not reactions to input:
   the fuzzer (below) counts reaching one as a bug, and finds none.
-- **Licence:** Apache-2.0, which combines with zerogap's GPLv3. zxing-cpp has
-  no NOTICE file. Its source stays as published, in the submodule; zerogap's
+- **Licence:** Apache-2.0, which combines with GapKeep's GPLv3. zxing-cpp has
+  no NOTICE file. Its source stays as published, in the submodule; GapKeep's
   changes are the patch files, each saying what it changes and why. Copies of
   the kernel carry zxing-cpp's licence: `tools/make_sdcard.sh` puts it on the
   card as `LICENCE.zxing-cpp`.
@@ -149,7 +149,7 @@ in 122 (at 640 px: 349 and 216), and it was faster too.
      error, and the decoder stops at the first one (worth sending upstream:
      upstream's unit and black box tests give the same results);
   2. builds without exceptions or `thread_local` (`ZX_THROW`, and
-     `ZX_THREAD_LOCAL` settable; one core, so zerogap makes it `static`);
+     `ZX_THREAD_LOCAL` settable; one core, so GapKeep makes it `static`);
   3. and 4. fixes for what the fuzzer found: no alignment pattern search
      around a point far outside the image (a float-to-int conversion of a
      huge value: undefined behaviour), and no line through two equal
@@ -172,7 +172,7 @@ in 122 (at 640 px: 349 and 216), and it was faster too.
 | Piece | State |
 | --- | --- |
 | `ui.Scanner`, scanning, preview, permission | Done, in the runtime (Pi and simulator). |
-| QR decoder | [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp)'s QR code reader (Apache-2.0), `third_party/zxing-cpp`, pinned, with zerogap's patches in `patches/zxing-cpp/` ([The QR decoder](#the-qr-decoder)). Fuzzed; timed on the host; the Zero's timings still to be taken on the rig. It replaced quirc, which read fewer codes. |
+| QR decoder | [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp)'s QR code reader (Apache-2.0), `third_party/zxing-cpp`, pinned, with GapKeep's patches in `patches/zxing-cpp/` ([The QR decoder](#the-qr-decoder)). Fuzzed; timed on the host; the Zero's timings still to be taken on the rig. It replaced quirc, which read fewer codes. |
 | Simulated camera | Done: the simulator, the IDE (QR codes from text, pictures, the webcam) and test kernels (`#camera` on the serial line). |
 | Pi Camera driver | Camera Module v2.1 (IMX219) on the Zero v1.3: `src/camera/`, kernel only. Checked on the rig: frames, colour bars, automatic exposure, and a printed code read within a second. |
 
@@ -186,7 +186,7 @@ use the decoder when the submodule is checked out.
 the Pi Zero v1.3's camera connector (with the Zero's narrower cable),
 without the GPU's camera firmware. It was written clean-room, from the
 specification in [camera/SPEC.md](camera/SPEC.md), not from other drivers'
-code (whose licence, GPL-2.0 only, doesn't combine with zerogap's GPLv3).
+code (whose licence, GPL-2.0 only, doesn't combine with GapKeep's GPLv3).
 [camera/IMPLEMENTATION.md](camera/IMPLEMENTATION.md) records the decisions
 and the measurements.
 

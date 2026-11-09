@@ -182,9 +182,9 @@ boolean CGkI18n::Configure (const char *pKey, const char *pValue, unsigned nLine
 	CLogger *pLogger = CLogger::Get ();
 	if (strcmp (pKey, "language") == 0)
 	{
-		if (!SetLanguage (pValue, "zerogap.txt"))
+		if (!SetLanguage (pValue, "gapkeep.txt"))
 		{
-			pLogger->Write (From, LogWarning, "zerogap.txt:%u: language: English instead", nLine);
+			pLogger->Write (From, LogWarning, "gapkeep.txt:%u: language: English instead", nLine);
 		}
 		return TRUE;
 	}
@@ -196,8 +196,8 @@ boolean CGkI18n::Configure (const char *pKey, const char *pValue, unsigned nLine
 	}
 	if (bDecimal ? !IsDecimalMark (pValue) : !IsGroupMark (pValue))
 	{
-		pLogger->Write (From, LogWarning, bDecimal ? "zerogap.txt:%u: decimal_mark: . or , expected"
-						  : "zerogap.txt:%u: group_mark: . or , or nothing expected", nLine);
+		pLogger->Write (From, LogWarning, bDecimal ? "gapkeep.txt:%u: decimal_mark: . or , expected"
+						  : "gapkeep.txt:%u: group_mark: . or , or nothing expected", nLine);
 		return TRUE;
 	}
 	const char *pDecimal = bDecimal ? pValue : s_bDecimalSet ? s_SetDecimal : 0;
@@ -205,9 +205,9 @@ boolean CGkI18n::Configure (const char *pKey, const char *pValue, unsigned nLine
 	char Decimal[4], Group[4];		// SetMarks copies onto s_Set*
 	if (pDecimal != 0) { strcpy (Decimal, pDecimal); pDecimal = Decimal; }
 	if (pGroup != 0) { strcpy (Group, pGroup); pGroup = Group; }
-	if (!SetMarks (pDecimal, pGroup, "zerogap.txt"))
+	if (!SetMarks (pDecimal, pGroup, "gapkeep.txt"))
 	{
-		pLogger->Write (From, LogWarning, "zerogap.txt:%u: decimal_mark and group_mark must differ", nLine);
+		pLogger->Write (From, LogWarning, "gapkeep.txt:%u: decimal_mark and group_mark must differ", nLine);
 	}
 	return TRUE;
 }

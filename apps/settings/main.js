@@ -1,7 +1,7 @@
 // Settings: the language, the marks numbers are written with, and the
 // keyboard layout (docs/plans/I18N.md, "Settings"). Each applies at once,
-// for this session: ZeroGap never writes to the card, so a choice lasts
-// until power-off. Like the clock app, it shows the zerogap.txt lines that
+// for this session: GapKeep never writes to the card, so a choice lasts
+// until power-off. Like the clock app, it shows the gapkeep.txt lines that
 // make it last, to be written on the card from another computer.
 //
 // Its text is in every language it offers (lang/), and the languages are
@@ -22,7 +22,7 @@ const sample = (m) => `1${m[1]}234${m[0]}5`;
 const LAYOUTS = () => ({ us: t("US"), "br-abnt2": t("Brazilian (ABNT2)") });
 
 // Which MARKS entry was chosen here (kept for the session); else the first.
-// (Marks set in zerogap.txt show in the samples, not here.)
+// (Marks set in gapkeep.txt show in the samples, not here.)
 function marksChoice() {
   const kept = session.get("marks");
   if (Number.isInteger(kept) && kept >= 0 && kept < MARKS.length) return kept;
@@ -109,7 +109,7 @@ function build() {
   const lines = [`language = ${i18n.language()}`, `keyboard = ${i18n.keyboard()}`];
   if (marksChoice() !== 0) lines.push(`decimal_mark = ${m.decimal}`, `group_mark = ${m.group}`);
   new ui.Label({
-    text: t("These apply now, until ZeroGap is switched off. To keep them, put these lines in zerogap.txt at the top of the SD card:") +
+    text: t("These apply now, until GapKeep is switched off. To keep them, put these lines in gapkeep.txt at the top of the SD card:") +
       "\n" + lines.join("\n"),
     width: "100%",
     font: 14,

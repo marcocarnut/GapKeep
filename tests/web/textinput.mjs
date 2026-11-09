@@ -150,7 +150,7 @@ const key = (k, more = {}) => ({ key: k, code: "Key" + k, repeat: false, shiftKe
   check ("pasted", z.sent, ["m", "s", "1", "2", " ", "ç", "Enter", "o", "k"]);
   check ("paste logged", logs, ["pasted 9 characters"]);
   keys.paste ("€uro");
-  check ("paste of a dropped character", logs[1], "pasted 3 of 4 characters (zerogap types ASCII and Latin-1 only)");
+  check ("paste of a dropped character", logs[1], "pasted 3 of 4 characters (GapKeep types ASCII and Latin-1 only)");
 }
 {
   // an input method's word, and an emoji: composition gives the text

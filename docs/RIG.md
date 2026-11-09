@@ -1,6 +1,6 @@
 # The hardware test rig
 
-zerogap is developed mostly in QEMU, but QEMU is not a Pi Zero. The rig lets
+GapKeep is developed mostly in QEMU, but QEMU is not a Pi Zero. The rig lets
 the same test scenarios run on a real Pi Zero with no person at the keyboard.
 A second Raspberry Pi (here a Pi 5 called `five`) is wired to the Zero and:
 
@@ -51,13 +51,13 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
   (`pinctrl`).
 - `sudo tools/rig/gadget.sh up` creates the keyboard and mouse (`/dev/hidg0`,
   `/dev/hidg1`). **Do this before resetting the Zero after every rig
-  reboot**, or install `tools/rig/zerogap-gadget.service` to do it at boot
+  reboot**, or install `tools/rig/gapkeep-gadget.service` to do it at boot
   (instructions inside). See "Known issues".
 - **If the Zero stops finding the keyboard** (its log: `dwhci: Control
   transfer timed out`, `Cannot get device descriptor`; the Pi 5's `dmesg`
   shows `new device is high-speed` but no `new address`), the gadget is
   wedged although its service says active: `sudo systemctl restart
-  zerogap-gadget` (or `sudo tools/rig/gadget.sh up`). Seen once, on
+  gapkeep-gadget` (or `sudo tools/rig/gadget.sh up`). Seen once, on
   2026-11-04, after the rig had been up for two days.
 - **Camera:** a Pi Camera Module v2.1 is plugged into the Zero, looking
   at a printed QR code. `tests/picamera.txt` (rig only) uses it through
@@ -80,7 +80,7 @@ GK_RIG=user@host tools/rig/run_hw_tests.sh     # another rig (default mac@five.l
 ```
 
 This builds a test kernel for the Pi (`tools/build.sh pi TEST=1`), copies it
-with the rig tools to `~/zerogap-rig` on the rig, plays each scenario and
+with the rig tools to `~/gapkeep-rig` on the rig, plays each scenario and
 fetches screenshots and logs. Each scenario starts with a reset and a fresh
 upload (about 33 s).
 
@@ -114,7 +114,7 @@ Rig-only scenario commands and serial commands (test builds, `src/testshot.h`):
   `<name>.raw.json`; `tests/camraw.txt` takes the colour bars and the scene
   in both of the scanner's modes.
 - `send #experimental on`: experimental features on, as `experimental = yes`
-  in `zerogap.txt` would (the rig's card never changes); the launcher lists
+  in `gapkeep.txt` would (the rig's card never changes); the launcher lists
   the experimental apps from its next start (`tests/colorqr_hw.txt`).
 - `camera picture <name>`: one of the colour codes of `tests/colorqr`, built
   into test kernels, for the synthetic camera.

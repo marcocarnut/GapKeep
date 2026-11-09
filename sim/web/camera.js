@@ -1,4 +1,4 @@
-// camera.js - the IDE's camera bar: what zerogap's (simulated) camera
+// camera.js - the IDE's camera bar: what GapKeep's (simulated) camera
 // films, for apps with ui.Scanner. Kept across reboots: apply() after
 // each boot.
 //
@@ -9,7 +9,7 @@
 //   Picture       an image file (any format the browser reads)
 //   No camera     as a Pi without one
 //
-// zerogap decodes the codes itself (the same decoder as on the Pi); the IDE
+// GapKeep decodes the codes itself (the same decoder as on the Pi); the IDE
 // only supplies the pictures.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,8 +18,8 @@ const $ = (id) => document.getElementById (id);
 
 const FRAME_MS = 1000 / 15;
 const PART_MS = 500;
-// Webcam frames go to zerogap at their own resolution, up to 1920 a side
-// (gapkeep.js / synthcam.h), and zerogap makes each frame as the Pi camera
+// Webcam frames go to GapKeep at their own resolution, up to 1920 a side
+// (gapkeep.js / synthcam.h), and GapKeep makes each frame as the Pi camera
 // would: the middle 640x480 pixel for pixel, or the whole picture averaged
 // down (the scanner's "field").
 const WEBCAM_W = 1920, WEBCAM_H = 1080, MAX_SIDE = 1920;
@@ -84,7 +84,7 @@ export class CameraBar {
     if (!file) return;
     try {
       const bitmap = await createImageBitmap (file);
-      // at most 1920 a side, as zerogap's simulated camera takes
+      // at most 1920 a side, as GapKeep's simulated camera takes
       const scale = Math.min (1, 1920 / Math.max (bitmap.width, bitmap.height));
       const w = Math.max (1, Math.round (bitmap.width * scale)), h = Math.max (1, Math.round (bitmap.height * scale));
       const canvas = new OffscreenCanvas (w, h);

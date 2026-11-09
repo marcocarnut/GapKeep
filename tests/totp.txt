@@ -3,12 +3,12 @@
 # 1999999983 s (2033-05-18 03:33:03 UTC), 3 s into the 30 s step 66666666,
 # where RFC 6238's vectors for T = 2000000000 apply, with the RFC's seeds.
 # Codes are logged as tags, never in clear: the start of the HMAC, under
-# the account's key, of "zerogap log <code>":
-#   SHA512, 8 digits, step 66666666: 38618901  68541462523f8061
-#                     step 66666667: 41841313  333950ef241255b9
-#   SHA1,   8 digits, step 66666666: 69279037  03f8ca84c736ba76
-#   SHA256, 8 digits, step 66666666: 90698825  bcb2d91df57850d2
-#   SHA1, 6 digits, JBSWY3DPEHPK3PXP: 890699   3d10ac4a71bb51a0
+# the account's key, of "gapkeep log <code>":
+#   SHA512, 8 digits, step 66666666: 38618901  9afd4618f25d2e9f
+#                     step 66666667: 41841313  f2b1a85775bf1480
+#   SHA1,   8 digits, step 66666666: 69279037  fc60ecdbbbafe9dd
+#   SHA256, 8 digits, step 66666666: 90698825  7000cd38203cb7b3
+#   SHA1, 6 digits, JBSWY3DPEHPK3PXP: 890699   bcb1a9dad0f323d6
 # The accounts are kept in the session store (gk:session) between runs.
 expect Keyboard attached 60
 expect launcher ready 60
@@ -34,7 +34,7 @@ expect clockset: set 1999999983 \(2033-05-18T03:33:03.000Z\), set true 10
 launch totp
 expect totp: restored 1 account kept from before 10
 expect totp ready \(clock set\) 10
-expect totp: account 1, step 66666666, code tag 68541462523f8061 5
+expect totp: account 1, step 66666666, code tag 9afd4618f25d2e9f 5
 expect totp selftest: \d+ passed, 0 failed 20
 key ret
 camera qr otpauth://totp/RFC%206238:sha512?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA%3D&algorithm=SHA512&digits=8
@@ -45,8 +45,8 @@ camera scene
 key ret
 camera qr otpauth-migration://offline?data=CjgKFDEyMzQ1Njc4OTAxMjM0NTY3ODkwEhFhbGljZUBleGFtcGxlLmNvbRoHRXhhbXBsZSABKAIwAgo3CiAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMhILQUNNRSBDbzpib2IaACACKAIwAhABGAEgACi5YA%3D%3D
 expect totp: export part 1 of 1: 2 added, 0 already there, 0 refused 20
-expect totp: account 2, step 66666666, code tag 03f8ca84c736ba76 5
-expect totp: account 3, step 66666666, code tag bcb2d91df57850d2 5
+expect totp: account 2, step 66666666, code tag fc60ecdbbbafe9dd 5
+expect totp: account 3, step 66666666, code tag 7000cd38203cb7b3 5
 camera scene
 
 # 4. Malformed and refused codes: the reason is on screen, nothing is added
@@ -78,7 +78,7 @@ shot 03-type-refused
 type ehpk3pxp
 key ret
 expect totp: added account 4 \(SHA1, 6 digits, 30 s\), 4 in all 5
-expect totp: account 4, step 66666666, code tag 3d10ac4a71bb51a0 5
+expect totp: account 4, step 66666666, code tag bcb1a9dad0f323d6 5
 wait 0.5
 shot 04-codes
 # Tab past the four buttons (Forget all is enabled now) to the first
@@ -97,9 +97,9 @@ expect clockset: set 2000000007 10
 launch totp
 expect totp: restored 4 accounts kept from before 10
 expect totp ready \(clock set\) 10
-expect totp: account 1, step 66666666, code tag 68541462523f8061 5
-expect totp: account 4, step 66666666, code tag 3d10ac4a71bb51a0 5
-expect totp: account 1, step 66666667, code tag 333950ef241255b9 10
+expect totp: account 1, step 66666666, code tag 9afd4618f25d2e9f 5
+expect totp: account 4, step 66666666, code tag bcb1a9dad0f323d6 5
+expect totp: account 1, step 66666667, code tag f2b1a85775bf1480 10
 wait 0.5
 shot 06-next-step
 

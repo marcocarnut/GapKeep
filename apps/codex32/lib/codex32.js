@@ -1,4 +1,4 @@
-// codex32 (BIP-93) share checking and recombination, for any zerogap app.
+// codex32 (BIP-93) share checking and recombination, for any GapKeep app.
 //
 // Pure: no gk:* module, no globals, no I/O, so it runs unchanged in an app,
 // under Node (tests/codex32/run_node.mjs) and in a future signer. The

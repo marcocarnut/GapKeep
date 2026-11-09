@@ -18,16 +18,16 @@ cd "$(dirname "$0")/../.."
 RIG=${GK_RIG:-mac@five.local}
 OUT=
 if [ "$1" = "-o" ]; then OUT=$2; shift 2; fi
-OUT=${OUT:-$(mktemp -d -t zerogap-hw-XXXXXX)}
+OUT=${OUT:-$(mktemp -d -t gapkeep-hw-XXXXXX)}
 mkdir -p "$OUT"
 SCENARIOS=${*:-$(ls tests/*.txt)}
 
 tools/build.sh pi TEST=1
 make -C src -s kernel.hex TEST=1 >/dev/null
-ssh "$RIG" 'mkdir -p zerogap-rig/tests'
+ssh "$RIG" 'mkdir -p gapkeep-rig/tests'
 scp -q src/kernel.hex tools/rig/gkrig.py tools/rig/gadget.sh tools/serialshot.py \
-	tools/qemu_harness.py "$RIG:zerogap-rig/"
-scp -q $SCENARIOS "$RIG:zerogap-rig/tests/"
+	tools/qemu_harness.py "$RIG:gapkeep-rig/"
+scp -q $SCENARIOS "$RIG:gapkeep-rig/tests/"
 
 FAILED=0
 for t in $SCENARIOS; do
@@ -44,7 +44,7 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
 	fi
-	if ssh "$RIG" "cd zerogap-rig && rm -rf out/$name && python3 -u gkrig.py run kernel.hex tests/$name.txt --out out/$name" \
+	if ssh "$RIG" "cd gapkeep-rig && rm -rf out/$name && python3 -u gkrig.py run kernel.hex tests/$name.txt --out out/$name" \
 		> "$OUT/$name.log" 2>&1; then
 		echo "PASS  hw:$name"
 	else
@@ -52,7 +52,7 @@ for t in $SCENARIOS; do
 		FAILED=1
 	fi
 	rm -rf "$OUT/$name"
-	scp -qr "$RIG:zerogap-rig/out/$name" "$OUT/$name" 2>/dev/null || true
+	scp -qr "$RIG:gapkeep-rig/out/$name" "$OUT/$name" 2>/dev/null || true
 done
 
 # dice39's three QR exports, decoded from the hardware's screenshots

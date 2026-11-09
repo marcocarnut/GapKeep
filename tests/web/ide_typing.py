@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 The browser IDE's keyboard in a real browser: headless Chrome, driven over
-its DevTools protocol, types into zerogap's screen as a person would:
+its DevTools protocol, types into GapKeep's screen as a person would:
 letters, a dead key composed by an input method and one without
 composition, an AltGr character, ç á ã, Shift, Backspace, Ctrl+C, a paste
 (a synthetic paste event: headless Chrome has no clipboard), and clicking
@@ -129,7 +129,7 @@ async def run():
           re.findall(r"typetest: typed [^\n]*", L)[-1:])
     check("pasted 6 of 7, logged", "pasted 6 of 7 characters" in L)
     check("one warning", L.count("other characters are dropped") == 1)
-    # the editor: clicking it takes the keyboard back; typing goes there, not to zerogap
+    # the editor: clicking it takes the keyboard back; typing goes there, not to GapKeep
     ed = await c.js("(() => { const r = document.querySelector('.monaco-editor .view-lines').getBoundingClientRect(); return [r.x + 40, r.y + 10]; })()")
     for t in ("mousePressed", "mouseReleased"):
         await c.call("Input.dispatchMouseEvent", type=t, x=ed[0], y=ed[1], button="left", clickCount=1)
@@ -139,7 +139,7 @@ async def run():
     before = (await log()).count("typetest: key")
     await key("q", "KeyQ", "q", vk=81)
     await asyncio.sleep(0.3)
-    check("a key in the editor doesn't reach zerogap", (await log()).count("typetest: key") == before)
+    check("a key in the editor doesn't reach GapKeep", (await log()).count("typetest: key") == before)
     print(f"ide_typing: {sum(results)} passed, {len(results) - sum(results)} failed")
 
 

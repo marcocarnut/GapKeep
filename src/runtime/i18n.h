@@ -8,7 +8,7 @@
 // pseudo-language for testing, i18n.js) or one the launcher has a catalog
 // for (apps/launcher/lang/<tag>.json: the launcher holds the system's own
 // text). It comes from the build (make LANGUAGE=pt-BR, the only way for
-// sealed builds), then zerogap.txt ("language = pt-BR"), and can be
+// sealed builds), then gapkeep.txt ("language = pt-BR"), and can be
 // changed while running, until reboot, by an app with the "settings"
 // permission (gk:i18n's setLanguage).
 //
@@ -41,11 +41,11 @@ struct TGkApp;
 class CGkI18n
 {
 public:
-	// After the built-in apps are registered, before zerogap.txt: the
+	// After the built-in apps are registered, before gapkeep.txt: the
 	// build's language (make LANGUAGE=..., default English)
 	static void Initialize (void);
 
-	// A zerogap.txt line: TRUE if the key is one of ours ("language",
+	// A gapkeep.txt line: TRUE if the key is one of ours ("language",
 	// "decimal_mark", "group_mark"); problems are logged
 	static boolean Configure (const char *pKey, const char *pValue, unsigned nLine);
 
@@ -55,7 +55,7 @@ public:
 	static const char *GetLanguage (void)	{ return s_Language; }
 
 	// The marks numbers are written with: the language's, or those set
-	// (zerogap.txt, setMarks). 0: the language's own. FALSE if refused.
+	// (gapkeep.txt, setMarks). 0: the language's own. FALSE if refused.
 	static boolean SetMarks (const char *pDecimal, const char *pGroup, const char *pFrom);
 	static const char *GetDecimal (void)	{ return s_Decimal; }
 	static const char *GetGroup (void)	{ return s_Group; }

@@ -69,7 +69,7 @@ public:
 
 	// The simulator in a browser: the characters it hands over were composed
 	// by the browser, with the computer's own layout and dead keys, so
-	// zerogap's dead keys must not compose them again. Set around Pressed().
+	// GapKeep's dead keys must not compose them again. Set around Pressed().
 	void SetComposed (boolean bComposed)	{ m_bComposed = bComposed; }
 
 private:

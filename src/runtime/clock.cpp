@@ -108,7 +108,7 @@ boolean CGkClock::SetUtcOffset (int nMinutes)
 	return TRUE;
 }
 
-// --- zerogap.txt --------------------------------------------------------------
+// --- gapkeep.txt --------------------------------------------------------------
 
 // "[+-]HH:MM" -> minutes. FALSE if malformed.
 static boolean ParseOffset (const char *p, int *pMinutes)
@@ -159,7 +159,7 @@ static boolean ParseDecimal (const char *p, double *pValue)
 	return TRUE;
 }
 
-// A clock setting from zerogap.txt (settings.cpp): FALSE if the key is not
+// A clock setting from gapkeep.txt (settings.cpp): FALSE if the key is not
 // the clock's. Logs what it refuses.
 boolean CGkClock::Configure (const char *pKey, const char *pValue, unsigned nLine)
 {
@@ -170,7 +170,7 @@ boolean CGkClock::Configure (const char *pKey, const char *pValue, unsigned nLin
 		if (!ParseDecimal (pValue, &fTrim) || !SetTrim (fTrim))
 		{
 			CLogger::Get ()->Write (From, LogWarning,
-				"zerogap.txt:%u: clock_trim_ppm: a number from -%d to %d expected",
+				"gapkeep.txt:%u: clock_trim_ppm: a number from -%d to %d expected",
 				nLine, MaxTrim, MaxTrim);
 		}
 		return TRUE;
@@ -180,7 +180,7 @@ boolean CGkClock::Configure (const char *pKey, const char *pValue, unsigned nLin
 		if (!ParseOffset (pValue, &nOffset) || !SetUtcOffset (nOffset))
 		{
 			CLogger::Get ()->Write (From, LogWarning,
-				"zerogap.txt:%u: utc_offset: -12:00 to +14:00 expected", nLine);
+				"gapkeep.txt:%u: utc_offset: -12:00 to +14:00 expected", nLine);
 		}
 		return TRUE;
 	}

@@ -1,4 +1,4 @@
-// textinput.js - the IDE's keyboard for zerogap's screen, without the DOM:
+// textinput.js - the IDE's keyboard for GapKeep's screen, without the DOM:
 // what to do with each keyboard, input, composition and paste event. ide.js
 // feeds it the events of a hidden <textarea> that has the focus while the
 // person types into the screen (the way terminals in browsers do it, as
@@ -19,10 +19,10 @@
 //
 // Text is typed as key presses at once, in order with the special keys
 // (printable ASCII and Latin-1, newlines as Enter, tabs as Tab); a paste,
-// which can be long, through Gapkeep.type, which paces it. What zerogap
+// which can be long, through Gapkeep.type, which paces it. What GapKeep
 // can't type is dropped, with one warning.
 // Held text keys repeat as the OS repeats them (each repeat is an input
-// event); held special keys repeat in zerogap, as on the device.
+// event); held special keys repeat in GapKeep, as on the device.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -46,7 +46,7 @@ export class TextInput {
     this.mac = !!options.mac;
     this.warn = options.warn || (() => {});
     this.log = options.log || (() => {});
-    this.heldCode = null;       // the special key zerogap is repeating
+    this.heldCode = null;       // the special key GapKeep is repeating
     this.composing = false;
     this.warned = false;
   }
@@ -65,7 +65,7 @@ export class TextInput {
     // a character, without Ctrl or Alt: the input event types it
     if (isChar (ev.key) && !ctrl && !alt) return false;
 
-    if (ev.repeat) return true;   // zerogap repeats keys itself
+    if (ev.repeat) return true;   // GapKeep repeats keys itself
     const mods = (ev.shiftKey ? MOD_SHIFT : 0) | (ctrl ? MOD_CTRL : 0) | (alt ? MOD_ALT : 0);
     if (m.keyDown (ev.key, mods)) {
       this.heldCode = ev.code;
@@ -75,7 +75,7 @@ export class TextInput {
   }
 
   keyup (ev) {
-    // zerogap has one key down at a time: release it only when that key is
+    // GapKeep has one key down at a time: release it only when that key is
     // let go (not, say, the Shift that came with it)
     if (this.machine && ev.code === this.heldCode) {
       this.machine.keyUp ();
@@ -117,7 +117,7 @@ export class TextInput {
     text = text.replace (/[\r\n]+$/, "").replace (/\r\n?/g, "\n");
     const n = this.text (text, true);
     this.log (n === [...text].length ? `pasted ${n} characters`
-      : `pasted ${n} of ${[...text].length} characters (zerogap types ASCII and Latin-1 only)`);
+      : `pasted ${n} of ${[...text].length} characters (GapKeep types ASCII and Latin-1 only)`);
   }
 
   // Types text: at once, or paced (a paste). The number of keys typed.
@@ -137,7 +137,7 @@ export class TextInput {
     }
     if (n < [...value].length && !this.warned) {
       this.warned = true;
-      this.warn ("zerogap types ASCII and Latin-1 only (á, ç, £...): other characters are dropped");
+      this.warn ("GapKeep types ASCII and Latin-1 only (á, ç, £...): other characters are dropped");
     }
     return n;
   }

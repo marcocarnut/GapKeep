@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates zerogap's fonts, src/runtime/fonts/gk_montserrat_*.c, gk_mono_*.c and gk_ttf_*.c.
+"""Regenerates GapKeep's fonts, src/runtime/fonts/gk_montserrat_*.c, gk_mono_*.c and gk_ttf_*.c.
 
 The ten sizes gk:ui offers (src/runtime/js_ui.cpp, Fonts[]), each with
 Montserrat Medium for text and Font Awesome Free for LVGL's icons

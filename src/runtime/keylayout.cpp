@@ -97,11 +97,11 @@ boolean GkKeyLayoutConfigure (const char *pKey, const char *pValue, unsigned nLi
 			List.Append (i == 0 ? "" : ", ");
 			List.Append (Layouts[i].pName);
 		}
-		CLogger::Get ()->Write (From, LogWarning, "zerogap.txt:%u: keyboard: one of %s expected",
+		CLogger::Get ()->Write (From, LogWarning, "gapkeep.txt:%u: keyboard: one of %s expected",
 					nLine, (const char *) List);
 		return TRUE;
 	}
-	GkKeyLayoutSet (pValue, "zerogap.txt");
+	GkKeyLayoutSet (pValue, "gapkeep.txt");
 	return TRUE;
 }
 
@@ -121,7 +121,7 @@ unsigned GkKeyLayoutGeneration (void)
 static const u32 Acute = 0xB4, Grave = 0x60, Tilde = 0x7E, Circumflex = 0x5E, Diaeresis = 0xA8;
 
 // accent, base letter, composed letter: Latin-1 and Latin Extended-A, which
-// zerogap's fonts have
+// GapKeep's fonts have
 static const struct { u16 nAccent, nBase, nComposed; } Compose[] =
 {
 	{Acute, 'a', 0xE1}, {Acute, 'e', 0xE9}, {Acute, 'i', 0xED}, {Acute, 'o', 0xF3},

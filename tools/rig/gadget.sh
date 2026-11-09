@@ -11,7 +11,7 @@
 # dash (Debian's sh) does not have.
 #
 set -e
-G=/sys/kernel/config/usb_gadget/zerogap
+G=/sys/kernel/config/usb_gadget/gapkeep
 
 down() {
 	[ -d $G ] || return 0
@@ -32,8 +32,8 @@ up() {
 	echo 0x0100 > $G/bcdDevice
 	echo 0x0200 > $G/bcdUSB
 	mkdir -p $G/strings/0x409
-	echo "zerogap" > $G/strings/0x409/manufacturer
-	echo "zerogap test rig HID" > $G/strings/0x409/product
+	echo "GapKeep" > $G/strings/0x409/manufacturer
+	echo "GapKeep test rig HID" > $G/strings/0x409/product
 	echo "0001" > $G/strings/0x409/serialnumber
 
 	F=$G/functions/hid.kbd

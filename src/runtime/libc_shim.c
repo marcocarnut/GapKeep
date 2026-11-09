@@ -125,8 +125,8 @@ size_t malloc_usable_size (void *ptr)
 	return 0;
 }
 
-/* Time: zerogap's clock (clock.cpp). A Pi Zero has no real-time clock and
- * zerogap has no network, so it counts from the Unix epoch at boot until
+/* Time: GapKeep's clock (clock.cpp). A Pi Zero has no real-time clock and
+ * GapKeep has no network, so it counts from the Unix epoch at boot until
  * the clock app sets it. */
 int gettimeofday (struct timeval *tv, void *tz)
 {
