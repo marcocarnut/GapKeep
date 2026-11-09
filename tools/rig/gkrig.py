@@ -96,10 +96,25 @@ def flash(port, hexfile):
     t = time.time()
     port.write(data)
     port.flush()
-    read_until(port, rb'#EOF:ok|#ERR:\w+', 30 + len(data) * 10 / BAUD)
+    answer = read_until(port, rb'#EOF:ok|#ERR:\w+', 30 + len(data) * 10 / BAUD)
+    if b'#ERR' in answer:
+        raise RuntimeError('the bootloader refused the kernel: %s' % re.search(rb'#ERR:\w+', answer).group().decode())
     print('gkrig: %d KB loaded in %.1f s' % (len(data) // 1024, time.time() - t), file=sys.stderr)
-    time.sleep(0.1)
-    port.write(b'g')
+    # 'g' starts the kernel. One lost byte would leave the Zero waiting and
+    # the log empty (seen about 1 boot in 8): if nothing comes back, send it
+    # again. Only peeks (in_waiting), so the kernel's first lines stay for
+    # the caller to read.
+    for attempt in range(3):
+        time.sleep(0.1)
+        port.write(b'g')
+        port.flush()
+        deadline = time.time() + 3
+        while time.time() < deadline and port.in_waiting == 0:
+            time.sleep(0.02)
+        if port.in_waiting:
+            return
+        print('gkrig: no answer to "g", sending it again', file=sys.stderr)
+    raise TimeoutError('the kernel did not start after 3 tries')
 
 
 # USB HID usage IDs for QEMU's sendkey names (as used in scenarios)
