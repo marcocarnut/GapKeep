@@ -106,6 +106,8 @@ declare module "zg:ui" {
     color?: Color;
     /** Font size, one of `ui.fonts`. */
     font?: number;
+    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
+    mono?: boolean;
     textAlign?: "left" | "center" | "right";
     /** Corner radius, px. */
     radius?: number;
@@ -301,6 +303,8 @@ declare module "zg:ui" {
     color: Color;
     /** Font size, one of `ui.fonts`. */
     font: number;
+    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
+    mono: boolean;
     textAlign: "left" | "center" | "right";
     /** Corner radius, px. */
     radius: number;
@@ -531,6 +535,8 @@ declare module "zg:ui" {
   export const height: number;
   /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
   export const fonts: number[];
+  /** Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. */
+  export const monoFonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
   export const symbols: SymbolTable;
   /** Modal message. [Details]. */

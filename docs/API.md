@@ -39,6 +39,7 @@ import * as ui from "zg:ui";
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
 | `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. |
+| `monoFonts` | number[] | Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. |
 | `symbols` | object | Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List](#symbols). |
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |
@@ -115,6 +116,7 @@ A **size** is a number of pixels, a percentage of the parent as a string
 | `bg` | color | Background color (makes the background opaque). |
 | `color` | color | Text color. |
 | `font` | number | Font size, one of `ui.fonts`. |
+| `mono` | boolean | *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. |
 | `textAlign` | `"left"`, `"center"`, `"right"` |  |
 | `radius` | number | Corner radius, px. |
 | `borderWidth` | number | px. |

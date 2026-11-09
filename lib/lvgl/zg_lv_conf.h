@@ -673,7 +673,14 @@
     LV_FONT_DECLARE(zg_montserrat_24) \
     LV_FONT_DECLARE(zg_montserrat_28) \
     LV_FONT_DECLARE(zg_montserrat_32) \
-    LV_FONT_DECLARE(zg_montserrat_40)
+    LV_FONT_DECLARE(zg_montserrat_40) \
+    LV_FONT_DECLARE(zg_mono_12) \
+    LV_FONT_DECLARE(zg_mono_14) \
+    LV_FONT_DECLARE(zg_mono_16) \
+    LV_FONT_DECLARE(zg_mono_18) \
+    LV_FONT_DECLARE(zg_mono_20) \
+    LV_FONT_DECLARE(zg_mono_24) \
+    LV_FONT_DECLARE(zg_mono_28)
 
 /** Always set a default font */
 #define LV_FONT_DEFAULT &zg_montserrat_14

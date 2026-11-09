@@ -18,10 +18,11 @@ the cards `tools/make_sdcard.sh` makes); Bitcoin Core's
 [libsecp256k1](https://github.com/bitcoin-core/secp256k1), under the MIT
 licence (`LICENCE.secp256k1` on the cards), as is the experimental colour QR
 decoder, `lib/colorqr` (`LICENCE.colorqr` on the cards). The fonts,
-[Montserrat](https://github.com/JulietaUla/Montserrat) and
-[Font Awesome Free](https://fontawesome.com)'s icons, are under the SIL
-Open Font License (`LICENCE.montserrat` and `LICENCE.fontawesome` on the
-cards; `tools/make_fonts.py` makes them).
+[Montserrat](https://github.com/JulietaUla/Montserrat),
+[Font Awesome Free](https://fontawesome.com)'s icons and
+[JetBrains Mono](https://www.jetbrains.com/lp/mono/), are under the SIL
+Open Font License (`LICENCE.montserrat`, `LICENCE.fontawesome` and
+`LICENCE.jetbrainsmono` on the cards; `tools/make_fonts.py` makes them).
 
 ```js
 import * as ui from "zg:ui";

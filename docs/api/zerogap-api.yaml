@@ -84,6 +84,12 @@ ui:
         has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the
         dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the
         `ui.symbols` icons. Other characters are drawn as an empty box.
+    - name: monoFonts
+      ts: number[]
+      md: >-
+        Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic
+        Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin
+        Extended-A, € and ₿) from the normal font of the same size.
     - name: symbols
       kind: object
       ts: SymbolTable
@@ -210,6 +216,16 @@ ui:
         - {name: bg, ts: Color, value: color, md: Background color (makes the background opaque).}
         - {name: color, ts: Color, value: color, md: Text color.}
         - {name: font, ts: number, value: number, md: 'Font size, one of `ui.fonts`.'}
+        - name: mono
+          ts: boolean
+          readable: true
+          md: >-
+            *Readable*. The monospaced font (JetBrains Mono), for addresses, keys,
+            hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with
+            `font` too, in any order, that size must be one of them, without it the
+            size the widget would have (or the next smaller mono size). Same line
+            height and baseline as the normal font of the same size, so the two mix
+            on a row. Set on a container, its children inherit it.
         - {name: textAlign, ts: '"left" | "center" | "right"', md: ''}
         - {name: radius, ts: number, value: number, md: 'Corner radius, px.'}
         - {name: borderWidth, ts: number, value: number, md: px.}
