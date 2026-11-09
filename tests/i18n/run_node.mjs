@@ -248,6 +248,31 @@ test("settings: readers, onLanguageChange", () => {
   assert.throws(() => i.onLanguageChange(1), TypeError);
 });
 
+test("tm: params escaped, a hostile one can't add a tag", () => {
+  const hostile = ["<span color='red'>", "&", "</tt>", "&amp;", "\"'", "<b>x</b>"];
+  for (const h of hostile) {
+    const out = i.tm("Pay <tt>{address}</tt> now", { address: h });
+    const inner = out.slice("Pay <tt>".length, -"</tt> now".length);
+    assert.ok(!/[<>"']/.test(inner) && !/&(?!amp;|lt;|gt;|quot;|apos;)/.test(inner), `${h} -> ${out}`);
+  }
+  assert.equal(i.tm("Pay <tt>{a}</tt>", { a: "</tt><span color='red'>x" }),
+    "Pay <tt>&lt;/tt&gt;&lt;span color=&apos;red&apos;&gt;x</tt>");
+  assert.equal(i.tm("{n} &amp; {m}", { n: 1234, m: "&" }), "1,234 &amp; &amp;");
+  // a key without tags is plain text: all of it escaped
+  assert.equal(i.tm("Fish & chips < {x}", { x: "<u>" }), "Fish &amp; chips &lt; &lt;u&gt;");
+  assert.equal(i.tm("{{literal}} {missing}"), "{literal} {missing}");
+  assert.equal(i.tm("<u>{{x}}</u>"), "<u>{x}</u>");
+  assert.throws(() => i.tm("<tt>{v}</tt>", { v: 5n }), TypeError);
+});
+
+test("qps keeps tags and entities, accents the text", () => {
+  inLanguage("qps", () => {
+    assert.match(i.tm("Send <span color='#ffb300'>{amount}</span> &amp; more", { amount: "1 BTC" }),
+      /^\[Šéñď <span color='#ffb300'>1 BTC<\/span> &amp; möŕé ·+\]$/);
+    assert.match(i.t("<tt>tt</tt> &lt;"), /^\[<tt>ţţ<\/tt> &lt; ·+\]$/);
+  });
+});
+
 console.log(`i18n: ${passed} passed, ${failed.length} failed`);
 for (const f of failed) console.log("FAIL", f);
 process.exit(failed.length ? 1 : 0);

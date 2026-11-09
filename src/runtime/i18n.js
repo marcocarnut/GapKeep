@@ -56,15 +56,39 @@ function keyOf(text, params) {
   return context + "\u0004" + text;
 }
 
-function lookup(table, text, params) {
+// The translation of text, or text, before its {names} are filled in
+function template(table, text, params) {
   const key = keyOf(text, params);
-  if (state.language === "qps") return fill(pseudo(text), params);
+  if (state.language === "qps") return pseudo(text);
   const s = table ? table[key] : undefined;
-  return fill(typeof s === "string" ? s : text, params);
+  return typeof s === "string" ? s : text;
+}
+
+function lookup(table, text, params) {
+  return fill(template(table, text, params), params);
 }
 
 export function t(text, params) {
   return lookup(messages, text, params);
+}
+
+// For a Label with markup: true. Every param is escaped (an address, a
+// name, a scanned text can never add a tag); the text is markup if its key
+// has a tag or an entity (and then its translation has the same tags: the
+// runtime checks), else plain text, escaped too.
+const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&apos;" };
+const escapeMarkup = (s) => String(s).replace(/[&<>"']/g, (c) => ENTITIES[c]);
+
+export function tm(text, params) {
+  const markup = /<\/?[a-z]+[\s>]|&#?\w+;/.test(text);    // a tag or an entity
+  const literal = (s) => (markup ? s : escapeMarkup(s));
+  return template(messages, text, params).replace(/\{\{|\}\}|\{(\w+)\}|[^{}]+|[{}]/g, (m, name) => {
+    if (m === "{{" || m === "}}") return literal(m[0]);
+    if (name !== undefined && params !== undefined && params !== null && Object.hasOwn(params, name)) {
+      return escapeMarkup(show(params[name]));
+    }
+    return literal(m);
+  });
 }
 
 // the runtime's own text: from the launcher's catalog
@@ -97,8 +121,9 @@ const ACCENTED = {
 function pseudo(text) {
   if (text === "") return text;
   let visible = 0;
-  const out = text.replace(/\{\{|\}\}|\{\w+\}|[^{}]+|[{}]/g, (piece) => {
-    if (piece[0] === "{" || piece[0] === "}") return piece;
+  // {names}, tags and entities stay as they are
+  const out = text.replace(/\{\{|\}\}|\{\w+\}|<[^<>]*>|&#?\w+;|[^{}<&]+|[{}<&]/g, (piece) => {
+    if (piece[0] === "{" || piece[0] === "}" || piece[0] === "<" || (piece[0] === "&" && piece.length > 1)) return piece;
     visible += [...piece].length;
     return piece.replace(/[A-Za-z]/g, (c) => ACCENTED[c] ?? c);
   });
