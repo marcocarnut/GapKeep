@@ -69,15 +69,35 @@ frames reach the simulator in colour.
   it). Then every key goes to zerogap: Tab, arrows, Enter, Backspace, Escape
   and Ctrl shortcuts included, and Ctrl+S and Ctrl+Enter go to the app, not
   the IDE. Click the editor to type there again.
+- **Typing text** goes through your computer's keyboard layout: dead keys
+  (" then a is ä, ´ then e is é), AltGr, Option on a Mac and input methods
+  all work, and zerogap gets the character they make. It types ASCII and
+  Latin-1 (á, ç, ã, £, ²); anything else (€, emoji) is dropped, with a
+  warning in the log the first time. On the device it is zerogap's own
+  layout that makes characters (`keyboard` in `zerogap.txt`): in the
+  browser, leave it at `us`: with `br-abnt2`, a ´ ` ~ ^ or ¨ that your
+  layout types would be a dead key again in zerogap.
 - **Ctrl+V** (Cmd+V) on the screen types the clipboard's text into zerogap,
-  as key presses: a codex32 share, a test address. ASCII only; a newline
-  inside it is Enter, one at the end is dropped. A simulator convenience:
-  the device has no clipboard.
+  as key presses: a codex32 share, a test address. ASCII and Latin-1; a
+  newline inside it is Enter, one at the end is dropped. A simulator
+  convenience: the device has no clipboard.
 - zerogap's Home key is the Windows (Super) key, which the desktop or the
   browser usually keeps for itself: use the **Home** button.
 - The mouse works on the screen; zerogap draws its own cursor, so the
   browser's is hidden there.
-- Held keys repeat at zerogap's own rate, as on the device.
+- Held keys repeat: Backspace, arrows and the other special keys at
+  zerogap's own rate, as on the device; letters as your computer repeats
+  them.
+
+How (for those changing the IDE): a hidden textarea beside the screen has
+the focus while you type there, as in terminals in browsers. Text comes
+only from its input and composition events, so the OS's layout applies;
+special keys and Ctrl or Alt shortcuts only from keydown. A key takes one
+path, never both, so nothing is typed twice: `sim/web/textinput.js`, tested
+under Node by `tests/web/textinput.mjs` (run by `tools/run_sim_tests.sh`;
+end to end with the WebAssembly build if `make -C sim web TEST=1` was
+run), and in headless Chrome by `tests/web/ide_typing.py` (by hand: it
+needs Chrome and Monaco).
 
 ## Where your work is
 

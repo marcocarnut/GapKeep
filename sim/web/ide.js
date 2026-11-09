@@ -5,7 +5,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { Zerogap, MOD_SHIFT, MOD_CTRL, MOD_ALT } from "./zerogap.js";
+import { Zerogap } from "./zerogap.js";
+import { TextInput } from "./textinput.js";
 import { Store } from "./store.js";
 import { makeZip } from "./zip.js";
 import { CameraBar } from "./camera.js";
@@ -599,7 +600,7 @@ async function run (appId, { focus = true } = {}) {
   }
   updateStatus ();
   renderTree ();
-  if (focus) canvas.focus ();
+  if (focus) $("screen-input").focus ({ preventScroll: true });
 }
 
 // The app to run: that of the open file, else the selected one.
@@ -611,7 +612,7 @@ function home () {
   // for themselves; the button sends it.
   machine.keyDown ("Meta");
   setTimeout (() => machine?.keyUp (), 50);
-  $("screen").focus ();
+  $("screen-input").focus ({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -630,12 +631,6 @@ function fitScreen () {
   const scale = Number.isInteger (s) ? s + "x" : s.toFixed (2) + "x";
   $("screen-info").textContent = `${w}x${h} at ${scale}`;
 }
-
-// Keys whose browser default (scroll, leave the canvas, go back...) must not
-// happen while the screen has the keyboard, even if zerogap ignores them.
-const BROWSER_KEYS = new Set (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Backspace",
-  " ", "Enter", "Escape", "Home", "End", "PageUp", "PageDown", "F1", "F3", "F5", "F6", "F7", "Delete"]);
-let heldCode = null;   // the key zerogap is repeating
 
 function setupScreen () {
   const canvas = $("screen");
@@ -656,57 +651,53 @@ function setupScreen () {
 
   new ResizeObserver (fitScreen).observe ($("screen-box"));
 
+  // The keyboard: a hidden textarea beside the canvas has the focus while
+  // the person types into the screen, so that the OS's layout, dead keys,
+  // AltGr and input methods work (textinput.js says which event types what).
+  const input = $("screen-input");
+  const keys = new TextInput ({
+    keyDown: (key, mods) => machine ? machine.keyDown (key, mods) : false,
+    keyUp: () => machine?.keyUp (),
+    type: (text) => machine ? machine.type (text) : 0,
+  }, {
+    mac: /Mac|iPhone|iPad/.test (navigator.platform),
+    warn: (message) => { console.warn (message); ideLog (message, true); },
+    log: (message) => ideLog (message),
+  });
   const hint = () => {
-    const focused = document.activeElement === canvas;
+    const focused = document.activeElement === input;
+    canvas.classList.toggle ("focused", focused);
     $("screen-hint").textContent = focused ? "keyboard goes to zerogap" : "click the screen to type into it";
     $("screen-hint").classList.toggle ("focused", focused);
   };
-  canvas.addEventListener ("focus", hint);
-  canvas.addEventListener ("blur", () => {
-    if (heldCode) machine?.keyUp ();
-    heldCode = null;
+  input.addEventListener ("focus", hint);
+  input.addEventListener ("blur", () => {
+    keys.blur ();
     hint ();
   });
   hint ();
 
-  canvas.addEventListener ("keydown", (e) => {
-    if (!machine) return;
-    if (e.repeat) {           // zerogap repeats keys itself
-      e.preventDefault ();
-      return;
-    }
-    // Ctrl+V (Cmd+V on a Mac): the browser's paste, below, types the text
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase () === "v") return;
-    // AltGr types a character (e.key has it): on Windows it also reports
-    // Ctrl and Alt, which would make it a shortcut instead
-    const altGr = e.getModifierState && e.getModifierState ("AltGraph");
-    const mods = (e.shiftKey ? MOD_SHIFT : 0) | (e.ctrlKey && !altGr ? MOD_CTRL : 0) | (e.altKey && !altGr ? MOD_ALT : 0);
-    if (machine.keyDown (e.key, mods)) {
-      heldCode = e.code;
-      e.preventDefault ();
-    } else if (BROWSER_KEYS.has (e.key)) {
-      e.preventDefault ();
-    }
+  const event = (e) => ({ key: e.key, code: e.code, repeat: e.repeat, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey,
+    altKey: e.altKey, metaKey: e.metaKey, isComposing: e.isComposing,
+    altGraph: !!(e.getModifierState && e.getModifierState ("AltGraph")) });
+  input.addEventListener ("keydown", (e) => {
+    if (machine && keys.keydown (event (e))) e.preventDefault ();
+  });
+  input.addEventListener ("keyup", (e) => {
+    keys.keyup (event (e));
+  });
+  input.addEventListener ("compositionstart", () => keys.compositionstart ());
+  input.addEventListener ("compositionend", () => {
+    if (keys.compositionend (input.value)) input.value = "";
+  });
+  input.addEventListener ("input", (e) => {
+    if (keys.input ({ isComposing: e.isComposing, inputType: e.inputType }, input.value)) input.value = "";
   });
   // Pasting types the clipboard's text into zerogap, a key at a time (a
-  // simulator convenience: the device has no clipboard). Browsers send the
-  // paste to the document when the focus isn't on something editable.
-  document.addEventListener ("paste", (e) => {
-    if (document.activeElement !== canvas || !machine) return;
+  // simulator convenience: the device has no clipboard).
+  input.addEventListener ("paste", (e) => {
     e.preventDefault ();
-    // without the newline that copying a whole line brings: no Enter at the end
-    const text = e.clipboardData.getData ("text/plain").replace (/[\r\n]+$/, "").replace (/\r\n?/g, "\n");
-    const n = machine.type (text);
-    ideLog (n === text.length ? `pasted ${n} characters` : `pasted ${n} of ${text.length} characters (zerogap types ASCII only)`);
-  });
-  canvas.addEventListener ("keyup", (e) => {
-    // zerogap has one key down at a time: release it only when that key is
-    // let go (not, say, the Shift that came with it).
-    if (machine && e.code === heldCode) {
-      machine.keyUp ();
-      heldCode = null;
-    }
-    e.preventDefault ();
+    if (machine) keys.paste (e.clipboardData.getData ("text/plain"));
   });
 
   // Mouse: CSS pixels on the scaled canvas -> zerogap's screen pixels.
@@ -718,7 +709,7 @@ function setupScreen () {
   };
   canvas.addEventListener ("pointerdown", (e) => {
     if (e.button !== 0) return;
-    canvas.focus ();
+    input.focus ({ preventScroll: true });
     canvas.setPointerCapture (e.pointerId);   // keep dragging outside the canvas
     machine?.pointer (...toScreen (e), true);
     e.preventDefault ();
@@ -966,7 +957,7 @@ function setupUi () {
   // Ctrl/Cmd+S and Ctrl/Cmd+Enter everywhere except on the screen, where
   // every key belongs to zerogap. Capture phase, so Monaco doesn't see them.
   window.addEventListener ("keydown", (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target === $("screen")) return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target === $("screen-input")) return;
     if (e.key === "s" || e.key === "S") {
       e.preventDefault ();
       e.stopPropagation ();
