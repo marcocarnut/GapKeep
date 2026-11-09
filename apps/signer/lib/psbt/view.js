@@ -150,8 +150,9 @@ export function showAnalysis(list, rows, a, source, options = {}) {
     const where = o.address ? group4(o.address) : o.type === "op_return" ? t("OP_RETURN (data, unspendable)")
       : t("{type} script", { type: typeName(o.type) });
     const claimed = options.changeClaimed && o.mine;
-    line(r, t("{n}. {where}", { n: o.index + 1, where }), btc(o.amount),
+    const addr = line(r, t("{n}. {where}", { n: o.index + 1, where }), btc(o.amount),
       { color: claimed || o.far ? AMBER : o.mine ? GREEN : undefined });
+    if (o.address) addr.mono = true;	// 0/O, 1/l/I apart
     const note = (text, color) => new ui.Label(r, { text, color, font: FONT.small, width: "100%", overflow: "wrap" });
     if (claimed) {
       note(ui.symbols.warning + " " + t("Claimed change (not checked yet): {path}", { path: o.derivations[0].path }), AMBER);
@@ -174,8 +175,9 @@ export function showAnalysis(list, rows, a, source, options = {}) {
   for (const i of a.inputs) {
     const r = rows.add(list, {}, () => rows.details(t("Input {n}", { n: i.index + 1 }), inputText(i)));
     const where = i.address ? group4(i.address) : i.prevTxid.slice(0, 16) + "...:" + i.vout;
-    line(r, t("{n}. {where}", { n: i.index + 1, where }), i.amount === null ? t("amount unknown") : btc(i.amount),
+    const addr = line(r, t("{n}. {where}", { n: i.index + 1, where }), i.amount === null ? t("amount unknown") : btc(i.amount),
       { color: i.problems.length ? RED : undefined });
+    addr.mono = true;			// an address, or a txid:vout
     const bits = [typeName(i.type)];
     if (i.multisig) {
       bits.push(t("{m}-of-{n}", { m: i.multisig.m, n: i.multisig.n }),

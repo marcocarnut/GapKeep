@@ -489,7 +489,7 @@ function makeBox(i) {
   const line = new ui.Container(row, { layout: "row", alignItems: "center", gap: 8, width: "100%" });
   new ui.Label(line, { text: `${i + 1}.`, width: 24, textAlign: "right", color: MUTED });
   const ta = secret(new ui.TextArea(line, { oneLine: true, grow: 1, maxLength: 160, accept: ACCEPT, text: state.texts[i] || "",
-    placeholder: i === 0 ? "ms1..." : "", font: wide ? 20 : 16 }));
+    placeholder: i === 0 ? "ms1..." : "", font: wide ? 20 : 16, mono: true }));
   const note = new ui.Label(row, { text: "", font: FONT.small, width: "100%", padding: [0, 0, 0, 32], hidden: true });
   const f = { row, ta, note, committed: false };
   ta.onChange = (ev) => {
@@ -810,7 +810,7 @@ function showFinished() {
   paragraph(ui.screen, t("It is signed already: there is nothing to sign here."), { color: MUTED });
   // to compare with what the wallet or a block explorer shows
   const txid = txidOf(l.tx);
-  paragraph(ui.screen, t("Transaction ID: {txid}", { txid: group4(txid) }), { font: FONT.small });
+  paragraph(ui.screen, t("Transaction ID: {txid}", { txid: group4(txid) }), { font: FONT.small, mono: true });
   showAnalysis(reviewList(), page.rows, a, l, {
     networkNote: state.network ? t("chosen", { $context: "network" })
       : inherited ? t("as the transaction before: a signed one doesn't say") : null,
@@ -963,7 +963,7 @@ function showSigned(form) {
   const side = new ui.Container(body, { layout: "column", gap: 8, grow: 1 });
   const note = paragraph(side, "", { color: MUTED, font: FONT.small });
   // to compare with what the wallet says it broadcast
-  if (s.txid) paragraph(side, t("Transaction ID: {txid}", { txid: group4(s.txid) }), { font: FONT.small });
+  if (s.txid) paragraph(side, t("Transaction ID: {txid}", { txid: group4(s.txid) }), { font: FONT.small, mono: true });
   else paragraph(side, t("No transaction ID yet: it isn't final until all its signatures are in."), { color: AMBER, font: FONT.small });
   const buttons = buttonRow(side);
   const done = new ui.Button(buttons, { text: ui.symbols.ok + " " + (state.keys.length ? t("Done, forget the keys") : t("Done")),
