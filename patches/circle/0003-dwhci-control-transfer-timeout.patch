@@ -6,7 +6,7 @@ index 33b15c7..3a37afe 100644
  
  #define DWHCI_WAIT_BLOCKS	DWHCI_MAX_CHANNELS
  
-+// zerogap: how long a blocking control transfer may take (USB 2.0 allows a
++// gapkeep: how long a blocking control transfer may take (USB 2.0 allows a
 +// device 5 s for a request with no data stage, 500 ms per data packet)
 +#define USB_CONTROL_TIMEOUT_MS	3000
 +
@@ -17,7 +17,7 @@ index 33b15c7..3a37afe 100644
  
  	void BeginRecoveryBackoff (void);
  	void AbortActiveChannels (void);
-+	boolean AbortRequest (CUSBRequest *pURB);	// zerogap: control transfer timeout
++	boolean AbortRequest (CUSBRequest *pURB);	// gapkeep: control transfer timeout
  
  	void ResetRecoveryState (void)			// called on genuine unplug
  	{
@@ -29,7 +29,7 @@ index b15200b..2f3cd4d 100644
  	boolean IsTimeout (void) const;
  	boolean IsRetryOK (void) const;
  
-+	// zerogap: a blocking control transfer that took too long; the channel
++	// gapkeep: a blocking control transfer that took too long; the channel
 +	// interrupt handler completes it with USBErrorTimeout
 +	void SetAborted (void)			{ m_bAborted = TRUE; }
 +	boolean IsAborted (void) const		{ return m_bAborted; }
@@ -103,7 +103,7 @@ index 66033b4..c3a231a 100644
  		return FALSE;
  	}
  
-+	// zerogap: control transfers had no timeout, so a device that never
++	// gapkeep: control transfers had no timeout, so a device that never
 +	// completes one (it NAKs forever) hung enumeration, and with it the
 +	// whole system. Give up after USB_CONTROL_TIMEOUT_MS, like Linux does.
 +	boolean bControl = pURB->GetEndpoint ()->GetType () == EndpointTypeControl;
@@ -137,7 +137,7 @@ index 66033b4..c3a231a 100644
  
 -	if (!m_bRootPortEnabled)
 +	if (   !m_bRootPortEnabled
-+	    || pStageData->IsAborted ())		// zerogap: see AbortRequest()
++	    || pStageData->IsAborted ())		// gapkeep: see AbortRequest()
  	{
  		DisableChannelInterrupt (nChannel);
  

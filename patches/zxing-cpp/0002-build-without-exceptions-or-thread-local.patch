@@ -1,10 +1,10 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: zerogap <zerogap@localhost>
+From: GapKeep <noreply@gapkeep.org>
 Date: Wed, 4 Nov 2026 12:50:25 -0300
 Subject: [PATCH] Build the QR code reader without exceptions (ZX_THROW) or
  thread_local
 
-For bare-metal targets without an exception runtime or TLS (zerogap, on
+For bare-metal targets without an exception runtime or TLS (GapKeep, on
 Circle on a Raspberry Pi Zero):
 
 - ZX_THROW(e) in ZXConfig.h: `throw e` when exceptions are enabled, and

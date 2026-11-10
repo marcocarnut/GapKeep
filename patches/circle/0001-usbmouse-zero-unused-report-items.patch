@@ -1,4 +1,4 @@
-From: zerogap
+From: GapKeep <noreply@gapkeep.org>
 Subject: usbmouse: zero the report layout before decoding the descriptor
 
 CUSBMouseDevice::DecodeReport() fills in only the items the HID report
