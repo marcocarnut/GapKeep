@@ -1,0 +1,24 @@
+{
+  "$language": "pt-BR",
+  "$app": "repl",
+  "messages": {
+    "Type JavaScript, see what it does.": "Digite JavaScript e veja o que ele faz.",
+    "Arithmetic": "Aritmética",
+    "Arrays": "Arrays",
+    "Objects as JSON": "Objetos como JSON",
+    "A label": "Um rótulo",
+    "Markup": "Marcação",
+    "A button with a counter": "Um botão com contador",
+    "Variables persist": "As variáveis permanecem",
+    "An error": "Um erro",
+    "REPL": "REPL",
+    "Examples…": "Exemplos…",
+    "Enter runs the code; Shift+Enter starts a new line.": "Enter executa o código; Shift+Enter começa uma nova linha.",
+    "({name} widget)": "(widget {name})",
+    "Back": "Voltar"
+  },
+  "notes": {
+    "REPL": "Read-Eval-Print Loop: stays as it is.",
+    "({name} widget)": "{name} is a class name from the code (Label, Button...): not translated."
+  }
+}

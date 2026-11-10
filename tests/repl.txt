@@ -1,0 +1,72 @@
+# The REPL (apps/repl): Enter runs the code without adding a line break
+# where the cursor is, Shift+Enter adds one, the examples, widgets made by
+# the code go into the area under the result. The log tells the length of
+# the code and the kind of result, never either.
+expect Keyboard attached 60
+expect launcher ready 60
+tile repl
+expect repl ready
+type 1+2
+key ret
+expect repl: ran 3 characters: number
+# Enter with the cursor inside the code: still 3 characters
+key left
+key ret
+expect repl: ran 3 characters: number
+# Shift+Enter: a line break there ("1+\n2"), not a run
+key shift-ret
+key ret
+expect repl: ran 4 characters: number
+# the examples (focus goes back to the code box): the markup label
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: Label widget
+wait 0.5
+shot 01-markup
+# a variable kept between runs, and the button the counter example makes
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: Button widget
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: number
+# an error
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: ReferenceError
+wait 0.5
+shot 02-error
