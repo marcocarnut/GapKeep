@@ -820,8 +820,15 @@ check("keyring", "an account xprv signs what the master signs, byte for byte (fu
   const p = build(TWO);
   const acct = derive(abandon, ACCOUNT);
   const pl = plan(p, acct, ZERO_AUX);
-  eq([pl.signable, pl.complete, pl.outputs[1].ours, pl.outputs[1].path, pl.outputs[1].role], [2, true, true, "m/84'/1'/0'/1/0", "change"]);
+  // the steps above the account are the PSBT's word: shown below the key only
+  eq([pl.signable, pl.complete, pl.outputs[1].ours, pl.outputs[1].path, pl.outputs[1].role], [2, true, true, "key/1/0", "change"]);
   eq(serialize(signPsbt(p, acct, ZERO_AUX).psbt), serialize(signPsbt(p, abandon, ZERO_AUX).psbt));
+});
+check("keyring", "an account xprv: the path above it is the PSBT's word, not shown nor judged", () => {
+  // the master's fingerprint, and a purpose and coin type that are lies: only account 0' is checked
+  const lie = (i) => ({ kind: "p2wpkh", amount: 50000, path: `${ACCOUNT}/0/${i}`, claimPath: `m/49'/0'/0'/0/${i}` });
+  const pl = plan(build({ inputs: [lie(0), lie(1)], outputs: [EXTERNAL] }), derive(abandon, ACCOUNT), ZERO_AUX);
+  eq([pl.signable, pl.inputs.map((r) => r.path), pl.inputs.flatMap((r) => r.oddities)], [2, ["key/0/0", "key/0/1"], []]);
 });
 check("keyring", "an account xprv: another account, same number, is another wallet", () => {
   const other = fromSeed(new Uint8Array(32).fill(5));
@@ -1693,7 +1700,7 @@ check("multisig", "a WIF and an account xprv find their key", () => {
   const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
   const k = derive(abandon, `${MS}/0/3`);
   eq(planKeys(p, [{ single: true, privateKey: k.privateKey, publicKey: k.publicKey }], {}).inputs[0].sign, true);
-  eq(planKeys(p, [derive(abandon, MS)], {}).inputs[0].path, `${MS}/0/3`);
+  eq(planKeys(p, [derive(abandon, MS)], {}).inputs[0].path, "key/0/3");
   const own = build({ inputs: [msInput([[0, "0/3", { fp: fingerprint(derive(abandon, MS)), path: "m/0/3" }], [1, "0/3"], [2, "0/3"]])], outputs: [EXTERNAL] });
   eq(planKeys(own, [abandon], {}).inputs[0].sign, true); // the account's own fingerprint, as Electrum names a key from an xpub
 });

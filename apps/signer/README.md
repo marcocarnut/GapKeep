@@ -226,7 +226,9 @@ Errors: `Bip32Error`. Private keys are never serialized.
 - a private BIP-32 node at depth 0, a master key;
 - a private node deeper down, as an account's xprv. It doesn't know the
   master's fingerprint, so it knows its keys by its own fingerprint or by
-  the path and public key the PSBT names: deriving must give that key;
+  the path and public key the PSBT names: deriving must give that key. The
+  path above it is the PSBT's word, so paths are shown below the key
+  (`key/0/3`) and not judged as oddities;
 - a single key, `{ single: true, privateKey, publicKey }`, from `keys.js`. It
   has no paths: what pays to it is its own.
 
