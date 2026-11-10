@@ -284,12 +284,20 @@ function buildTree () {
   const root = { children: new Map () };
   for (const path of files.keys ()) {
     const parts = path.split ("/");
-    if (parts[0] !== "apps" || parts.length < 3) continue;
-    let node = root, acc = "apps";
+    // the card's data folders (gk:data) show as one folder, "data"
+    const data = parts[0] === "data";
+    if ((parts[0] !== "apps" && !data) || parts.length < 3) continue;
+    let node = root, acc = parts[0];
+    if (data) {
+      if (!root.children.has ("data/")) {
+        root.children.set ("data/", { name: "data", path: "data", kind: "dir", children: new Map () });
+      }
+      node = root.children.get ("data/");
+    }
     for (let i = 1; i < parts.length; i++) {
       acc += "/" + parts[i];
       if (!node.children.has (parts[i])) {
-        const kind = i === parts.length - 1 ? "file" : i === 1 ? "app" : "dir";
+        const kind = i === parts.length - 1 ? "file" : i === 1 && !data ? "app" : "dir";
         node.children.set (parts[i], { name: parts[i], path: acc, kind, children: new Map () });
       }
       node = node.children.get (parts[i]);
@@ -300,6 +308,8 @@ function buildTree () {
 
 function appName (id) {
   try {
+    const suite = files.get (`apps/${id}/suite.json`);   // a suite: its name, marked
+    if (suite !== undefined) return (JSON.parse (suite).name || "") + " (suite)";
     return JSON.parse (files.get (`apps/${id}/manifest.json`)).name || "";
   } catch {
     return "";
@@ -396,8 +406,10 @@ function openFile (path, line, col = 1) {
     editor.setModel (ensureModel (path));
     editor.updateOptions ({ readOnly: false });
   } else {
-    binaryModel.setValue (`(${relOf (path)}: binary, ${files.get (path).length} bytes; ` +
-      "GapKeep only reads .js, .json and .txt files)");
+    binaryModel.setValue (path.startsWith ("data/")
+      ? `(${path}: binary, ${files.get (path).length} bytes; apps read it with gk:data)`
+      : `(${relOf (path)}: binary, ${files.get (path).length} bytes; ` +
+        "GapKeep only reads .js, .json and .txt files)");
     editor.setModel (binaryModel);
     editor.updateOptions ({ readOnly: true });
   }
@@ -465,8 +477,22 @@ const MANIFEST_SCHEMA = {
       ],
     },
     entry: { type: "string", description: "Entry module (default main.js)." },
-    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc"] }, description: "Extra rights: \"apps\" (gk:apps), \"camera\" (ui.Scanner), \"rtc\" (setting gk:clock)." },
+    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc", "settings"] }, description: "Extra rights: \"apps\" (gk:apps), \"camera\" (ui.Scanner), \"rtc\" (setting gk:clock), \"settings\" (gk:i18n's setters)." },
     hidden: { type: "boolean", description: "true: not listed in the launcher." },
+    experimental: { type: "boolean", description: "true: only with experimental features on (docs/EXPERIMENTAL.md)." },
+    data: { type: "array", maxItems: 8, uniqueItems: true, items: { type: "string", pattern: "^[a-z0-9][a-z0-9-]{0,31}$" }, description: "The card's data folders (data/<name>) the app reads with gk:data." },
+  },
+};
+// a suite's suite.json (docs/APPS.md, "Suites")
+const SUITE_SCHEMA = {
+  type: "object",
+  required: ["id", "name"],
+  additionalProperties: false,
+  properties: {
+    id: MANIFEST_SCHEMA.properties.id,
+    name: MANIFEST_SCHEMA.properties.name,
+    description: MANIFEST_SCHEMA.properties.description,
+    icon: MANIFEST_SCHEMA.properties.icon,
   },
 };
 
@@ -500,7 +526,8 @@ async function setupEditor () {
   const json = monaco.json || monaco.languages.json;
   json.jsonDefaults.setDiagnosticsOptions ({
     validate: true,
-    schemas: [{ uri: "gapkeep://manifest.schema.json", fileMatch: ["**/manifest.json"], schema: MANIFEST_SCHEMA }],
+    schemas: [{ uri: "gapkeep://manifest.schema.json", fileMatch: ["**/manifest.json"], schema: MANIFEST_SCHEMA },
+              { uri: "gapkeep://suite.schema.json", fileMatch: ["**/suite.json"], schema: SUITE_SCHEMA }],
   });
 
   monaco.editor.defineTheme ("gapkeep", {
@@ -567,6 +594,7 @@ async function run (appId, { focus = true } = {}) {
   logApp = null;
   const card = {}, builtin = {};
   for (const [path, data] of files) {
+    if (path.startsWith ("data/")) card[path] = data;   // data folders (gk:data)
     if (!path.startsWith ("apps/")) continue;
     if (BUILTIN.has (appOf (path))) builtin[path.slice (5)] = data;
     else card[path] = data;
@@ -604,7 +632,14 @@ async function run (appId, { focus = true } = {}) {
 }
 
 // The app to run: that of the open file, else the selected one.
-const appToRun = () => appOf (current) || appOf (selected?.path);
+// in a suite (apps/<suite>/suite.json), the app is the next folder down
+const runnable = (path) => {
+  const id = appOf (path);
+  if (!id || !files.has (`apps/${id}/suite.json`)) return id;
+  const sub = path.split ("/")[2];
+  return sub && files.has (`apps/${id}/${sub}/manifest.json`) ? sub : null;
+};
+const appToRun = () => runnable (current) || runnable (selected?.path);
 
 function home () {
   if (!machine) return;
@@ -855,12 +890,30 @@ async function deleteSelected () {
 
 // <input webkitdirectory> gives every file with its path from the chosen
 // folder: "counter/main.js" for an app, "apps/counter/main.js" for a folder
-// of apps (a card's apps/, or the repository's).
+// of apps (a card's apps/, or the repository's). A folder named "data" is
+// the card's data folders (gk:data): "data/pgp/alice.asc" goes on the card
+// as it is, binary or not.
 async function importFolder (list) {
   const all = [...list].filter ((f) => !f.webkitRelativePath.split ("/").some ((p) => p.startsWith (".")));
   if (!all.length) return;
   const top = all[0].webkitRelativePath.split ("/")[0];
-  const single = all.some ((f) => f.webkitRelativePath === `${top}/manifest.json`);
+  if (top === "data") {
+    const add = {};
+    for (const f of all) {
+      if (f.webkitRelativePath.split ("/").length < 3) continue;   // a loose file in data/
+      // as text only if that keeps every byte (TextDecoder drops a BOM)
+      const bytes = new Uint8Array (await f.arrayBuffer ());
+      const bom = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+      add[f.webkitRelativePath] = bom ? bytes : decode (bytes.buffer);
+    }
+    await addFiles (add);
+    ideLog (`imported ${Object.keys (add).length} data files into data/`);
+    toggle ("data", true);
+    renderTree ();
+    return;
+  }
+  // one app, or one suite (suite.json and its apps), or a folder of either
+  const single = all.some ((f) => f.webkitRelativePath === `${top}/manifest.json` || f.webkitRelativePath === `${top}/suite.json`);
   const apps = new Map ();   // id -> [[rel, File]]
   for (const f of all) {
     const parts = f.webkitRelativePath.split ("/").slice (1);
@@ -870,7 +923,7 @@ async function importFolder (list) {
     apps.get (id).push ([parts.join ("/"), f]);
   }
   for (const [id, entries] of apps) {
-    if (!entries.some (([rel]) => rel === "manifest.json")) {
+    if (!entries.some (([rel]) => rel === "manifest.json" || rel === "suite.json")) {
       ideLog (`import: skipped ${id}/ (no manifest.json)`, true);
       continue;
     }

@@ -59,7 +59,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 ## Documentation
 
 - [Writing apps](docs/APPS.md): start here.
-- [API reference](docs/API.md): `gk:ui`, `gk:sys`, `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:apps`, globals.
+- [API reference](docs/API.md): `gk:ui`, `gk:sys`, `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:data`, `gk:apps`, globals.
   Generated from [docs/api/gapkeep-api.yaml](docs/api/gapkeep-api.yaml), which a
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.

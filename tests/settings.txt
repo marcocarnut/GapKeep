@@ -51,6 +51,6 @@ shot 03b-keyboard
 mark
 key meta_l
 expect launcher ready
-expect i18n: launcher lang/pt-BR.json: 28 translations, 0 ignored
+expect i18n: launcher lang/pt-BR.json: 30 translations, 0 ignored
 wait 1
 shot 04-launcher

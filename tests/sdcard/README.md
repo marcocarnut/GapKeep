@@ -15,3 +15,17 @@ other folder must be refused, each for its own reason:
 | `noentry` | the entry module does not exist |
 | `unknownkey` | manifest.json has a key GapKeep doesn't know |
 | `wrongid` | the manifest's id differs from the folder name |
+| `zsuite/suite-peer` | `testsuite` has an app with that id (ids are unique across suites) |
+
+`apps/testsuite` is a suite (docs/APPS.md, "Suites"): a `suite.json`, its
+name in Brazilian Portuguese (`lang/pt-BR.json`), and two apps,
+`suite-reader` and `suite-peer`, which read `data/testdata` with `gk:data`
+(tests/suites.txt). `apps/zsuite` is a suite whose only app is refused, so
+the launcher doesn't show it.
+
+`data/` holds the data folders (docs/APPS.md, "Data files"):
+`data/testdata` has a binary file (`key.bin`, every byte value), a text
+file in a subfolder (`notes/hello.txt`), a name with `@` and a space, and a
+macOS `._` file that is skipped; its hash is
+`python3 tools/bundle_apps.py --data-hash tests/sdcard/data/testdata`.
+`data/other` is there to be refused: no app lists it.

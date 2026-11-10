@@ -1,0 +1,6 @@
+{
+  "id": "testsuite",
+  "name": "Test Suite",
+  "description": "Two apps that share a data folder.",
+  "icon": "directory"
+}

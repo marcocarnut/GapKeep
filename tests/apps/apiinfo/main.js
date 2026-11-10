@@ -10,6 +10,7 @@ import * as apps from "gk:apps";
 import * as clock from "gk:clock";
 import * as session from "gk:session";
 import * as i18n from "gk:i18n";
+import * as data from "gk:data";
 
 // own members of a prototype: methods, and accessors with get/set
 function members(proto) {
@@ -39,6 +40,7 @@ const info = {
     "gk:clock": Object.keys(clock).sort(),
     "gk:session": Object.keys(session).sort(),
     "gk:i18n": Object.keys(i18n).sort(),
+    "gk:data": Object.keys(data).sort(),
   },
   base: members(ui.Widget.prototype),
   widgets,

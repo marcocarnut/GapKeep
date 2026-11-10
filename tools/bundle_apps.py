@@ -12,6 +12,10 @@ The checks are the same as for apps loaded from the SD card at boot
 Usage: bundle_apps.py <output.c> [--only id,...] <apps-dir> [<apps-dir> ...]
        bundle_apps.py --hash <app-dir> [<app-dir> ...]
            prints each app's hash, as the launcher shows it
+       bundle_apps.py --data-hash <data-dir> [<data-dir> ...]
+           prints the hash of each data folder (a card's data/<name>), as
+           gk:data's hash() and the launcher show it (docs/APPS.md, "Data
+           files")
 
 SPDX-License-Identifier: GPL-3.0-or-later
 """
@@ -32,7 +36,14 @@ MAX_FILES = 256
 MAX_FILE_SIZE = 4 << 20
 MAX_APP_SIZE = 16 << 20
 MAX_DEPTH = 8
-ICON_MAX_SIDE = 128     # GK_ICON_MAX_SIDE in src/runtime/bundle.h
+MAX_APP_DATA = 8        # GK_MAX_APP_DATA in src/runtime/bundle.h
+# data folders (data/<name>, gk:data), read as src/runtime/appstore.cpp reads
+# them: names are printable ASCII without / and \
+DATA_NAME_RE = re.compile(r'^[\x20-\x2e\x30-\x5b\x5d-\x7e]{1,128}$')
+MAX_DATA_FILES = 256
+MAX_DATA_FILE_SIZE = 4 << 20
+MAX_DATA_SIZE = 8 << 20
+ICON_MAX_SIDE = 128    # GK_ICON_MAX_SIDE in src/runtime/bundle.h
 
 # Keep in sync with the symbol table in src/runtime/js_ui.cpp (ui.symbols).
 SYMBOLS = {
@@ -165,6 +176,40 @@ def read_files(appdir):
     return sorted(files, key=lambda f: f[0].encode())
 
 
+def read_data(datadir):
+    """The files of a data folder as the device reads data/<name>: every file,
+    of any type, except those (and folders) whose name starts with "."."""
+    files = []
+    total = 0
+    bad = 'names may only be printable ASCII, without / and \\'
+    for root, dirs, names in os.walk(datadir):
+        rel_root = os.path.relpath(root, datadir)
+        depth = 1 if rel_root == '.' else rel_root.count(os.sep) + 2
+        dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
+        for d in dirs:
+            if not DATA_NAME_RE.match(d):
+                fail('%s: %s' % (os.path.join(root, d), bad))
+            if depth >= MAX_DEPTH:
+                fail('%s: folders nested too deeply' % os.path.join(root, d))
+        for n in sorted(names):
+            if n.startswith('.'):
+                continue
+            full = os.path.join(root, n)
+            if not DATA_NAME_RE.match(n):
+                fail('%s: %s' % (full, bad))
+            with open(full, 'rb') as f:
+                data = f.read()
+            if len(data) > MAX_DATA_FILE_SIZE:
+                fail('%s: larger than %d MB' % (full, MAX_DATA_FILE_SIZE >> 20))
+            total += len(data)
+            files.append((os.path.relpath(full, datadir).replace(os.sep, '/'), data))
+    if len(files) > MAX_DATA_FILES:
+        fail('%s: more than %d files' % (datadir, MAX_DATA_FILES))
+    if total > MAX_DATA_SIZE:
+        fail('%s: larger than %d MB' % (datadir, MAX_DATA_SIZE >> 20))
+    return files
+
+
 def load_app(appdir, app_id):
     where = os.path.join(appdir, 'manifest.json')
     try:
@@ -176,7 +221,7 @@ def load_app(appdir, app_id):
         fail('%s: must be a JSON object' % where)
 
     known = {'id', 'name', 'version', 'description', 'icon', 'entry', 'permissions', 'hidden',
-             'experimental'}
+             'experimental', 'data'}
     for k in m:
         if k not in known:
             fail('%s: unknown key %r' % (where, k))
@@ -201,6 +246,12 @@ def load_app(appdir, app_id):
     perms = m.get('permissions', [])
     if not isinstance(perms, list) or any(not isinstance(p, str) or p not in PERMISSIONS for p in perms):
         fail('%s: permissions must be a list drawn from %s' % (where, sorted(PERMISSIONS)))
+    data = m.get('data', [])
+    if (not isinstance(data, list) or len(data) > MAX_APP_DATA
+            or any(not isinstance(d, str) or not ID_RE.match(d) for d in data)
+            or len(set(data)) != len(data)):
+        fail('%s: "data" must be a list of at most %d different folder names (a-z, 0-9 and -, at most 32)'
+             % (where, MAX_APP_DATA))
     entry = m.get('entry', 'main.js')
 
     files = read_files(appdir)
@@ -220,6 +271,7 @@ def load_app(appdir, app_id):
         'experimental': 1 if m.get('experimental') else 0,
         'files': files,
         'hash': app_hash(files),
+        'data': data,
     }
 
 
@@ -229,6 +281,13 @@ def main():
             appdir = appdir.rstrip('/')
             a = load_app(appdir, os.path.basename(appdir))
             print('%s  %s %s' % (a['hash'], a['id'], a['version']))
+        return
+    if len(sys.argv) >= 3 and sys.argv[1] == '--data-hash':
+        for datadir in sys.argv[2:]:
+            datadir = datadir.rstrip('/')
+            files = read_data(datadir)
+            print('%s  data/%s (%d files, %d bytes)' % (
+                app_hash(files), os.path.basename(datadir), len(files), sum(len(d) for _, d in files)))
         return
     if len(sys.argv) < 3:
         sys.exit(__doc__)
@@ -269,16 +328,20 @@ def main():
             for i in range(0, len(pixels), 16):
                 lines.append('\t' + ','.join(str(b) for b in pixels[i:i + 16]) + ',')
             lines.append('};')
+        if a['data']:
+            lines.append('static const char *const app%d_data[] = { %s };' % (
+                n, ', '.join(c_string(d.encode()) for d in a['data'])))
         lines.append('')
     lines.append('const gk_app_t gk_builtin_apps[] = {')
     for n, a in enumerate(apps):
         w, h, _ = a['picture'] or (0, 0, None)
-        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", GK_APP_BUILTIN, %s, %d, %d },' % (
+        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", GK_APP_BUILTIN, %s, %d, %d, %s, %d, 0 },' % (
             c_string(a['id'].encode()), c_string(a['name'].encode()),
             c_string(a['version'].encode()), c_string(a['description'].encode()),
             c_string(a['icon']), c_string(a['entry'].encode()),
             a['permissions'], a['hidden'], a['experimental'], n, len(a['files']), a['hash'],
-            'app%d_icon' % n if a['picture'] else '0', w, h))
+            'app%d_icon' % n if a['picture'] else '0', w, h,
+            'app%d_data' % n if a['data'] else '0', len(a['data'])))
     lines.append('};')
     lines.append('const unsigned gk_builtin_app_count = %d;' % len(apps))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)

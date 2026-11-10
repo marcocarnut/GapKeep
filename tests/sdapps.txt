@@ -13,9 +13,11 @@ expect apps/noentry not loaded: entry module "main.js" not found
 expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 08ab835023ad24a18a3de481f20b5b55b44224e738959e3964477cf43695a3ed
 expect apps/unknownkey not loaded: manifest.json: unknown key "network"
 expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
-expect 1 app\(s\) from the SD card, 9 not loaded
+# tests/suites.txt: an app id is unique across suites
+expect apps/zsuite/suite-peer not loaded: an app with this id was loaded from apps/testsuite/suite-peer
+expect 3 app\(s\) from the SD card, 10 not loaded, 2 suite\(s\)
 expect launcher ready: .*sdhello 60
-expect sd card: ok 9 problem\(s\)
+expect sd card: ok 10 problem\(s\)
 # the card's apps come after the built-in ones
 tilefocus sdhello
 wait 1

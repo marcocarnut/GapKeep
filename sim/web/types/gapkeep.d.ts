@@ -32,6 +32,10 @@ type AppInfo = {
   readonly hash: string;
   /** the manifest says "experimental" (docs/EXPERIMENTAL.md) */
   readonly experimental: boolean;
+  /** the id of its suite (apps/<suite>/<id>, docs/APPS.md, "Suites"), or null */
+  readonly suite: string | null;
+  /** the manifest's "data": the data folders it may read with gk:data */
+  readonly data: string[];
 };
 
 declare module "gk:ui" {
@@ -557,7 +561,7 @@ declare module "gk:ui" {
 declare module "gk:sys" {
   /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
   export const kernel: { readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" };
-  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)). */
+  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest's `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none). */
   export const app: AppInfo;
   /** `{ gapkeep, quickjs, lvgl, circle }` version strings. */
   export const version: { readonly gapkeep: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string };
@@ -697,9 +701,24 @@ declare module "gk:i18n" {
   export function formatTime(seconds: number, options?: { utc?: boolean }): string;
 }
 
+declare module "gk:data" {
+  /** The folder's files, `{ name, size }`, sorted by name (byte order): `name` is the path inside the folder, with `/` between folders (`"keys/alice.asc"`), `size` in bytes. `[]` if the folder is not on the card. */
+  export function list(folder: string): { name: string; size: number }[];
+  /** The file's bytes, a fresh copy. `name` as `list()` gives it. */
+  export function read(folder: string, name: string): Uint8Array;
+  /** The file as UTF-8 text. A `TypeError` if it isn't valid UTF-8 (or holds a NUL byte); `read()` gives its bytes. */
+  export function readText(folder: string, name: string): string;
+  /** The SHA-256 of the folder's files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)'s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if the folder is not on the card. */
+  export function hash(folder: string): string | null;
+}
+
 declare module "gk:apps" {
-  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). */
+  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)'s apps, in `apps/<suite>/<id>`, where the suite's folder sorts, each with `suite` set to the suite's id). */
   export function list(): AppInfo[];
+  /** The [suites](APPS.md#suites) on the card (`apps/<id>/suite.json`), sorted by id: `{ id, name, description, icon, image }`, as for apps (`name` and `description` in the language, from the suite's own `lang/` catalogs). A suite whose apps were all refused is listed too; the launcher shows only suites with apps. */
+  export function suites(): { id: string; name: string; description: string; icon: string; image: { width: number; height: number; data: Uint8Array } | null }[];
+  /** The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`'s `hash()` gives it, for any folder: the launcher shows those an app lists. `null` if it is not on the card; a `TypeError` if it can't be read (too big, a bad name). */
+  export function dataHash(folder: string): string | null;
   /** Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. */
   export function launch(id: string): void;
   /** The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16. */

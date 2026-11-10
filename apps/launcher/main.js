@@ -5,7 +5,12 @@
 //
 // Below the tiles it shows where the focused app came from and its SHA-256
 // (docs/APPS.md, "App hashes"), so it can be checked against a published
-// one before the app is opened, and any app on the card that was not loaded.
+// one before the app is opened, the hash of each data folder it reads
+// ("Data files"), and any app on the card that was not loaded.
+//
+// A suite (apps/<suite>/suite.json, "Suites") is one tile; Enter opens it,
+// showing its apps; Back, Escape or Backspace return. Coming back from one
+// of its apps opens the suite again (remembered with gk:session).
 //
 // Its text is translated (gk:i18n, lang/<language>.json). Its catalogs are
 // also the system's: they translate the runtime's own messages, like
@@ -16,6 +21,7 @@
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 import * as apps from "gk:apps";
+import * as session from "gk:session";
 import { rngStatus } from "gk:crypto";
 import { t, plural, formatNumber } from "gk:i18n";
 
@@ -60,6 +66,28 @@ if (!rng.healthy) {
   });
 }
 
+// A suite (docs/APPS.md, "Suites") is one tile; opening it shows its apps,
+// with a Back button (Escape or Backspace too)
+const suiteBar = new ui.Container({
+  width: "100%",
+  layout: "row",
+  alignItems: "center",
+  gap: 12,
+  hidden: true,
+});
+const backButton = new ui.Button(suiteBar, {
+  text: ui.symbols.left + " " + t("Back"),
+  onClick: () => goHome(),
+});
+const suiteTitle = new ui.Label(suiteBar, { text: "", font: 20 });
+const suiteText = new ui.Label(suiteBar, {
+  text: "",
+  color: "#8a9199",
+  font: 12,
+  grow: 1,
+  overflow: "dots",
+});
+
 // app tiles
 const grid = new ui.Container({
   width: "100%",
@@ -69,10 +97,25 @@ const grid = new ui.Container({
   scrollable: true,
 });
 
-const tiles = [];
-let focused = 0;
+// the home screen's tiles: apps, and a suite where its first app would be
+const suites = new Map(apps.suites().map((s) => [s.id, { ...s, apps: [] }]));
+const home = [];
+for (const app of list) {
+  const suite = app.suite && suites.get(app.suite);
+  if (!suite) {
+    home.push({ app });
+    continue;
+  }
+  if (suite.apps.length === 0) home.push({ suite });
+  suite.apps.push(app);
+}
 
-list.forEach((app, i) => {
+let tiles = [];
+let focused = 0;
+let openSuite = null;   // the suite shown, or null: the home screen
+
+function addTile({ app, suite }, i) {
+  const item = app || suite;
   const tile = new ui.Button(grid, {
     width: 180,
     height: 150,
@@ -81,25 +124,32 @@ list.forEach((app, i) => {
     alignItems: "center",
     gap: 4,
     padding: 10,
-    onClick: () => apps.launch(app.id),
+    onClick: () => (app ? apps.launch(app.id) : showSuite(suite.id)),
     onFocus: () => {
       focused = i;
       tile.scrollIntoView();
-      showDetails(app);
+      if (app) showDetails(app);
+      else showSuiteDetails(suite);
     },
   });
-  if (app.image) {
+  if (item.image) {
     // 64 x 64 (a smaller picture shows as it is, a larger one is scaled down)
-    const big = app.image.width > 64 || app.image.height > 64;
+    const big = item.image.width > 64 || item.image.height > 64;
     // rounded corners: opaque square art (a favicon) sits better on the tile
-    new ui.Image(tile, big ? { src: app.image, width: 64, height: 64, radius: 12 }
-                           : { src: app.image, radius: 12 });
+    new ui.Image(tile, big ? { src: item.image, width: 64, height: 64, radius: 12 }
+                           : { src: item.image, radius: 12 });
   } else {
-    new ui.Label(tile, { text: app.icon, font: 40 });
+    new ui.Label(tile, { text: item.icon, font: 40 });
   }
-  new ui.Label(tile, { text: app.name, font: 18 });
   new ui.Label(tile, {
-    text: app.description,
+    text: suite ? item.name + " " + ui.symbols.right : item.name,
+    font: 18,
+    width: "100%",
+    textAlign: "center",
+    overflow: "dots",
+  });
+  new ui.Label(tile, {
+    text: item.description,
     font: 12,
     width: "100%",
     textAlign: "center",
@@ -107,7 +157,45 @@ list.forEach((app, i) => {
     maxHeight: 32,
   });
   tiles.push(tile);
-});
+}
+
+function showTiles(items) {
+  grid.clear();
+  tiles = [];
+  items.forEach(addTile);
+  if (tiles.length === 0) {
+    details.text = "";
+    new ui.Label(grid, { text: t("No apps installed."), color: "#8a9199" });
+  }
+}
+
+// the home screen; focus: the tile to focus (a suite's id when coming back from it)
+function showHome(focusId) {
+  openSuite = null;
+  session.remove("suite");
+  suiteBar.hidden = true;
+  showTiles(home);
+  const i = Math.max(0, home.findIndex((h) => (h.app || h.suite).id === focusId));
+  if (tiles.length) tiles[i].focus();
+  return home.map((h) => (h.app || h.suite).id);
+}
+
+function showSuite(id) {
+  const suite = suites.get(id);
+  openSuite = suite;
+  session.set("suite", id);
+  suiteTitle.text = suite.name;
+  suiteText.text = suite.description;
+  suiteBar.hidden = false;
+  showTiles(suite.apps.map((app) => ({ app })));
+  if (tiles.length) tiles[0].focus();
+  console.log("launcher suite " + id + ": " + suite.apps.map((a) => a.id).join(", "));
+  console.log("launcher shows suite " + id + " as \"" + suite.name + "\"");
+}
+
+function goHome() {
+  console.log("launcher home: " + showHome(openSuite?.id).join(", "));
+}
 
 // apps on the card that were not loaded, and why (scrolls if there are many)
 const problems = card.problems.length
@@ -122,17 +210,34 @@ for (const p of card.problems) {
   });
 }
 
-// the focused app: where it came from, and its hash
+// the focused app: where it came from, and its hash; and the hash of each
+// data folder it reads (docs/APPS.md, "Data files"), which is not part of
+// the app's hash: whoever prepared the card chose those files
 const details = new ui.Label({ text: "", color: "#8a9199", font: 12, width: "100%" });
-function showDetails(app) {
-  const where = app.source === "sdcard" ? t("SD card, apps/{id}", { id: app.id }) : t("built in");
-  details.text = app.name + " " + app.version + "  |  " + where + "\nSHA-256 " + app.hash;
+const dataHashes = new Map();
+function dataLine(folder) {
+  if (!dataHashes.has(folder)) {
+    let text;
+    try {
+      const hash = apps.dataHash(folder);
+      text = hash ? "data/" + folder + " SHA-256 " + hash
+                  : t("data/{folder}: not on the SD card", { folder });
+    } catch (e) {
+      text = ui.symbols.warning + " " + e.message;
+    }
+    dataHashes.set(folder, text);
+  }
+  return dataHashes.get(folder);
 }
-
-if (tiles.length === 0) {
-  new ui.Label(grid, { text: t("No apps installed."), color: "#8a9199" });
-} else {
-  tiles[0].focus();
+function showDetails(app) {
+  const path = app.suite ? app.suite + "/" + app.id : app.id;
+  const where = app.source === "sdcard" ? t("SD card, apps/{id}", { id: path }) : t("built in");
+  details.text = [app.name + " " + app.version + "  |  " + where, "SHA-256 " + app.hash,
+                  ...app.data.map(dataLine)].join("\n");
+}
+function showSuiteDetails(suite) {
+  details.text = suite.name + "  |  " + t("SD card, apps/{id}", { id: suite.id }) + "  |  " +
+    plural(suite.apps.length, "{n} app", "{n} apps");
 }
 
 // "i": what is running, to check against published hashes
@@ -152,10 +257,15 @@ function showSystem() {
   );
 }
 
-// arrow keys move between tiles (Tab and Shift+Tab work too)
+// arrow keys move between tiles (Tab and Shift+Tab work too); Escape or
+// Backspace leave a suite
 ui.onKey((ev) => {
   if (ev.key === "i" && !ev.ctrl && !ev.alt) {
     showSystem();
+    return true;
+  }
+  if ((ev.key === "Escape" || ev.key === "Backspace") && openSuite) {
+    goHome();
     return true;
   }
   const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[ev.key];
@@ -172,6 +282,9 @@ new ui.Label({
   width: "100%",        // wraps if a translation is longer
 });
 
-console.log("launcher ready:", list.map((a) => a.id).join(", "));
+// back from an app of a suite: that suite again
+const lastSuite = session.get("suite");
+console.log("launcher ready:", showHome().join(", "));
 console.log("sd card:", card.status, card.problems.length, "problem(s)");
 console.log("kernel:", sys.kernel.build, sys.kernel.hashedBytes, sys.kernel.hash, "rng:", rng.healthy ? "healthy" : rng.failure);
+if (suites.get(lastSuite)?.apps.length) showSuite(lastSuite);

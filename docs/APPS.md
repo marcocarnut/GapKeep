@@ -87,6 +87,7 @@ handlers and timers.
 | `permissions` | no | Extra rights: `"apps"` (import `gk:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 | `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `gapkeep.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
+| `data` | no | The card's data folders the app reads with `gk:data`, e.g. `["pgp"]`: at most 8 names, each `[a-z0-9-]`, at most 32. See [Data files](#data-files). |
 
 GapKeep checks every manifest, and refuses an app with unknown keys, a bad
 id, an unknown or malformed icon, an unknown permission, or a missing entry
@@ -168,6 +169,155 @@ python3 tools/bundle_apps.py --hash apps/dice39
 It is the SHA-256 of the app's files sorted by path (byte order), each
 contributing its path relative to the app folder (with `/`), a NUL byte, its
 size in decimal, a NUL byte, and its contents.
+
+## Suites
+
+A suite is a group of apps that belong together (a PGP suite: one app to
+encrypt, one to sign, one to manage keys), shown in the launcher as one
+tile. It is a folder in `apps/` with a `suite.json` instead of a
+`manifest.json`, holding the apps' folders:
+
+```
+(card)
+  apps/
+    pgp/
+      suite.json
+      lang/pt-BR.json        optional: the suite's name and description translated
+      pgp-sign/
+        manifest.json
+        main.js
+      pgp-encrypt/
+        ...
+```
+
+```json
+{ "id": "pgp", "name": "PGP", "description": "Sign, encrypt, check.", "icon": "envelope" }
+```
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | `[a-z0-9-]`, at most 32, the same as the folder name. |
+| `name` | yes | Shown on the suite's tile. |
+| `description` | no | One line for the tile. |
+| `icon` | no | As an app's: a `ui.symbols` name (default `"file"`) or a [picture](#picture-icons). |
+
+The launcher shows the suite as one tile; Enter opens it and shows its
+apps, with a **Back** button; Escape or Backspace go back too. When an app
+of the suite exits (or the Windows key is pressed), the launcher opens the
+suite again. The suite's name and description are translated like an app's
+([Languages](#languages)): `lang/<language>.json` in the suite's folder,
+with `"$app"` set to the suite's id; `python3 tools/i18n.py extract
+apps/pgp --lang pt-BR` writes it, `check` checks it. The folder `lang` in a
+suite is its catalogs, never an app.
+
+**Each app stays an app.** It has its own manifest, its own hash, its own
+`gk:session` store, and imports only its own files: apps in a suite **share
+no code**. That is deliberate: an app's hash covers every line it runs, so
+the hash a person compares means the same with or without the suite, and
+one app of the suite can be checked, replaced or removed without touching
+the others. Code two apps need goes into both. What they can share is
+data: [Data files](#data-files),
+listed in each app's manifest. A suite's apps get no implicit access to a
+folder named after the suite: each lists what it reads.
+
+App ids are unique on the whole card, suites included: an app whose id is
+already taken (by a built-in app, an app loaded before it, in folder
+order, or a suite) is refused, and the launcher lists it with the reason
+(`apps/pgp-sign not loaded: an app with this id was loaded from
+apps/pgp/pgp-sign`). Suites don't nest. `apps.list()` gives each app's `suite`
+(its id, or `null`), `apps.suites()` the suites. Built-in apps belong to no
+suite. A sealed build has no card, so no suites.
+
+## Data files
+
+Some apps need data the person chose when preparing the card: a PGP app
+needs public keys, and scanning each one as a QR code every time is no
+way to work. Such files go in `data/<folder>/` at the top of the card,
+beside `apps/`, and an app reads the folders its manifest lists:
+
+```
+(card)
+  apps/...
+  data/
+    pgp/
+      alice.asc
+      bob@example.org.pgp
+      keyring/work.gpg
+```
+
+```json
+{ "id": "pgp-encrypt", ..., "data": ["pgp"] }
+```
+
+```js
+import * as data from "gk:data";
+
+const files = data.list("pgp");                   // [{ name: "alice.asc", size: 3112 }, ...]
+const key = data.read("pgp", "keyring/work.gpg"); // Uint8Array
+const armored = data.readText("pgp", "alice.asc");
+```
+
+- Folder names are like app ids: `[a-z0-9-]`, at most 32. Files can be of
+  any type, binary or text, in sub-folders (`list()` names them
+  `"keyring/work.gpg"`). File and folder names are printable ASCII
+  (`alice@example.org key.asc` is fine; `/` and `\` are not), at most 128
+  bytes; names starting with `.` are skipped (macOS's `._x` files).
+- Read-only: nothing can write to the card. Apps that list the same
+  folder share it; no other permission is needed. An app can't read a
+  folder it doesn't list, or leave the folder (`..`, `.`, a leading `/` or a
+  `\` in a name are refused).
+- A folder is read on first use (when the app or the launcher first asks
+  for it), all of it, checked and hashed, and kept in memory until
+  power-off: what an app reads is exactly what was hashed. Limits: 4 MB per
+  file, 8 MB and 256 files per folder, 8 levels of sub-folders, 32 MB for all
+  the folders read since boot. A folder over a limit, or with a bad name in
+  it, can't be read at all: `list()`, `read()` and `hash()` throw a
+  `TypeError` saying which file and why, and the launcher shows it.
+- A folder that isn't on the card is empty: `list()` returns `[]`,
+  `hash()` `null`. So is every folder without a card, and in a **sealed**
+  build, which reads no card.
+- The log shows each folder's file count, size and hash when it is read;
+  never what the files hold. Don't log it from your app either.
+
+**The data is not part of the app's hash.** The [app hash](#app-hashes)
+names the code, and must be the same on every card so people can compare it
+with a published one; the data is different on every card. So whoever can
+change the card can change the data, and swap Bob's key for theirs. The
+launcher shows the hash of each data folder the focused app lists, below
+the app's hash; it is the app hash's scheme over the folder's files, so
+
+```sh
+python3 tools/bundle_apps.py --data-hash ~/gapkeep-data/pgp
+```
+
+computes it on a computer, and `data.hash("pgp")` gives it to the app. But
+a folder hash only says the folder is unchanged, not that its contents are
+right. **Show the person what matters, at the moment it matters:** before
+encrypting to a key, its fingerprint (and the name and e-mail it carries),
+for them to compare with one they got from its owner; before trusting a
+list of addresses, the address about to be used. Never act on data from
+the card silently.
+
+### Preparing a card with data
+
+Make a folder with one sub-folder per data folder, and give it to
+`tools/make_sdcard.sh`, which copies them to the card's `data/` and prints
+their hashes:
+
+```sh
+mkdir -p ~/gapkeep-data/pgp
+gpg --export --armor alice@example.org > ~/gapkeep-data/pgp/alice.asc
+gpg --export bob@example.org > ~/gapkeep-data/pgp/bob.gpg
+tools/make_sdcard.sh --standalone --data ~/gapkeep-data
+```
+
+Or copy the folders to a card by hand: `data/pgp/...` at the card's top,
+beside `apps/`. Write down the hashes it prints (or that
+`tools/bundle_apps.py --data-hash` prints) to check them on the device's
+launcher later. In the simulator, `tools/gksim --data ~/gapkeep-data/pgp
+apps/myapp` puts a folder on its card (a `data/` folder beside the app's
+folder, or beside the `apps/` folder holding it, goes too); in the browser
+IDE, **Import** a folder named `data` ([IDE.md](IDE.md)).
 
 ## Laying out a screen
 
@@ -412,10 +562,11 @@ import * as checks from "./lib/checks.js";
 Apps never import each other's files: the [app hash](#app-hashes) covers
 every line of JavaScript an app runs, which shared code would break. To
 build on another app's library, carry a copy of it, made byte for byte by
-`tools/share_libs.py` (add it to its `COPIES`). Data is another matter: a
-coming `gk:data` module will let apps read shared, read-only data sets from
+`tools/share_libs.py` (add it to its `COPIES`). Data is another matter:
+apps read shared, read-only data folders from
 the card by name (`data/<name>/`, listed in the manifest, as in `"data":
-["pgp"]`), outside the app hash. Why: [DESIGN.md](DESIGN.md#apps).
+["pgp"]`), outside the app hash, with `gk:data` ([Data files](#data-files)).
+Why: [DESIGN.md](DESIGN.md#apps).
 
 ## Timers and async code
 

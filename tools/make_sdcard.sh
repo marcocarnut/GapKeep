@@ -18,6 +18,15 @@
 #                                         into kernel.img, which then has no
 #                                         SD card code at all
 #
+#   --data DIR (with --standalone, or for the development card; more than
+#   once is fine): every folder in DIR goes on the card as data/<name>, the
+#   read-only data folders apps read with gk:data (docs/APPS.md, "Data
+#   files"), e.g. DIR/pgp/alice.asc -> data/pgp/alice.asc. Their hashes,
+#   as the launcher shows them, are printed. A sealed build reads no card,
+#   so it has no data folders.
+#
+#   tools/make_sdcard.sh --standalone --data ~/gapkeep-data
+#
 # The Pi firmware (closed, Broadcom's) comes from the raspberrypi/firmware
 # commit that Circle pins (circle/boot/Makefile); tools/firmware.sha256 pins
 # the bytes too (checked against that commit's git blob ids when written).
@@ -25,6 +34,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 set -e
+MODE=
+DATA=
+while [ $# -gt 0 ]; do
+	case $1 in
+	--standalone|--sealed) MODE=$1; shift ;;
+	--data) [ -d "$2" ] || { echo "make_sdcard: --data $2 is not a folder" >&2; exit 2; }
+		DATA="$DATA $(cd "$2" && pwd)"; shift 2 ;;
+	*) echo "make_sdcard: unknown argument $1" >&2; exit 2 ;;
+	esac
+done
+[ -z "$DATA" ] || [ "$MODE" != --sealed ] || {
+	echo "make_sdcard: a sealed build reads no card: --data has no use" >&2; exit 2; }
+set -- $MODE
 cd "$(dirname "$0")/.."
 make -C circle/boot all >/dev/null
 ( cd circle/boot && sha256sum -c --quiet ../../tools/firmware.sha256 ) || {
@@ -96,9 +118,26 @@ init_uart_clock=48000000
 hdmi_ignore_cec=1
 hdmi_ignore_cec_init=1
 CFG
-	cp -r tests/sdcard/apps $OUT/
+	cp -r tests/sdcard/apps tests/sdcard/data $OUT/
 fi
 
-( cd $OUT && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS )
+# data folders (--data): never part of an app's hash, so print theirs
+if [ -n "$DATA" ]; then
+	mkdir -p $OUT/data
+	for d in $DATA; do
+		for f in "$d"/*/; do
+			[ -d "$f" ] || continue
+			name=$(basename "$f")
+			echo "$name" | grep -Eq '^[a-z0-9][a-z0-9-]{0,31}$' || {
+				echo "make_sdcard: $f: a data folder's name is a-z, 0-9 and -, at most 32" >&2; exit 1; }
+			rm -rf "$OUT/data/$name"
+			cp -r "$f" "$OUT/data/$name"
+			python3 tools/bundle_apps.py --data-hash "$OUT/data/$name"
+		done
+	done
+fi
+
+# (-print0: data file names may hold spaces)
+( cd $OUT && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS )
 echo "$OUT/ ready:"
 cat $OUT/SHA256SUMS

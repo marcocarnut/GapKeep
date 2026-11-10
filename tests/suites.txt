@@ -1,0 +1,96 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# Suites and data files (docs/APPS.md, "Suites" and "Data files"), from the
+# keyboard alone: the test suite (apps/testsuite) is one tile; Enter opens
+# it, Escape, Backspace or its Back button leave it. Its apps read the
+# card's data/testdata with gk:data: a binary and a text file, the folder's
+# hash, and what must be refused.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect apps/testsuite: suite testsuite, 2 app folder\(s\)
+expect apps/testsuite/suite-reader: suite-reader 1.0.0
+# an app id is unique across suites
+expect apps/zsuite/suite-peer not loaded: an app with this id was loaded from apps/testsuite/suite-peer
+expect launcher ready: .*sdhello, testsuite 60
+tilefocus testsuite
+wait 1
+shot 01-suite-tile
+mark
+key ret
+expect launcher suite testsuite: suite-peer, suite-reader
+expect launcher shows suite testsuite as "Test Suite"
+# read when first needed (the launcher shows its hash): names and sizes only
+expect data/testdata: 3 files, 357 bytes, sha256 f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+wait 1
+shot 02-suite
+# Escape: back home, on the suite's tile
+mark
+key esc
+expect launcher home: .*sdhello, testsuite
+mark
+key ret
+expect launcher suite testsuite: suite-peer, suite-reader
+# the launcher shows the data folder's hash with the app's (screenshot)
+key right
+wait 1
+shot 03-suite-reader-tile
+mark
+key ret
+expect suite-reader app: suite testsuite, data testdata absent
+expect suite-reader refused not in the manifest: TypeError: list: the data folder "other" is not in the manifest's "data"
+expect suite-reader refused not a folder name: TypeError: list: "../other" is not a data folder name
+expect suite-reader refused parent path: TypeError: read: "../other/secret.txt" is not a path inside the folder
+expect suite-reader refused parent inside: TypeError: read: "notes/../../other/secret.txt" is not a path inside the folder
+expect suite-reader refused absolute path: TypeError: read: "/key.bin" is not a path inside the folder
+expect suite-reader refused backslash: TypeError: read: "notes\\hello.txt" is not a path inside the folder
+expect suite-reader refused missing file: TypeError: read: no file "nothere.txt" in data/testdata
+expect suite-reader refused dotfile: TypeError: read: no file "._key.bin" in data/testdata
+expect suite-reader refused binary as text: TypeError: readText: data/testdata/key.bin is not UTF-8 text
+expect suite-reader refused no folder: TypeError: read: no file "x.txt": data/absent is not on the card
+expect suite-reader absent: \[\] null
+# names and sizes; the dotfile (._key.bin) is skipped
+expect suite-reader list: alice@example.org key.asc 88, key.bin 256, notes/hello.txt 13
+# the same hash as "tools/bundle_apps.py --data-hash tests/sdcard/data/testdata"
+expect suite-reader hash: f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+expect suite-reader ready
+# Tab to key.bin (every byte value: binary), then notes/hello.txt (UTF-8)
+key tab
+key ret
+expect suite-reader read key.bin: 256 bytes, binary, sha256 40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880
+key tab
+key ret
+expect suite-reader read notes/hello.txt: 13 bytes, text, 12 characters, sha256 0f593121e2491513935f3a42950951093a2cd700e53eb231b1deb31957c114d8
+wait 1
+shot 04-reader
+# the Windows key: back to the launcher, which opens the suite again
+mark
+key meta_l
+expect launcher suite testsuite: suite-peer, suite-reader
+tile suite-peer
+expect suite-peer ready: hash f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+mark
+key meta_l
+expect launcher suite testsuite: suite-peer, suite-reader
+# Backspace leaves the suite too
+mark
+key backspace
+expect launcher home: .*testsuite
+# and the Back button (Shift+Tab from the first tile reaches it)
+mark
+key ret
+expect launcher suite testsuite
+key shift-tab
+key ret
+expect launcher home: .*testsuite
+# the suite's name in the language: its own catalog (lang/pt-BR.json)
+language pt-BR
+mark
+key ret
+expect launcher suite testsuite
+tile suite-peer
+expect suite-peer ready
+mark
+key meta_l
+expect launcher shows suite testsuite as "Conjunto de Teste"
+wait 1
+shot 05-suite-pt-BR

@@ -26,7 +26,8 @@
 //   quit                    exit
 //
 // Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]
-//   --card DIR      DIR plays the SD card: apps load from DIR/apps
+//   --card DIR      DIR plays the SD card: apps load from DIR/apps, data
+//                   folders (gk:data) from DIR/data
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
 //                   a launcher to try out; see docs/SIMULATOR.md)
 //   --app ID        start that app right after boot

@@ -67,26 +67,41 @@ the gain is that one hash pins one app's whole behaviour.
 
 ### Data is shared by name
 
-Data is different from code, and will be shared between apps by name
-(a `gk:data` module is coming). A data set is a folder on the card,
-`data/<name>/`, read-only like everything else there. An app lists the data
-sets it reads in its manifest (for example `"data": ["pgp"]`), so what it
-can read is known before it starts. Data is outside the app hash: the same
-app can work on different data, and data can be updated without changing
-the hash of the app that reads it.
+Data is different from code, and is shared between apps by name, with
+`gk:data` ([APPS.md](APPS.md#data-files)). A data folder is a folder on the
+card, `data/<name>/`, read-only like everything else there: public keys
+for a PGP app, say, put there when the card was prepared. An app lists the
+folders it reads in its manifest (for example `"data": ["pgp"]`), so what
+it can read is known before it starts, and is covered by its hash. Data is
+outside the app hash: the same app can work on different data, and data
+can be updated without changing the hash of the app that reads it.
 
 **Why the difference:** code decides what happens to a secret; data is only
-read. An app's hash must pin its code, but an app has to treat data the way
+read. An app's hash must pin its code, and be the same on every card so
+people can compare it with a published one; data is different on every
+card, so no published hash could cover it. An app has to treat data the way
 it treats anything typed or scanned: as input to check, never as something
 to run. Sharing data by name avoids carrying a copy of a large data set in
 every app that reads it, without weakening what the app hash promises.
 
+**The price** is that whoever can change the card can change the data (swap
+Bob's key for theirs), as they could change the apps. The defence is to
+show it: the launcher shows each data folder's hash beside the app's
+(`tools/bundle_apps.py --data-hash` computes it on a computer), and apps
+show what matters at the moment it matters (a key's fingerprint before
+encrypting to it). A folder is read whole, hashed and kept in memory on
+first use, so what an app reads is what was hashed, even if the card were
+swapped while it runs.
+
 ### Suites group apps, nothing more
 
-Suites, planned, group apps in the launcher: a set of apps that belong
-together shown together. A suite is grouping only. Each app in it stays
-self-contained, with its own files, its own hash and its own runtime, for
-the same reasons as above.
+Suites group apps in the launcher: a set of apps that belong together, one
+tile (`apps/<suite>/suite.json`, [APPS.md](APPS.md#suites)). A suite is
+grouping only. Each app in it stays self-contained, with its own files,
+its own hash and its own runtime, for the same reasons as above: the
+suite's apps share no code, only data folders, each listing those it
+reads (a suite gives no implicit access to a folder named after it, so the
+manifest always says everything an app can read).
 
 ## Languages
 

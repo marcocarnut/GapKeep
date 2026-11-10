@@ -81,15 +81,17 @@ and the same description (`gk_app_t`):
   in the launcher with the reason. A card app cannot take a built-in app's
   id.
 
-After boot nothing more is loaded: apps cannot read files or load code
-other than their own modules, which are already in memory.
+After boot no code is loaded: apps cannot load code
+other than their own modules, which are already in memory, and the only
+files they read are the card's data folders their manifest names
+(`gk:data`, read whole and hashed on first use).
 
 Apps never share code at run time: an app's hash covers every line of
 JavaScript it runs, so one that builds on another's library carries a
-byte-for-byte copy (`tools/share_libs.py`). Data, unlike code, will be
-shared by name: read-only folders on the card (`data/<name>/`, through a
-coming `gk:data` module), listed in the manifest and outside the app hash.
-Suites, also planned, only group apps in the launcher. The reasons are in
+byte-for-byte copy (`tools/share_libs.py`). Data, unlike code, is
+shared by name: read-only folders on the card (`data/<name>/`, through
+`gk:data`), listed in the manifest and outside the app hash. Suites
+(`apps/<suite>/suite.json`) only group apps in the launcher. The reasons are in
 [DESIGN.md](DESIGN.md#apps).
 
 ### Widgets (`src/runtime/js_ui.cpp`)
@@ -203,7 +205,7 @@ for them to leave, other than what a person reads off the screen.
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at boot, then by GapKeep, once, for `/apps` and `gapkeep.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
+| SD card | Read by the firmware at boot, then by GapKeep: once, for `/apps` and `gapkeep.txt`, and each data folder (`/data/<name>`) once, when first used (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **Nothing is kept.** GapKeep never writes to the card, and the session
@@ -216,7 +218,8 @@ switched-off GapKeep reveals no key.
 
 **What is absent by design:** network stack, Wi-Fi and Bluetooth (the
 plain Pi Zero has no radio at all), writing to storage, file access for
-apps, code loading after boot, a clock you can trust, and any way for apps
+apps (but reading the data folders their manifest names, below), code
+loading after boot, a clock you can trust, and any way for apps
 to reach each other (each app's session store is its own).
 
 **Apps on the card** are as trustworthy as the card: whoever can write it
@@ -224,6 +227,20 @@ can replace `kernel.img` too, so loading apps from it does not move the
 trust boundary. The launcher shows each app's SHA-256, to compare with a
 published one. A sealed build (`tools/build.sh pi SEALED=1`) removes the SD and FAT code
 from the trusted base.
+
+**Data folders and suites**: code is inside the app hash, data
+(`data/<name>/`, read with `gk:data`) is outside it, on purpose: the hash
+must be the same on every card, the data differs per card
+([DESIGN.md](DESIGN.md#data-is-shared-by-name) says why). So whoever can
+change the card can change the data, as they can the apps, and the defence
+is the same: the launcher shows each data folder's hash beside the app's,
+and apps show what matters before using it (a key's fingerprint). Apps read
+only the folders their hashed manifest names, never write, and a folder is
+read whole, hashed and kept in memory on first use (`appstore.cpp`), so
+what an app reads is what was hashed even if the card were swapped while
+running. Nothing in the data is executed; what parses it is FatFs and the
+apps' own JavaScript. Apps in a suite share data this way but never code,
+so each app's hash still covers every line it runs.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs
