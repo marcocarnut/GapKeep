@@ -154,7 +154,10 @@ in 122 (at 640 px: 349 and 216), and it was faster too.
      around a point far outside the image (a float-to-int conversion of a
      huge value: undefined behaviour), and no line through two equal
      alignment pattern positions (a failed assertion: on the Pi, a stop
-     caused by a crafted code). Worth sending upstream too.
+     caused by a crafted code). Worth sending upstream too;
+  5. the corrected data codewords kept as an extra of the result, for the
+     experimental colour layer (`lib/colorqr`,
+     [EXPERIMENTAL.md](EXPERIMENTAL.md)).
 - **The kernel:** `lib/zxing/Makefile`, C++20 and the C++ library's headers
   for those files only, Circle's ARM1176 flags. What it needs of the C++
   library that is not in headers comes from `lib/zxing/cxxrt.cpp` and two
@@ -268,7 +271,7 @@ are the same code as with a real camera.
 - **IDE:** the Camera bar under the screen: a code from text (one per line
   for an animated code), a picture, your webcam, or no camera. See
   [IDE.md](IDE.md#the-camera).
-- **Test kernels** (`make TEST=1`, QEMU and the rig): the synthetic camera,
+- **Test kernels** (`tools/build.sh qemu TEST=1` or `pi TEST=1`: QEMU and the rig): the synthetic camera,
   driven by `#camera qr <text>`, `#camera scene` and `#camera none` on the
   serial line. On the rig this times the decoder on a real Zero, without a
   camera module. Test kernels on a Zero with a camera module can switch to

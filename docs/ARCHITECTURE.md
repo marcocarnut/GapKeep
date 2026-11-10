@@ -198,6 +198,14 @@ for them to leave, other than what a person reads off the screen.
 | SD card | Read by the firmware at boot, then by GapKeep, once, for `/apps` and `gapkeep.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
+**Nothing is kept.** GapKeep never writes to the card, and the session
+store (`gk:session`) is RAM, gone at power-off. So keys are not stored on
+the device: they live elsewhere (on paper, as codex32 shares or seed words),
+come in when needed, by keyboard or as QR codes shown to the camera, are
+recombined in memory for the task (the Signer signs, then forgets them), and
+are wiped when the app is done with them (below). Losing or stealing a
+switched-off GapKeep reveals no key.
+
 **What is absent by design:** network stack, Wi-Fi and Bluetooth (the
 plain Pi Zero has no radio at all), writing to storage, file access for
 apps, code loading after boot, a clock you can trust, and any way for apps
@@ -206,7 +214,7 @@ to reach each other (each app's session store is its own).
 **Apps on the card** are as trustworthy as the card: whoever can write it
 can replace `kernel.img` too, so loading apps from it does not move the
 trust boundary. The launcher shows each app's SHA-256, to compare with a
-published one. A sealed build (`make SEALED=1`) removes the SD and FAT code
+published one. A sealed build (`tools/build.sh pi SEALED=1`) removes the SD and FAT code
 from the trusted base.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
@@ -255,11 +263,17 @@ build.
 | `apps/` | The apps: built in (the launcher, or all in sealed builds) or copied to the card's `/apps`. |
 | `circle/` | Circle (submodule) plus the fixes in `patches/circle/`, applied by `tools/build.sh`. Its LVGL submodule supplies the LVGL sources. |
 | `third_party/quickjs/` | QuickJS (submodule, unmodified). |
+| `third_party/zxing-cpp/` | zxing-cpp, the QR decoder (submodule), plus the fixes in `patches/zxing-cpp/`. |
+| `third_party/secp256k1/` | Bitcoin Core's libsecp256k1 (submodule, unmodified). |
 | `lib/lvgl/` | Builds LVGL with `gk_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
+| `lib/zxing/`, `lib/secp256k1/` | Build the QR decoder and libsecp256k1 for the kernel. |
+| `lib/colorqr/` | The experimental colour QR decoder, vendored ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
+| `lib/js/` | JavaScript libraries that apps carry copies of (`tools/share_libs.py`). |
+| `patches/` | GapKeep's changes to Circle and zxing-cpp, applied at build time by `tools/apply_patches.sh`. |
 | `src/` | Kernel and runtime. `src/generated/` is build output. `src/runtime/` is also compiled into the simulator. |
 | `sim/` | The simulator ([SIMULATOR.md](SIMULATOR.md)): stand-ins for the Circle headers the runtime uses, its main loop, and the browser IDE (`sim/web/`). |
-| `tests/` | QEMU scenarios; `tests/apps/` holds test-only apps (`make TEST=1`); `tests/sdcard/` the test SD card; `tests/native`, `tests/dice39` host tests. |
-| `tools/` | App bundler, QEMU harness, test runner. |
+| `tests/` | Scenarios (QEMU, simulator, rig); `tests/apps/` holds test-only apps (test builds, `TEST=1`); `tests/sdcard/` the test SD card; `tests/native`, `tests/dice39`, `tests/signer`... host tests (Python, Node). |
+| `tools/` | Build script, app bundler, QEMU harness, simulator and IDE launchers, test runners; `tools/rig/` drives the hardware test rig ([RIG.md](RIG.md)). |
 | `docs/` | This file, the guides, and the API reference generated from `docs/api/gapkeep-api.yaml`. |

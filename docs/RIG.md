@@ -141,11 +141,12 @@ no commands while it sends the screenshot.
 
 ## Known issues
 
-- A USB device that is connected but never answers hangs Circle's USB
-  enumeration, and with it the boot. Five's USB controller is in that state
-  between its driver loading and `gadget.sh up`. A real keyboard won't do
-  this, but a broken device could; it should be fixed in Circle (a timeout on
-  enumeration).
+- A USB device that is connected but never answers used to hang Circle's
+  USB enumeration, and with it the boot; the rig's USB controller is in that
+  state between its driver loading and `gadget.sh up`. Control transfers
+  now time out after 3 s (`patches/circle/0003-dwhci-control-transfer-timeout.patch`),
+  so such a device no longer hangs the boot. The rig still brings the gadget
+  up before it resets the Zero, so that the keyboard and mouse are found.
 - Circle's mouse driver read uninitialized memory for report items a mouse
   doesn't have (a wheel, typically), which asserted on the first report.
   Fixed in `patches/circle/0001-usbmouse-zero-unused-report-items.patch`.
