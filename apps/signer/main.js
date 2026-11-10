@@ -39,7 +39,7 @@ import { DecodeError, toHex } from "./lib/psbt/bytes.js";
 import { electrumQrText } from "./lib/psbt/transport.js";
 import { parsePsbt } from "./lib/psbt/psbt.js";
 import { parseTx, txid as txidOf } from "./lib/psbt/tx.js";
-import { analyze, analyzeTx } from "./lib/psbt/analyze.js";
+import { analyze, analyzeTx, guessNetwork } from "./lib/psbt/analyze.js";
 import { NETWORKS } from "./lib/psbt/script.js";
 import { Rows, showAnalysis, group4, tr, btc, networkName, MUTED, RED, GREEN, AMBER, wide, FONT } from "./lib/psbt/view.js";
 import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32.js";
@@ -48,7 +48,7 @@ import * as M from "./lib/text.js";   // Messages: English for the log, translat
 import { Bip39Error } from "./lib/bip39.js";
 import { KeyError } from "./lib/keys.js";
 import { combine, CombineError } from "./lib/combine.js";
-import { CodeReader, seriesFor } from "./lib/codes.js";
+import { CodeReader, seriesFor, sizeProblem } from "./lib/codes.js";
 import { applyPlan, flagSignatures } from "./lib/review.js";
 import * as wallet from "./lib/wallet.js";
 
@@ -748,6 +748,8 @@ function scannedTx(text, bytes) {
     return refuse(/^(This|The code|That|These)/.test(why) ? why
       : M.t("Not a transaction Electrum would load: {why}", { why }));
   }
+  const big = sizeProblem(loaded.psbt ? loaded.psbt.tx : loaded.tx);
+  if (big) return refuse(big);
   if (state.merging) {
     if (r.kind !== "psbt") return refuse(M.t("That is a finished transaction: there is nothing to merge."));
     let m;
@@ -838,17 +840,38 @@ function keyNetworkWarnings(a) {
   }
 }
 
+// The network decides the addresses shown. What the PSBT says of it (its
+// paths' coin types, its xpubs' versions) is the computer's word, and a
+// mainnet transaction shown as a test one looks harmless. So: the person's
+// choice; else their own keys' (an xprv's or WIF's version; mainnet wins);
+// else the PSBT's guess, and when that isn't mainnet, a warning says so.
+// (Seed words and codex32 shares don't say.) -> { network, note, guessed }
+function reviewNetwork(psbt) {
+  if (state.network) return { network: state.network, note: t("chosen", { $context: "network" }) };
+  const said = new Set(state.keys.map((k) => k.network).filter(Boolean));
+  if (said.has("mainnet")) return { network: "mainnet", note: t("as your keys say") };
+  if (said.has("test")) return { network: "testnet", note: t("as your keys say") };
+  const guess = guessNetwork(psbt);
+  return { network: guess.network, note: null, guessed: guess.network !== "mainnet" ? guess : null };
+}
+
 function showReview() {
   const l = state.loaded;
   if (!l) return showHome();
   if (l.kind === "tx") return showFinished();
-  const a = analyze(l.psbt, { network: state.network });
+  const net = reviewNetwork(l.psbt);
+  const a = analyze(l.psbt, { network: net.network });
   state.lastNetwork = a.network;
   const haveKeys = state.keys.length > 0;
   const plan = wallet.plan(l.psbt, state.keys, signOptions(a.network));
   if (haveKeys) applyPlan(a, plan);
   else flagSignatures(a, plan);
   keyNetworkWarnings(a);
+  if (net.guessed) {
+    a.warnings.unshift({ level: "warn", text: M.t("The network, {network}, is only the PSBT's guess ({why}). If these " +
+      "are real bitcoin, choose Mainnet (the Network button): only then are the addresses shown the real ones.",
+    { network: M.t(NETWORKS[a.network].name), why: net.guessed.why }) });
+  }
   a.warnings.unshift(...l.notes);
 
   newPage("review", t("Transaction to sign"));
@@ -886,7 +909,7 @@ function showReview() {
   }
 
   showAnalysis(reviewList(), page.rows, a, l, {
-    networkNote: state.network ? t("chosen", { $context: "network" }) : null,
+    networkNote: net.note,
     changeClaimed: !haveKeys,
     inputNote: (i) => {
       const p = plan.inputs[i.index];
@@ -922,6 +945,7 @@ async function sign(a) {
   if (a.warnings.some((w) => w.level === "danger")) {
     const answer = await ui.alert(t("There are serious warnings (in red) about this transaction. Sign it anyway?"),
       { title: t("Sign?"), buttons: [t("Don't sign"), t("Sign anyway")] });
+    console.log(`signer: red warnings: ${answer === 1 ? "signing anyway" : "not signed"}`);
     if (answer !== 1) return;
   }
   busy = true;

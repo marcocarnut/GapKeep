@@ -55,6 +55,11 @@ wait 0.5
 shot 06-review-checked
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 2 inputs, transaction complete \(SHA-256 dd31fe69d7368962\) 30
 wait 0.5
 shot 07-signed
@@ -98,6 +103,11 @@ expect signer: review: 2 inputs, 2 to sign 5
 camera scene
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 2 inputs, transaction complete \(SHA-256 0baf3b76d1d92827\) 30
 wait 0.3
 key tab
@@ -239,6 +249,11 @@ shot 16-unverified
 mark
 key ret
 wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
+wait 0.5
 expect signer: signed 1 input 15
 expect signer: showing the signed psbt 10
 wait 0.3
@@ -274,6 +289,11 @@ wait 0.5
 shot 18-merged
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 0 inputs, transaction complete 10
 expect signer: showing the signed tx 10
 wait 0.3
@@ -297,7 +317,7 @@ key esc
 wait 0.3
 
 # 11. A PSBT with only WITNESS_UTXO, as another wallet may still send: it
-# signs, and the screen says the amounts are the PSBT's word. Seed words, a
+# signs, after a red warning that the amounts are the PSBT's word. Seed words, a
 # word wrong then right, signing with the account's tprv too
 mark
 key ret
@@ -305,7 +325,7 @@ wait 0.3
 mark
 camera qr @plain@
 expect signer: change: 1 claimed 15
-expect signer: info: Inputs 1, 2: amounts as the PSBT states th 5
+expect signer: danger: Inputs 1, 2: only the coins' amounts are given 5
 camera scene
 wait 0.5
 shot 20-witness-utxo-only
@@ -348,6 +368,11 @@ expect signer: review: 2 inputs, 2 to sign 5
 expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted 5
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 2 inputs, transaction complete 15
 wait 0.3
 # Escape is Done: the keys go
@@ -603,6 +628,10 @@ expect signer: change: 0 claimed, 1 checked 5
 wait 0.5
 mark
 key ret
+wait 0.5
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 30 inputs, transaction complete 30
 expect signer: showing the signed tx as BBQr 10
 wait 1.2

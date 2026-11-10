@@ -7,6 +7,8 @@
 //                       or { payload: { encoding, bytes, kind, chars } }
 //   r.reset()           forget the parts read; r.started: any read?
 //   seriesFor(bytes, kind) -> { version, encoding, parts }  to show them
+//   sizeProblem(tx) -> a Message if the transaction has more inputs or
+//                      outputs than are checked in time, else null
 //
 // kind and bytes as readPayload()'s: "psbt" or "tx". encoding: as
 // readPayload()'s, or "BBQr". Throws DecodeError with a message for people;
@@ -22,9 +24,29 @@ import { readPayload } from "./psbt/transport.js";
 import { isPsbt } from "./psbt/psbt.js";
 import { Joiner, BBQrError, FILE_TYPES, isBBQr, parsePart, split } from "./bbqr.js";
 
-// A PSBT with its previous transactions can be large, not this large:
-// decompression stops here.
-const MAX_BYTES = 1 << 21;
+// The limits of what is read, as everything a code holds is checked in one
+// handler, and a handler has 10 s (a hostile computer could aim at that).
+// In the simulator, parsing a 486 KB PSBT takes 77 ms, and analysing and
+// planning 200 inputs that each hold a signature to verify 30 ms; a Pi Zero
+// is some 30 to 40 times slower. So, at most:
+//   - 256 KiB, a PSBT with its previous transactions (some 200 inputs of
+//     ordinary ones): the Joiner stops there, compressed or not;
+//   - 200 inputs and 500 outputs.
+// (Base43 isn't one: a QR code holds at most 4296 of its characters,
+// decoded in about 2 ms in the simulator.)
+export const MAX_BYTES = 256 * 1024;
+export const MAX_INPUTS = 200;
+export const MAX_OUTPUTS = 500;
+
+export function sizeProblem(tx) {
+  if (tx.inputs.length > MAX_INPUTS) {
+    return t("This transaction has {n} inputs: this signer checks at most {max}.", { n: tx.inputs.length, max: MAX_INPUTS });
+  }
+  if (tx.outputs.length > MAX_OUTPUTS) {
+    return t("This transaction has {n} outputs: this signer checks at most {max}.", { n: tx.outputs.length, max: MAX_OUTPUTS });
+  }
+  return null;
+}
 
 const isPart = (text) => {
   if (!isBBQr(text)) return false;

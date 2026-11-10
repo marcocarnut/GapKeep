@@ -55,6 +55,11 @@ wait 0.5
 shot 06-review-checked
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 2 inputs, transaction complete \(SHA-256 dd31fe69d7368962\) 30
 wait 0.5
 shot 07-signed
@@ -98,6 +103,11 @@ expect signer: review: 2 inputs, 2 to sign 5
 camera scene
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 2 inputs, transaction complete \(SHA-256 0baf3b76d1d92827\) 30
 wait 0.3
 key tab
@@ -245,6 +255,11 @@ shot 16-unverified
 mark
 key ret
 wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
+wait 0.5
 expect signer: signed 1 input 15
 expect signer: showing the signed psbt 10
 wait 0.3
@@ -280,6 +295,11 @@ wait 0.5
 shot 18-merged
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 0 inputs, transaction complete 10
 expect signer: showing the signed tx 10
 wait 0.3
@@ -303,7 +323,7 @@ key esc
 wait 0.3
 
 # 11. A PSBT with only WITNESS_UTXO, as another wallet may still send: it
-# signs, and the screen says the amounts are the PSBT's word. Seed words, a
+# signs, after a red warning that the amounts are the PSBT's word. Seed words, a
 # word wrong then right, signing with the account's tprv too
 mark
 key ret
@@ -311,7 +331,7 @@ wait 0.3
 mark
 camera qr AD6H+D4K-EL8*EM/J3/8YTT16GN-HUHJH/6R:TPFBII$UXHX76UN5SPZQIT+FV9$LNVHJ9IP4GB+Z$-.*X5WZQ7LA*UDQRYBLV6P$C016-W0L9*0LT*T56DRH4215TZ8NNUP24SCAINB*LY4/3RLCFN+WS2DFX$Z74UI5*5231VV16Z.X/.FQ7W6NB-394F0MMJ42WQK:36:/BYA94YVLNN47OJU3N7ZZ*C:O$OQDNQ2470/TNM0-D69XX1NU+*U0D8.VLKL8ESX-TI.75::$P5EK5LOK4G0.J:/$:EYEBAW1DTUHMMLC:5-2$9NO4$YQ++*I-LXQT4PPT$Y46M8-MWPV*Z$N8WI3RH8M:M6ZLZ$WYCHF+.2RM94F+LC0U5YCJ74*/Q-6/N3..2PEZUX1A1EZYDXRHL5MDY8F-+TX1P6YPY2I1.J6S7CLCHP7EY*I6AL1IIC00X*D6A5JHVJ.2ME/R+J8SX/SUOO4KK2ANZ1MFG8ADIL1.HLR5*PTXIXQLTLH6SXDG24C7M6HC0-N5$-KO$VGKA/B**-60XB8IY336FJ9R$D4A94BC064O5U.NOJKVE+BH70QB$UZEFHYU-IM:DNYPUO0MKG
 expect signer: change: 1 claimed 15
-expect signer: info: Inputs 1, 2: amounts as the PSBT states th 5
+expect signer: danger: Inputs 1, 2: only the coins' amounts are given 5
 camera scene
 wait 0.5
 shot 20-witness-utxo-only
@@ -354,6 +374,11 @@ expect signer: review: 2 inputs, 2 to sign 5
 expect signer: change: 0 claimed, 1 checked, 0 stray, 0 unverified, 0 refuted 5
 mark
 key ret
+wait 0.5
+# red: the segwit v0 fee attack (no previous transactions); Tab to "Sign anyway"
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 2 inputs, transaction complete 15
 wait 0.3
 # Escape is Done: the keys go
@@ -656,6 +681,10 @@ expect signer: change: 0 claimed, 1 checked 5
 wait 0.5
 mark
 key ret
+wait 0.5
+key tab
+key ret
+expect signer: red warnings: signing anyway 5
 expect signer: signed 30 inputs, transaction complete 30
 expect signer: showing the signed tx as BBQr 10
 wait 1.2

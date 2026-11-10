@@ -161,6 +161,12 @@ between the two only as QR codes.
   otherwise BBQr, the multi-part format Coldcard and Sparrow use, simpler
   than UR. Colour QR codes stay experimental and out of this.
 - **PSBTs must carry their origins:** every input and change output its
-  BIP-32 derivation with the master fingerprint; segwit inputs their
-  previous transaction too, by default, which closes the segwit v0 fee
-  attack.
+  BIP-32 derivation with the master fingerprint.
+- **The segwit v0 fee attack is the person's to accept, in red:** a segwit
+  v0 signature covers its own input's amount only, so a transaction with
+  more than one segwit v0 input, any of them without its previous
+  transaction (Electrum's QR codes leave them all out), gets a red warning,
+  and signing it asks "Sign anyway". As Trezor and Ledger do. With the
+  previous transaction, its txid is checked and the amount is its own. One
+  input alone can't be attacked this way, and taproot signatures cover
+  every input's amount.
