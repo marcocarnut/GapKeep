@@ -28,5 +28,5 @@ ZXING_SOURCES = \
 # thread-local storage) are plain local variables instead (ZX_THREAD_LOCAL
 # empty): allocated for each call and freed after it, so nothing derived
 # from a picture (a row of a QR code, binarised) stays in memory between
-# scans; freed memory is zeroed (patches/circle/0008).
+# scans; freed memory is zeroed (patches/circle/0011).
 ZXING_DEFINES = -DZXING_INTERNAL -DZX_THREAD_LOCAL=

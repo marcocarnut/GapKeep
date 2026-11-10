@@ -294,7 +294,7 @@ static JSValue js_sys_gc (JSContext *ctx, JSValueConst this_val, int argc, JSVal
 // where they are. Its initialised data (.data, up to the image's end,
 // __tdata_end) changes as the kernel runs (the stack canary, self-test
 // results, pointers), so Circle's sysinit() hands it over before anything
-// writes to it (patches/circle/0009), and the copy kept here is hashed.
+// writes to it (patches/circle/0012), and the copy kept here is hashed.
 // Computed once.
 #ifndef GK_SIM
 
@@ -338,7 +338,7 @@ static JSValue KernelInfo (JSContext *ctx)
 
 	if (s_nKernelDataSize == 0)
 	{
-		// never happens with patches/circle/0009 and .data below 16 KB
+		// never happens with patches/circle/0012 and .data below 16 KB
 		// (tests/check_kernel_hash.sh would fail): say so, never a hash
 		// of something else
 		strcpy (s_Hash, "unknown");

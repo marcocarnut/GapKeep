@@ -42,7 +42,7 @@ static const char FromKernel[] = "kernel";
 
 // ... and nothing reads the events: each is taken off the queue as soon as
 // it is queued, and its copy here wiped (the event itself is freed, which
-// zeroes it: patches/circle/0008). Every build.
+// zeroes it: patches/circle/0011). Every build.
 static void DropLogEvents (void)
 {
 	TLogSeverity Severity;

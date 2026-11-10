@@ -212,7 +212,7 @@ for them to leave, other than what a person reads off the screen.
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
 | SD card | Read by the firmware at power-on (`kernel.img` comes from it, so it must be in then), then by GapKeep, once, at boot: `/apps`, `gapkeep.txt`, and the data folders (`/data/<name>`) the apps list (FAT, read-only driver). Then unmounted; any later FatFs call is refused and logged as an error. Never written; removable once the launcher is up. Sealed builds don't contain the SD code (their data, if any, is built in). A card can be tampered with while the kernel on it is still the genuine one (checked on another computer), so everything the genuine kernel parses from it must be memory-safe on any input: the FAT file system (FatFs), manifests, `suite.json` and catalogs (QuickJS's JSON parser, then GapKeep's checks), icons, `gapkeep.txt`. What it reads is capped: per file, per app, 64 MB for all the apps on a card and 48 MB for all data folders, refused ones included. Names, versions and descriptions shown by the launcher may not hold line breaks, control, bidi or invisible characters (`src/runtime/textcheck.h`); folder names from the card are shown with such characters as `?`. |
-| Boot files: `config.txt`, `cmdline.txt` | Read by the closed firmware, outside any hash GapKeep shows. `config.txt` decides what the firmware loads and how the screen is set up (it could even name another kernel file), so the defence against a changed one is the same as against a changed `kernel.img`: check the card's boot files on a trusted computer, against the `SHA256SUMS` `tools/make_sdcard.sh` printed when the card was made (not the copy on the card, which whoever changed the card could change too). The firmware passes `cmdline.txt` to the kernel as its command line; Circle would honour some of its options (`usbignore` turns a USB device off, `width` and `height` change the screen, `keymap`, `loglevel`, USB timing, CPU temperature limits), so GapKeep ignores it: Circle's options parser never reads it (`patches/circle/0010`), and every setting has its default. GapKeep's own settings are in `gapkeep.txt`. |
+| Boot files: `config.txt`, `cmdline.txt` | Read by the closed firmware, outside any hash GapKeep shows. `config.txt` decides what the firmware loads and how the screen is set up (it could even name another kernel file), so the defence against a changed one is the same as against a changed `kernel.img`: check the card's boot files on a trusted computer, against the `SHA256SUMS` `tools/make_sdcard.sh` printed when the card was made (not the copy on the card, which whoever changed the card could change too). The firmware passes `cmdline.txt` to the kernel as its command line; Circle would honour some of its options (`usbignore` turns a USB device off, `width` and `height` change the screen, `keymap`, `loglevel`, USB timing, CPU temperature limits), so GapKeep ignores it: Circle's options parser never reads it (`patches/circle/0013`), and every setting has its default. GapKeep's own settings are in `gapkeep.txt`. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **Nothing is kept.** GapKeep never writes to the card, and the session
@@ -289,7 +289,7 @@ the JS heap (`apphost.cpp`, which also makes `realloc` move so the old
 block can be zeroed), LVGL's heap (`lv_mem_wipe.c`; labels and text areas
 keep copies of what they show), and Circle's heap under them, which also
 holds the QR decoder's results, log messages and everything else the
-kernel allocates (`patches/circle/0008`). Buffers that held a secret, or a
+kernel allocates (`patches/circle/0011`). Buffers that held a secret, or a
 picture of a QR code, are also wiped explicitly before they go, with
 `gk_wipe()` (`src/crypto/wipe.h`), which the compiler cannot drop as a
 dead store (`tests/native/check_wipes.sh`): keys and digests in
@@ -313,7 +313,7 @@ pinned compiler (`tools/toolchain.sh`), the same commit gives the same
 SHA-256 the running kernel computed of its own image: its code and
 constants as they are in memory, and its data as the firmware loaded it
 (Circle hands a copy over before anything changes it,
-`patches/circle/0009`). It equals `sha256sum kernel.img`, for every build
+`patches/circle/0012`). It equals `sha256sum kernel.img`, for every build
 (`tests/check_kernel_hash.sh`). It identifies an honest kernel, and catches
 a wrong build or a bad copy on the card. It cannot catch a malicious
 kernel: that one can show any hash it likes. So against a card someone may

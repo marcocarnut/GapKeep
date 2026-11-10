@@ -54,7 +54,7 @@ int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 // codewords): a code may hold a secret. Call it once they have been copied
 // or used, and when scanning stops. The decoder's own memory (zxing-cpp's
 // results and scratch buffers, on the heap) is zeroed as it is freed
-// (patches/circle/0008 on the device).
+// (patches/circle/0011 on the device).
 void GkDecodeQRWipe (void);
 
 #endif
