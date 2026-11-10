@@ -1,0 +1,116 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: usb: let a driver outside Circle claim a whole device by its ids
+
+GapKeep's gk:usb (src/usbclaim.cpp) drives the devices that apps list by
+vendor and product id, with control transfers on endpoint 0 only. Such a
+device (a macro keyboard being configured) often has HID keyboard or
+mouse interfaces too; while it is claimed they must get no driver, so
+that it cannot type into the system it is being configured from.
+
+- CUSBDeviceFactory::SetClaimHook() sets a hook that is asked first, with
+  the device's ids, whether it takes the device; it returns the function
+  that drives it, made from the first interface's.
+- CUSBDevice::Initialize() asks it for the first interface, before the
+  factory, and gives a claimed device no other driver: the rest of its
+  interfaces are not looked at.
+
+--- a/include/circle/usb/usbdevicefactory.h
++++ b/include/circle/usb/usbdevicefactory.h
+@@ -32,12 +32,27 @@
+ 	u16	usDeviceID;
+ };
+ 
++// gapkeep: a driver outside Circle may claim a whole device by its vendor
++// and product ids, before any of its interfaces gets a driver. The hook
++// returns the function that drives the device, made from its first
++// interface's (pFirstInterface), or 0 to leave the device to the factory.
++// A claimed device gets no other driver: its other interfaces are not
++// looked at (a HID keyboard among them is not a keyboard).
++typedef CUSBFunction *TUSBDeviceClaimHook (CUSBFunction *pFirstInterface,
++					   u16 usVendorID, u16 usProductID);
++
+ class CUSBDeviceFactory
+ {
+ public:
+ 	static CUSBFunction *GetDevice (CUSBFunction *pParent, CString *pName);
+ 
++	// gapkeep: see TUSBDeviceClaimHook
++	static void SetClaimHook (TUSBDeviceClaimHook *pHook);
++	static CUSBFunction *ClaimDevice (CUSBFunction *pFirstInterface);
++
+ private:
++	static TUSBDeviceClaimHook *s_pClaimHook;		// gapkeep
++
+ 	// for "int3-0-0" devices
+ 	static CUSBFunction *GetGenericHIDDevice (CUSBFunction *pParent);
+ 
+--- a/lib/usb/usbdevicefactory.cpp
++++ b/lib/usb/usbdevicefactory.cpp
+@@ -56,6 +56,35 @@
+ #include <circle/usb/usbserialft231x.h>
+ #include <circle/usb/usbtouchscreen.h>
+ 
++TUSBDeviceClaimHook *CUSBDeviceFactory::s_pClaimHook = 0;	// gapkeep
++
++void CUSBDeviceFactory::SetClaimHook (TUSBDeviceClaimHook *pHook)
++{
++	s_pClaimHook = pHook;
++}
++
++CUSBFunction *CUSBDeviceFactory::ClaimDevice (CUSBFunction *pFirstInterface)
++{
++	assert (pFirstInterface != 0);
++	if (s_pClaimHook == 0)
++	{
++		return 0;
++	}
++
++	const TUSBDeviceDescriptor *pDesc = pFirstInterface->GetDevice ()->GetDeviceDescriptor ();
++	assert (pDesc != 0);
++
++	CUSBFunction *pResult = (*s_pClaimHook) (pFirstInterface, pDesc->idVendor, pDesc->idProduct);
++	if (pResult != 0)
++	{
++		pResult->GetDevice ()->LogWrite (LogNotice, "Claimed whole as ven%x-%x:"
++						 " no interface gets another driver",
++						 (unsigned) pDesc->idVendor, (unsigned) pDesc->idProduct);
++	}
++
++	return pResult;
++}
++
+ CUSBFunction *CUSBDeviceFactory::GetDevice (CUSBFunction *pParent, CString *pName)
+ {
+ 	assert (pParent != 0);
+--- a/lib/usb/usbdevice.cpp
++++ b/lib/usb/usbdevice.cpp
+@@ -405,10 +405,16 @@
+ 
+ 	unsigned nFunction = 0;
+ 	u8 ucInterfaceNumber = 0;
++	boolean bClaimed = FALSE;		// gapkeep: CUSBDeviceFactory::ClaimDevice()
+ 
+ 	TUSBInterfaceDescriptor *pInterfaceDesc;
+ 	while ((pInterfaceDesc = (TUSBInterfaceDescriptor *) m_pConfigParser->GetDescriptor (DESCRIPTOR_INTERFACE)) != 0)
+ 	{
++		if (bClaimed)
++		{
++			break;			// the claiming driver has the whole device
++		}
++
+ 		if (pInterfaceDesc->bInterfaceNumber > ucInterfaceNumber)
+ 		{
+ 			ucInterfaceNumber = pInterfaceDesc->bInterfaceNumber;
+@@ -431,6 +437,12 @@
+ 
+ 		if (nFunction == 0)
+ 		{
++			pChild = CUSBDeviceFactory::ClaimDevice (m_pFunction[nFunction]);	// gapkeep
++			bClaimed = pChild != 0;
++		}
++
++		if (nFunction == 0 && pChild == 0)
++		{
+ 			pChild = CUSBDeviceFactory::GetDevice (m_pFunction[nFunction], GetName (DeviceNameVendor));
+ 			if (pChild == 0)
+ 			{
