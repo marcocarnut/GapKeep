@@ -38,7 +38,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o \
 	  runtime/gk_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
-	  runtime/session.o runtime/js_session.o runtime/i18n.o runtime/markup.o generated/i18n_js.o runtime/keylayout.o runtime/wheel.o \
+	  runtime/session.o runtime/js_session.o runtime/js_data.o runtime/i18n.o runtime/markup.o generated/i18n_js.o runtime/keylayout.o runtime/wheel.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
 

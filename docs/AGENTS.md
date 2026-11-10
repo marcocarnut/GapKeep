@@ -102,6 +102,22 @@ other apps (until power-off; never on the card): `gk:session`'s
 [API.md](API.md#gkcrypto). Don't add npm dependencies; vendor plain ES
 modules into the app if you must, and check they use nothing above.
 
+## Data on the card, and suites
+
+The one file access there is: read-only **data folders** the person put on
+the card, `data/<folder>/...` (public keys, say). List the folders in the
+manifest, `"data": ["pgp"]`, then `import * as data from "gk:data"`:
+`data.list("pgp")` gives `[{ name, size }]`, `data.read("pgp", name)` a
+`Uint8Array`, `data.readText(...)` a string, `data.hash("pgp")` the folder's
+hash. Data is not part of the app hash, so anyone with the card can change
+it: **show the person what matters before using it** (a key's fingerprint).
+Run with data: `tools/gksim --data path/to/pgp apps/myapp`; in scenarios,
+the card's `data/` folder (tests/sdcard/data). Several apps can form a
+**suite**, one launcher tile: `apps/<suite>/suite.json` and
+`apps/<suite>/<app>/`; each app stays self-contained (its own files only,
+no shared code), and they share data folders. Details:
+[APPS.md, "Data files" and "Suites"](APPS.md#data-files).
+
 ## Languages
 
 Write text in English through `t()` from `gk:i18n`, with what varies as

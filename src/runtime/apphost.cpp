@@ -707,6 +707,10 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	{
 		return GkInitSessionModule (pContext, pName);
 	}
+	if (strcmp (pName, "gk:data") == 0)
+	{
+		return GkInitDataModule (pContext, pName);
+	}
 	if (strcmp (pName, "gk:i18n") == 0)
 	{
 		return GkInitI18nModule (pContext, pName);

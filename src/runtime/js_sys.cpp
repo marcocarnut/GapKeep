@@ -334,6 +334,8 @@ static JSValue KernelInfo (JSContext *ctx)
 	return Obj;
 }
 
+static JSValue IconImage (JSContext *ctx, const gk_app_t *pApp);
+
 static JSValue AppInfo (JSContext *ctx, const gk_app_t *pApp)
 {
 	JSValue Obj = JS_NewObject (ctx);
@@ -348,22 +350,7 @@ static JSValue AppInfo (JSContext *ctx, const gk_app_t *pApp)
 	JS_SetPropertyStr (ctx, Obj, "hash", JS_NewString (ctx, pApp->hash));
 	JS_SetPropertyStr (ctx, Obj, "experimental", JS_NewBool (ctx, pApp->experimental != 0));
 
-	// the picture icon, ready for ui.Image's src (RGBA, like canvas ImageData)
-	JSValue Image = JS_NULL;
-	if (pApp->icon_rgba != 0)
-	{
-		Image = JS_NewObject (ctx);
-		JS_SetPropertyStr (ctx, Image, "width", JS_NewUint32 (ctx, pApp->icon_width));
-		JS_SetPropertyStr (ctx, Image, "height", JS_NewUint32 (ctx, pApp->icon_height));
-		JSValue Buffer = JS_NewArrayBufferCopy (ctx, pApp->icon_rgba,
-							pApp->icon_width * pApp->icon_height * 4);
-		// JS_NewTypedArray reads argv[0..2] regardless of argc: pass all three
-		JSValueConst Args[3] = {Buffer, JS_NewInt32 (ctx, 0), JS_UNDEFINED};
-		JSValue Data = JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8);
-		JS_FreeValue (ctx, Buffer);
-		JS_SetPropertyStr (ctx, Image, "data", Data);
-	}
-	JS_SetPropertyStr (ctx, Obj, "image", Image);
+	JS_SetPropertyStr (ctx, Obj, "image", IconImage (ctx, pApp));
 
 	JSValue Perms = JS_NewArray (ctx);
 	unsigned nPerms = 0;
@@ -385,7 +372,38 @@ static JSValue AppInfo (JSContext *ctx, const gk_app_t *pApp)
 	}
 	JS_SetPropertyStr (ctx, Obj, "permissions", Perms);
 
+	// its suite (apps/<suite>/<id>), and the data folders it may read
+	JS_SetPropertyStr (ctx, Obj, "suite", pApp->suite ? JS_NewString (ctx, pApp->suite) : JS_NULL);
+	JSValue Data = JS_NewArray (ctx);
+	for (unsigned i = 0; i < pApp->data_count; i++)
+	{
+		JS_SetPropertyUint32 (ctx, Data, i, JS_NewString (ctx, pApp->data[i]));
+	}
+	JS_SetPropertyStr (ctx, Obj, "data", Data);
+
 	return Obj;
+}
+
+// The picture icon, ready for ui.Image's src (RGBA, like canvas ImageData), or null
+static JSValue IconImage (JSContext *ctx, const gk_app_t *pApp)
+{
+	if (pApp->icon_rgba == 0)
+	{
+		return JS_NULL;
+	}
+
+	JSValue Image = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Image, "width", JS_NewUint32 (ctx, pApp->icon_width));
+	JS_SetPropertyStr (ctx, Image, "height", JS_NewUint32 (ctx, pApp->icon_height));
+	JSValue Buffer = JS_NewArrayBufferCopy (ctx, pApp->icon_rgba,
+						pApp->icon_width * pApp->icon_height * 4);
+	// JS_NewTypedArray reads argv[0..2] regardless of argc: pass all three
+	JSValueConst Args[3] = {Buffer, JS_NewInt32 (ctx, 0), JS_UNDEFINED};
+	JSValue Data = JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8);
+	JS_FreeValue (ctx, Buffer);
+	JS_SetPropertyStr (ctx, Image, "data", Data);
+
+	return Image;
 }
 
 static int SysModuleInit (JSContext *ctx, JSModuleDef *m)
@@ -465,6 +483,55 @@ static JSValue js_apps_card (JSContext *ctx, JSValueConst this_val, int argc, JS
 	return Obj;
 }
 
+// The suites (apps/<id>/suite.json): { id, name, description, icon, image }
+static JSValue js_apps_suites (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	JSValue Array = JS_NewArray (ctx);
+	for (unsigned i = 0; i < CAppStore::GetSuiteCount (); i++)
+	{
+		const gk_app_t *pSuite = CAppStore::GetSuite (i);
+		JSValue Obj = JS_NewObject (ctx);
+		JS_SetPropertyStr (ctx, Obj, "id", JS_NewString (ctx, pSuite->id));
+		// in the language: the suite's own catalog (lang/<tag>.json), as for apps
+		JS_SetPropertyStr (ctx, Obj, "name", JS_NewString (ctx, CGkI18n::GetAppName (ctx, pSuite)));
+		JS_SetPropertyStr (ctx, Obj, "description",
+				   JS_NewString (ctx, CGkI18n::GetAppDescription (ctx, pSuite)));
+		JS_SetPropertyStr (ctx, Obj, "icon", JS_NewString (ctx, pSuite->icon));
+		JS_SetPropertyStr (ctx, Obj, "image", IconImage (ctx, pSuite));
+		JS_SetPropertyUint32 (ctx, Array, i, Obj);
+	}
+
+	return Array;
+}
+
+// The hash of a data folder, for the launcher to show: as gk:data's hash()
+static JSValue js_apps_data_hash (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	const char *pName = argc >= 1 && JS_IsString (argv[0]) ? JS_ToCString (ctx, argv[0]) : 0;
+	if (pName == 0 || !CAppStore::IsValidID (pName))
+	{
+		JS_FreeCString (ctx, pName);
+		return JS_ThrowTypeError (ctx, "dataHash: a data folder name expected (a-z, 0-9 and -, at most 32)");
+	}
+
+	const gk_file_t *pFiles;
+	unsigned nCount;
+	const char *pHash, *pError;
+	TGkDataStatus Status = CAppStore::GetData (pName, &pFiles, &nCount, &pHash, &pError);
+	JSValue Result = JS_NULL;
+	if (Status == GkDataOK)
+	{
+		Result = JS_NewString (ctx, pHash);
+	}
+	else if (Status == GkDataError)
+	{
+		Result = JS_ThrowTypeError (ctx, "data/%s: %s", pName, pError);
+	}
+	JS_FreeCString (ctx, pName);
+
+	return Result;
+}
+
 static JSValue js_apps_launch (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	const char *pID = argc >= 1 ? JS_ToCString (ctx, argv[0]) : 0;
@@ -491,6 +558,8 @@ static int AppsModuleInit (JSContext *ctx, JSModuleDef *m)
 	JS_SetModuleExport (ctx, m, "list", JS_NewCFunction (ctx, js_apps_list, "list", 0));
 	JS_SetModuleExport (ctx, m, "launch", JS_NewCFunction (ctx, js_apps_launch, "launch", 1));
 	JS_SetModuleExport (ctx, m, "card", JS_NewCFunction (ctx, js_apps_card, "card", 0));
+	JS_SetModuleExport (ctx, m, "suites", JS_NewCFunction (ctx, js_apps_suites, "suites", 0));
+	JS_SetModuleExport (ctx, m, "dataHash", JS_NewCFunction (ctx, js_apps_data_hash, "dataHash", 1));
 
 	return 0;
 }
@@ -506,6 +575,8 @@ JSModuleDef *GkInitAppsModule (JSContext *ctx, const char *pName)
 	JS_AddModuleExport (ctx, m, "list");
 	JS_AddModuleExport (ctx, m, "launch");
 	JS_AddModuleExport (ctx, m, "card");
+	JS_AddModuleExport (ctx, m, "suites");
+	JS_AddModuleExport (ctx, m, "dataHash");
 
 	return m;
 }

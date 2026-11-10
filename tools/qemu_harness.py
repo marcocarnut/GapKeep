@@ -39,7 +39,10 @@ Scenario file: one command per line, '#' starts a comment.
     tile <id>                   open that app from the launcher: moves the
                                 focus to its tile (by the order in the
                                 launcher's last "launcher ready: ..." log
-                                line) and presses Enter. Works everywhere.
+                                line, or "launcher suite <id>: ..." inside
+                                a suite, "launcher home: ..." back from
+                                one) and presses Enter. Works everywhere.
+                                A suite's tile has the suite's id.
     tilefocus <id>              the same, without pressing Enter
     launch <id>                 simulator only: start that app, as the
                                 launcher would
@@ -569,7 +572,8 @@ def run_scenario(m, path, outdir):
                 m.moveto(x, y)
             elif cmd in ('tile', 'tilefocus'):
                 app = rest.strip()
-                ready = re.findall(r'launcher ready: ([^\r\n]*)', m.serial()[m.mark:])
+                # the launcher's tiles: at start, or after opening a suite or leaving it
+                ready = re.findall(r'launcher (?:ready|home|suite [a-z0-9-]+): ([^\r\n]*)', m.serial()[m.mark:])
                 tiles = ready[-1].split(', ') if ready else []
                 if app not in tiles:
                     raise SystemExit('%s: no tile %r in the launcher (%s)' % (where, app, ', '.join(tiles)))

@@ -156,6 +156,21 @@ get the built-in one back (**Examples** brings back a fresh copy).
 To put your launcher on the device, **Export .zip** it, unzip it over
 `apps/launcher` in the repository and rebuild the kernel.
 
+## Data files and suites
+
+Data folders ([APPS.md](APPS.md#data-files)) go on the IDE's card with
+**Import**: choose a folder named `data` holding one folder per data
+folder (`data/pgp/alice.asc`, ...), as on a real card. They show in the
+tree as `data`, are saved with the apps, and go on the card at every
+boot, binary or not; apps read them with `gk:data`. Delete them as
+anything else in the tree.
+
+A suite ([APPS.md](APPS.md#suites)) is imported as a folder of apps (its
+folder holds `suite.json` and the apps' folders): it shows in the tree as
+one folder. **Run** with a file of one of its apps open starts that app;
+the launcher shows the suite as one tile. **Export .zip** exports the
+whole suite.
+
 ## Putting an app on a real SD card
 
 Export the app, then unzip it into the `apps` folder of the card (the zip

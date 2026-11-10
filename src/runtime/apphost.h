@@ -142,6 +142,7 @@ JSModuleDef *GkInitCryptoModule (JSContext *pContext, const char *pName);
 JSModuleDef *GkInitClockModule (JSContext *pContext, const char *pName);
 void GkClockFree (TGkApp *pApp);		// js_clock.cpp: the app's alarms
 JSModuleDef *GkInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
+JSModuleDef *GkInitDataModule (JSContext *pContext, const char *pName);	// js_data.cpp
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void GkInitGlobals (JSContext *pContext);

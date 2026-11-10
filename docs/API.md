@@ -13,6 +13,7 @@ modules below, imported by name:
 | [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
 | [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
 | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
+| [`gk:data`](#gkdata) | every app (only the folders its manifest lists in `"data"`) | Read-only files from the card's data folders, shared by name |
 | [`gk:apps`](#gkapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -422,7 +423,7 @@ import * as sys from "gk:sys";
 | Name | Description |
 | --- | --- |
 | `kernel` | The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). |
-| `app` | This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
+| `app` | This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest's `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none). |
 | `version` | `{ gapkeep, quickjs, lvgl, circle }` version strings. |
 | `log(...args)` | Same as `console.log`. |
 | `uptime()` | Milliseconds since boot, as a float with microsecond resolution. |
@@ -634,6 +635,56 @@ the change, and at once to the app that made it, through
 
 ---
 
+## gk:data
+
+```js
+import * as data from "gk:data";
+```
+
+Read-only files the person put on the SD card when preparing it, in
+`data/<folder>/...` beside `apps/`: public keys, address books, word
+lists. An app reads only the folders its manifest lists, `"data": ["pgp"]`,
+and nothing can write them. Apps that list the same folder share it.
+Any kind of file: binary (an exported OpenPGP key) or text (`.asc`).
+[APPS.md, "Data files"](APPS.md#data-files) says how to lay them out and
+put them on a card.
+
+```js
+for (const { name, size } of data.list("pgp")) {
+  const key = data.read("pgp", name);          // Uint8Array
+  // ... parse it, show its fingerprint ...
+}
+```
+
+**The data is not part of the app's [hash](APPS.md#app-hashes).** The app
+hash names the code, and is the same on every card; the data is whatever
+the card holds, and whoever can change the card can change it. So show
+the person what matters before using it: for a key, its fingerprint,
+to be compared with one they trust; `hash(folder)` names the whole
+folder, as the launcher shows it.
+
+A folder is read on first use, all of it, and kept in memory until
+power-off: what the app reads is what was hashed. Limits: 4 MB per file,
+8 MB and 256 files per folder, 32 MB for all the folders read. A folder
+over them, or with a name that is not printable ASCII, can't be read:
+every call on it throws, saying why. Names starting with `.` (macOS's
+`._x`) are skipped.
+
+Every refusal is a `TypeError` that says what is wrong: a folder that
+is not in the manifest, a path that leaves the folder (`..`, `.`, a
+leading `/`, a `\`), a file that isn't there. A folder that is not on
+the card (and every folder, without a card or in a sealed build, which
+reads no card) has no files: `list()` returns `[]` and `hash()` `null`.
+
+| Name | Description |
+| --- | --- |
+| `list(folder)` | The folder's files, `{ name, size }`, sorted by name (byte order): `name` is the path inside the folder, with `/` between folders (`"keys/alice.asc"`), `size` in bytes. `[]` if the folder is not on the card. |
+| `read(folder, name)` | The file's bytes, a fresh copy. `name` as `list()` gives it. |
+| `readText(folder, name)` | The file as UTF-8 text. A `TypeError` if it isn't valid UTF-8 (or holds a NUL byte); `read()` gives its bytes. |
+| `hash(folder)` | The SHA-256 of the folder's files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)'s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if the folder is not on the card. |
+
+---
+
 ## gk:apps
 
 Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
@@ -641,7 +692,9 @@ throws a `ReferenceError`. Used by the launcher.
 
 | Name | Description |
 | --- | --- |
-| `list()` | Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by id). |
+| `list()` | Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)'s apps, in `apps/<suite>/<id>`, where the suite's folder sorts, each with `suite` set to the suite's id). |
+| `suites()` | The [suites](APPS.md#suites) on the card (`apps/<id>/suite.json`), sorted by id: `{ id, name, description, icon, image }`, as for apps (`name` and `description` in the language, from the suite's own `lang/` catalogs). A suite whose apps were all refused is listed too; the launcher shows only suites with apps. |
+| `dataHash(folder)` | The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`'s `hash()` gives it, for any folder: the launcher shows those an app lists. `null` if it is not on the card; a `TypeError` if it can't be read (too big, a bad name). |
 | `launch(id)` | Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. |
 | `card()` | The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16. |
 

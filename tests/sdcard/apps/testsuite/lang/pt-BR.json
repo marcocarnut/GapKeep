@@ -1,0 +1,8 @@
+{
+  "$language": "pt-BR",
+  "$app": "testsuite",
+  "messages": {
+    "Test Suite": "Conjunto de Teste",
+    "Two apps that share a data folder.": "Dois aplicativos que compartilham uma pasta de dados."
+  }
+}

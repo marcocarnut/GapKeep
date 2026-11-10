@@ -24,7 +24,9 @@ An app's translations: apps/<app>/lang/<language>.json (docs/APPS.md,
 
 The manifest's name and description are keys too, optional ones (a
 product's name stays as it is): the runtime shows the launcher and
-sys.app those translations (docs/APPS.md, "Languages").
+sys.app those translations (docs/APPS.md, "Languages"). A suite's folder
+(apps/<suite>, with a suite.json) works too: its catalogs hold only
+suite.json's name and description (docs/APPS.md, "Suites").
 
 The keys are the first argument of t() and the second and third of
 plural() (or i18n.t(), ...), and of N_(), which marks text for t()
@@ -236,6 +238,8 @@ def keys_in(src, path, names=('t', 'plural')):
 def sources(appdir):
     """(path, names) of the JavaScript whose keys the app's catalogs hold."""
     out = []
+    if is_suite(appdir):
+        return out          # its apps have their own catalogs
     for root, dirs, files in os.walk(appdir):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
         for f in sorted(files):
@@ -249,10 +253,18 @@ def sources(appdir):
     return out
 
 
+def is_suite(appdir):
+    """A suite's folder: suite.json, no manifest.json."""
+    return (os.path.isfile(os.path.join(appdir, 'suite.json'))
+            and not os.path.isfile(os.path.join(appdir, 'manifest.json')))
+
+
 def manifest_keys(appdir):
-    """The manifest's name and description: keys that may stay untranslated."""
+    """The manifest's (or suite.json's) name and description: keys that may
+    stay untranslated."""
     try:
-        with open(os.path.join(appdir, 'manifest.json'), encoding='utf-8') as f:
+        with open(os.path.join(appdir, 'suite.json' if is_suite(appdir) else 'manifest.json'),
+                  encoding='utf-8') as f:
             m = json.load(f)
     except (OSError, ValueError):
         return []
@@ -603,8 +615,8 @@ def main(argv):
     if len(args) != 2 or args[0] not in ('check', 'extract', 'keys'):
         sys.exit(__doc__)
     cmd, appdir = args
-    if not os.path.isfile(os.path.join(appdir, 'manifest.json')):
-        sys.exit('i18n: %s is not an app (no manifest.json)' % appdir)
+    if not os.path.isfile(os.path.join(appdir, 'manifest.json')) and not is_suite(appdir):
+        sys.exit('i18n: %s is not an app (no manifest.json) or a suite (no suite.json)' % appdir)
     if cmd == 'check':
         return check(appdir, opts.get('lang'))
     if cmd == 'keys':

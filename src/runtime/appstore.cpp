@@ -29,9 +29,20 @@ static const unsigned MaxAppSize = 16 * 1024 * 1024;	// all files of one app
 static const unsigned MaxDepth = 8;			// folder levels inside an app
 static const unsigned MaxNameLength = 64;		// of one file or folder name
 static const unsigned MaxProblems = 16;
+static const unsigned MaxSuites = 16;
+
+// Limits for data folders (data/<name>, gk:data); docs/APPS.md, "Data files"
+static const unsigned MaxDataFiles = 256;		// per folder
+static const unsigned MaxDataFileSize = 4 * 1024 * 1024;
+static const unsigned MaxDataSize = 8 * 1024 * 1024;	// all files of one folder
+static const unsigned MaxDataNameLength = 128;		// of one file or folder name
+static const unsigned MaxDataFolders = 32;		// read until power-off
+static const unsigned MaxDataTotal = 32 * 1024 * 1024;	// all folders read
 
 static const gk_app_t **s_ppApps = 0;
 static unsigned s_nApps = 0;
+static const gk_app_t *s_pSuites[MaxSuites];
+static unsigned s_nSuites = 0;
 static TGkCardStatus s_CardStatus = GkCardDisabled;
 
 struct TProblem
@@ -78,6 +89,29 @@ const gk_app_t *CAppStore::Find (const char *pID)
 	return 0;
 }
 
+unsigned CAppStore::GetSuiteCount (void)
+{
+	return s_nSuites;
+}
+
+const gk_app_t *CAppStore::GetSuite (unsigned nIndex)
+{
+	return nIndex < s_nSuites ? s_pSuites[nIndex] : 0;
+}
+
+const gk_app_t *CAppStore::FindSuite (const char *pID)
+{
+	for (unsigned i = 0; i < s_nSuites; i++)
+	{
+		if (strcmp (s_pSuites[i]->id, pID) == 0)
+		{
+			return s_pSuites[i];
+		}
+	}
+
+	return 0;
+}
+
 TGkCardStatus CAppStore::GetCardStatus (void)
 {
 	return s_CardStatus;
@@ -112,23 +146,9 @@ const char *CAppStore::GetProblemText (unsigned nIndex)
 	return nIndex < s_nProblems ? s_Problems[nIndex].pText : 0;
 }
 
-#ifndef GK_SEALED
-
-static void AddProblem (const char *pFolder, const char *pText)
-{
-	CLogger::Get ()->Write (From, LogWarning, "apps/%s not loaded: %s", pFolder, pText);
-
-	if (s_nProblems < MaxProblems)
-	{
-		s_Problems[s_nProblems].pFolder = StrDup (pFolder);
-		s_Problems[s_nProblems].pText = StrDup (pText);
-		s_nProblems++;
-	}
-}
-
 // --- checks shared with tools/bundle_apps.py --------------------------------
 
-static boolean IsValidID (const char *p)
+boolean CAppStore::IsValidID (const char *p)
 {
 	// ^[a-z0-9][a-z0-9-]{0,31}$
 	size_t n = strlen (p);
@@ -146,6 +166,8 @@ static boolean IsValidID (const char *p)
 
 	return TRUE;
 }
+
+#ifndef GK_SEALED
 
 // Names of the folders and files that are loaded: [A-Za-z0-9._-], not
 // starting with '.' (those are skipped: macOS litters cards with "._x.js").
@@ -181,9 +203,31 @@ static boolean IsAppFile (const char *pName)
 	       && strcmp (pName, "package.json") != 0;
 }
 
+// Names in a data folder: printable ASCII but '/' and '\' (any file type,
+// so "alice@example.org.asc" and "Bob's key.pgp" are fine). Those starting
+// with '.' are skipped, as in apps.
+static boolean IsValidDataName (const char *p)
+{
+	if (*p == '\0' || strlen (p) > MaxDataNameLength)
+	{
+		return FALSE;
+	}
+	for (; *p; p++)
+	{
+		if (*p < 0x20 || *p > 0x7E || *p == '/' || *p == '\\')
+		{
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+#endif	// !GK_SEALED
+
 // Strict UTF-8, as Python's bytes.decode('utf-8'): no overlong forms, no
 // surrogates, nothing above U+10FFFF. NUL bytes are rejected too.
-static boolean IsValidUTF8 (const u8 *p, unsigned n)
+boolean CAppStore::IsValidUTF8 (const u8 *p, unsigned n)
 {
 	unsigned i = 0;
 	while (i < n)
@@ -241,14 +285,50 @@ static boolean IsValidUTF8 (const u8 *p, unsigned n)
 	return TRUE;
 }
 
-// --- reading an app folder --------------------------------------------------
+#ifndef GK_SEALED
+
+static void AddProblem (const char *pFolder, const char *pText)
+{
+	CLogger::Get ()->Write (From, LogWarning, "apps/%s not loaded: %s", pFolder, pText);
+
+	if (s_nProblems < MaxProblems)
+	{
+		s_Problems[s_nProblems].pFolder = StrDup (pFolder);
+		s_Problems[s_nProblems].pText = StrDup (pText);
+		s_nProblems++;
+	}
+}
+
+// --- reading an app or data folder ------------------------------------------
+
+// What a folder may hold
+struct TReadRules
+{
+	boolean bData;			// a data folder: any file, binary, IsValidDataName
+	unsigned nMaxFiles;
+	unsigned nMaxFileSize;
+	unsigned nMaxTotal;
+	const char *pWhat;		// "app" or "folder", for the messages
+};
+
+static const TReadRules AppRules = {FALSE, MaxFiles, MaxFileSize, MaxAppSize, "app"};
+static const TReadRules DataRules = {TRUE, MaxDataFiles, MaxDataFileSize, MaxDataSize, "folder"};
 
 struct TFileList
 {
-	gk_file_t *pFiles;		// MaxFiles entries
+	const TReadRules *pRules;
+	gk_file_t *pFiles;		// pRules->nMaxFiles entries
 	unsigned nCount;
 	unsigned nTotalSize;
 };
+
+static void InitFiles (TFileList *pList, const TReadRules *pRules)
+{
+	pList->pRules = pRules;
+	pList->pFiles = new gk_file_t[pRules->nMaxFiles];
+	pList->nCount = 0;
+	pList->nTotalSize = 0;
+}
 
 static void FreeFiles (TFileList *pList)
 {
@@ -262,20 +342,24 @@ static void FreeFiles (TFileList *pList)
 	pList->nCount = 0;
 }
 
-static boolean ReadFile (const char *pFullPath, const char *pRelPath, unsigned nSize,
+static boolean ReadFile (const char *pFullPath, const char *pRelPath, FSIZE_t nFileSize,
 			 TFileList *pList, CString *pError)
 {
-	if (pList->nCount >= MaxFiles)
+	const TReadRules *pRules = pList->pRules;
+	if (pList->nCount >= pRules->nMaxFiles)
 	{
-		pError->Format ("more than %u files", MaxFiles);
+		pError->Format ("more than %u files", pRules->nMaxFiles);
 		return FALSE;
 	}
-	if (nSize > MaxFileSize || pList->nTotalSize + nSize > MaxAppSize)
+	if (   nFileSize > pRules->nMaxFileSize
+	    || pList->nTotalSize + (unsigned) nFileSize > pRules->nMaxTotal)
 	{
-		pError->Format ("%s: too large (at most %u MB per file, %u MB per app)",
-				pRelPath, MaxFileSize >> 20, MaxAppSize >> 20);
+		pError->Format ("%s: too large (at most %u MB per file, %u MB per %s)",
+				pRelPath, pRules->nMaxFileSize >> 20, pRules->nMaxTotal >> 20,
+				pRules->pWhat);
 		return FALSE;
 	}
+	unsigned nSize = (unsigned) nFileSize;
 
 	FIL File;
 	if (f_open (&File, pFullPath, FA_READ) != FR_OK)
@@ -296,7 +380,7 @@ static boolean ReadFile (const char *pFullPath, const char *pRelPath, unsigned n
 	}
 	pData[nSize] = '\0';
 
-	if (!IsValidUTF8 ((const u8 *) pData, nSize))
+	if (!pRules->bData && !CAppStore::IsValidUTF8 ((const u8 *) pData, nSize))
 	{
 		delete [] pData;
 		pError->Format ("%s: not valid UTF-8 text", pRelPath);
@@ -312,11 +396,14 @@ static boolean ReadFile (const char *pFullPath, const char *pRelPath, unsigned n
 	return TRUE;
 }
 
-// Reads the app files in pDir (on the card) and below; pRel is pDir relative
-// to the app folder ("" at the top).
+// Reads the files in pDir (on the card) and below, as pList's rules say:
+// an app's (.js, .json, .txt) or a data folder's (all); pRel is pDir
+// relative to the app or data folder ("" at the top).
 static boolean ReadFolder (const char *pDir, const char *pRel, unsigned nDepth,
 			   TFileList *pList, CString *pError)
 {
+	boolean bData = pList->pRules->bData;
+
 	DIR Dir;
 	if (f_opendir (&Dir, pDir) != FR_OK)
 	{
@@ -344,16 +431,17 @@ static boolean ReadFolder (const char *pDir, const char *pRel, unsigned nDepth,
 		}
 
 		boolean bDir = !!(Info.fattrib & AM_DIR);
-		if (!bDir && !IsAppFile (Info.fname))
+		if (!bDir && !bData && !IsAppFile (Info.fname))
 		{
 			continue;	// not part of the app
 		}
 
 		CString Rel;
 		Rel.Format ("%s%s%s", pRel, *pRel ? "/" : "", Info.fname);
-		if (!IsValidName (Info.fname))
+		if (bData ? !IsValidDataName (Info.fname) : !IsValidName (Info.fname))
 		{
-			pError->Format ("%s: name may only contain A-Z a-z 0-9 . _ -", (const char *) Rel);
+			pError->Format (bData ? "%s: names may only be printable ASCII, without / and \\"
+					      : "%s: name may only contain A-Z a-z 0-9 . _ -", (const char *) Rel);
 			bOK = FALSE;
 			break;
 		}
@@ -374,7 +462,7 @@ static boolean ReadFolder (const char *pDir, const char *pRel, unsigned nDepth,
 		}
 		else
 		{
-			bOK = ReadFile (Full, Rel, (unsigned) Info.fsize, pList, pError);
+			bOK = ReadFile (Full, Rel, Info.fsize, pList, pError);
 		}
 	}
 
@@ -605,13 +693,91 @@ static boolean ParseIconPicture (JSContext *ctx, JSValueConst Icon, gk_app_t *pA
 	return TRUE;
 }
 
-// Fills pApp's metadata from manifest.json, with the checks of
-// tools/bundle_apps.py.
-static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
-			      gk_app_t *pApp, CString *pError)
+// The manifest's "data": at most GK_MAX_APP_DATA different folder names
+static boolean ParseData (JSContext *ctx, JSValueConst Obj, gk_app_t *pApp, CString *pError)
 {
-	static const char *Known[] = {"id", "name", "version", "description", "icon", "entry",
-				      "permissions", "hidden", "experimental"};
+	JSValue Data = JS_GetPropertyStr (ctx, Obj, "data");
+	if (JS_IsUndefined (Data))
+	{
+		return TRUE;
+	}
+
+	boolean bOK = JS_IsArray (ctx, Data);
+	uint32_t nLength = 0;
+	if (bOK)
+	{
+		JSValue Length = JS_GetPropertyStr (ctx, Data, "length");
+		bOK = JS_ToUint32 (ctx, &nLength, Length) == 0 && nLength <= GK_MAX_APP_DATA;
+		JS_FreeValue (ctx, Length);
+	}
+	char **ppNames = new char *[GK_MAX_APP_DATA];
+	unsigned nNames = 0;
+	for (uint32_t i = 0; bOK && i < nLength; i++)
+	{
+		JSValue Name = JS_GetPropertyUint32 (ctx, Data, i);
+		const char *p = JS_IsString (Name) ? JS_ToCString (ctx, Name) : 0;
+		bOK = p != 0 && CAppStore::IsValidID (p);
+		for (unsigned k = 0; bOK && k < nNames; k++)
+		{
+			bOK = strcmp (ppNames[k], p) != 0;
+		}
+		if (bOK)
+		{
+			ppNames[nNames++] = StrDup (p);
+		}
+		JS_FreeCString (ctx, p);
+		JS_FreeValue (ctx, Name);
+	}
+	JS_FreeValue (ctx, Data);
+
+	if (!bOK)
+	{
+		for (unsigned k = 0; k < nNames; k++)
+		{
+			delete [] ppNames[k];
+		}
+		delete [] ppNames;
+		pError->Format ("manifest.json: \"data\" must be a list of at most %u different folder"
+				" names (a-z, 0-9 and -, at most 32)", GK_MAX_APP_DATA);
+		return FALSE;
+	}
+
+	pApp->data = ppNames;
+	pApp->data_count = nNames;
+
+	return TRUE;
+}
+
+// What ParseManifest allocated (pApp itself is the caller's)
+static void FreeMetadata (gk_app_t *pApp)
+{
+	delete [] (char *) pApp->id;
+	delete [] (char *) pApp->name;
+	delete [] (char *) pApp->version;
+	delete [] (char *) pApp->description;
+	delete [] (char *) pApp->entry;
+	delete [] pApp->icon_rgba;
+	for (unsigned i = 0; i < pApp->data_count; i++)
+	{
+		delete [] (char *) pApp->data[i];
+	}
+	delete [] pApp->data;
+	pApp->id = pApp->name = pApp->version = pApp->description = pApp->entry = 0;
+	pApp->icon_rgba = 0;
+	pApp->data = 0;
+	pApp->data_count = 0;
+}
+
+// Fills pApp's metadata from manifest.json, with the checks of
+// tools/bundle_apps.py; or, if bSuite, from a suite's suite.json (id, name,
+// description, icon).
+static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
+			      gk_app_t *pApp, CString *pError, boolean bSuite = FALSE)
+{
+	static const char *AppKeys[] = {"id", "name", "version", "description", "icon", "entry",
+					"permissions", "hidden", "experimental", "data", 0};
+	static const char *SuiteKeys[] = {"id", "name", "description", "icon", 0};
+	const char **Known = bSuite ? SuiteKeys : AppKeys;
 
 	JSRuntime *rt = CAppHost::NewRuntime ();
 	JSContext *ctx = JS_NewContext (rt);
@@ -649,7 +815,7 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 		{
 			const char *pKey = JS_AtomToCString (ctx, pProps[i].atom);
 			bKnown = FALSE;
-			for (unsigned k = 0; pKey && k < sizeof Known / sizeof Known[0]; k++)
+			for (unsigned k = 0; pKey && Known[k] != 0; k++)
 			{
 				bKnown = bKnown || strcmp (pKey, Known[k]) == 0;
 			}
@@ -673,7 +839,7 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 		char *pName = 0, *pVersion = 0;
 		if (   !GetString (ctx, Obj, "id", 32, TRUE, &pID, pError)
 		    || !GetString (ctx, Obj, "name", 64, TRUE, &pName, pError)
-		    || !GetString (ctx, Obj, "version", 32, TRUE, &pVersion, pError)
+		    || !GetString (ctx, Obj, "version", 32, !bSuite, &pVersion, pError)
 		    || !GetString (ctx, Obj, "description", 256, FALSE, &pDescription, pError)
 		    || (!bPicture && !GetString (ctx, Obj, "icon", 32, FALSE, &pIcon, pError))
 		    || !GetString (ctx, Obj, "entry", 255, FALSE, &pEntry, pError))
@@ -775,6 +941,11 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 			break;
 		}
 
+		if (!ParseData (ctx, Obj, pApp, pError))
+		{
+			break;
+		}
+
 		bOK = TRUE;
 	}
 	while (0);
@@ -784,22 +955,24 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 	JS_FreeRuntime (rt);
 
 	delete [] pIcon;
-	if (bOK)
+	pApp->id = pID;
+	pApp->entry = pEntry ? pEntry : StrDup (bSuite ? "" : "main.js");
+	pApp->description = pDescription ? pDescription : StrDup ("");
+	if (pApp->version == 0)
 	{
-		pApp->id = pID;
-		pApp->entry = pEntry ? pEntry : StrDup ("main.js");
-		pApp->description = pDescription ? pDescription : StrDup ("");
+		pApp->version = StrDup ("");		// a suite has none
 	}
-	else
+	if (!bOK)
 	{
-		delete [] pID;
-		delete [] pEntry;
-		delete [] pDescription;
-		delete [] (char *) pApp->name;
-		delete [] (char *) pApp->version;
-		delete [] pApp->icon_rgba;
-		pApp->name = pApp->version = 0;
-		pApp->icon_rgba = 0;
+		FreeMetadata (pApp);
+	}
+
+	if (!bOK && bSuite && strncmp (*pError, "manifest.json:", 14) == 0)
+	{
+		// the messages above name the app's file
+		CString Error;
+		Error.Format ("suite.json:%s", (const char *) *pError + 14);
+		*pError = Error;
 	}
 
 	return bOK;
@@ -842,9 +1015,7 @@ static gk_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFol
 			  CString *pError)
 {
 	TFileList List;
-	List.pFiles = new gk_file_t[MaxFiles];
-	List.nCount = 0;
-	List.nTotalSize = 0;
+	InitFiles (&List, &AppRules);
 
 	if (!ReadFolder (pDir, "", 1, &List, pError))
 	{
@@ -872,12 +1043,7 @@ static gk_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFol
 	if (FindFile (&List, pApp->entry) == 0)
 	{
 		pError->Format ("entry module \"%s\" not found", pApp->entry);
-		delete [] (char *) pApp->id;
-		delete [] (char *) pApp->name;
-		delete [] (char *) pApp->version;
-		delete [] (char *) pApp->description;
-		delete [] (char *) pApp->entry;
-		delete [] pApp->icon_rgba;
+		FreeMetadata (pApp);
 		delete pApp;
 		FreeFiles (&List);
 		return 0;
@@ -895,31 +1061,205 @@ static gk_app_t *ReadApp (const char *pDir, const char *pLabel, const char *pFol
 	return pApp;
 }
 
-static void LoadApp (const char *pFolder)
+// Why the id pID can't be used for an app or suite, or 0 if it can
+static const char *TakenBecause (const char *pID, CString *pWhy)
 {
-	if (!IsValidID (pFolder))
+	const gk_app_t *pOther = CAppStore::Find (pID);
+	if (pOther != 0 && pOther->source != GK_APP_SDCARD)
 	{
-		AddProblem (pFolder, "the folder name must be an app id: a-z, 0-9 and -, at most 32");
+		*pWhy = "an app with this id is built in";
+	}
+	else if (pOther != 0)
+	{
+		pWhy->Format ("an app with this id was loaded from apps/%s%s%s",
+			      pOther->suite ? pOther->suite : "", pOther->suite ? "/" : "", pID);
+	}
+	else if (CAppStore::FindSuite (pID) != 0)
+	{
+		pWhy->Format ("apps/%s is a suite with this id", pID);
+	}
+	else
+	{
+		return 0;
+	}
+
+	return *pWhy;
+}
+
+// Loads apps/<pFolder>, or apps/<pSuite>/<pFolder> for an app of a suite.
+static void LoadApp (const gk_app_t *pSuite, const char *pFolder)
+{
+	CString Where;		// relative to /apps
+	Where.Format ("%s%s%s", pSuite ? pSuite->id : "", pSuite ? "/" : "", pFolder);
+
+	CString Why;
+	if (!CAppStore::IsValidID (pFolder))
+	{
+		AddProblem (Where, "the folder name must be an app id: a-z, 0-9 and -, at most 32");
 		return;
 	}
-	if (CAppStore::Find (pFolder) != 0)
+	if (TakenBecause (pFolder, &Why) != 0)
 	{
-		AddProblem (pFolder, "an app with this id is built in");
+		AddProblem (Where, Why);
+		return;
+	}
+	if (s_nApps >= gk_builtin_app_count + MaxCardApps)
+	{
+		AddProblem (Where, "too many apps on the card");
 		return;
 	}
 
 	CString Dir, Label;
-	Dir.Format ("SD:/apps/%s", pFolder);
-	Label.Format ("apps/%s", pFolder);
+	Dir.Format ("SD:/apps/%s", (const char *) Where);
+	Label.Format ("apps/%s", (const char *) Where);
 	CString Error;
 	gk_app_t *pApp = ReadApp (Dir, Label, pFolder, &Error);
 	if (pApp == 0)
 	{
-		AddProblem (pFolder, Error);
+		AddProblem (Where, Error);
+		return;
+	}
+	pApp->suite = pSuite ? pSuite->id : 0;
+
+	s_ppApps[s_nApps++] = pApp;
+}
+
+// The names of the folders in pDir, sorted (the launcher lists apps in this
+// order), at most nMax; those starting with '.' and pSkip are left out.
+// pWhere: pDir relative to /apps, for the problems ("" at the top).
+static unsigned ListFolders (const char *pDir, const char *pWhere, const char *pSkip,
+			     char **ppFolders, unsigned nMax)
+{
+	DIR Dir;
+	if (f_opendir (&Dir, pDir) != FR_OK)
+	{
+		return 0;
+	}
+
+	unsigned nFolders = 0;
+	FILINFO Info;
+	while (f_readdir (&Dir, &Info) == FR_OK && Info.fname[0] != '\0')
+	{
+		if (   !(Info.fattrib & AM_DIR) || Info.fname[0] == '.'
+		    || (pSkip != 0 && strcmp (Info.fname, pSkip) == 0))
+		{
+			continue;
+		}
+		if (nFolders == nMax)
+		{
+			CString Where;
+			Where.Format ("%s%s%s", pWhere, *pWhere ? "/" : "", Info.fname);
+			AddProblem (Where, "too many apps on the card");
+			continue;
+		}
+
+		char *pName = StrDup (Info.fname);
+		unsigned j = nFolders++;
+		for (; j > 0 && strcmp (ppFolders[j - 1], pName) > 0; j--)
+		{
+			ppFolders[j] = ppFolders[j - 1];
+		}
+		ppFolders[j] = pName;
+	}
+	f_closedir (&Dir);
+
+	return nFolders;
+}
+
+// The entry pName in the folder pDir (exact name), FALSE if none
+static boolean FindEntry (const char *pDir, const char *pName, FILINFO *pInfo)
+{
+	DIR Dir;
+	if (f_opendir (&Dir, pDir) != FR_OK)
+	{
+		return FALSE;
+	}
+	boolean bFound = FALSE;
+	while (!bFound && f_readdir (&Dir, pInfo) == FR_OK && pInfo->fname[0] != '\0')
+	{
+		bFound = strcmp (pInfo->fname, pName) == 0;
+	}
+	f_closedir (&Dir);
+
+	return bFound;
+}
+
+static boolean HasFile (const char *pDir, const char *pName)
+{
+	FILINFO Info;
+	return FindEntry (pDir, pName, &Info) && !(Info.fattrib & AM_DIR);
+}
+
+// apps/<pFolder>, which has a suite.json: the suite, then each of its apps
+// (its sub-folders but lang/, which holds the suite's translations)
+static void LoadSuite (const char *pFolder)
+{
+	CString Why;
+	if (!CAppStore::IsValidID (pFolder))
+	{
+		AddProblem (pFolder, "the folder name must be a suite id: a-z, 0-9 and -, at most 32");
+		return;
+	}
+	if (TakenBecause (pFolder, &Why) != 0)
+	{
+		AddProblem (pFolder, Why);
+		return;
+	}
+	if (s_nSuites == MaxSuites)
+	{
+		AddProblem (pFolder, "too many suites on the card");
 		return;
 	}
 
-	s_ppApps[s_nApps++] = pApp;
+	// suite.json and lang/*.json: what the launcher shows
+	TFileList List;
+	InitFiles (&List, &AppRules);
+	CString Dir, Path, Error;
+	Dir.Format ("SD:/apps/%s", pFolder);
+	Path.Format ("%s/suite.json", (const char *) Dir);
+	FILINFO Info;
+	boolean bOK = FindEntry (Dir, "suite.json", &Info);
+	if (!bOK)
+	{
+		Error = "suite.json: cannot open";
+	}
+	bOK = bOK && ReadFile (Path, "suite.json", Info.fsize, &List, &Error);
+	Path.Format ("%s/lang", (const char *) Dir);
+	DIR Probe;
+	if (bOK && f_opendir (&Probe, Path) == FR_OK)
+	{
+		f_closedir (&Probe);
+		bOK = ReadFolder (Path, "lang", 2, &List, &Error);
+	}
+	gk_app_t *pSuite = 0;
+	if (bOK)
+	{
+		SortFiles (&List);
+		pSuite = new gk_app_t;
+		memset (pSuite, 0, sizeof *pSuite);
+		bOK = ParseManifest (FindFile (&List, "suite.json"), pFolder, pSuite, &Error, TRUE);
+	}
+	if (!bOK)
+	{
+		delete pSuite;
+		FreeFiles (&List);
+		AddProblem (pFolder, Error);
+		return;
+	}
+	pSuite->files = List.pFiles;
+	pSuite->file_count = List.nCount;
+	pSuite->source = GK_APP_SDCARD;
+	s_pSuites[s_nSuites++] = pSuite;
+
+	char *Folders[MaxCardApps];
+	unsigned nFolders = ListFolders (Dir, pFolder, "lang", Folders, MaxCardApps);
+	CLogger::Get ()->Write (From, LogNotice, "apps/%s: suite %s, %u app folder(s)",
+				pFolder, pSuite->id, nFolders);
+	for (unsigned i = 0; i < nFolders; i++)
+	{
+		LoadApp (pSuite, Folders[i]);
+		delete [] Folders[i];
+	}
 }
 
 static void LoadCard (void)
@@ -941,39 +1281,107 @@ static void LoadCard (void)
 		CLogger::Get ()->Write (From, LogNotice, "SD card: no /apps folder");
 		return;
 	}
-
-	// the folder names, sorted: the launcher lists apps in this order
-	char *Folders[MaxCardApps];
-	unsigned nFolders = 0;
-	FILINFO Info;
-	while (f_readdir (&Dir, &Info) == FR_OK && Info.fname[0] != '\0')
-	{
-		if (!(Info.fattrib & AM_DIR) || Info.fname[0] == '.')
-		{
-			continue;
-		}
-		if (nFolders == MaxCardApps)
-		{
-			AddProblem (Info.fname, "too many apps on the card");
-			continue;
-		}
-
-		char *pName = StrDup (Info.fname);
-		unsigned j = nFolders++;
-		for (; j > 0 && strcmp (Folders[j - 1], pName) > 0; j--)
-		{
-			Folders[j] = Folders[j - 1];
-		}
-		Folders[j] = pName;
-	}
 	f_closedir (&Dir);
+
+	char *Folders[MaxCardApps];
+	unsigned nFolders = ListFolders ("SD:/apps", "", 0, Folders, MaxCardApps);
 
 	s_CardStatus = GkCardOK;
 	for (unsigned i = 0; i < nFolders; i++)
 	{
-		LoadApp (Folders[i]);
+		// a folder with a suite.json (and no manifest.json) is a suite
+		CString Dir;
+		Dir.Format ("SD:/apps/%s", Folders[i]);
+		if (HasFile (Dir, "suite.json") && !HasFile (Dir, "manifest.json"))
+		{
+			LoadSuite (Folders[i]);
+		}
+		else
+		{
+			LoadApp (0, Folders[i]);
+		}
 		delete [] Folders[i];
 	}
+}
+
+// --- data folders -----------------------------------------------------------
+
+struct TDataFolder
+{
+	char *pName;
+	TGkDataStatus Status;
+	TFileList List;			// GkDataOK: the files, sorted
+	char *pHash;			// GkDataOK
+	char *pError;			// GkDataError
+};
+
+static TDataFolder s_Data[MaxDataFolders];
+static unsigned s_nData = 0;
+static unsigned s_nDataBytes = 0;	// all folders read
+
+static TDataFolder *ReadData (const char *pName)
+{
+	for (unsigned i = 0; i < s_nData; i++)
+	{
+		if (strcmp (s_Data[i].pName, pName) == 0)
+		{
+			return &s_Data[i];
+		}
+	}
+
+	// a folder that isn't there takes no place: it is looked for again
+	static TDataFolder Missing = {0, GkDataMissing, {0, 0, 0, 0}, 0, 0};
+	CString Dir;
+	Dir.Format ("SD:/data/%s", pName);
+	DIR Probe;
+	if (   (s_CardStatus != GkCardOK && s_CardStatus != GkCardNoApps)	// not mounted
+	    || f_opendir (&Probe, Dir) != FR_OK)
+	{
+		return &Missing;
+	}
+	f_closedir (&Probe);
+
+	static TDataFolder TooMany;
+	if (s_nData == MaxDataFolders)
+	{
+		CString Error;
+		Error.Format ("more than %u data folders in use", MaxDataFolders);
+		delete [] TooMany.pError;
+		TooMany.Status = GkDataError;
+		TooMany.pError = StrDup (Error);
+		return &TooMany;
+	}
+
+	TDataFolder *pData = &s_Data[s_nData++];
+	memset (pData, 0, sizeof *pData);
+	pData->pName = StrDup (pName);
+
+	CString Error;
+	InitFiles (&pData->List, &DataRules);
+	boolean bOK = ReadFolder (Dir, "", 1, &pData->List, &Error);
+	if (bOK && s_nDataBytes + pData->List.nTotalSize > MaxDataTotal)
+	{
+		Error.Format ("the data folders in use would hold more than %u MB", MaxDataTotal >> 20);
+		bOK = FALSE;
+	}
+	if (!bOK)
+	{
+		FreeFiles (&pData->List);
+		pData->Status = GkDataError;
+		pData->pError = StrDup (Error);
+		CLogger::Get ()->Write (From, LogWarning, "data/%s: %s", pName, (const char *) Error);
+		return pData;
+	}
+
+	SortFiles (&pData->List);
+	pData->pHash = HashApp (pData->List.pFiles, pData->List.nCount);
+	pData->Status = GkDataOK;
+	s_nDataBytes += pData->List.nTotalSize;
+	// names and sizes only: the contents may be private
+	CLogger::Get ()->Write (From, LogNotice, "data/%s: %u files, %u bytes, sha256 %s",
+				pName, pData->List.nCount, pData->List.nTotalSize, pData->pHash);
+
+	return pData;
 }
 
 #ifdef GK_SIM
@@ -1042,9 +1450,34 @@ void CAppStore::Initialize (boolean bCardPresent)
 
 	LoadCard ();
 
-	CLogger::Get ()->Write (From, LogNotice, "%u app(s) from the SD card, %u not loaded",
-				s_nApps - gk_builtin_app_count, s_nProblems);
+	CLogger::Get ()->Write (From, LogNotice, "%u app(s) from the SD card, %u not loaded, %u suite(s)",
+				s_nApps - gk_builtin_app_count, s_nProblems, s_nSuites);
 #else
 	s_CardStatus = GkCardDisabled;
+#endif
+}
+
+TGkDataStatus CAppStore::GetData (const char *pName, const gk_file_t **ppFiles, unsigned *pCount,
+				  const char **ppHash, const char **ppError)
+{
+	*ppFiles = 0;
+	*pCount = 0;
+	*ppHash = 0;
+	*ppError = 0;
+	assert (IsValidID (pName));
+
+#ifndef GK_SEALED
+	const TDataFolder *pData = ReadData (pName);
+	if (pData->Status == GkDataOK)
+	{
+		*ppFiles = pData->List.pFiles;
+		*pCount = pData->List.nCount;
+		*ppHash = pData->pHash;
+	}
+	*ppError = pData->pError;
+
+	return pData->Status;
+#else
+	return GkDataMissing;		// a sealed build has no card
 #endif
 }

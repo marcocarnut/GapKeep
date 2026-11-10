@@ -23,6 +23,8 @@ tools/gksim apps/hello                               # run; the log on stdout
 tools/gksim --for 3 --shot /tmp/hello.png apps/hello # run 3 s, screenshot, exit
 tools/gksim --size 1824x984 path/to/myapp            # another screen size
 tools/gksim --lang pt-BR apps/clock                  # another language (or qps)
+tools/gksim --data ~/keys/pgp apps/myapp             # with data/pgp on the card (gk:data)
+tools/gksim path/to/card/apps/mysuite                # a suite (suite.json): starts on the launcher
 ```
 
 `tools/gksim` builds the simulator if needed, copies the app folders onto a
@@ -46,7 +48,7 @@ Answers to commands start with `#`; everything else on stdout is the log,
 formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 
 `sim/build/gksim` itself takes `--card DIR` (DIR plays the SD card: apps in
-`DIR/apps`), `--builtin DIR` (below), `--app ID`, `--size WxH`, `--lang TAG` (the
+`DIR/apps`, data folders in `DIR/data`), `--builtin DIR` (below), `--app ID`, `--size WxH`, `--lang TAG` (the
 language, over the card's `gapkeep.txt`; `qps` is the pseudo-language of
 [APPS.md](APPS.md#languages)),
 `--for SECONDS` and `--shot FILE`.

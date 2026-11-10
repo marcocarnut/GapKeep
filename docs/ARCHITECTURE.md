@@ -195,7 +195,7 @@ for them to leave, other than what a person reads off the screen.
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at boot, then by GapKeep, once, for `/apps` and `gapkeep.txt` (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
+| SD card | Read by the firmware at boot, then by GapKeep: once, for `/apps` and `gapkeep.txt`, and each data folder (`/data/<name>`) once, when first used (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **Nothing is kept.** GapKeep never writes to the card, and the session
@@ -208,7 +208,8 @@ switched-off GapKeep reveals no key.
 
 **What is absent by design:** network stack, Wi-Fi and Bluetooth (the
 plain Pi Zero has no radio at all), writing to storage, file access for
-apps, code loading after boot, a clock you can trust, and any way for apps
+apps (but reading the data folders their manifest names, below), code
+loading after boot, a clock you can trust, and any way for apps
 to reach each other (each app's session store is its own).
 
 **Apps on the card** are as trustworthy as the card: whoever can write it
@@ -216,6 +217,23 @@ can replace `kernel.img` too, so loading apps from it does not move the
 trust boundary. The launcher shows each app's SHA-256, to compare with a
 published one. A sealed build (`tools/build.sh pi SEALED=1`) removes the SD and FAT code
 from the trusted base.
+
+**Data folders and suites** ([APPS.md](APPS.md#data-files)): code is
+inside the app hash, data is outside it, on purpose. The hash says *which
+program* runs, so it must be the same on every card and comparable with a
+published one; data (public keys, address lists) is what a particular
+person put on a particular card, so no published hash could cover it. The
+price is that whoever can change the card can change the data, just as
+they can change the apps; the defence is the same: show it. The launcher
+shows each data folder's hash beside the app's, and apps must show what
+matters before using it (a key's fingerprint, an address). Apps read only
+the folders their (hashed) manifest names, never write, and a folder is
+read whole, hashed and kept in memory on first use, so what an app reads is
+what was hashed even if the card were swapped while running. Apps in a
+suite share data this way but never code: each app imports only its own
+files, so its hash still covers every line it runs, and one app of a suite
+can be checked or replaced on its own. Nothing in the data is executed;
+the native code that parses it is FatFs, and the apps' JavaScript.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs

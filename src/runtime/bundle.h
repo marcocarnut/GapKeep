@@ -15,6 +15,9 @@
 extern "C" {
 #endif
 
+/* at most this many data folders per app (manifest "data") */
+#define GK_MAX_APP_DATA	8
+
 /* permission bits, granted by "permissions" in manifest.json */
 #define GK_PERM_APPS	(1u << 0)	/* gk:apps - list and launch other apps */
 #define GK_PERM_RTC	(1u << 2)	/* gk:clock's set, setTrim, setUtcOffset */
@@ -48,8 +51,16 @@ typedef struct
 	const unsigned char *icon_rgba;	/* picture icon (manifest "icon": { width, height,
 					   rgba }): width * height * 4 bytes, or 0 */
 	unsigned icon_width, icon_height;
+	const char *const *data;	/* manifest "data": the data folders (data/<name>) the
+					   app may read with gk:data; data_count names */
+	unsigned data_count;
+	const char *suite;		/* the suite's id (apps/<suite>/<id>), or 0 */
 }
 gk_app_t;
+
+/* A suite (docs/APPS.md, "Suites"), apps/<id>/suite.json, is described with
+   a gk_app_t too: id, name, description, icon (and icon_rgba), and files
+   (suite.json and lang/<tag>.json, for its translated name); the rest is 0. */
 
 #define GK_APP_BUILTIN	0
 #define GK_APP_SDCARD	1

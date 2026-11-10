@@ -6,44 +6,71 @@
 # sim/src/main.cpp: key <name>, pointer <x> <y> <0|1>, shot <file.png>,
 # launch <id>, quit).
 #
-# Usage: tools/gksim [--size WxH] [--lang TAG] [--for SECONDS] [--shot FILE.png] APP_DIR [APP_DIR ...]
+# Usage: tools/gksim [--size WxH] [--lang TAG] [--for SECONDS] [--shot FILE.png]
+#                    [--data DIR ...] APP_DIR [APP_DIR ...]
 #
 #   tools/gksim apps/hello                         # run it, Ctrl-D or "quit" to stop
 #   tools/gksim --for 3 --shot /tmp/x.png myapp    # run 3 s, screenshot, exit
 #   tools/gksim --lang pt-BR apps/clock            # in Brazilian Portuguese
 #   tools/gksim --lang qps apps/clock              # the pseudo-language: text
 #                                                  # not translated stands out
+#   tools/gksim --data ~/keys/pgp myapp            # with data/pgp on the card
 #
 # The card is a copy: edit the app, run again. Each APP_DIR is a folder
-# with manifest.json; its name must be the app's id. A folder named
-# launcher replaces the built-in launcher (simulator only, see --builtin
-# in docs/SIMULATOR.md):  tools/gksim apps/launcher
+# with manifest.json; its name must be the app's id. A folder with a
+# suite.json is a suite (docs/APPS.md, "Suites"): it goes on the card as
+# it is, and the launcher starts (open the suite from there). A folder
+# named launcher replaces the built-in launcher (simulator only, see
+# --builtin in docs/SIMULATOR.md):  tools/gksim apps/launcher
+#
+# --data DIR puts the folder DIR on the card as data/<its name>, for
+# gk:data (docs/APPS.md, "Data files"); give it once per folder. A folder
+# named data beside the app folder, or beside the apps folder holding it
+# (a card's layout: card/apps/x, card/data/pgp), goes on the card too.
 #
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ARGS=
 APPS=
+DATA=
 while [ $# -gt 0 ]; do
 	case $1 in
 	--size|--for|--shot|--lang) ARGS="$ARGS $1 $2"; shift 2 ;;
+	--data) DATA="$DATA ${2%/}"; shift 2 ;;
 	-*) echo "gksim: unknown option $1" >&2; exit 2 ;;
 	*) APPS="$APPS $1"; shift ;;
 	esac
 done
-[ -n "$APPS" ] || { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ -n "$APPS" ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 make -C "$ROOT/sim" -s -j"$(nproc)" >/dev/null
 CARD=$(mktemp -d -t gksim-card-XXXXXX)
 trap 'rm -rf "$CARD"' EXIT
-mkdir "$CARD/apps" "$CARD/builtin"
+mkdir "$CARD/apps" "$CARD/builtin" "$CARD/data"
 FIRST=
+SUITE=
 for a in $APPS; do
 	a=${a%/}
-	[ -f "$a/manifest.json" ] || { echo "gksim: $a has no manifest.json" >&2; exit 2; }
-	case $(basename "$a") in
-	launcher) cp -r "$a" "$CARD/builtin/" ;;
-	*) cp -r "$a" "$CARD/apps/" ;;
-	esac
-	FIRST=${FIRST:-$(basename "$a")}
+	if [ -f "$a/suite.json" ] && [ ! -f "$a/manifest.json" ]; then
+		cp -r "$a" "$CARD/apps/"
+		SUITE=yes
+	else
+		[ -f "$a/manifest.json" ] || { echo "gksim: $a has no manifest.json (or suite.json)" >&2; exit 2; }
+		case $(basename "$a") in
+		launcher) cp -r "$a" "$CARD/builtin/" ;;
+		*) cp -r "$a" "$CARD/apps/" ;;
+		esac
+		FIRST=${FIRST:-$(basename "$a")}
+	fi
+	# a data folder beside the app (or suite), or beside the apps folder
+	# that holds it (a card's layout: apps/x, data/<name>)
+	for d in "$(dirname "$a")/data" "$(dirname "$a")/../data"; do
+		[ ! -d "$d" ] || cp -r "$d/." "$CARD/data/"
+	done
 done
-"$ROOT/sim/build/gksim" --card "$CARD" --builtin "$CARD/builtin" --app "$FIRST" $ARGS
+for d in $DATA; do
+	[ -d "$d" ] || { echo "gksim: --data $d is not a folder" >&2; exit 2; }
+	cp -r "$d" "$CARD/data/"
+done
+[ -z "$SUITE" ] || FIRST=
+"$ROOT/sim/build/gksim" --card "$CARD" --builtin "$CARD/builtin" ${FIRST:+--app "$FIRST"} $ARGS

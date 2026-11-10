@@ -1,0 +1,8 @@
+{
+  "id": "suite-peer",
+  "name": "Data Peer",
+  "version": "1.0.0",
+  "description": "Shows the hash of data/testdata.",
+  "icon": "eye-open",
+  "data": ["testdata"]
+}

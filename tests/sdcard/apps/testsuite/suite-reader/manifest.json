@@ -1,0 +1,8 @@
+{
+  "id": "suite-reader",
+  "name": "Data Reader",
+  "version": "1.0.0",
+  "description": "Reads data/testdata (test card).",
+  "icon": "file",
+  "data": ["testdata", "absent"]
+}
