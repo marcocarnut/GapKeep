@@ -150,3 +150,69 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 #console .app { color: #c9e7c2; }
 #console a { color: inherit; text-decoration: underline; text-decoration-color: var(--dim); cursor: pointer; }
 #console a:hover { color: var(--focus); }
+
+/* Touch: the screen takes every gesture (ide.js: a tap clicks, a swipe
+   turns the wheel), and the hidden textarea is 16px so that focusing it
+   doesn't make iOS zoom. */
+#screen { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#screen.smooth { image-rendering: auto; }
+#screen-input { font-size: 16px; }
+/* Phone-only parts: the panes' fold buttons and the key bar. */
+.fold, #keybar { display: none; }
+
+/* Phones (ide.js has the same query, PHONE): one column that scrolls.
+   GapKeep's screen first, as wide as the page, with the run controls
+   above it (they stay at the top as the page scrolls) and the key bar
+   under it; then the SD card, the editor and the console, folded. The
+   desktop layout above is unchanged. */
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  html, body { height: auto; min-height: 100%; }
+  body { overflow: visible; }
+  #top { gap: 10px; padding: 6px 10px; }
+  #top .hint, #top .spacer { display: none; }
+  #status { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #layout { display: flex; flex-direction: column; flex: none; }
+  /* the screen pane's parts become the column's, so that its bar can stick */
+  #screen-pane { display: contents; }
+  #screen-pane > .pane-head {
+    order: 1; position: sticky; top: 0; z-index: 2; gap: 6px; padding: 4px 6px;
+  }
+  #screen-pane > .pane-head button, #screen-pane > .pane-head select { min-height: 36px; padding: 2px 10px; }
+  #screen-pane > .pane-head label { display: none; }    /* Experimental: on a desktop */
+  #screen-box { order: 2; flex: none; }
+  #keybar { order: 3; }
+  #screen-foot { order: 4; background: var(--pane); }
+  #camera-bar { order: 5; background: var(--pane); }
+  #files-pane { order: 6; }
+  #editor-pane { order: 7; }
+  #console-pane { order: 8; }
+  .pane { scroll-margin-top: 48px; }    /* below the sticky bar */
+
+  .pane > .pane-head { min-height: 44px; cursor: pointer; }
+  #screen-pane > .pane-head { cursor: auto; }
+  .fold {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--dim);
+  }
+  .fold::before { content: "\25BE"; font-size: 16px; }
+  .fold[aria-expanded="false"]::before { content: "\25B8"; }
+  .pane.folded > :not(.pane-head) { display: none; }
+  .pane.folded .pane-head .dim, #console-pane.folded #clear { display: none; }
+  #tree { max-height: 55vh; flex: none; }
+  #tree .row { padding-top: 6px; padding-bottom: 6px; }
+  .toolbar button { min-height: 36px; padding: 2px 10px; }
+  #editor { height: 70vh; flex: none; }
+  #console { height: 40vh; flex: none; }
+
+  #keybar {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+    padding: 4px; background: var(--head); border-top: 1px solid var(--line);
+  }
+  #keybar button {
+    min-height: 44px; padding: 0; font-size: 15px;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  #keybar button.down { background: var(--select); border-color: var(--focus); }
+  #keybar .wide { grid-column: span 2; }
+  #kbd-toggle[aria-pressed="true"] { color: var(--focus); }
+}

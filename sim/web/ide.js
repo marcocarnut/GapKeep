@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { Gapkeep } from "./gapkeep.js";
-import { TextInput } from "./textinput.js";
+import { TextInput, MOD_SHIFT } from "./textinput.js";
 import { Store } from "./store.js";
 import { makeZip } from "./zip.js";
 import { CameraBar } from "./camera.js";
@@ -30,6 +30,16 @@ const MONACO_VS = here ("vendor/monaco/vs");
 // What docs/APPS.md allows: app ids, and file and folder names.
 const APP_ID = /^[a-z0-9-]+$/;
 const NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+// The phone layout (ide.css has the same media query): the screen first,
+// the panes under it, folded; the editor loaded only when unfolded.
+const PHONE = matchMedia ("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
+
+// The address's parameters (docs/IDE.md, "Links"): ?run=<app id> boots
+// into that app; ?lang=pt-BR boots in that language (the card's gapkeep.txt).
+const params = new URLSearchParams (location.search);
+const LANG_RE = /^(?:[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*|qps)$/;
+const language = LANG_RE.test (params.get ("lang") || "") ? params.get ("lang") : null;
 
 // ---------------------------------------------------------------------------
 // State
@@ -174,6 +184,7 @@ function ideLog (text, error = false) {
 // Files: the in-memory card, its Monaco models, and IndexedDB
 
 function ensureModel (path) {
+  if (!monaco) return undefined;   // made for every file once the editor loads
   if (models.has (path) || !isText (files.get (path))) return models.get (path);
   const uri = monaco.Uri.from ({ scheme: "file", path: "/" + path });
   const model = monaco.editor.createModel (files.get (path), languageOf (path), uri);
@@ -400,6 +411,19 @@ function openFile (path, line, col = 1) {
   }
   current = path;
   localStorage.setItem ("gkide.open", path || "");
+  if (!editor) {
+    // Monaco loads late (after the boot, or when a phone unfolds the
+    // editor): it opens this file, at this line, when it is there.
+    pendingLine = path && line ? [line, col] : null;
+    if (path) {
+      reveal (path);
+      selected = { path, kind: "file" };
+      showEditor ();
+    }
+    updateTitle ();
+    renderTree ();
+    return;
+  }
   if (!path) {
     editor.setModel (null);
   } else if (isText (files.get (path))) {
@@ -432,7 +456,46 @@ function updateTitle () {
   t.classList.toggle ("dirty", !!current && isDirty (current));
 }
 
-// Monaco's AMD build (vendor/monaco/vs, from tools/fetch_monaco.sh).
+// The editor, loaded once, when first needed: Monaco is several MB, and
+// GapKeep's screen comes first (on a phone, it may never be needed).
+let pendingLine = null;     // [line, col] to go to in the current file once loaded
+let editorLoading = null;
+function ensureEditor () {
+  if (!editorLoading) {
+    editorMessage ("Loading the editor...");
+    editorLoading = setupEditor ().then (() => {
+      for (const path of files.keys ()) ensureModel (path);
+      const at = pendingLine || [];
+      pendingLine = null;
+      if (current && files.has (current)) openFile (current, ...at);
+      else renderTree ();
+    }, (e) => {
+      editorMessage (`The editor did not load: ${e.message || e}`, true);
+      ideLog (`the editor did not load: ${e.message || e}`, true);
+    });
+  }
+  return editorLoading;
+}
+
+function editorMessage (text, error = false) {
+  const msg = document.createElement ("div");
+  msg.className = "message" + (error ? " error" : "");
+  msg.textContent = text;
+  $("editor").replaceChildren (msg);
+}
+
+// Shows the editor: on a phone, unfolds it (which loads it) and scrolls to it.
+function showEditor () {
+  if (PHONE.matches) {
+    fold ("editor-pane", false);
+    $("editor-pane").scrollIntoView ({ block: "start", behavior: "smooth" });
+  } else {
+    ensureEditor ();
+  }
+}
+
+// Monaco's AMD build (vendor/monaco/vs, from tools/fetch_monaco.sh). It
+// adds its own stylesheet.
 function loadMonaco () {
   return new Promise ((resolve, reject) => {
     const script = document.createElement ("script");
@@ -540,6 +603,7 @@ async function setupEditor () {
       "focusBorder": "#00968c",
     },
   });
+  $("editor").replaceChildren ();   // "Loading the editor..."
   editor = monaco.editor.create ($("editor"), {
     model: null,
     theme: "gapkeep",
@@ -599,8 +663,12 @@ async function run (appId, { focus = true } = {}) {
     if (BUILTIN.has (appOf (path))) builtin[path.slice (5)] = data;
     else card[path] = data;
   }
-  // the card's gapkeep.txt: only the experimental switch (docs/EXPERIMENTAL.md)
-  if (localStorage.getItem ("gkide.experimental") === "yes") card["gapkeep.txt"] = "experimental = yes\n";
+  // the card's gapkeep.txt: the experimental switch (docs/EXPERIMENTAL.md)
+  // and the language of the address's ?lang=
+  let settings = "";
+  if (localStorage.getItem ("gkide.experimental") === "yes") settings += "experimental = yes\n";
+  if (language) settings += `language = ${language}\n`;
+  if (settings) card["gapkeep.txt"] = settings;
   if (Object.keys (card).length) gk.writeCard (card);
   if (Object.keys (builtin).length) gk.writeBuiltin (builtin);
   const canvas = $("screen");
@@ -628,7 +696,8 @@ async function run (appId, { focus = true } = {}) {
   }
   updateStatus ();
   renderTree ();
-  if (focus) $("screen-input").focus ({ preventScroll: true });
+  // (not on a phone: there the focus brings up its keyboard; a tap on the screen does)
+  if (focus && !PHONE.matches) $("screen-input").focus ({ preventScroll: true });
 }
 
 // The app to run: that of the open file, else the selected one.
@@ -647,7 +716,7 @@ function home () {
   // for themselves; the button sends it.
   machine.keyDown ("Meta");
   setTimeout (() => machine?.keyUp (), 50);
-  $("screen-input").focus ({ preventScroll: true });
+  if (!PHONE.matches) $("screen-input").focus ({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -657,9 +726,20 @@ function fitScreen () {
   const canvas = $("screen"), box = $("screen-box");
   const [w, h] = [canvas.width, canvas.height];
   const dpr = window.devicePixelRatio || 1;
-  // In device pixels, so "integer" means really sharp on HiDPI screens too.
-  let s = Math.min ((box.clientWidth - 8) * dpr / w, (box.clientHeight - 8) * dpr / h);
-  if (s >= 1) s = Math.floor (s);
+  let s;
+  if (PHONE.matches) {
+    // The page's width, in any ratio (640 is wider than a phone), and no
+    // taller than the view (a phone on its side). Smoothed when the pixels
+    // would come out uneven and large enough to see it.
+    s = Math.min (box.clientWidth / w, (Math.max (window.innerHeight, 300) - 56) / h) * dpr;
+    if (Math.abs (s - Math.round (s)) < 0.01) s = Math.round (s);
+    canvas.classList.toggle ("smooth", !Number.isInteger (s) && s < 2.5);
+  } else {
+    // In device pixels, so "integer" means really sharp on HiDPI screens too.
+    s = Math.min ((box.clientWidth - 8) * dpr / w, (box.clientHeight - 8) * dpr / h);
+    if (s >= 1) s = Math.floor (s);
+    canvas.classList.remove ("smooth");
+  }
   if (!(s > 0)) s = 1;
   canvas.style.width = (w * s) / dpr + "px";
   canvas.style.height = (h * s) / dpr + "px";
@@ -702,7 +782,9 @@ function setupScreen () {
   const hint = () => {
     const focused = document.activeElement === input;
     canvas.classList.toggle ("focused", focused);
-    $("screen-hint").textContent = focused ? "keyboard goes to GapKeep" : "click the screen to type into it";
+    $("screen-hint").textContent = focused ? "keyboard goes to GapKeep"
+      : PHONE.matches ? "tap the screen to type into it" : "click the screen to type into it";
+    $("kbd-toggle").setAttribute ("aria-pressed", focused);
     $("screen-hint").classList.toggle ("focused", focused);
   };
   input.addEventListener ("focus", hint);
@@ -728,6 +810,10 @@ function setupScreen () {
   input.addEventListener ("input", (e) => {
     if (keys.input ({ isComposing: e.isComposing, inputType: e.inputType }, input.value)) input.value = "";
   });
+  // a phone keyboard's Backspace can come only as an edit of the textarea
+  input.addEventListener ("beforeinput", (e) => {
+    if (keys.beforeinput ({ isComposing: e.isComposing, inputType: e.inputType })) e.preventDefault ();
+  });
   // Pasting types the clipboard's text into GapKeep, a key at a time (a
   // simulator convenience: the device has no clipboard).
   input.addEventListener ("paste", (e) => {
@@ -736,22 +822,144 @@ function setupScreen () {
   });
 
   // Mouse: CSS pixels on the scaled canvas -> GapKeep's screen pixels.
-  const toScreen = (e) => {
+  const toScreen = (e) => toScreenAt (e.clientX, e.clientY);
+  const toScreenAt = (clientX, clientY) => {
     const r = canvas.getBoundingClientRect ();
-    const x = (e.clientX - r.left) * canvas.width / r.width;
-    const y = (e.clientY - r.top) * canvas.height / r.height;
+    const x = (clientX - r.left) * canvas.width / r.width;
+    const y = (clientY - r.top) * canvas.height / r.height;
     return [Math.min (Math.max (x, 0), canvas.width - 1), Math.min (Math.max (y, 0), canvas.height - 1)];
   };
   canvas.addEventListener ("pointerdown", (e) => {
+    if (e.pointerType === "touch") return touchDown (e);
     if (e.button !== 0) return;
     input.focus ({ preventScroll: true });
     canvas.setPointerCapture (e.pointerId);   // keep dragging outside the canvas
     machine?.pointer (...toScreen (e), true);
     e.preventDefault ();
   });
-  canvas.addEventListener ("pointermove", (e) => machine?.pointer (...toScreen (e), (e.buttons & 1) !== 0));
+  canvas.addEventListener ("pointermove", (e) => {
+    if (e.pointerType === "touch") return touchMove (e);
+    machine?.pointer (...toScreen (e), (e.buttons & 1) !== 0);
+  });
   canvas.addEventListener ("pointerup", (e) => {
+    if (e.pointerType === "touch") return touchUp (e, false);
     if (e.button === 0) machine?.pointer (...toScreen (e), false);
+  });
+  canvas.addEventListener ("pointercancel", (e) => {
+    if (e.pointerType === "touch") touchUp (e, true);
+  });
+
+  // Touch (ide.css gives the screen touch-action: none, so the page neither
+  // scrolls nor zooms there). A finger is GapKeep's mouse: a tap is a click
+  // where it touched, and brings up the phone's keyboard; held still, it
+  // presses (and then drags, as for a slider); moved sideways, it drags at
+  // once; swiped up or down, it turns the wheel, as on the device, where
+  // the content follows the finger. One finger at a time.
+  const TAP_SLOP = 10;      // CSS pixels a tap may wander
+  const HOLD_MS = 300;      // a press, not a tap, after this
+  const CLICK_MS = 80;      // how long a tap holds the button: LVGL reads the pointer every 33 ms
+  const NOTCH = 60;         // screen pixels of swipe per wheel notch (about 3 lines of text)
+  let touch = null;         // { id, m, x0, y0, lastY, rest, mode: "wait" | "drag" | "swipe", timer }
+  function touchDown (e) {
+    e.preventDefault ();
+    if (touch || !machine) return;
+    canvas.setPointerCapture (e.pointerId);
+    const m = machine;
+    m.pointer (...toScreen (e), false);   // GapKeep's cursor goes there
+    touch = { id: e.pointerId, m, x0: e.clientX, y0: e.clientY, lastY: e.clientY, rest: 0, mode: "wait" };
+    touch.timer = setTimeout (() => {
+      if (touch?.mode !== "wait") return;
+      touch.mode = "drag";
+      m.pointer (...toScreenAt (touch.x0, touch.y0), true);
+    }, HOLD_MS);
+  }
+  function touchMove (e) {
+    if (!touch || e.pointerId !== touch.id) return;
+    const dx = e.clientX - touch.x0, dy = e.clientY - touch.y0;
+    if (touch.mode === "wait" && Math.hypot (dx, dy) > TAP_SLOP) {
+      clearTimeout (touch.timer);
+      if (Math.abs (dy) >= Math.abs (dx)) {
+        touch.mode = "swipe";
+      } else {
+        touch.mode = "drag";
+        touch.m.pointer (...toScreenAt (touch.x0, touch.y0), true);
+      }
+    }
+    if (touch.mode === "drag") {
+      touch.m.pointer (...toScreen (e), true);
+    } else if (touch.mode === "swipe") {
+      // the finger going up shows what is below: the wheel turned down (> 0)
+      touch.rest += (touch.lastY - e.clientY) * canvas.height / canvas.getBoundingClientRect ().height / NOTCH;
+      touch.lastY = e.clientY;
+      const notches = Math.trunc (touch.rest);
+      if (notches) {
+        touch.rest -= notches;
+        touch.m.wheel (notches);
+      }
+    }
+  }
+  function touchUp (e, cancelled) {
+    if (!touch || e.pointerId !== touch.id) return;
+    clearTimeout (touch.timer);
+    const t = touch;
+    touch = null;
+    if (t.mode === "drag") {
+      t.m.pointer (...toScreen (e), false);
+    } else if (t.mode === "wait" && !cancelled) {
+      const at = toScreenAt (t.x0, t.y0);
+      t.m.pointer (...at, true);
+      setTimeout (() => t.m.pointer (...at, false), CLICK_MS);
+      if (wantKeyboard) showKeyboard ();
+    }
+  }
+
+  // The phone's keyboard comes up when the hidden textarea gets the focus,
+  // from a tap (a user's gesture: browsers refuse it otherwise). Focus it
+  // again even if it has it: Android hides its keyboard without taking the
+  // focus away. The ⌨ key hides it, and taps then leave it hidden until ⌨
+  // brings it back.
+  let wantKeyboard = true;
+  const showKeyboard = () => {
+    if (document.activeElement === input) input.blur ();
+    input.focus ({ preventScroll: true });
+  };
+
+  // The key bar (phones): the keys their keyboards lack. A key is down
+  // while the finger is, so GapKeep repeats a held Backspace or arrow, as
+  // the device does. It never takes the focus (that would hide the phone's
+  // keyboard).
+  const keybar = $("keybar");
+  let barKey = null;        // the button whose key is down
+  const barUp = () => {
+    if (!barKey) return;
+    barKey.classList.remove ("down");
+    barKey = null;
+    machine?.keyUp ();
+  };
+  keybar.addEventListener ("pointerdown", (e) => {
+    e.preventDefault ();     // keep the focus where it is
+    const b = e.target.closest ("button[data-key]");
+    if (!b || !machine) return;
+    barUp ();
+    if (machine.keyDown (b.dataset.key, b.dataset.shift ? MOD_SHIFT : 0)) {
+      barKey = b;
+      b.classList.add ("down");
+      keybar.setPointerCapture (e.pointerId);
+    }
+  });
+  keybar.addEventListener ("pointerup", barUp);
+  keybar.addEventListener ("pointercancel", barUp);
+  keybar.addEventListener ("mousedown", (e) => e.preventDefault ());
+  // from a keyboard (Enter or Space on a focused key): a press and a release
+  keybar.addEventListener ("click", (e) => {
+    const b = e.target.closest ("button[data-key]");
+    if (!b || e.detail !== 0 || !machine) return;
+    if (machine.keyDown (b.dataset.key, b.dataset.shift ? MOD_SHIFT : 0)) setTimeout (() => machine?.keyUp (), 50);
+  });
+  $("kbd-toggle").addEventListener ("click", () => {
+    wantKeyboard = document.activeElement !== input;
+    if (wantKeyboard) showKeyboard ();
+    else input.blur ();
   });
   canvas.addEventListener ("contextmenu", (e) => e.preventDefault ());
   // The wheel: notches, as a mouse's (a pixel delta of 100, or 3 lines, is
@@ -1007,6 +1215,12 @@ function setupUi () {
   $("restart").onclick = () => run (null);
   $("clear").onclick = () => $("console").replaceChildren ();
 
+  // On gapkeep.org itself, its link stays in the same tab.
+  if (/^(www\.)?gapkeep\.org$/.test (location.hostname)) {
+    $("site").removeAttribute ("target");
+    $("site").removeAttribute ("rel");
+  }
+
   // Ctrl/Cmd+S and Ctrl/Cmd+Enter everywhere except on the screen, where
   // every key belongs to GapKeep. Capture phase, so Monaco doesn't see them.
   window.addEventListener ("keydown", (e) => {
@@ -1027,19 +1241,92 @@ function setupUi () {
   });
 }
 
+// The phone layout's panes fold (ide.css hides a folded pane's body). They
+// start folded, but for the console when it has news; the editor loads when
+// first unfolded.
+function fold (id, folded = !$(id).classList.contains ("folded")) {
+  const pane = $(id);
+  pane.classList.toggle ("folded", folded);
+  pane.querySelector (".fold").setAttribute ("aria-expanded", !folded);
+  if (!folded && id === "editor-pane" && PHONE.matches) ensureEditor ();
+}
+
+function setupFolds () {
+  for (const id of ["files-pane", "editor-pane", "console-pane"]) {
+    if (PHONE.matches) fold (id, true);
+    // the whole bar is the button, but for the bar's own buttons
+    $(id).querySelector (".pane-head").addEventListener ("click", (e) => {
+      if (!PHONE.matches) return;
+      const b = e.target.closest ("button");
+      if (b && !b.classList.contains ("fold")) return;
+      fold (id);
+    });
+  }
+  // a phone turned into a desktop (a wider window): the editor is shown
+  PHONE.addEventListener ("change", () => {
+    if (!PHONE.matches) ensureEditor ();
+    fitScreen ();
+  });
+}
+
+// ?run=<id>: the folder of that app (apps/<id>, or apps/<suite>/<id>), if the
+// card has it.
+function appFolder (id) {
+  if (files.has (`apps/${id}/manifest.json`)) return `apps/${id}`;
+  for (const path of files.keys ()) {
+    const p = path.split ("/");
+    if (p.length === 4 && p[2] === id && p[3] === "manifest.json" && files.has (`apps/${p[1]}/suite.json`)) {
+      return `apps/${p[1]}/${id}`;
+    }
+  }
+  return null;
+}
+
+// The app the address asks for (?run=dice39), if any: its id, once it is
+// on the card (an example app deleted from this browser is added back).
+async function linkedApp () {
+  const id = params.get ("run");
+  if (!id) return null;
+  if (!APP_ID.test (id)) {
+    ideLog (`?run=: "${id}" is not an app id`, true);
+    return null;
+  }
+  if (!appFolder (id)) {
+    try {
+      const r = await fetch (EXAMPLES_URL, { cache: "no-cache" });
+      if (r.ok && (await r.json ()).apps[id]) {
+        await fetchExamples ([id]);
+        ideLog (`added the example app ${id} back`);
+      }
+    } catch (e) {
+      // not an example (or no examples): said below
+    }
+  }
+  const folder = appFolder (id);
+  if (!folder) {
+    ideLog (`?run=${id}: there is no app with that id here; starting the launcher`, true);
+    fold ("console-pane", false);
+    return null;
+  }
+  // its entry file is the one open (for the editor, and for Run)
+  let entry = "main.js";
+  try {
+    entry = JSON.parse (files.get (`${folder}/manifest.json`)).entry || entry;
+  } catch {
+    // GapKeep says what is wrong with the manifest
+  }
+  if (files.has (`${folder}/${entry}`)) {
+    current = `${folder}/${entry}`;
+    selected = { path: current, kind: "file" };
+    reveal (current);
+  }
+  return id;
+}
+
 async function main () {
   setupUi ();
+  setupFolds ();
   setupScreen ();
-  try {
-    await setupEditor ();
-  } catch (e) {
-    const msg = document.createElement ("div");
-    msg.className = "message error";
-    msg.textContent = `The editor did not load: ${e.message || e}`;
-    $("editor").append (msg);
-    setStatus ("no editor", "error");
-    return;
-  }
   store = await Store.open ();
   for (const [path, data] of await store.loadAll ()) files.set (path, data);
   if (!(await store.getMeta ("seeded"))) {
@@ -1051,13 +1338,22 @@ async function main () {
       ideLog (`could not fetch the example apps: ${e.message}`, true);
     }
   }
-  for (const path of files.keys ()) ensureModel (path);
+  // the file to open once the editor is there (openFile shows the editor)
   const last = localStorage.getItem ("gkide.open");
-  if (last && files.has (last)) openFile (last);
-  else if (files.has ("apps/hello/main.js")) openFile ("apps/hello/main.js");
-  else renderTree ();
-  // Boot into the launcher, as the device does when switched on.
-  await run (null, { focus: false });
+  if (last && files.has (last)) current = last;
+  else if (files.has ("apps/hello/main.js")) current = "apps/hello/main.js";
+  if (current) {
+    selected = { path: current, kind: "file" };
+    reveal (current);
+  }
+  const app = await linkedApp ();
+  updateTitle ();
+  renderTree ();
+  // Boot into the launcher, as the device does when switched on (or into
+  // the app the address names). Then the editor, unless on a phone, where
+  // it waits for the editor pane to be unfolded.
+  await run (app, { focus: false });
+  if (!PHONE.matches) ensureEditor ();
 }
 
 // For scripts and tests: window.gkide.run("hello"), .open("apps/x/main.js", 3)...
