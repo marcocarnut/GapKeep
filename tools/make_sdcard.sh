@@ -52,7 +52,11 @@ if [ "$MODE" = --sealed ] && [ $(echo $DATA | wc -w) -gt 1 ]; then
 fi
 set -- $MODE
 cd "$(dirname "$0")/.."
-make -C circle/boot all >/dev/null
+# (production cards need only the firmware: once it is there and checks
+# out, it isn't downloaded again)
+if [ -z "$1" ] || ! ( cd circle/boot && sha256sum -c --quiet ../../tools/firmware.sha256 ) >/dev/null 2>&1; then
+	make -C circle/boot all >/dev/null
+fi
 ( cd circle/boot && sha256sum -c --quiet ../../tools/firmware.sha256 ) || {
 	echo "make_sdcard: the firmware files differ from tools/firmware.sha256" >&2; exit 1; }
 
