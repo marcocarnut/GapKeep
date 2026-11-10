@@ -1,7 +1,7 @@
-From: zerogap
+From: GapKeep <noreply@gapkeep.org>
 Subject: keyboard: Brazilian ABNT2 keymap, switched at run time
 
-zerogap's keyboard layout is a setting (zerogap.txt "keyboard", and while
+GapKeep's keyboard layout is a setting (gapkeep.txt "keyboard", and while
 running: src/kbdindev.cpp), so the keymap can change after the keyboard
 is attached: CUSBKeyboardDevice::SetKeyMap() and CKeyMap::LoadMap().
 
@@ -23,7 +23,7 @@ diff --git a/include/circle/input/keymap.h b/include/circle/input/keymap.h
  #include <circle/types.h>
  
 -#define PHY_MAX_CODE	127
-+#define PHY_MAX_CODE	0x87		// zerogap: up to International1 (ABNT2's / ?)
++#define PHY_MAX_CODE	0x87		// gapkeep: up to International1 (ABNT2's / ?)
  
  #define K_NORMTAB	0
  #define K_SHIFTTAB	1
@@ -31,7 +31,7 @@ diff --git a/include/circle/input/keymap.h b/include/circle/input/keymap.h
  
  	u8 GetLEDStatus (void) const;
  
-+	// zerogap: switches to one of the built-in maps ("US", "BR", ...),
++	// gapkeep: switches to one of the built-in maps ("US", "BR", ...),
 +	// keeping Caps Lock and Num Lock. FALSE: no such map, nothing changed.
 +	boolean LoadMap (const char *pLocale);
 +
@@ -70,7 +70,7 @@ diff --git a/lib/input/keymap.cpp b/lib/input/keymap.cpp
  		{
  			chChar -= 'a'-'A';
  		}
-+		// zerogap: and the Latin-1 letters (not the signs at 0xD7 and 0xF7,
++		// gapkeep: and the Latin-1 letters (not the signs at 0xD7 and 0xF7,
 +		// nor 0xDF and 0xFF, which have no capital in Latin-1)
 +		else if (0xC0 <= (u8) chChar && (u8) chChar <= 0xDE && (u8) chChar != 0xD7)
 +		{
@@ -115,7 +115,7 @@ diff --git a/include/circle/input/keyboardbehaviour.h b/include/circle/input/key
  enum TModifierKey
  {
 -	ModifierKeyLeftCtrl = 0x80,
-+	ModifierKeyLeftCtrl = 0xE0,	// zerogap: their HID usages, above every key's
++	ModifierKeyLeftCtrl = 0xE0,	// gapkeep: their HID usages, above every key's
  	ModifierKeyLeftShift,
  	ModifierKeyAlt,
  	ModifierKeyLeftWin,
@@ -123,7 +123,7 @@ diff --git a/include/circle/input/keyboardbehaviour.h b/include/circle/input/key
  
  	u8 GetLEDStatus (void) const;
  
-+	boolean SetKeyMap (const char *pLocale);	// zerogap: CKeyMap::LoadMap()
++	boolean SetKeyMap (const char *pLocale);	// gapkeep: CKeyMap::LoadMap()
 +
  private:
  	void GenerateKeyEvent (u8 ucKeyCode);
@@ -174,7 +174,7 @@ diff --git a/include/circle/usb/usbkeyboard.h b/include/circle/usb/usbkeyboard.h
  
  	u8 GetLEDStatus (void) const;	// returns USB LED status to be handed-over to SetLEDs()
  
-+	// zerogap: the cooked mode's keymap, "US", "BR"... (CKeyMap::LoadMap())
++	// gapkeep: the cooked mode's keymap, "US", "BR"... (CKeyMap::LoadMap())
 +	boolean SetKeyMap (const char *pLocale);
 +
  	// raw mode (if bMixedMode is FALSE, the cooked handlers are ignored)
@@ -215,7 +215,7 @@ new file mode 100644
 --- /dev/null
 +++ b/lib/input/keymap_br.h
 @@ -0,0 +1,140 @@
-+// Brazilian ABNT2 (zerogap): the keys' markings. The dead keys (acute,
++// Brazilian ABNT2 (gapkeep): the keys' markings. The dead keys (acute,
 +// grave, tilde, circumflex, diaeresis) give their spacing accents here:
 +// composing them with the next key is left to the application.
 +// Normal	Shift		AltGr		AltGr+Shift	Ctrl

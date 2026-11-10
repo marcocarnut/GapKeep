@@ -1,7 +1,7 @@
 //
 // i18n.h
 //
-// Languages (docs/plans/I18N.md): the system's language and number marks,
+// Languages (docs/DESIGN.md, docs/APPS.md): the system's language and number marks,
 // and each app's catalog of translations, apps/<id>/lang/<language>.json.
 //
 // The language is "en" (English, the text in the code), "qps" (a

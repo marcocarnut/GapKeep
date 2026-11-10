@@ -1,5 +1,7 @@
 // Hello: the example from docs/APPS.md, in more than one language
 // (gk:i18n, lang/<language>.json; docs/APPS.md, "Languages").
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

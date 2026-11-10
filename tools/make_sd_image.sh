@@ -6,6 +6,8 @@
 #
 # Usage: tools/make_sd_image.sh <image> [<dir>]     (needs mtools, dosfstools)
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 IMG=$1; DIR=$2
 [ -n "$IMG" ] || { echo "usage: $0 <image> [<dir>]" >&2; exit 2; }

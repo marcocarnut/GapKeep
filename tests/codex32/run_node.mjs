@@ -5,6 +5,8 @@
 // of every valid vector's shares must be refused, and pointed at. And the
 // app's own wording of the errors (lib/messages.js, through gk:i18n): in
 // English the library's, word for word; in pt-BR translated, nothing left out.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { webcrypto } from "node:crypto";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

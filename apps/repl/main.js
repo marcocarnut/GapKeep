@@ -1,11 +1,18 @@
 // REPL: type JavaScript, press Enter, see the result. The code runs at the
 // global level (an indirect eval), so a `var` stays for the next run; it
 // sees a `ui` whose new widgets go into the area under the result, cleared
-// before each run.
+// before each run. And `btc` (lib/btc.js: btc.help() says what it does),
+// loaded the first time the code says btc.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
+import * as crypto from "gk:crypto";
 import { t } from "gk:i18n";
+
+// BIP-39's test phrase: public, no real funds
+const ABANDON = "abandon ".repeat(11) + "about";
 
 const EXAMPLES = [
   [t("Arithmetic"), "2 ** 64"],
@@ -24,6 +31,11 @@ const EXAMPLES = [
     "b"],
   [t("Variables persist"), "typeof clicks === \"undefined\" ? \"run the counter first\" : clicks"],
   [t("An error"), "notDefined + 1"],
+  [t("Bitcoin: an address from the words"),
+    `btc.words("${ABANDON}")\n  .derive("m/84'/0'/0'/0/0").address()`],
+  [t("Bitcoin: an account's descriptor"),
+    `var account = btc.words("${ABANDON}").derive("m/86'/0'/0'");\naccount.descriptor()`],
+  [t("Bitcoin: what btc does"), "btc.help()"],
 ];
 
 const header = new ui.Container({ layout: "row", width: "100%", gap: 12, alignItems: "center" });
@@ -60,24 +72,73 @@ function show(value) {
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "function") return "function " + (value.name || "");
   if (value !== null && typeof value === "object") {
+    // a value that says what it is (a btc key: never its secrets)
+    if (!Array.isArray(value) && typeof value.toString === "function" && value.toString !== Object.prototype.toString) {
+      return String(value);
+    }
     try { return JSON.stringify(value); } catch (e) { return String(value); }
   }
   return String(value);
 }
 
+function kindOf(value) {
+  if (value instanceof ui.Widget) return value.constructor.name + " widget";
+  const name = value !== null && typeof value === "object" && value.constructor ? value.constructor.name : "";
+  return name && name !== "Object" ? name + " object" : typeof value;
+}
+
+// btc: lib/btc.js and what it imports (86 KB) are loaded the first time
+// the code says btc, before it runs; until then btc costs nothing. A getter
+// stands in for it meanwhile, for code that reaches it some other way.
+let btcLoading = null;
+function loadBtc() {
+  if (!btcLoading) {
+    const start = Date.now();
+    btcLoading = import("./lib/btc.js").then((m) => {
+      m.setCrypto(crypto);
+      Object.defineProperty(globalThis, "btc", { value: m.btc, writable: true, configurable: true });
+      console.log("repl: btc loaded in " + (Date.now() - start) + " ms");
+    }, (e) => {
+      btcLoading = null;
+      throw e;
+    });
+  }
+  return btcLoading;
+}
+Object.defineProperty(globalThis, "btc", {
+  configurable: true,
+  get() {
+    loadBtc();
+    throw new ReferenceError(t("btc is loading: run the code again"));
+  },
+  // the code's own btc (var btc = ...) replaces ours
+  set(value) {
+    Object.defineProperty(globalThis, "btc", { value, writable: true, configurable: true });
+  },
+});
+const BTC_LOADED = () => !Object.getOwnPropertyDescriptor(globalThis, "btc").get;
+
 // The log says what kind of result, never the code or the value: it goes
 // to the serial port in test builds, and the code could hold a secret.
-function run() {
+let running = false;
+async function run() {
+  if (running) return;
+  running = true;
   area.clear();
   const code = input.text;
   try {
+    if (/\bbtc\b/.test(code) && !BTC_LOADED()) {
+      output.set({ text: t("Loading btc…"), bg: "#000", color: "#fff" });
+      await loadBtc();
+    }
     const value = (0, eval)(code);
     output.set({ text: show(value), bg: "#000", color: "#fff" });
-    const kind = value instanceof ui.Widget ? value.constructor.name + " widget" : typeof value;
-    console.log("repl: ran " + code.length + " characters: " + kind);
+    console.log("repl: ran " + code.length + " characters: " + kindOf(value));
   } catch (e) {
     output.set({ text: String(e), bg: "#ff8080", color: "#000" });
     console.log("repl: ran " + code.length + " characters: " + (e && e.name ? e.name : "exception"));
+  } finally {
+    running = false;
   }
 }
 

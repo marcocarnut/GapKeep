@@ -1,4 +1,6 @@
 // Stand-in for Circle's timer: microsecond ticks since start.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef _circle_timer_h
 #define _circle_timer_h
 #include <circle/types.h>

@@ -4,6 +4,8 @@
 # it, Escape, Backspace or its Back button leave it. Its apps read the
 # card's data/testdata with gk:data: a binary and a text file, the folder's
 # hash, and what must be refused.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
 expect Keyboard attached 60
 expect apps/testsuite: suite testsuite, 2 app folder\(s\)
 expect apps/testsuite/suite-reader: suite-reader 1.0.0

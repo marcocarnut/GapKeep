@@ -13,6 +13,8 @@
 # table (default size, 22 KiB). The default callbacks (illegal argument,
 # internal error) are GapKeep's: src/crypto/secp.c, which halts.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 SECP_DIR     = $(ROOT)/third_party/secp256k1
 SECP_SOURCES = src/secp256k1.c src/precomputed_ecmult.c src/precomputed_ecmult_gen.c
 SECP_DEFINES = -DENABLE_MODULE_EXTRAKEYS=1 -DENABLE_MODULE_SCHNORRSIG=1 \

@@ -1,5 +1,7 @@
 // Stand-in for Circle's CString (the members GapKeep uses), on the host C
 // library's vsnprintf.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef _circle_string_h
 #define _circle_string_h
 #include <circle/types.h>

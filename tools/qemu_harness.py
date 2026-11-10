@@ -77,6 +77,8 @@ Usage:
         (apps in DIR/apps). "send" and "serialshot" need a serial port, which
         the simulator doesn't have: "serialshot" takes a normal screenshot,
         "send" fails.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 
 import argparse

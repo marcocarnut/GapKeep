@@ -1,7 +1,7 @@
-From: zerogap
+From: GapKeep <noreply@gapkeep.org>
 Subject: keyboard: enable auto-repeat
 
-Holding Backspace or an arrow key repeats it, as people expect. zerogap
+Holding Backspace or an arrow key repeats it, as people expect. GapKeep
 tells repeats from real presses (src/kbdindev.cpp) and never lets a
 repeat click a button.
 

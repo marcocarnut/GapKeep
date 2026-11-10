@@ -1,4 +1,6 @@
 // Modifier bits of USB HID keyboard reports, as in Circle's usbhid.h.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef _circle_usb_usbhid_h
 #define _circle_usb_usbhid_h
 #define LCTRL		(1 << 0)

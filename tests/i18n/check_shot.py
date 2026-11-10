@@ -6,6 +6,8 @@ match QEMU's), for tests/i18n_qps.txt.
 Usage: check_shot.py <reference.png> <screenshot.png> [--record]
   --record   copy the screenshot over the reference (after looking at it:
              when the fonts or the launcher change)
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import sys
 

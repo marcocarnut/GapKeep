@@ -1,6 +1,8 @@
 // Runs the dice39 self-test on the development machine under Node:
 //   node tests/dice39/run_node.mjs
 // Checks the extracted modules independently of GapKeep's own crypto.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { webcrypto } from "node:crypto";
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 

@@ -1,4 +1,6 @@
 // Test builds only: must see none of sessiontest's values (tests/session.txt).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as ui from "gk:ui";
 import * as session from "gk:session";
 

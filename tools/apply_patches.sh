@@ -8,6 +8,8 @@
 #
 #   tools/apply_patches.sh circle|zxing-cpp
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 case "$1" in

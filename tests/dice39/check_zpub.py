@@ -12,6 +12,8 @@ account 0 and no passphrase, the zpub must also be BIP-84's published test
 vector, and the descriptor the signer's (tests/signer/check_descriptor.py).
 
 Usage: check_zpub.py <screenshot-dir>
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import hashlib
 import hmac

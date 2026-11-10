@@ -4,6 +4,8 @@
 # ff.h includes "ffconf.h" relative to itself, so the sources are copied
 # next to our ffconf.h (into src/) rather than compiled in place.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 CIRCLEHOME = ../../circle
 ADDON      = $(CIRCLEHOME)/addon/fatfs

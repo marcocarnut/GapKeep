@@ -27,6 +27,8 @@
 # anywhere, unless made with LOG=serial (tools/build.sh does that for QEMU,
 # where the tests read the log). No build but TEST=1 ever reads from it.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 CIRCLEHOME = ../circle
 QJSDIR     = ../third_party/quickjs

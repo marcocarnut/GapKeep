@@ -10,6 +10,8 @@
 #
 # (bash, not sh: emsdk_env.sh needs bash to find its own folder.)
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 PORT=${1:-8039}

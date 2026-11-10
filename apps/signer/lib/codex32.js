@@ -24,6 +24,8 @@
 //
 // None of these functions log. Messages hold positions and characters of
 // the text they were given, never a whole share or the seed.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
   CX_CHARSET, CX_SECRET_INDEX, MS32_CONST, MS32_LONG_CONST, MS32_GEN, MS32_LONG_GEN, BECH32_INV, bech32Mul,

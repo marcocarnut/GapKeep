@@ -12,6 +12,8 @@
 # there, then check the IDE still loads (Monaco's AMD build, which the IDE
 # uses, is deprecated upstream).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 VERSION=0.57.0

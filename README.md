@@ -2,6 +2,9 @@
 
 **A tiny bare-metal OS for air-gapped apps.**
 
+Site: [gapkeep.org](https://gapkeep.org) (coming soon). Source:
+[github.com/marcocarnut/GapKeep](https://github.com/marcocarnut/GapKeep).
+
 GapKeep is a tiny bare-metal system for the Raspberry Pi Zero (the plain one,
 with no radio). It boots in about two seconds into a graphical app launcher.
 Apps are written in JavaScript and run on [QuickJS](https://bellard.org/quickjs/),
@@ -19,7 +22,15 @@ hand, and forgotten afterwards. What leaves is only what is on the screen:
 text to read, and QR codes for another device's camera.
 
 Built on [Circle](https://github.com/rsta2/circle) (bare-metal C++ for the
-Pi). Licensed under the GPLv3 (GapKeep's own sources say GPL-3.0-or-later).
+Pi, GPLv3). GapKeep is licensed under the GPLv3 or later
+([LICENSE](LICENSE); its sources say GPL-3.0-or-later), and the cards
+`tools/make_sdcard.sh` makes carry each licence of what is on them, as
+`LICENCE.*` files: GapKeep's and Circle's (`LICENCE.gapkeep`,
+`LICENCE.circle`), and those named below.
+[LVGL](https://lvgl.io) and [QuickJS](https://bellard.org/quickjs/) are
+under the MIT licence (`LICENCE.lvgl`, `LICENCE.quickjs`), and
+[FatFs](https://elm-chan.org/fsw/ff/), which reads the card, under its own
+BSD-style licence (`LICENCE.fatfs`; sealed builds don't have it).
 The QR decoder,
 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), is under the Apache
 License 2.0 (`third_party/zxing-cpp/LICENSE`, and `LICENCE.zxing-cpp` on
@@ -48,7 +59,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 ## Documentation
 
 - [Writing apps](docs/APPS.md): start here.
-- [API reference](docs/API.md): `gk:ui`, `gk:sys`, `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:apps`, globals.
+- [API reference](docs/API.md): `gk:ui`, `gk:sys`, `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:data`, `gk:apps`, globals.
   Generated from [docs/api/gapkeep-api.yaml](docs/api/gapkeep-api.yaml), which a
   test checks against the runtime.
 - [Simulator](docs/SIMULATOR.md): run apps on your machine, in seconds.
@@ -57,6 +68,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 - [The camera and QR codes](docs/CAMERA.md): `ui.Scanner`, and testing it without a camera.
 - [Guide for coding agents](docs/AGENTS.md): writing apps with an AI agent.
 - [Architecture and security model](docs/ARCHITECTURE.md)
+- [Design decisions](docs/DESIGN.md): what GapKeep does and doesn't do, and why.
 - [Hardware test rig](docs/RIG.md)
 
 ## Building
@@ -84,8 +96,8 @@ against a pinned hash). Nothing in the build or the tests talks to a
 network after that.
 
 ```sh
-git submodule update --init                              # Circle, QuickJS, zxing-cpp, libsecp256k1
-git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
+git clone --recursive https://github.com/marcocarnut/GapKeep
+cd GapKeep
 tools/toolchain.sh                                       # the pinned compiler
 
 tools/build.sh qemu          # -> src/kernel.img for QEMU
@@ -98,7 +110,15 @@ tools/build.sh pi SEALED=1   # ... with every app built in and no SD card code
 configures Circle for the target (QEMU lacks a few peripherals, so the two
 need different Circle libraries) and builds Circle, LVGL, QuickJS, the QR
 decoder (zxing-cpp, [docs/CAMERA.md](docs/CAMERA.md#the-qr-decoder)) and the
-kernel. zxing-cpp's own submodule (zint, for writing barcodes) is not needed.
+kernel. `--recursive` also fetches submodules GapKeep doesn't use
+(Circle's Wi-Fi support, zxing-cpp's barcode writer); to fetch only what it
+needs, clone without it and then:
+
+```sh
+git submodule update --init                              # Circle, QuickJS, zxing-cpp, libsecp256k1
+git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
+```
+
 Switching targets rebuilds everything (about 40 s); otherwise builds are
 incremental. Builds are reproducible: `tools/check_reproducible.sh` builds
 the current commit twice, in fresh checkouts, and compares the images. GapKeep needs Circle's 8 MB kernel limit and a 1 MB stack, which
@@ -143,8 +163,7 @@ everything the card needs in `sdcard-standalone/`: the Pi firmware,
 of a FAT32 card. Add or remove apps by changing `apps` on the card.
 `--sealed` makes `sdcard-sealed/` instead, with every app inside
 `kernel.img`. The settings file at the top of the card is `gapkeep.txt`
-([docs/CLOCK.md](docs/CLOCK.md)); on a card from before the rename from
-ZeroGap, rename `zerogap.txt` to `gapkeep.txt`.
+([docs/CLOCK.md](docs/CLOCK.md)).
 Production builds leave the serial port (GPIO 14/15) alone: there is no log.
 Test builds (`tools/build.sh pi TEST=1`) log to it at 921600 baud.
 

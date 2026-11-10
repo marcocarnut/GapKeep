@@ -5,34 +5,56 @@ Copies the JavaScript libraries one app shares with another.
 An app imports only its own files (docs/APPS.md), so an app that builds on
 another app's library carries a copy of it. Each library has one home, the
 app it was written for, or lib/js/ for libraries written for no app in
-particular (lib/js/README.md); the copies below are made from it byte for
-byte, and never edited by hand.
+particular (lib/js/README.md: the Bitcoin libraries are in lib/js/bitcoin/);
+the copies below are made from it byte for byte, and never edited by hand.
 
 Usage:
   tools/share_libs.py           copy (after changing a library at home)
   tools/share_libs.py --check   exit 1 if a copy differs from its home
                                 (tools/run_sim_tests.sh runs this)
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# (home, copy), relative to the repository
+# The Bitcoin libraries (lib/js/bitcoin/), as each app lays them out: they
+# go to the app's lib/ (psbt/ inside it), the BIP-39 wordlist they import
+# to its vendor/
+BITCOIN = ["bip32.js", "bip39.js", "combine.js", "crypto.js", "descriptor.js", "keys.js", "multisig.js",
+           "sighash.js", "sign.js", "text.js"] + ["psbt/" + f for f in (
+    "analyze.js", "basen.js", "bech32.js", "bytes.js", "hashes.js", "psbt.js", "script.js", "transport.js", "tx.js")]
+
+
+def bitcoin(app, files):
+    return [("lib/js/bitcoin/" + f, "apps/%s/lib/%s" % (app, f)) for f in files]
+
+
+# (home, copy), relative to the repository, in order: a copy made here may
+# be the home of a later one
 COPIES = (
     [("apps/codex32/lib/codex32.js", "apps/signer/lib/codex32.js"),
        ("apps/codex32/lib/messages.js", "apps/signer/lib/codex32messages.js"),
        ("apps/codex32/vendor/codex32.js", "apps/signer/vendor/codex32.js"),
        ("apps/codex32/vendor/recover.js", "apps/signer/vendor/recover.js"),
        ("apps/codex32/vendor/wordlist.js", "apps/signer/vendor/wordlist.js"),
+       # the wordlist lib/js/bitcoin/bip39.js imports, at home
+       ("apps/codex32/vendor/wordlist.js", "lib/js/vendor/wordlist.js"),
        ("apps/codex32/LICENSE-dice39.txt", "apps/signer/LICENSE-dice39.txt"),
        ("lib/js/bbqr.js", "apps/signer/lib/bbqr.js")]
-    # dice39 shows the account's public key with the signer's BIP-39, BIP-32
-    # and descriptors, and what they import
-    + [("apps/signer/lib/" + f, "apps/dice39/lib/" + f) for f in ("bip39.js", "bip32.js", "crypto.js", "descriptor.js")]
-    + [("apps/signer/lib/psbt/" + f, "apps/dice39/lib/psbt/" + f) for f in ("bytes.js", "basen.js", "hashes.js")]
+    + bitcoin("signer", BITCOIN)
+    # dice39 shows the account's public key with BIP-39, BIP-32 and
+    # descriptors, and what they import
+    + bitcoin("dice39", ["bip39.js", "bip32.js", "crypto.js", "descriptor.js",
+                         "psbt/bytes.js", "psbt/basen.js", "psbt/hashes.js"])
+    # the REPL's btc (loaded when the code first says btc), and what it imports
+    + bitcoin("repl", ["btc.js", "bip32.js", "bip39.js", "crypto.js", "descriptor.js", "keys.js", "text.js",
+                       "psbt/basen.js", "psbt/bech32.js", "psbt/bytes.js", "psbt/hashes.js", "psbt/script.js"])
+    + [("apps/codex32/vendor/wordlist.js", "apps/repl/vendor/wordlist.js"),
+       ("apps/codex32/LICENSE-dice39.txt", "apps/repl/LICENSE-dice39.txt")]
 )
-
 
 def read(path):
     with open(os.path.join(ROOT, path), "rb") as f:

@@ -10,6 +10,8 @@
 # (what zxing-cpp would throw: a stop on the Pi) stops it with a report.
 # Needs third_party/zxing-cpp.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ZX=$ROOT/third_party/zxing-cpp/core/src

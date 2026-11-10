@@ -1,4 +1,4 @@
-// Tests apps/signer/lib (BIP-39, BIP-32, sighashes, signing PSBTs) under
+// Tests lib/js/bitcoin (BIP-39, BIP-32, sighashes, signing PSBTs) and the signer's own lib under
 // Node, with tests/signer/crypto_ref.mjs in place of gk:crypto, against
 // tests/signer/vectors.json, tests/signer/electrum.json and BIP-174's
 // vectors in tests/psbt/vectors.json (sources: tests/signer/README.md):
@@ -9,29 +9,31 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { readFileSync, writeFileSync } from "node:fs";
 import * as ref from "./crypto_ref.mjs";
-import { setCrypto, taggedHash, hash160 } from "../../apps/signer/lib/crypto.js";
-import { mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic, Bip39Error } from "../../apps/signer/lib/bip39.js";
+import { setCrypto, taggedHash, hash160 } from "../../lib/js/bitcoin/crypto.js";
+import { mnemonicFromEntropy, entropyFromMnemonic, seedFromMnemonic, Bip39Error } from "../../lib/js/bitcoin/bip39.js";
 import {
   fromSeed, derive, deriveChild, parsePath, formatPath, neuter, fingerprint, serializeXpub, parseXpub, decodeExtendedKey,
   wipe, VERSIONS, versionFor, Bip32Error, HARDENED,
-} from "../../apps/signer/lib/bip32.js";
-import { legacySighash, segwitV0Sighash, taprootSighash, taprootSigMsg, p2wpkhScriptCode } from "../../apps/signer/lib/sighash.js";
-import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, partialSigGood, SignError, CHANGE_NEAR, CHANGE_GAP } from "../../apps/signer/lib/sign.js";
-import { parsePrivateKey, parseWif, KeyError } from "../../apps/signer/lib/keys.js";
-import { combine, CombineError } from "../../apps/signer/lib/combine.js";
+} from "../../lib/js/bitcoin/bip32.js";
+import { legacySighash, segwitV0Sighash, taprootSighash, taprootSigMsg, p2wpkhScriptCode } from "../../lib/js/bitcoin/sighash.js";
+import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, partialSigGood, SignError, CHANGE_NEAR, CHANGE_GAP } from "../../lib/js/bitcoin/sign.js";
+import { parsePrivateKey, parseWif, KeyError } from "../../lib/js/bitcoin/keys.js";
+import { combine, CombineError } from "../../lib/js/bitcoin/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
-import { analyze } from "../../apps/signer/lib/psbt/analyze.js";
-import { base58CheckEncode, base58CheckDecode } from "../../apps/signer/lib/psbt/basen.js";
+import { analyze } from "../../lib/js/bitcoin/psbt/analyze.js";
+import { base58CheckEncode, base58CheckDecode } from "../../lib/js/bitcoin/psbt/basen.js";
 import { CodeReader, seriesFor } from "../../apps/signer/lib/codes.js";
+// codes.js is the signer's own: it throws the DecodeError of the signer's copy of bytes.js
+import { DecodeError as CodesDecodeError } from "../../apps/signer/lib/psbt/bytes.js";
 import { split, deflateRaw, toBase32, Joiner } from "../../lib/js/bbqr.js";
-import { accountDescriptor, cosignerKey, descriptorChecksum, checkDescriptor } from "../../apps/signer/lib/descriptor.js";
+import { accountDescriptor, cosignerKey, descriptorChecksum, checkDescriptor } from "../../lib/js/bitcoin/descriptor.js";
 import { selfTest } from "../../apps/signer/lib/selftest.js";
-import { fromHex, toHex, equal, concat, Writer, fromBase64, DecodeError } from "../../apps/signer/lib/psbt/bytes.js";
-import { parseTx, serializeTx, txid as txidOf } from "../../apps/signer/lib/psbt/tx.js";
-import { parsePsbt, serializePsbt, setEntry, IN, OUT, GLOBAL, MAGIC } from "../../apps/signer/lib/psbt/psbt.js";
-import { readPayload, electrumQrText } from "../../apps/signer/lib/psbt/transport.js";
-import { scriptToAddress, p2wpkhScript, p2shScript, p2pkhScript, p2wshScript, parseMultisig, classify } from "../../apps/signer/lib/psbt/script.js";
-import { multisigScript } from "../../apps/signer/lib/multisig.js";
+import { fromHex, toHex, equal, concat, Writer, fromBase64, DecodeError } from "../../lib/js/bitcoin/psbt/bytes.js";
+import { parseTx, serializeTx, txid as txidOf } from "../../lib/js/bitcoin/psbt/tx.js";
+import { parsePsbt, serializePsbt, setEntry, IN, OUT, GLOBAL, MAGIC } from "../../lib/js/bitcoin/psbt/psbt.js";
+import { readPayload, electrumQrText } from "../../lib/js/bitcoin/psbt/transport.js";
+import { scriptToAddress, p2wpkhScript, p2shScript, p2pkhScript, p2wshScript, parseMultisig, classify } from "../../lib/js/bitcoin/psbt/script.js";
+import { multisigScript } from "../../lib/js/bitcoin/multisig.js";
 
 setCrypto(ref);
 
@@ -1378,7 +1380,7 @@ check("codes", "another series is refused, the first goes on, or starts over", (
   const other = split(tx, "T", { encoding: "2", minVersion: 25 }).parts[0];
   const r = new CodeReader();
   r.read(parts[0]);
-  has(throws(() => r.read(other), DecodeError).message, "another series");
+  has(throws(() => r.read(other), CodesDecodeError).message, "another series");
   eq(r.started, true);
   eq(toHex(readAll(r, parts).payload.bytes), toHex(BIG));
   r.read(parts[0]);
@@ -1387,29 +1389,29 @@ check("codes", "another series is refused, the first goes on, or starts over", (
 });
 check("codes", "other files are refused, saying what they are", () => {
   const u = split(new TextEncoder().encode("hello"), "U", { encoding: "2", minVersion: 20 }).parts[0];
-  return has(throws(() => new CodeReader().read(u), DecodeError).message, "text");
+  return has(throws(() => new CodeReader().read(u), CodesDecodeError).message, "text");
 });
 check("codes", "a series that says PSBT and isn't one", () => {
   const u = split(new Uint8Array(40).fill(7), "P", { encoding: "2", minVersion: 20 }).parts[0];
-  return has(throws(() => new CodeReader().read(u), DecodeError).message, "isn't one");
+  return has(throws(() => new CodeReader().read(u), CodesDecodeError).message, "isn't one");
 });
 check("codes", "a damaged deflate stream is refused, and the reader is free again", () => {
   const z = "B$ZP0100" + toBase32(new Uint8Array(16).fill(0xff));
   const r = new CodeReader();
-  has(throws(() => r.read(z), DecodeError).message, "don't make a file");
+  has(throws(() => r.read(z), CodesDecodeError).message, "don't make a file");
   return !r.started;
 });
 check("codes", "a deflate bomb stops at the limit", () => {
   const big = new Uint8Array(3 << 20);
   const text = "B$ZP0100" + toBase32(deflateRaw(big));
-  return has(throws(() => new CodeReader().read(text), DecodeError).message, "don't make a file");
+  return has(throws(() => new CodeReader().read(text), CodesDecodeError).message, "don't make a file");
 });
 check("codes", "two contents for one part are refused", () => {
   const { parts } = split(BIG, "P", { encoding: "2", maxVersion: 8, maxParts: 20 });
   const r = new CodeReader();
   r.read(parts[0]);
   const bad = parts[0].slice(0, -8) + "AAAAAAAA";
-  return has(throws(() => r.read(bad), DecodeError).message, "can't be used");
+  return has(throws(() => r.read(bad), CodesDecodeError).message, "can't be used");
 });
 for (const [name, size, most] of [["small", 900, 8], ["large", 6000, 40]]) {
   check("codes", `what the signer shows: a ${name} file, at one version up to 12`, () => {
@@ -1427,7 +1429,7 @@ check("codes", "a PSBT's series says it is one, and reads back", () => {
   return equal(parts.map((t) => got.read(t)).at(-1).payload.bytes, BIG);
 });
 check("codes", "a BBQr-looking text with a bad header isn't a part", () =>
-  throws(() => new CodeReader().read("B$ZP!!!!"), DecodeError));
+  throws(() => new CodeReader().read("B$ZP!!!!"), CodesDecodeError));
 
 // The codes tests/signer.txt shows the camera (tests/signer/make_scenario.py)
 // --- multisig -----------------------------------------------------------------------

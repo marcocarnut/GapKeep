@@ -3,6 +3,8 @@
 # GapKeep's own configuration (gk_lv_conf.h). Every file that includes LVGL
 # headers must be compiled with the same LV_CONF_PATH: see ../../src/Makefile.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 CIRCLEHOME = ../../circle
 ADDON      = $(CIRCLEHOME)/addon/lvgl

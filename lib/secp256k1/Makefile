@@ -2,6 +2,8 @@
 # Builds libsecp256k1 (third_party/secp256k1, pinned release) as a static
 # library for Circle; see secp256k1.mk.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 CIRCLEHOME = ../../circle
 ROOT       = ../..

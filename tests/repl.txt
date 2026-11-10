@@ -1,7 +1,8 @@
 # The REPL (apps/repl): Enter runs the code without adding a line break
 # where the cursor is, Shift+Enter adds one, the examples, widgets made by
 # the code go into the area under the result. The log tells the length of
-# the code and the kind of result, never either.
+# the code and the kind of result, never either. btc (lib/btc.js) loads
+# when the code first says btc.
 expect Keyboard attached 60
 expect launcher ready 60
 tile repl
@@ -70,3 +71,71 @@ key ret
 expect repl: ran \d+ characters: ReferenceError
 wait 0.5
 shot 02-error
+# btc: not loaded at start; the first code that says btc loads it, then
+# runs. Its address example (BIP-84's first address of the test phrase)
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: btc loaded in \d+ ms
+expect repl: ran \d+ characters: string
+wait 0.5
+shot 03-btc-address
+# an account's descriptor; then the account itself (a key prints what it
+# is, never its secrets), and its xprv only when asked for
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: string
+type ;account
+key ret
+expect repl: ran \d+ characters: Key object
+wait 0.5
+shot 04-btc-key
+type .xprv().length
+key ret
+expect repl: ran \d+ characters: number
+# what btc does; then an error that says what is wrong
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: object
+wait 0.5
+shot 05-btc-help
+type ;btc.xpub("x")
+key ret
+expect repl: ran \d+ characters: BtcError
+wait 0.5
+shot 06-btc-error

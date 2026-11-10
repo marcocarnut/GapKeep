@@ -16,6 +16,8 @@ Usage: make_icon.py <image> [--size N] [--manifest apps/<id>/manifest.json]
                   are) instead of printing it
 
 Needs Pillow (pip install pillow); runs on the development machine only.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import base64
 import json

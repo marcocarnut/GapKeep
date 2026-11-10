@@ -3,6 +3,8 @@
 // where <root> is set with GkSimSetCardRoot(). Read-only, like GapKeep's
 // FatFs. Symbolic links and anything but plain files and folders are not
 // visible (a FAT card has none).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef GK_SIM_FF_H
 #define GK_SIM_FF_H
 

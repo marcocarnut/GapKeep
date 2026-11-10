@@ -1,6 +1,8 @@
 // Runs QuickJS's own test scripts (third_party/quickjs/tests) on the
 // target, unmodified, with the two host objects they expect: std.gc and
 // os.setTimeout. Each suite throws on its first failed assertion.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as sys from "gk:sys";
 import { suites } from "./suites.js";
 

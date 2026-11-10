@@ -28,6 +28,8 @@
 # named data beside the app folder, or beside the apps folder holding it
 # (a card's layout: card/apps/x, card/data/pgp), goes on the card too.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ARGS=

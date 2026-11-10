@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef _circle_device_h
 #define _circle_device_h
 class CDevice;

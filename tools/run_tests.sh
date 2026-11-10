@@ -9,6 +9,8 @@
 #
 # Usage: tools/run_tests.sh [output-dir]
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 OUT=${1:-$(mktemp -d -t gapkeep-tests-XXXXXX)}
@@ -54,6 +56,7 @@ check totp_node node --experimental-default-type=module tests/totp/run_node.mjs
 check codex32_node node --experimental-default-type=module tests/codex32/run_node.mjs
 check psbt_node node --experimental-default-type=module tests/psbt/run_node.mjs
 check signer_node node --experimental-default-type=module tests/signer/run_node.mjs
+check btc_node node --experimental-default-type=module tests/btc/run_node.mjs
 check i18n_node node --experimental-default-type=module tests/i18n/run_node.mjs
 
 # the two SD cards

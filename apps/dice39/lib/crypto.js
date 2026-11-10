@@ -32,7 +32,7 @@ export function setCrypto(c) {
 
 // The functions given to setCrypto(); throws if none were.
 export function cr() {
-  if (!C) throw new Error("signer: no cryptography given (setCrypto)");
+  if (!C) throw new Error("bitcoin: no cryptography given (setCrypto)");
   return C;
 }
 

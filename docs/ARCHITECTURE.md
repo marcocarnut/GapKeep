@@ -81,8 +81,18 @@ and the same description (`gk_app_t`):
   in the launcher with the reason. A card app cannot take a built-in app's
   id.
 
-After boot nothing more is loaded: apps cannot read files or load code
-other than their own modules, which are already in memory.
+After boot no code is loaded: apps cannot load code
+other than their own modules, which are already in memory, and the only
+files they read are the card's data folders their manifest names
+(`gk:data`, read whole and hashed on first use).
+
+Apps never share code at run time: an app's hash covers every line of
+JavaScript it runs, so one that builds on another's library carries a
+byte-for-byte copy (`tools/share_libs.py`). Data, unlike code, is
+shared by name: read-only folders on the card (`data/<name>/`, through
+`gk:data`), listed in the manifest and outside the app hash. Suites
+(`apps/<suite>/suite.json`) only group apps in the launcher. The reasons are in
+[DESIGN.md](DESIGN.md#apps).
 
 ### Widgets (`src/runtime/js_ui.cpp`)
 
@@ -218,22 +228,19 @@ trust boundary. The launcher shows each app's SHA-256, to compare with a
 published one. A sealed build (`tools/build.sh pi SEALED=1`) removes the SD and FAT code
 from the trusted base.
 
-**Data folders and suites** ([APPS.md](APPS.md#data-files)): code is
-inside the app hash, data is outside it, on purpose. The hash says *which
-program* runs, so it must be the same on every card and comparable with a
-published one; data (public keys, address lists) is what a particular
-person put on a particular card, so no published hash could cover it. The
-price is that whoever can change the card can change the data, just as
-they can change the apps; the defence is the same: show it. The launcher
-shows each data folder's hash beside the app's, and apps must show what
-matters before using it (a key's fingerprint, an address). Apps read only
-the folders their (hashed) manifest names, never write, and a folder is
-read whole, hashed and kept in memory on first use, so what an app reads is
-what was hashed even if the card were swapped while running. Apps in a
-suite share data this way but never code: each app imports only its own
-files, so its hash still covers every line it runs, and one app of a suite
-can be checked or replaced on its own. Nothing in the data is executed;
-the native code that parses it is FatFs, and the apps' JavaScript.
+**Data folders and suites**: code is inside the app hash, data
+(`data/<name>/`, read with `gk:data`) is outside it, on purpose: the hash
+must be the same on every card, the data differs per card
+([DESIGN.md](DESIGN.md#data-is-shared-by-name) says why). So whoever can
+change the card can change the data, as they can the apps, and the defence
+is the same: the launcher shows each data folder's hash beside the app's,
+and apps show what matters before using it (a key's fingerprint). Apps read
+only the folders their hashed manifest names, never write, and a folder is
+read whole, hashed and kept in memory on first use (`appstore.cpp`), so
+what an app reads is what was hashed even if the card were swapped while
+running. Nothing in the data is executed; what parses it is FatFs and the
+apps' own JavaScript. Apps in a suite share data this way but never code,
+so each app's hash still covers every line it runs.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs

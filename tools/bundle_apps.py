@@ -16,6 +16,8 @@ Usage: bundle_apps.py <output.c> [--only id,...] <apps-dir> [<apps-dir> ...]
            prints the hash of each data folder (a card's data/<name>), as
            gk:data's hash() and the launcher show it (docs/APPS.md, "Data
            files")
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import base64
 import binascii

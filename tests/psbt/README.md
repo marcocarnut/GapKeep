@@ -1,4 +1,4 @@
-# Tests for the PSBT modules (apps/signer/lib/psbt)
+# Tests for the PSBT modules (lib/js/bitcoin/psbt)
 
     node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
 
@@ -61,6 +61,6 @@ texts apart, and gives anything else to `tx_from_any()`: whitespace
 removed, then hex, else Base64 when it starts with `cHNidP`, else Base43
 (up to 30000 characters), else an error; the bytes are a PSBT or a network
 transaction. A signer answering Electrum should send Base43 (alphanumeric
-QR mode); `lib/transport.js`'s `electrumQrText()` does, and falls back to
+QR mode); `lib/js/bitcoin/psbt/transport.js`'s `electrumQrText()` does, and falls back to
 uppercase hex in the rare case that the Base43 text is itself valid hex
 (Electrum would try hex first and misread it).

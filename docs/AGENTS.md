@@ -87,7 +87,8 @@ Widgets without a parent go on `ui.screen`, a column with 16 px padding.
 ## What is not there
 
 No `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage`, `document`,
-`window`, `require`, `process`, `Buffer`, global `crypto` or file access.
+`window`, `require`, `process`, `Buffer`, global `crypto` or file access
+(except reading data folders: below).
 Time of day: `Date` works, but the clock is only right once the Clock app
 has set it after boot: check `status().set` from `gk:clock`, and use its
 `every(seconds, fn)` for things on the clock's marks. Random bytes:

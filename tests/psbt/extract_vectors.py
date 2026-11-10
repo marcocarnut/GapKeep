@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collects the test vectors for apps/signer/lib/psbt (tests/psbt/run_node.mjs)
+"""Collects the test vectors for lib/js/bitcoin/psbt (tests/psbt/run_node.mjs)
 into tests/psbt/vectors.json, from the sources in tests/psbt/README.md:
 
   BIP-173, BIP-350, BIP-174, BIP-370 (bitcoin/bips, the .mediawiki files)
@@ -16,6 +16,8 @@ BIPS_DIR holds bip-0173.mediawiki ...; ELECTRUM_TESTS_DIR holds test_psbt.py,
 test_transaction.py, test_bitcoin.py, test_wallet_vertical.py. The extra
 vectors made by tests/psbt/make_electrum_psbts.py (electrum_made.json) are
 merged in when present.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import ast
 import json

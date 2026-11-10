@@ -1,5 +1,7 @@
 // The test suite's second app (tests/sdcard/apps/testsuite): the same data
 // folder as suite-reader, so the same hash.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as ui from "gk:ui";
 import * as data from "gk:data";
 

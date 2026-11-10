@@ -4,6 +4,8 @@
 //
 // Needs a global `crypto` with subtle.digest and getRandomValues, and
 // setCrypto() done (./crypto.js) for the public key.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { BIP39_WORDS } from "../vendor/wordlist.js";
 import { buildMnemonic, importMnemonic, PHRASE_SIZES } from "../vendor/bip39core.js";

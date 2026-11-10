@@ -11,6 +11,8 @@ between is edited, so `diff` against the HTML shows exactly what was taken.
 Deterministic: same input, same output. Re-run it and `git diff` to check.
 
 Usage: extract_codex32.py <path/to/codex32_recover.html> <output-dir>
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import hashlib
 import os

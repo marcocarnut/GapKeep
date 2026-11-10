@@ -1,5 +1,7 @@
 // Markup and whether it is valid, for this app and tests/i18n/check_tool.py
 // (src/runtime/markup.cpp and tools/i18n.py must agree). One JSON array.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 export const CASES = [
 [
 "plain text",

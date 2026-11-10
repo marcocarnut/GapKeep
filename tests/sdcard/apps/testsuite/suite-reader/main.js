@@ -3,6 +3,8 @@
 // file: Enter reads it, as text if it is UTF-8, else as bytes. At start it
 // tries what must be refused, and logs each refusal. It logs sizes and
 // hashes, never what the files hold.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 import * as data from "gk:data";

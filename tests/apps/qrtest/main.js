@@ -2,6 +2,8 @@
 // chosen for the data, error correction, the smallest version (`version`,
 // for series of codes such as BBQr's), and values refused without changing
 // the code.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 

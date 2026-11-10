@@ -1,11 +1,11 @@
-From: zerogap
+From: GapKeep <noreply@gapkeep.org>
 Subject: lvgl addon: count the mouse wheel's notches
 
 The addon fed LVGL the pointer and the left button, and dropped the
 wheel. It now adds up the notches (Circle's MouseEventMouseWheel, from
 the USB mouse's report) in the event handler, in interrupt context, and
 CLVGL::TakeWheelMove() hands them to the main loop, which scrolls what
-is under the pointer (zerogap's src/runtime/wheel.cpp). Mice in the
+is under the pointer (GapKeep's src/runtime/wheel.cpp). Mice in the
 boot protocol report no wheel: nothing changes for them.
 
 diff --git a/addon/lvgl/lvgl.h b/addon/lvgl/lvgl.h
@@ -15,7 +15,7 @@ diff --git a/addon/lvgl/lvgl.h b/addon/lvgl/lvgl.h
  
  	void Update (boolean bPlugAndPlayUpdated = FALSE);
  
-+	// zerogap: the mouse wheel's notches since the last call (> 0: turned
++	// gapkeep: the mouse wheel's notches since the last call (> 0: turned
 +	// away from the user, "up"), for the caller to scroll with
 +	int TakeWheelMove (void);
 +
@@ -26,7 +26,7 @@ diff --git a/addon/lvgl/lvgl.h b/addon/lvgl/lvgl.h
  	unsigned m_nLastUpdate;
  
  	CMouseDevice * volatile m_pMouseDevice;
-+	volatile int m_nWheelMove;		// zerogap: see TakeWheelMove()
++	volatile int m_nWheelMove;		// gapkeep: see TakeWheelMove()
  	CTouchScreenDevice *m_pTouchScreen;
  	unsigned m_nLastTouchUpdate;
  	lv_indev_data_t m_PointerData;
@@ -61,7 +61,7 @@ diff --git a/addon/lvgl/lvgl.cpp b/addon/lvgl/lvgl.cpp
  		}
  		break;
  
-+	case MouseEventMouseWheel:		// zerogap
++	case MouseEventMouseWheel:		// gapkeep
 +		s_pThis->m_nWheelMove += nWheelMove;
 +		break;
 +
