@@ -188,6 +188,46 @@ The QEMU scenarios then run unchanged on real hardware; see
 **Using it:** Tab and Shift+Tab move between widgets, Enter or Space
 activates, and the Windows (Super) key always returns to the launcher.
 
+## Releases
+
+A release is made from a clean checkout of its commit, tagged
+`v<version>` (the version is `GAPKEEP_VERSION` in
+`src/runtime/version.h`, which the launcher shows):
+
+```sh
+tools/toolchain.sh          # once: the pinned compiler
+tools/make_release.sh       # -> release/ (-o DIR for another folder)
+tools/check_release.sh      # checks the images, and boots each in QEMU
+```
+
+For English (US keyboard) and Português (Brasil) (ABNT2 keyboard), it makes
+`gapkeep-<version>-<lang>.img.zip`, an SD card image for Raspberry Pi
+Imager or balenaEtcher (256 MiB, one FAT32 partition named GAPKEEP), and
+`gapkeep-<version>-<lang>.zip`, the same card as files: format a card
+FAT32, as cards come (one partition, MBR), and copy what is in the zip's
+folder to its root; the Pi's firmware needs nothing more. Each card is
+`tools/make_sdcard.sh --standalone` plus a `gapkeep.txt` that sets the
+language and keyboard (edit it to change them, or to add the clock's
+settings: [docs/CLOCK.md](docs/CLOCK.md)). Then `RELEASE.txt`: the commit,
+and the hashes the launcher shows; and `SHA256SUMS` of it all. A tree with
+changes is refused; `--allow-dirty` builds anyway, with "dirty" in the
+names and "NOT A RELEASE" in `RELEASE.txt`. How to write the image to a
+card: on the website (coming soon).
+
+**Checking a release**, from the least to the most work:
+
+- `sha256sum -c SHA256SUMS` next to the downloads; each card also carries
+  a `SHA256SUMS` of its own files.
+- On the device: the launcher's `i` shows the kernel's SHA-256, and below
+  the tiles, the focused app's; `RELEASE.txt` lists them all (an app's is
+  `python3 tools/bundle_apps.py --hash apps/<app>` from the source).
+- Rebuild it: check out the tag, run `tools/toolchain.sh` and
+  `tools/make_release.sh`, and compare `SHA256SUMS`: the same commit gives
+  the same files, byte for byte (fixed timestamps, volume ID and file
+  order; tested with dosfstools 4.2 and mtools 4.0.43).
+  `tools/check_reproducible.sh --release` builds it twice, in two fresh
+  checkouts, and compares.
+
 ## Status
 
 - [x] Step 1: LVGL on the framebuffer, USB keyboard and mouse

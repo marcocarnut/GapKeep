@@ -17,7 +17,8 @@ src/kernel.hex
 /sdcard-standalone/
 /sdcard-sealed/
 lib/fatfs/src/
-/toolchain/
+/toolchain
+/release/
 /sim/build/
 /sim/web/vendor/
 # agent tooling (worktrees, local settings)
