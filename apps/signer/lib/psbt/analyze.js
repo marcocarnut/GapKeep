@@ -366,24 +366,25 @@ export function analyze(psbt, { network = null, complete = false } = {}) {
   // signer shows a modest fee both times; the two signatures, each valid,
   // make a transaction that pays the difference as fee. The previous
   // transaction (non_witness_utxo) proves an amount: its txid is checked
-  // above, and the amount taken from it. So, as Trezor and Ledger do: when
-  // there is more than one segwit v0 input and any of them is described by
-  // its output alone, a red warning, and signing needs "Sign anyway".
+  // above, and the amount taken from it. Electrum's QR codes never carry it,
+  // so a red warning there would be on nearly every transaction, and soon
+  // clicked through. Instead: amber, when there is more than one segwit v0
+  // input and any of them is described by its output alone, with what to do;
+  // and the app remembers what it signed until power-off, refusing the same
+  // coin told with another amount (apps/signer/lib/memory.js).
   //   - A single input can't be attacked this way: its own signature covers
   //     its amount, and the fee shown is computed from that amount alone.
   //   - Taproot inputs don't count: a BIP-341 signature covers every input's
   //     amount and script, so a lie about any of them makes it invalid.
   const v0All = inputs.filter((a) => a.segwitV0);
   if (v0.length && v0All.length > 1) {
-    warn("danger", plural(v0.length, "Input {list}: only the coin's amount is given, not its previous transaction " +
-      "(Electrum's QR codes leave it out), so the amount can't be checked. With more than one segwit input, a " +
-      "hostile computer can show a different amount each time it asks you to sign, and put the signatures together " +
-      "into a transaction that pays a much larger fee than shown. Sign only if you trust the computer that made " +
-      "this, and only once.",
-    "Inputs {list}: only the coins' amounts are given, not their previous transactions (Electrum's QR codes leave " +
-      "them out), so the amounts can't be checked. With more than one segwit input, a hostile computer can show a " +
-      "different amount each time it asks you to sign, and put the signatures together into a transaction that " +
-      "pays a much larger fee than shown. Sign only if you trust the computer that made this, and only once.",
+    warn("warn", plural(v0.length, "Input {list}: its amount is only the PSBT's word (Electrum's QR codes leave out " +
+      "the previous transaction), and two signatures made with different amounts could pay a much larger fee than " +
+      "shown. If a transaction \"failed\" and you're asked to sign the same coins again, don't, unless the amounts " +
+      "are the same.",
+    "Inputs {list}: their amounts are only the PSBT's word (Electrum's QR codes leave out the previous " +
+      "transactions), and two signatures made with different amounts could pay a much larger fee than shown. If a " +
+      "transaction \"failed\" and you're asked to sign the same coins again, don't, unless the amounts are the same.",
     { list: list(v0) }));
   }
 

@@ -127,11 +127,23 @@ malformed or truncated, with what is wrong.
   its own input's amount only, so two signatures of differently-described
   versions can make a transaction with a much larger fee (the segwit v0 fee
   attack). So with more than one segwit v0 input, any of them without its
-  previous transaction, the warning is red, and signing asks "Sign anyway":
-  every multi-input PSBT from Electrum's QR codes. One input alone is safe
-  (its signature covers the amount the fee is computed from), and so is
-  taproot (its signatures cover every input's amount). With the previous
-  transaction, the amount is its own. For non-segwit inputs the amount
+  previous transaction (every multi-input PSBT from Electrum's QR codes),
+  an amber warning says so, with what to do: if a transaction "failed" and
+  you're asked to sign the same coins again, don't, unless the amounts are
+  the same. One input alone is safe (its signature covers the amount the
+  fee is computed from), and so is taproot (its signatures cover every
+  input's amount). With the previous transaction, the amount is its own.
+- **Coins signed before** (`lib/memory.js`): the Signer remembers each input
+  it signed since the device was switched on, its outpoint and the amount it
+  was told (nothing else: no keys, scripts or addresses), in gk:session: RAM
+  only, until power-off, never on the card, and kept across the app's runs.
+  Recorded once signed, not when reviewed. The same coin told with another
+  amount is red, and not signed: a coin's amount never changes, so one of
+  the two was a lie. With the same amount, a blue line says it was signed
+  before. Every kind of input is checked and recorded, proved amounts and
+  taproot too: it costs nothing. Up to 500 coins, then the oldest go. After
+  a power-off the memory is gone, and the amber warning above is what is
+  left. For non-segwit inputs the amount
   can't be checked at all, and a signer needs the previous transaction
   (amber).
 - Input and output amounts over 21 million BTC (red).

@@ -74,9 +74,15 @@ any earlier step.
   amounts, previous transaction txid, sighash types, fake change outputs,
   odd paths). The segwit v0 fee attack as the security review's M2 showed it
   (two rounds, each with an amount understated, whose signatures pay the
-  real fee together): red whenever it applies, and not for one input, for
+  real fee together): amber whenever it applies, and not for one input, for
   taproot, or with the previous transactions. Amounts over 21 million BTC;
   finalize refusing a held signature that doesn't verify.
+- **memory**: the Signer's memory of coins signed since power-on
+  (`apps/signer/lib/memory.js`, over a stand-in for gk:session): round 1
+  signs and records, round 2 with the amounts swapped is red and names both;
+  the same amounts get a blue line; only signed inputs are recorded, and only
+  outpoints and amounts; a fresh store (power-off) knows nothing; the limit
+  of 500 coins. `tests/signer.txt` plays round 2 (step 16).
 - **electrum**: PSBTs from Electrum itself (`electrum.json`, below).
 
 ## Where the vectors come from
