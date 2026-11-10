@@ -19,7 +19,15 @@ hand, and forgotten afterwards. What leaves is only what is on the screen:
 text to read, and QR codes for another device's camera.
 
 Built on [Circle](https://github.com/rsta2/circle) (bare-metal C++ for the
-Pi). Licensed under the GPLv3 (GapKeep's own sources say GPL-3.0-or-later).
+Pi, GPLv3). GapKeep is licensed under the GPLv3 or later
+([LICENSE](LICENSE); its sources say GPL-3.0-or-later), and the cards
+`tools/make_sdcard.sh` makes carry each licence of what is on them, as
+`LICENCE.*` files: GapKeep's and Circle's (`LICENCE.gapkeep`,
+`LICENCE.circle`), and those named below.
+[LVGL](https://lvgl.io) and [QuickJS](https://bellard.org/quickjs/) are
+under the MIT licence (`LICENCE.lvgl`, `LICENCE.quickjs`), and
+[FatFs](https://elm-chan.org/fsw/ff/), which reads the card, under its own
+BSD-style licence (`LICENCE.fatfs`; sealed builds don't have it).
 The QR decoder,
 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), is under the Apache
 License 2.0 (`third_party/zxing-cpp/LICENSE`, and `LICENCE.zxing-cpp` on
