@@ -87,7 +87,8 @@ export class Gapkeep {
     return gk;
   }
 
-  // The SD card's contents: { "apps/<id>/<path>": string or Uint8Array }.
+  // The SD card's contents: { "apps/<id>/<path>" or "data/<name>/<path>":
+  // string or Uint8Array }.
   // Call before boot().
   writeCard (files) {
     this.m.FS.mkdirTree ("/card/apps");     // an empty card has the folder too
