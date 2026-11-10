@@ -77,7 +77,7 @@ or structure were copied.
 
 ## Same-licence material (GapKeep's vendored Circle, GPLv3)
 
-Circle, as vendored in /home/mac/claude/code/lvglzero/circle (commit
+Circle, as vendored in this repository's `circle/` submodule (commit
 7a81e1b480fe7d19fc1fc695b89bff0a0848f44b), may be used directly by GapKeep. It
 was consulted for: `ARM_CM_CAM1CTL/DIV`, `ARM_CM_PASSWD`; `ARM_IRQ_CAM1` and
 `ARM_FIQ_CAM1 = 39`; `PROPTAG_SET_DOMAIN_STATE`, `DOMAIN_ID_UNICAM1 = 14`,

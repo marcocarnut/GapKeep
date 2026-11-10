@@ -34,12 +34,15 @@ console (and its camera sends grey).
   renaming an app also changes the `id` in its manifest. **Import** takes a
   folder from your computer: one app's folder, or a folder of apps (a card's
   `apps/`). **Export .zip** downloads the selected app. **Examples** adds back
-  any of `launcher`, `hello`, `gallery`, `dice39` and `qrscan` that you deleted. A dot marks
+  any of the example apps that you deleted: `launcher`, `settings`, `hello`,
+  `gallery`, `dice39`, `qrscan`, `clock`, `totp`, `codex32`, `signer` and
+  `colorqr` (the list is `EXAMPLES` in `tools/gkide.sh`). A dot marks
   unsaved files, a triangle the running app.
 - **Editor** (middle): Monaco, as in VS Code. JavaScript is checked as
   GapKeep runs it: ES2023 modules, no DOM (`document`, `fetch` are errors),
-  with completions and hovers for `gk:ui`, `gk:sys`, `gk:crypto` and
-  `gk:apps` from `sim/web/types/gapkeep.d.ts`. `manifest.json` is checked
+  with completions and hovers for every `gk:*` module (`gk:ui`, `gk:sys`,
+  `gk:crypto`, `gk:clock`, `gk:session`, `gk:i18n`, `gk:apps`) from
+  `sim/web/types/gapkeep.d.ts`. `manifest.json` is checked
   against the manifest's rules (keys, id, icon names).
 - **Screen** (right): GapKeep's screen at its true size, scaled to fit in
   whole steps when it fits. **Run** saves everything, boots a fresh machine

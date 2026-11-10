@@ -10,8 +10,17 @@ There is no Linux, no network stack and no radio, and the SD card is only
 ever read: a computer for creating and handling secrets that have no way out
 except what you read off the screen.
 
+GapKeep keeps nothing. It never writes to the SD card, and what an app holds
+is gone at power-off. Keys are not stored on the device: they live
+elsewhere, on paper, for example as [codex32](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki)
+shares (which dice39 makes), and are brought in only when needed (typed,
+or shown to the camera as QR codes), recombined in memory for the task at
+hand, and forgotten afterwards. What leaves is only what is on the screen:
+text to read, and QR codes for another device's camera.
+
 Built on [Circle](https://github.com/rsta2/circle) (bare-metal C++ for the
-Pi). Licensed under the GPLv3. The QR decoder,
+Pi). Licensed under the GPLv3 (GapKeep's own sources say GPL-3.0-or-later).
+The QR decoder,
 [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), is under the Apache
 License 2.0 (`third_party/zxing-cpp/LICENSE`, and `LICENCE.zxing-cpp` on
 the cards `tools/make_sdcard.sh` makes); Bitcoin Core's
@@ -23,6 +32,11 @@ decoder, `lib/colorqr` (`LICENCE.colorqr` on the cards). The fonts,
 [JetBrains Mono](https://www.jetbrains.com/lp/mono/), are under the SIL
 Open Font License (`LICENCE.montserrat`, `LICENCE.fontawesome` and
 `LICENCE.jetbrainsmono` on the cards; `tools/make_fonts.py` makes them).
+The code that `apps/dice39`, `apps/codex32` and `apps/signer` copy from
+[dice39](https://github.com/marcocarnut/dice39) (their `vendor/` folders) is
+under the GNU AGPL v3 (`LICENSE-dice39.txt` in each). The Pi's boot firmware
+is Broadcom's, closed, and redistributable under `LICENCE.broadcom` (on the
+cards).
 
 ```js
 import * as ui from "gk:ui";
@@ -47,12 +61,27 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 
 ## Building
 
-Needs an x86_64 Linux machine with `curl`, `qemu-system-arm` (tested
-8.2.2), Python 3, Pillow for PNG screenshots, and `mtools` and `dosfstools`
-for SD card images. `tools/toolchain.sh` fetches the pinned compiler (Arm GNU
-Toolchain 13.2.Rel1, checked by SHA-256) into `toolchain/`; without it,
-`arm-none-eabi-gcc` from the PATH is used, but builds are then not
-reproducible.
+Needs an x86_64 Linux machine with `git`, `make`, `curl`,
+`qemu-system-arm` (tested 8.2.2), Python 3, Pillow for PNG screenshots, and
+`mtools` and `dosfstools` for SD card images. `tools/toolchain.sh` fetches
+the pinned compiler (Arm GNU Toolchain 13.2.Rel1, checked by SHA-256) into
+`toolchain/`; without it, `arm-none-eabi-gcc` from the PATH is used, but
+builds are then not reproducible.
+
+For the rest:
+
+| For | Needs |
+| --- | --- |
+| The simulator (`tools/gksim`) | `gcc` and `g++` for the host, with C++20 support (zxing-cpp) |
+| The tests (`tools/run_sim_tests.sh`, `tools/run_tests.sh`) | Node.js 18.19 or later; Python's PyYAML, Pillow and `qrcode`; `zbarimg` (Debian: `nodejs python3-yaml python3-pil python3-qrcode zbar-tools`) |
+| The browser IDE (`tools/gkide.sh`) | [Emscripten](https://emscripten.org) (emsdk, found in `~/emsdk` or through `$EMSDK`) |
+| SD cards (`tools/make_sdcard.sh`) | network access once: Circle's `boot/Makefile` downloads the Pi firmware, then checked against `tools/firmware.sha256` |
+| Regenerating the fonts (`tools/make_fonts.py`, rarely) | `lv_font_conv` 1.5.3 and fontTools; the fonts' zips (see the script) |
+
+The network is needed only to fetch: the submodules, the compiler, the Pi
+firmware and the IDE's Monaco editor (`tools/fetch_monaco.sh`, checked
+against a pinned hash). Nothing in the build or the tests talks to a
+network after that.
 
 ```sh
 git submodule update --init                              # Circle, QuickJS, zxing-cpp, libsecp256k1
@@ -94,13 +123,16 @@ WebAssembly for the browser IDE: see [docs/SIMULATOR.md](docs/SIMULATOR.md).
 ## Running and testing in QEMU
 
 ```sh
-python3 tools/qemu_harness.py --sd card.img --interactive   # boot, print the serial log
+tools/build.sh qemu                                         # the kernel for QEMU
+python3 tools/qemu_harness.py --interactive                 # boot it, print the serial log (no card: the launcher only)
+python3 tools/qemu_harness.py --sd card.img --interactive   # ... with an SD card image (below)
 tools/run_tests.sh                              # everything: QEMU scenarios, QuickJS's
                                                 # own tests on the target, native and Node tests
 ```
 
 The harness boots the kernel on QEMU's Pi Zero model with a USB keyboard and
-mouse, and an SD card image made by `tools/make_sd_image.sh <image> <dir>`. It can type, click, take screenshots and wait for log lines, so most
+mouse, and an SD card image made by `tools/make_sd_image.sh <image> <dir>`
+(`<dir>/apps` holds the apps; [docs/APPS.md](docs/APPS.md#your-first-app)). It can type, click, take screenshots and wait for log lines, so most
 development and testing needs no hardware.
 
 ## Running on a Pi Zero
@@ -142,17 +174,20 @@ activates, and the Windows (Super) key always returns to the launcher.
 - [x] Native SHA-1, SHA-512 and HMAC (`gk:crypto`); a per-app session store in RAM (`gk:session`)
 - [x] Bitcoin's primitives in `gk:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
 - [x] The Signer (`apps/signer`): BIP-174/370 PSBTs from Electrum's QR codes, explained; the transaction first, then the keys (codex32 shares, BIP-39 words, xprv, WIF); merges PSBTs; checks change
-- [ ] Experimental: colour QR codes (`"qr-color"`, `apps/colorqr`, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)): read on the simulator, QEMU and a Pi Zero's synthetic camera; the real camera next
+- [x] QR codes from a camera (`ui.Scanner`): zxing-cpp's decoder, patched and fuzzed; a clean-room driver for the Pi Camera Module v2.1 ([docs/CAMERA.md](docs/CAMERA.md)); a synthetic camera for the simulator, the IDE and test builds
+- [x] Languages (`gk:i18n`): English and Brazilian Portuguese, a pseudo-language for testing, the Settings app
+- [ ] Experimental: colour QR codes (`"qr-color"`, `apps/colorqr`, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)): read on the simulator, QEMU and a Pi Zero, with the synthetic camera and the Pi Camera; still being researched
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `clock`, `totp` (Authenticator), `signer` (shows what a transaction does, then signs it with keys from codex32 shares, seed words, an xprv or a WIF), `colorqr` (experimental: colour QR codes, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
+| `apps/` | The apps: `launcher` (built in), `dice39`, `codex32` (recombines codex32 shares, as dice39 makes them), `hello`, `gallery` (all widgets plus a runtime self-test), `qrscan`, `settings` (language, number marks and keyboard, until power-off), `clock`, `totp` (Authenticator), `signer` (shows what a transaction does, then signs it with keys from codex32 shares, seed words, an xprv or a WIF), `colorqr` (experimental: colour QR codes, [docs/EXPERIMENTAL.md](docs/EXPERIMENTAL.md)). Apps that build on another's library carry a copy, made by `tools/share_libs.py`. |
 | `src/` | Kernel (`kernel.*`, `kbdindev.*`) and runtime (`runtime/`). |
-| `lib/` | Builds of LVGL (with `gk_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs; `lib/colorqr`, the colour QR decoder, vendored (not a submodule: its project is not published). |
+| `lib/` | Builds of LVGL (with `gk_lv_conf.h`), QuickJS (with compat headers), zxing-cpp's QR code reader, libsecp256k1 and read-only FatFs; `lib/colorqr`, the colour QR decoder, vendored (not a submodule: its project is not published); `lib/js`, JavaScript libraries that apps copy ([lib/js/README.md](lib/js/README.md)). |
 | `circle/`, `third_party/quickjs/`, `third_party/zxing-cpp/`, `third_party/secp256k1/` | Pinned submodules. Circle and zxing-cpp get GapKeep's changes in `patches/`. |
 | `sim/` | The simulator: the runtime on a host, natively or in the browser, and the browser IDE (`sim/web/`). |
+| `patches/` | GapKeep's changes to Circle and zxing-cpp, applied by `tools/apply_patches.sh` at build time. |
 | `tests/` | Scenarios (QEMU, hardware, simulator), test-only apps and the test SD card. |
 | `tools/` | Build script, app bundler, QEMU harness, test runner; `tools/rig/` drives real hardware. |
 | `docs/` | Guides and reference; `docs/api/` holds the API description. |
