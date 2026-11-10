@@ -6,7 +6,9 @@ Site: [gapkeep.org](https://gapkeep.org) (coming soon). Source:
 [github.com/marcocarnut/GapKeep](https://github.com/marcocarnut/GapKeep).
 
 GapKeep is a tiny bare-metal system for the Raspberry Pi Zero (the plain one,
-with no radio). It boots in about two seconds into a graphical app launcher.
+with no radio). It boots in seconds into a graphical app launcher: about 3 s
+from GapKeep's start, about 12 s from power-on, most of it the Pi's own
+firmware.
 Apps are written in JavaScript and run on [QuickJS](https://bellard.org/quickjs/),
 with an [LVGL](https://lvgl.io) interface driven by a USB keyboard and mouse.
 There is no Linux, no network stack and no radio, and the SD card is only
