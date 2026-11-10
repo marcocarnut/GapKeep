@@ -191,8 +191,8 @@ export function formatBtc(sats, options) {
 
 const escape = (c) => c.replace(/[.\\]/g, "\\$&");
 
-// The text as typed -> "1234.5", or a RangeError saying why not. GapWallet's
-// rules (W4, src/amount.js): what could be read two ways, like 1.000 (one,
+// The text as typed -> "1234.5", or a RangeError saying why not. The rules
+// of GapWallet, the companion web wallet: what could be read two ways, like 1.000 (one,
 // or a thousand), is refused rather than guessed; a lone mark that can't be
 // a thousands separator, as in 0.001 or 1,5, is the decimal mark, whichever
 // the language: numbers are often copied from elsewhere.

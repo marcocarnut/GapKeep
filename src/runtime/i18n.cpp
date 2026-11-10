@@ -244,7 +244,8 @@ static int NextCodePoint (const u8 **pp, const u8 *pEnd)
 
 // Control characters (C0 but the line feed, DEL, C1), the bidi controls and
 // the line and paragraph separators: what could change how the text around
-// reads. (GapWallet's clean(), W6.) Lone surrogates too.
+// reads (the set GapWallet, the companion web wallet, removes). Lone
+// surrogates too.
 static boolean IsForbidden (int c)
 {
 	return    c < 0

@@ -1,8 +1,9 @@
 # Glossary: Brazilian Portuguese (pt-BR)
 
-The terms GapKeep's apps and GapWallet use in Brazilian Portuguese, so the
-same thing has the same name everywhere. The user decides them; translators
-follow them and propose changes here, not in a catalog alone.
+The terms GapKeep's apps use in Brazilian Portuguese, as does GapWallet, a
+companion web wallet (not yet published), so the same thing has the same
+name everywhere. Translators follow them, and propose changes here, not in
+a catalog alone.
 
 `tools/i18n.py check --lang pt-BR` reads the table below and warns about
 a translation with a word from the "Avoid" column: a warning for the
