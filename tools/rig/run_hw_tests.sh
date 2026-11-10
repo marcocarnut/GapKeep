@@ -6,8 +6,9 @@
 # Hardware runs always use a test build: screenshots come over the serial
 # line, which production builds never read.
 #
-# Usage: tools/rig/run_hw_tests.sh [-o output-dir] [scenario.txt ...]
-#        (default: every scenario; rig from $GK_RIG, default mac@five.local)
+# Usage: tools/rig/run_hw_tests.sh [--rig user@host] [-o output-dir] [scenario.txt ...]
+#        (default: every scenario). The rig's Linux host, as ssh reaches
+#        it, is required: --rig, or $GK_RIG.
 #
 # Scenarios that need the test SD card (tests/sdcard: "Needs ... the test SD
 # card") are skipped unless GK_RIG_SDAPPS=1 says the rig's card has its
@@ -17,9 +18,20 @@
 #
 set -e
 cd "$(dirname "$0")/../.."
-RIG=${GK_RIG:-mac@five.local}
+RIG=$GK_RIG
 OUT=
-if [ "$1" = "-o" ]; then OUT=$2; shift 2; fi
+while :; do
+	case "$1" in
+		--rig) RIG=$2; shift 2 ;;
+		-o)    OUT=$2; shift 2 ;;
+		*)     break ;;
+	esac
+done
+if [ -z "$RIG" ]; then
+	echo "run_hw_tests: which rig? Give its Linux host as ssh reaches it:" >&2
+	echo "  GK_RIG=user@host $0 ...   or   $0 --rig user@host ...   (docs/RIG.md)" >&2
+	exit 2
+fi
 OUT=${OUT:-$(mktemp -d -t gapkeep-hw-XXXXXX)}
 mkdir -p "$OUT"
 SCENARIOS=${*:-$(ls tests/*.txt)}

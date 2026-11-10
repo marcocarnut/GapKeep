@@ -2,7 +2,8 @@
 
 GapKeep is developed mostly in QEMU, but QEMU is not a Pi Zero. The rig lets
 the same test scenarios run on a real Pi Zero with no person at the keyboard.
-A second Raspberry Pi (here a Pi 5 called `five`) is wired to the Zero and:
+A second Raspberry Pi (here a Pi 5: the rig's Linux host) is wired to the Zero
+and:
 
 - resets it, through its RUN pad;
 - sends it kernels over the serial line, to Circle's serial bootloader on the
@@ -71,12 +72,15 @@ On the Pi 5 (Raspberry Pi OS, bookworm):
 
 ## Using it
 
-From the development machine:
+From the development machine, which reaches the rig's Linux host over ssh
+(with a key, so that no password is asked for each copy). Say which host
+with `GK_RIG` or `--rig`; there is no default:
 
 ```sh
+export GK_RIG=user@host                        # the rig's Linux host, as ssh reaches it
 tools/rig/run_hw_tests.sh                      # every scenario in tests/
 tools/rig/run_hw_tests.sh tests/dice39.txt     # one scenario
-GK_RIG=user@host tools/rig/run_hw_tests.sh     # another rig (default mac@five.local)
+tools/rig/run_hw_tests.sh --rig user@otherhost # another rig, this once
 ```
 
 This builds a test kernel for the Pi (`tools/build.sh pi TEST=1`), copies it
@@ -88,6 +92,7 @@ upload (about 33 s).
 on the development machine, a 640x480 grey frame every 3.5 s or so, with lines
 marking the middle. It builds and sends a test kernel and opens the scanner
 (about a minute); `--no-flash` skips that when the scanner is already open.
+It finds the rig as `run_hw_tests.sh` does (`GK_RIG` or `--rig`).
 
 On the rig itself, `gkrig.py` does the individual steps:
 

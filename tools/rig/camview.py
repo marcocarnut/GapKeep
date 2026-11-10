@@ -9,7 +9,8 @@ the 640x480 grey picture the scanner works on, over the serial line.
                                       scanner open: show at once
 
 The lines mark the middle of the picture. s saves the frame as camview-N.pgm
-here; q or Esc quits. The rig: $GK_RIG, default mac@five.local (docs/RIG.md).
+here; q or Esc quits. The rig's Linux host, as ssh reaches it, is required:
+--rig user@host, or $GK_RIG (docs/RIG.md).
 
 SPDX-License-Identifier: GPL-3.0-or-later
 """
@@ -43,8 +44,12 @@ def read_frames(proc, got):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--no-flash', action='store_true', help='use the kernel running on the rig')
+    ap.add_argument('--rig', metavar='USER@HOST', default=os.environ.get('GK_RIG'),
+                    help="the rig's Linux host, as ssh reaches it (default: $GK_RIG)")
     args = ap.parse_args()
-    rig = os.environ.get('GK_RIG', 'mac@five.local')
+    rig = args.rig
+    if not rig:
+        ap.error("which rig? Give its Linux host as ssh reaches it: --rig user@host, or GK_RIG=user@host")
 
     if args.no_flash:
         hexfile = ''
