@@ -149,7 +149,7 @@ check("wipe: then public", () => {
   k.wipe();
   return !k.isPrivate && k.address() === addr ? true : { isPrivate: k.isPrivate };
 });
-check("help", () => /btc\.words/.test(btc.help()));
+check("help", () => /btc\.words/.test(String(btc.help())) && JSON.stringify(btc.help()) === JSON.stringify(String(btc.help())));
 
 console.log(`btc tests: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

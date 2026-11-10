@@ -47,6 +47,11 @@ COPIES = (
     # descriptors, and what they import
     + bitcoin("dice39", ["bip39.js", "bip32.js", "crypto.js", "descriptor.js",
                          "psbt/bytes.js", "psbt/basen.js", "psbt/hashes.js"])
+    # the REPL's btc (loaded when the code first says btc), and what it imports
+    + bitcoin("repl", ["btc.js", "bip32.js", "bip39.js", "crypto.js", "descriptor.js", "keys.js", "text.js",
+                       "psbt/basen.js", "psbt/bech32.js", "psbt/bytes.js", "psbt/hashes.js", "psbt/script.js"])
+    + [("apps/codex32/vendor/wordlist.js", "apps/repl/vendor/wordlist.js"),
+       ("apps/codex32/LICENSE-dice39.txt", "apps/repl/LICENSE-dice39.txt")]
 )
 
 def read(path):
