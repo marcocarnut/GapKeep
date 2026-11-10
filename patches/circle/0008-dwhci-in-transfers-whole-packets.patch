@@ -1,0 +1,240 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: dwhci: IN transfers receive whole packets, into a bounce buffer
+
+The DWC OTG core receives whole packets of up to the endpoint's maximum
+packet size, and an IN transfer's size is meant to be a multiple of it
+(Linux's dwc2 rounds it up and uses bounce buffers). Circle programmed
+exactly the caller's buffer length, and callers ask for less: a 4-byte
+string descriptor header, 8 bytes of device descriptor, an 8-byte
+keyboard report, into heap blocks of that size. A device that sends a
+full packet (up to 1024 bytes for a high-speed interrupt endpoint) could
+have the core write past the caller's buffer, into the heap.
+
+- IN stages (but isochronous ones) are programmed for whole packets and
+  receive into a bounce buffer of that size, whole cache lines; what the
+  caller asked for is copied to its buffer as it arrives. The status
+  stage, which expects no data, gets one too.
+- bMaxPacketSize0 must be 8, 16, 32 or 64 (USB 2.0 5.5.3); an endpoint
+  declaring 0 is no longer a division by zero.
+- HID keyboards and mice whose report endpoint declares a packet size
+  over 64 bytes (or 0) are refused.
+
+diff --git a/include/circle/usb/dwhcixferstagedata.h b/include/circle/usb/dwhcixferstagedata.h
+index 51e2e6b..aa5fa60 100644
+--- a/include/circle/usb/dwhcixferstagedata.h
++++ b/include/circle/usb/dwhcixferstagedata.h
+@@ -123,6 +123,13 @@ private:
+ 	DMA_BUFFER (u32, m_TempBuffer, 1);
+ 	void		*m_pBufferPointer;
+ 
++	// gapkeep: IN stages receive into a bounce buffer of whole max-size
++	// packets (see the constructor); what fits is copied to the caller's
++	// buffer as it arrives
++	u8		*m_pBounceBuffer;
++	u8		*m_pCallerBuffer;
++	u32		 m_nCallerSize;
++
+ 	unsigned	 m_nStartTicksHZ;
+ 
+ 	CDWHCIFrameScheduler *m_pFrameScheduler;
+diff --git a/lib/usb/dwhcixferstagedata.cpp b/lib/usb/dwhcixferstagedata.cpp
+index 9141f30..312dcb8 100644
+--- a/lib/usb/dwhcixferstagedata.cpp
++++ b/lib/usb/dwhcixferstagedata.cpp
+@@ -27,6 +27,8 @@
+ #include <circle/sysconfig.h>
+ #include <circle/logger.h>
+ #include <circle/timer.h>
++#include <circle/synchronize.h>
++#include <circle/util.h>
+ #include <assert.h>
+ 
+ #define MAX_ISO_SPLIT_PAYLOAD	188
+@@ -51,6 +53,9 @@ CDWHCITransferStageData::CDWHCITransferStageData (unsigned	 nChannel,
+ 	m_nSubState (0),
+ 	m_nTransactionStatus (0),
+ 	m_nErrorCount (0),
++	m_pBounceBuffer (0),
++	m_pCallerBuffer (0),
++	m_nCallerSize (0),
+ 	m_nStartTicksHZ (0),
+ 	m_pFrameScheduler (0)
+ {
+@@ -63,6 +68,10 @@ CDWHCITransferStageData::CDWHCITransferStageData (unsigned	 nChannel,
+ 
+ 	m_Speed = m_pDevice->GetSpeed ();
+ 	m_nMaxPacketSize = m_pEndpoint->GetMaxPacketSize ();
++	if (m_nMaxPacketSize == 0)		// gapkeep: a broken descriptor; it is a divisor
++	{
++		m_nMaxPacketSize = 1;
++	}
+ 	
+ 	m_bSplitTransaction = m_pDevice->IsSplit ();
+ 
+@@ -135,6 +144,58 @@ CDWHCITransferStageData::CDWHCITransferStageData (unsigned	 nChannel,
+ 		m_nPacketsPerTransaction = 1;
+ 	}
+ 
++	// gapkeep: the core receives whole packets of up to the endpoint's
++	// maximum packet size, which the device declares (up to 1024 bytes for
++	// a high-speed interrupt endpoint), and IN transfer sizes must be a
++	// multiple of it. Callers often ask for less (a 4-byte string header,
++	// an 8-byte keyboard report) into heap blocks of that size: a device
++	// that sends a full packet could have its bytes land past the end of
++	// the caller's buffer, in the heap. So, as Linux's dwc2 does, IN stages
++	// are programmed for whole packets, into a bounce buffer that holds
++	// them; only what the caller asked for is copied back, as it arrives
++	// (TransactionComplete()). The status stage gets one too (it expects no
++	// data at all). Not for isochronous transfers: no driver in GapKeep's
++	// image uses them.
++	if (   m_bIn
++	    && !IsIsochronous ())
++	{
++		u32 nMaxPacketSize = m_nMaxPacketSize;
++		u32 nPackets = (m_nTransferSize + nMaxPacketSize - 1) / nMaxPacketSize;
++		if (nPackets == 0)
++		{
++			nPackets = 1;
++		}
++		u32 nDMASize = nPackets * nMaxPacketSize;
++
++		m_pCallerBuffer = bStatusStage ? 0 : (u8 *) m_pBufferPointer;
++		m_nCallerSize = bStatusStage ? 0 : m_nTransferSize;
++
++		// whole cache lines (heap blocks start on one): invalidating the
++		// buffer's lines touches nothing else
++		m_pBounceBuffer = new u8[  (nDMASize + DATA_CACHE_LINE_LENGTH_MAX-1)
++					 & ~(DATA_CACHE_LINE_LENGTH_MAX-1)];
++		assert (m_pBounceBuffer != 0);
++		m_pBufferPointer = m_pBounceBuffer;
++
++		m_nTransferSize = nDMASize;
++		m_nPackets = nPackets;
++		if (m_bSplitTransaction)
++		{
++			m_nBytesPerTransaction =   nDMASize > nMaxPacketSize
++						 ? nMaxPacketSize : nDMASize;
++			m_nPacketsPerTransaction = 1;
++		}
++		else
++		{
++			m_nBytesPerTransaction = nDMASize;
++			m_nPacketsPerTransaction = nPackets;
++		}
++	}
++	else
++	{
++		m_nCallerSize = m_nTransferSize;
++	}
++
+ 	assert (m_pBufferPointer != 0);
+ 	assert (((uintptr) m_pBufferPointer & 3) == 0);
+ 
+@@ -180,6 +241,10 @@ CDWHCITransferStageData::~CDWHCITransferStageData (void)
+ 	delete m_pFrameScheduler;
+ 	m_pFrameScheduler = 0;
+ 
++	delete [] m_pBounceBuffer;
++	m_pBounceBuffer = 0;
++	m_pCallerBuffer = 0;
++
+ 	m_pBufferPointer = 0;
+ 
+ 	m_pEndpoint = 0;
+@@ -246,6 +311,27 @@ void CDWHCITransferStageData::TransactionComplete (u32 nStatus, u32 nPacketsLeft
+ 		}
+ 	}
+ 
++	// gapkeep: never past the end of the (bounce) buffer
++	if (nBytesTransfered > m_nTransferSize - m_nTotalBytesTransfered)
++	{
++		nBytesTransfered = m_nTransferSize - m_nTotalBytesTransfered;
++	}
++
++	// gapkeep: hand the caller what fits of the bytes just received (the
++	// channel interrupt handler has invalidated the cache over them)
++	if (   m_pCallerBuffer != 0
++	    && m_nTotalBytesTransfered < m_nCallerSize)
++	{
++		u32 nCopy = m_nCallerSize - m_nTotalBytesTransfered;
++		if (nCopy > nBytesTransfered)
++		{
++			nCopy = nBytesTransfered;
++		}
++
++		memcpy (m_pCallerBuffer + m_nTotalBytesTransfered,
++			m_pBounceBuffer + m_nTotalBytesTransfered, nCopy);
++	}
++
+ 	m_nTotalBytesTransfered += nBytesTransfered;
+ 	m_pBufferPointer = (u8 *) m_pBufferPointer + nBytesTransfered;
+ 	
+@@ -578,9 +664,11 @@ boolean CDWHCITransferStageData::IsStageComplete (void) const
+ 
+ u32 CDWHCITransferStageData::GetResultLen (void) const
+ {
+-	if (m_nTotalBytesTransfered > m_nTransferSize)
++	// gapkeep: with a bounce buffer, at most what the caller asked for
++	u32 nLimit = m_pBounceBuffer != 0 ? m_nCallerSize : m_nTransferSize;
++	if (m_nTotalBytesTransfered > nLimit)
+ 	{
+-		return m_nTransferSize;
++		return nLimit;
+ 	}
+ 	
+ 	return m_nTotalBytesTransfered;
+diff --git a/lib/usb/usbdevice.cpp b/lib/usb/usbdevice.cpp
+index dbc710c..3e91365 100644
+--- a/lib/usb/usbdevice.cpp
++++ b/lib/usb/usbdevice.cpp
+@@ -209,6 +209,23 @@ boolean CUSBDevice::Initialize (void)
+ 		return FALSE;
+ 	}
+ 
++	// gapkeep: USB 2.0 allows 8, 16, 32 or 64 (5.5.3); the host controller
++	// divides by it and sizes its buffers from it
++	u8 ucMaxPacketSize0 = m_pDeviceDesc->bMaxPacketSize0;
++	if (   ucMaxPacketSize0 != 8
++	    && ucMaxPacketSize0 != 16
++	    && ucMaxPacketSize0 != 32
++	    && ucMaxPacketSize0 != 64)
++	{
++		LogWrite (LogError, "Invalid maximum packet size on EP0 (%u)",
++			  (unsigned) ucMaxPacketSize0);
++
++		delete m_pDeviceDesc;
++		m_pDeviceDesc = 0;
++
++		return FALSE;
++	}
++
+ 	if (!m_pEndpoint0->SetMaxPacketSize (m_pDeviceDesc->bMaxPacketSize0))
+ 	{
+ 		LogWrite (LogError, "Cannot set maximum packet size on EP0");
+diff --git a/lib/usb/usbhiddevice.cpp b/lib/usb/usbhiddevice.cpp
+index 0ea164f..bebb72e 100644
+--- a/lib/usb/usbhiddevice.cpp
++++ b/lib/usb/usbhiddevice.cpp
+@@ -88,6 +88,22 @@ boolean CUSBHIDDevice::ConfigureHID (unsigned nMaxReportSize)
+ 					return FALSE;
+ 				}
+ 
++				// gapkeep: keyboards and mice send a few bytes per
++				// report; no real one needs packets over 64 bytes
++				// (full-speed's limit), while the larger sizes a
++				// high-speed device may declare (up to 1024, more
++				// with the extra-transaction bits) only widen what a
++				// hostile device can push at the host
++				if (   pEndpointDesc->wMaxPacketSize == 0
++				    || pEndpointDesc->wMaxPacketSize > 64)
++				{
++					CLogger::Get ()->Write (FromUSBHID, LogError,
++								"Report endpoint's packet size (%u) not supported",
++								(unsigned) pEndpointDesc->wMaxPacketSize);
++
++					return FALSE;
++				}
++
+ 				m_pReportEndpoint = new CUSBEndpoint (GetDevice (), pEndpointDesc);
+ 			}
+ 			else							// Output EP

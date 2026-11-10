@@ -24,7 +24,62 @@ while it runs: after pulling changes, stop it and start it again (or run
 example apps. A page newer than its simulator says so in the browser's
 console (and its camera sends grey).
 
-## The panes
+GapKeep's screen comes first: the page boots the simulator, then loads
+the editor (Monaco, several MB) while you look at the launcher.
+
+## Links
+
+The address takes two parameters, for links that start GapKeep in a
+given state (the website's "try this app" links):
+
+- `?run=<app-id>` boots straight into that app, as **Run** would, with its
+  `main.js` open in the editor: `web/index.html?run=dice39`. The id is one
+  of the apps on the IDE's card (an app in a suite works too); an example
+  app deleted in this browser is added back first. An unknown id boots the
+  launcher, with a line in the console saying so.
+- `?lang=<language>` boots in that language: `language = pt-BR` in the
+  simulated card's `gapkeep.txt` ([APPS.md](APPS.md), "The language"), for
+  every boot of that page. An unknown language is English, with a line in
+  the log.
+
+They combine: `web/index.html?run=dice39&lang=pt-BR`.
+
+## Phones
+
+On a narrow window (up to 760 px wide, or a phone on its side) the IDE is
+one column that scrolls:
+
+- **The screen** first, as wide as the page (any scale: 640 px is wider
+  than a phone; smoothed when whole pixels can't be kept). The run
+  controls (**Run**, **Stop**, **Home**, **Restart**, the screen size) are
+  above it and stay at the top of the page as it scrolls. **Experimental**
+  is on the desktop layout only.
+- **Touch**: a tap is a click where the finger touched, and brings up the
+  phone's keyboard (typed text goes to GapKeep, as from a computer's
+  keyboard). A finger held still presses, and then drags (sliders); moved
+  sideways, it drags at once. A swipe up or down turns GapKeep's mouse
+  wheel where it started, one notch per 60 screen pixels, so the content
+  roughly follows the finger.
+- **The key bar**, under the screen, has the keys phone keyboards lack:
+  Esc, Tab, Shift+Tab (⇧Tab), **Home** (the Windows key: back to the
+  launcher), Backspace (⌫), the four arrows and Enter. A held key repeats,
+  as on the device. The keys don't take the focus, so the phone's
+  keyboard stays up. ⌨ hides the phone's keyboard (taps on the screen then
+  leave it hidden) or brings it back.
+- **SD card**, **editor** and **console** come below, folded: tap a
+  pane's bar to unfold it. The editor is loaded the first time it is
+  unfolded (or a file is opened), not before: on a phone the first thing
+  loaded is GapKeep itself. The console unfolds by itself when a `?run=`
+  link names no app.
+
+Wider windows have the panes described below, side by side, and no key
+bar.
+
+What needs a real phone to check (headless Chrome's touch emulation was
+used): Android keyboards that compose whole words (Gboard's suggestions)
+send a word when it is finished (a space, or a suggestion picked), not
+letter by letter; a Backspace that such a keyboard sends only as an edit
+of the hidden textarea is taken as GapKeep's Backspace.
 
 - **SD card** (left): the apps on the simulated card, `apps/<id>/...`.
   Click a file to edit it, a folder to open or close it. **New app** makes
@@ -184,6 +239,32 @@ GapKeep reads the card at boot, so restart the Pi. See
 [APPS.md](APPS.md#installing-apps). The launcher shows the app's SHA-256;
 `python3 tools/bundle_apps.py --hash <folder>` computes it on your computer
 to compare.
+
+## Serving it with a Content Security Policy
+
+The page has no inline scripts or styles, and needs no CSP of its own. A
+site that serves it with one needs at least this (tested in Chrome: the
+simulator boots, Monaco and its workers run, no violations):
+
+```
+default-src 'self'; script-src 'self' 'wasm-unsafe-eval';
+style-src 'self' 'unsafe-inline'; img-src 'self' data:;
+font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'
+```
+
+- `'wasm-unsafe-eval'`: the simulator is WebAssembly.
+- `style-src 'unsafe-inline'`: Monaco makes `<style>` elements and
+  `style` attributes as it runs (without it the editor loads but is drawn
+  wrong); the IDE's own code sets styles only through the DOM, which a CSP
+  allows.
+- `worker-src blob:`: Monaco starts its workers (JavaScript checking and
+  completions) from `blob:` URLs that load its files from `'self'`.
+  Without it, the editor works without them.
+- `font-src data:`: Monaco's icon font is inline; `img-src data:`: the
+  page's empty favicon.
+
+The webcam (getUserMedia) and pictures (read from the file) need nothing
+more.
 
 ## Differences from a real Pi Zero
 

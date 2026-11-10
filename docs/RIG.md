@@ -155,3 +155,22 @@ no commands while it sends the screenshot.
 - Circle's mouse driver read uninitialized memory for report items a mouse
   doesn't have (a wheel, typically), which asserted on the first report.
   Fixed in `patches/circle/0001-usbmouse-zero-unused-report-items.patch`.
+- Uploads sometimes fail several times in a row (`the bootloader refused
+  the kernel: #ERR:checksum`, or no `IHEX-F` after `R`): bytes from the rig
+  to the Zero get lost or garbled on the serial line, while the Zero's log
+  comes through intact. Seen on 2026-11-10, for some minutes; then uploads
+  went through again. Rerun.
+
+## A hostile keyboard
+
+The gadget can play a misbehaving keyboard: configfs's `report_length` is
+also the interrupt endpoint's `wMaxPacketSize` (up to 1024 at high speed),
+and a write to `/dev/hidg0` of that many bytes goes out as one packet. With
+`report_length` 1024 on the keyboard, a kernel without
+`patches/circle/0008` had the USB controller write the whole packet, 1016
+bytes past the 8-byte report buffer, on every report (seen with a guard
+region after the buffer, 2026-11-10). With 0008 such a keyboard is refused
+(packets over 64 bytes), and, with that check taken out, the packets land in
+the bounce buffer and the guard stays intact. To repeat it, record the
+gadget's configuration first and bring it back afterwards (the rig's
+gadget service, `sudo systemctl restart ...-gadget`, rebuilds it).

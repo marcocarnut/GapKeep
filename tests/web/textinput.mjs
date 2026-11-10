@@ -153,6 +153,18 @@ const key = (k, more = {}) => ({ key: k, code: "Key" + k, repeat: false, shiftKe
   check ("paste of a dropped character", logs[1], "pasted 3 of 4 characters (GapKeep types ASCII and Latin-1 only)");
 }
 {
+  // a phone's keyboard (Android): keys as "Unidentified", Backspace only as an
+  // edit of the (empty) textarea; while composing a word, the edit is the word's
+  const { z, keys } = setup ();
+  check ("Unidentified keydown left alone", keys.keydown (key ("Unidentified")), false);
+  check ("deleteContentBackward is Backspace", keys.beforeinput ({ inputType: "deleteContentBackward" }), true);
+  check ("other edits left to input", keys.beforeinput ({ inputType: "insertText" }), false);
+  keys.compositionstart ();
+  check ("composing: the word's", keys.beforeinput ({ isComposing: true, inputType: "deleteContentBackward" }), false);
+  keys.compositionend ("");
+  check ("phone Backspace sent once", z.sent, ["Backspace"]);
+}
+{
   // an input method's word, and an emoji: composition gives the text
   const { z, keys, warnings } = setup ();
   keys.compositionstart ();
