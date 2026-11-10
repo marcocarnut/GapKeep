@@ -1,19 +1,19 @@
-// Tests apps/signer/lib/psbt under Node, with Node's SHA-256 and RIPEMD-160 in
+// Tests lib/js/bitcoin/psbt under Node, with Node's SHA-256 and RIPEMD-160 in
 // place of gk:crypto's, against tests/psbt/vectors.json (sources in
 // tests/psbt/README.md):
 //   node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
-// (the flag: apps/signer has no package.json saying its .js files are modules)
+// (the flag: lib/js/bitcoin has no package.json saying its .js files are modules)
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { setHashes } from "../../apps/signer/lib/psbt/hashes.js";
-import { fromHex, toHex, DecodeError, equal } from "../../apps/signer/lib/psbt/bytes.js";
-import { base43Encode, base43Decode, base58Encode, base58Decode, base58CheckEncode, base58CheckDecode } from "../../apps/signer/lib/psbt/basen.js";
-import { bech32Decode, BECH32, BECH32M, segwitDecode, segwitEncode } from "../../apps/signer/lib/psbt/bech32.js";
-import { parseTx, serializeTx, txid } from "../../apps/signer/lib/psbt/tx.js";
-import { scriptToAddress, addressToScript } from "../../apps/signer/lib/psbt/script.js";
-import { parsePsbt, serializePsbt, PsbtError } from "../../apps/signer/lib/psbt/psbt.js";
-import { readPayload, electrumQrText } from "../../apps/signer/lib/psbt/transport.js";
-import { analyze, analyzeTx } from "../../apps/signer/lib/psbt/analyze.js";
+import { setHashes } from "../../lib/js/bitcoin/psbt/hashes.js";
+import { fromHex, toHex, DecodeError, equal } from "../../lib/js/bitcoin/psbt/bytes.js";
+import { base43Encode, base43Decode, base58Encode, base58Decode, base58CheckEncode, base58CheckDecode } from "../../lib/js/bitcoin/psbt/basen.js";
+import { bech32Decode, BECH32, BECH32M, segwitDecode, segwitEncode } from "../../lib/js/bitcoin/psbt/bech32.js";
+import { parseTx, serializeTx, txid } from "../../lib/js/bitcoin/psbt/tx.js";
+import { scriptToAddress, addressToScript } from "../../lib/js/bitcoin/psbt/script.js";
+import { parsePsbt, serializePsbt, PsbtError } from "../../lib/js/bitcoin/psbt/psbt.js";
+import { readPayload, electrumQrText } from "../../lib/js/bitcoin/psbt/transport.js";
+import { analyze, analyzeTx } from "../../lib/js/bitcoin/psbt/analyze.js";
 
 const hash = (name) => (data) => new Uint8Array(createHash(name).update(data).digest());
 const withRipemd = { sha256: hash("sha256"), ripemd160: hash("ripemd160") };

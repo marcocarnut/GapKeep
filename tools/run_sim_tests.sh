@@ -156,6 +156,11 @@ if command -v node >/dev/null; then
 	else
 		echo "FAIL  sim:bbqr   (see $OUT/bbqr.log)"; FAILED=1
 	fi
+	if node --experimental-default-type=module tests/btc/run_node.mjs > "$OUT/btc.log" 2>&1; then
+		echo "PASS  sim:btc"
+	else
+		echo "FAIL  sim:btc   (see $OUT/btc.log)"; FAILED=1
+	fi
 else
 	echo "SKIP  sim:bbqr   (needs Node)"
 fi

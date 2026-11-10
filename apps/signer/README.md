@@ -116,7 +116,9 @@ malformed or truncated, with what is wrong.
   system has it; without it the check is skipped and the screen says so),
   P2SH by its redeemScript, P2WSH multisig by its witnessScript. An output
   claiming a wallet key but paying elsewhere is flagged red and counted as
-  someone else's. Taproot keys are not checked (that needs the key tweak).
+  someone else's. Taproot keys are not checked here (that needs the key
+  tweak); once the keys are in, they are (`gk:crypto`'s
+  `taprootTweakPublicKey`, BIP-86), as all change is.
 - Each input's previous transaction against its txid, and against its
   witness UTXO; redeemScripts and witnessScripts against their scripts.
 - **Electrum's QR codes leave out the previous transactions**
@@ -144,7 +146,11 @@ Pi Zero at some 40 times that (under half a second for all of it).
 
 Pure modules, like the PSBT library (`lib/psbt/`, all but `view.js`, which
 draws): no `gk:*` import, so the same files run here and
-under Node (`tests/signer/run_node.mjs`). The cryptography is given once:
+under Node (`tests/signer/run_node.mjs`). Their home is `lib/js/bitcoin/`
+(`lib/js/README.md`), the copies here are made by `tools/share_libs.py`:
+change them there. The signer's own are `review.js`, `codes.js`,
+`wallet.js`, `selftest.js` and `psbt/view.js`. The cryptography is given
+once:
 
 ```js
 import * as crypto from "gk:crypto";
