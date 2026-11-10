@@ -32,7 +32,7 @@ run() {	# scenario, SD card image
 		echo "SKIP  $name   (needs the QR decoder, third_party/zxing-cpp)"
 		return
 	fi
-	if python3 tools/qemu_harness.py --sd "$2" --out "$OUT/$name" "$1" > "$OUT/$name.log" 2>&1; then
+	if python3 tools/qemu_harness.py ${2:+--sd "$2"} --out "$OUT/$name" "$1" > "$OUT/$name.log" 2>&1; then
 		echo "PASS  $name"
 	else
 		echo "FAIL  $name   (see $OUT/$name.log)"
@@ -42,6 +42,9 @@ run() {	# scenario, SD card image
 
 # scenarios whose first line says "Needs a test build" run against make TEST=1
 needs_test_build() { head -1 "$1" | grep -q "Needs a test build"; }
+# and those that say "Needs a sealed build" against a sealed build with
+# built-in data and test apps, without a card (tests/sealed_data.txt)
+needs_sealed_build() { head -1 "$1" | grep -q "Needs a sealed build"; }
 
 check() {	# name, command...
 	name=$1; shift
@@ -69,7 +72,7 @@ tools/make_sd_image.sh "$OUT/sd-test.img" tests/sdcard
 
 tools/build.sh qemu >/dev/null
 for t in tests/*.txt; do
-	needs_test_build "$t" || run "$t" "$OUT/sd-apps.img"
+	needs_test_build "$t" || needs_sealed_build "$t" || run "$t" "$OUT/sd-apps.img"
 done
 
 # the kernel hash the launcher shows must be that of kernel.img
@@ -94,6 +97,11 @@ fi
 if [ -f "$OUT/signer/30-part-00.png" ]; then
 	check signer_bbqr node --experimental-default-type=module tests/signer/check_bbqr.mjs "$OUT/signer"
 fi
+
+tools/build.sh qemu SEALED=1 DATA=tests/sdcard/data EXTRA_APPS=tests/sdcard/apps/testsuite >/dev/null
+for t in tests/*.txt; do
+	! needs_sealed_build "$t" || run "$t" ""
+done
 
 tools/build.sh qemu >/dev/null	# back to the production app set
 

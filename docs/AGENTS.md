@@ -110,7 +110,8 @@ the card, `data/<folder>/...` (public keys, say). List the folders in the
 manifest, `"data": ["pgp"]`, then `import * as data from "gk:data"`:
 `data.list("pgp")` gives `[{ name, size }]`, `data.read("pgp", name)` a
 `Uint8Array`, `data.readText(...)` a string, `data.hash("pgp")` the folder's
-hash. Data is not part of the app hash, so anyone with the card can change
+hash (read at boot, from memory: the card may be gone by then). Data is not
+part of the app hash, so anyone with the card can change
 it: **show the person what matters before using it** (a key's fingerprint).
 Run with data: `tools/gksim --data path/to/pgp apps/myapp`; in scenarios,
 the card's `data/` folder (tests/sdcard/data). Several apps can form a

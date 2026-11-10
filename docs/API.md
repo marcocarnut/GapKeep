@@ -647,7 +647,7 @@ lists. An app reads only the folders its manifest lists, `"data": ["pgp"]`,
 and nothing can write them. Apps that list the same folder share it.
 Any kind of file: binary (an exported OpenPGP key) or text (`.asc`).
 [APPS.md, "Data files"](APPS.md#data-files) says how to lay them out and
-put them on a card.
+put them on a card, or build them into a sealed kernel.
 
 ```js
 for (const { name, size } of data.list("pgp")) {
@@ -663,25 +663,29 @@ the person what matters before using it: for a key, its fingerprint,
 to be compared with one they trust; `hash(folder)` names the whole
 folder, as the launcher shows it.
 
-A folder is read on first use, all of it, and kept in memory until
-power-off: what the app reads is what was hashed. Limits: 4 MB per file,
-8 MB and 256 files per folder, 32 MB for all the folders read. A folder
-over them, or with a name that is not printable ASCII, can't be read:
-every call on it throws, saying why. Names starting with `.` (macOS's
-`._x`) are skipped.
+Every folder some installed app lists is read at boot, all of it,
+hashed, and kept in memory until power-off; these functions never
+touch the card, which can be taken out once the launcher is up. What
+the app reads is what was hashed. Limits: 4 MB per file, 8 MB and 256
+files per folder, 32 folders and 32 MB in all. A folder over them, or
+with a name that is not printable ASCII, is refused at boot: every call
+on it throws, saying why. Names starting with `.` (macOS's `._x`) are
+skipped. A sealed build reads no card; its data folders, if any, are
+built into the kernel and served the same way.
 
 Every refusal is a `TypeError` that says what is wrong: a folder that
 is not in the manifest, a path that leaves the folder (`..`, `.`, a
-leading `/`, a `\`), a file that isn't there. A folder that is not on
-the card (and every folder, without a card or in a sealed build, which
-reads no card) has no files: `list()` returns `[]` and `hash()` `null`.
+leading `/`, a `\`), a file that isn't there. A folder that isn't there
+(not on the card; every folder without a card, or in a sealed build
+without built-in data) has no files: `list()` returns `[]` and
+`hash()` `null`.
 
 | Name | Description |
 | --- | --- |
-| `list(folder)` | The folder's files, `{ name, size }`, sorted by name (byte order): `name` is the path inside the folder, with `/` between folders (`"keys/alice.asc"`), `size` in bytes. `[]` if the folder is not on the card. |
+| `list(folder)` | The folder's files, `{ name, size }`, sorted by name (byte order): `name` is the path inside the folder, with `/` between folders (`"keys/alice.asc"`), `size` in bytes. `[]` if there is no such folder. |
 | `read(folder, name)` | The file's bytes, a fresh copy. `name` as `list()` gives it. |
 | `readText(folder, name)` | The file as UTF-8 text. A `TypeError` if it isn't valid UTF-8 (or holds a NUL byte); `read()` gives its bytes. |
-| `hash(folder)` | The SHA-256 of the folder's files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)'s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if the folder is not on the card. |
+| `hash(folder)` | The SHA-256 of the folder's files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)'s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if there is no such folder. |
 
 ---
 
@@ -694,7 +698,7 @@ throws a `ReferenceError`. Used by the launcher.
 | --- | --- |
 | `list()` | Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)'s apps, in `apps/<suite>/<id>`, where the suite's folder sorts, each with `suite` set to the suite's id). |
 | `suites()` | The [suites](APPS.md#suites) on the card (`apps/<id>/suite.json`), sorted by id: `{ id, name, description, icon, image }`, as for apps (`name` and `description` in the language, from the suite's own `lang/` catalogs). A suite whose apps were all refused is listed too; the launcher shows only suites with apps. |
-| `dataHash(folder)` | The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`'s `hash()` gives it, for any folder: the launcher shows those an app lists. `null` if it is not on the card; a `TypeError` if it can't be read (too big, a bad name). |
+| `dataHash(folder)` | The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`'s `hash()` gives it: the launcher shows those an app lists (only those are read, at boot). `null` if there is no such folder, or no app lists it; a `TypeError` if it was refused (too big, a bad name). |
 | `launch(id)` | Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. |
 | `card()` | The SD card: `{ status, problems }`. `status` is `"ok"` (`/apps` was read), `"none"` (no card), `"unreadable"` (no FAT file system), `"no-apps"` (no `/apps` folder) or `"disabled"` (sealed build). `problems` lists the folders in `/apps` that were not loaded: `[{ folder, error }]`, at most 16. |
 

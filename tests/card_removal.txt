@@ -1,0 +1,70 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# After startup the card can go: everything GapKeep needs from it (the apps,
+# gapkeep.txt, the data folders the apps list) is read at boot, and nothing
+# reads it afterwards. The card is taken out once the launcher is up
+# (QEMU: the monitor's "eject"; the simulator stops reading its folder);
+# then the language changes in Settings, apps from the card start and read
+# data, and Home goes back and forth. Any read of the card after boot would
+# log "... after boot: the card is read at boot only" (src/runtime/cardfs.h).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect data/testdata: 3 files, 357 bytes, sha256 f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+expect the card is no longer read: it can be removed
+expect launcher ready: .*sdhello, testsuite 60
+eject
+wait 2
+# Settings: Português (Brasil), the second language
+tile settings
+expect settings ready
+key ret
+wait 0.5
+key down
+key ret
+expect i18n: language pt-BR, numbers 1\.234,5 \(app settings\)
+expect settings: redrawn in pt-BR
+# the launcher in Portuguese: its catalogs, as every app's, are in memory
+mark
+key meta_l
+expect launcher ready
+expect i18n: launcher lang/pt-BR.json: 30 translations, 0 ignored
+# an app from the card, from memory
+tile sdhello
+expect sdhello ready: Hello from the SD card sdcard
+wait 1
+shot 01-sdhello
+mark
+key meta_l
+expect launcher ready
+# the suite (its name from its catalog), an app of it reading data
+tile testsuite
+expect launcher shows suite testsuite as "Conjunto de Teste"
+tile suite-reader
+expect suite-reader hash: f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+expect suite-reader ready
+key tab
+key ret
+expect suite-reader read key.bin: 256 bytes, binary, sha256 40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880
+key tab
+key ret
+expect suite-reader read notes/hello.txt: 13 bytes, text, 12 characters, sha256 0f593121e2491513935f3a42950951093a2cd700e53eb231b1deb31957c114d8
+wait 1
+shot 02-reader
+# Home: back to the suite; its other app
+mark
+key meta_l
+expect launcher suite testsuite: suite-peer, suite-reader
+tile suite-peer
+expect suite-peer ready: hash f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+wait 1
+shot 03-peer
+mark
+key meta_l
+expect launcher suite testsuite
+mark
+key esc
+expect launcher home: .*testsuite
+wait 1
+shot 04-home
+# nothing tried to read the card after boot
+reject after boot: the card is read at boot only

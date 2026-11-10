@@ -34,7 +34,12 @@ static int HostPath (const char *path, char *out, size_t size)
 FRESULT f_mount (FATFS *fs, const char *path, BYTE opt)
 {
 	(void) opt;
-	if (strcmp (path, "SD:") != 0 || s_Root[0] == '\0' || !HostIsDir (s_Root))
+	if (fs == 0 && strcmp (path, "SD:") == 0)
+	{
+		s_Root[0] = '\0';	// unmounted (after boot): the card is as good as gone
+		return FR_OK;
+	}
+	if (fs == 0 || strcmp (path, "SD:") != 0 || s_Root[0] == '\0' || !HostIsDir (s_Root))
 	{
 		return FR_NOT_ENABLED;
 	}

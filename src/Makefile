@@ -14,7 +14,11 @@
 # Which apps are built into the image:
 #   make            the launcher only; the other apps come from the SD
 #                   card's /apps folder (tools/make_sdcard.sh --standalone)
-#   make SEALED=1   every app in ../apps, and no SD card code at all
+#   make SEALED=1   every app in ../apps, and no SD card code at all;
+#                   DATA=dir (an absolute path, tools/build.sh makes it
+#                   one) also builds in every folder of dir as a data
+#                   folder (gk:data), EXTRA_APPS=dir the apps in dir
+#                   (tests/sealed_data.txt)
 #   make TEST=1     every app in ../apps and ../tests/apps, plus test
 #                   features (serial screenshots); /apps is read too
 #
@@ -55,12 +59,18 @@ OBJS	+= testshot.o testcrash.o runtime/synthcam.o generated/testpictures.o
 DEFINE	+= -DGK_TEST
 BUILDMODE = test
 else ifeq ($(strip $(SEALED)),1)
-BUNDLE	= ../apps
+BUNDLE	= $(if $(strip $(DATA)),--data $(strip $(DATA))) ../apps $(EXTRA_APPS)
 DEFINE	+= -DGK_SEALED
 BUILDMODE = sealed
 else
 BUNDLE	= --only launcher ../apps
 BUILDMODE = production
+endif
+
+ifneq ($(strip $(SEALED)),1)
+ifneq ($(strip $(DATA)$(EXTRA_APPS)),)
+$(error DATA and EXTRA_APPS are for sealed builds (SEALED=1); others read data folders from the card)
+endif
 endif
 
 # The language a build starts in (before gapkeep.txt; the only one for

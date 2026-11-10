@@ -10,7 +10,7 @@
 #include <circle/logger.h>
 #include <circle/util.h>
 #ifndef GK_SEALED
-#include <ff.h>
+#include "cardfs.h"		// FatFs, at boot only
 #endif
 
 static const char From[] = "settings";

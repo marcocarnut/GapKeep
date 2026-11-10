@@ -54,6 +54,11 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (simulator only)"
 		continue
 	fi
+	# the rig can't pull its card out, and runs test kernels only
+	if grep -q "^eject" "$t" || head -1 "$t" | grep -q "Needs a sealed build"; then
+		echo "SKIP  hw:$name   (QEMU and the simulator: tools/run_tests.sh)"
+		continue
+	fi
 	if grep -q "^camera " "$t" && [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ]; then
 		echo "SKIP  hw:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
