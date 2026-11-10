@@ -16,7 +16,8 @@ through writing one; [API.md](API.md) is the full reference.
   activated with Enter or Space.
 - **No network, no files, no clock you can trust**, and no way to reach
   other apps. (Apps are read from the card at boot, but an app itself cannot
-  read or write files.) That is the point: an app sees only what the person types.
+  write files, and reads only the [data folders](#data-files) its manifest
+  lists, read at boot.) That is the point: an app sees only what the person types.
 
 ## Your first app
 
@@ -146,13 +147,25 @@ after its id, laid out exactly like the repository's `apps/`:
 to the card (its FAT driver is compiled read-only). To install or remove an
 app, change the card and restart.
 
+**After startup the card can go.** The card must be in at power-on: the
+Pi's firmware loads `kernel.img` from it. GapKeep then reads everything it
+needs from it at boot (the apps, `gapkeep.txt`, and the [data
+folders](#data-files) the apps list), unmounts it, and never reads it
+again: once the launcher is up, the card can be taken out and put away, and
+every app, the Settings app and the launcher keep working until power-off.
+This holds in every mode; a sealed system never reads it at all. (Should
+some part of GapKeep try to read it afterwards, that is a bug: the log
+says `... after boot: the card is read at boot only`, and
+`tests/card_removal.txt` takes the card out to make sure it doesn't.)
+
 The launcher lists the built-in apps first, then those from the card, each
 sorted by id. An app on the card cannot replace a built-in one: if its id is
 taken (the launcher's, for instance), it is refused.
 
 A **sealed** system (`tools/make_sdcard.sh --sealed`) has every app built
 into `kernel.img` and no SD card code at all: for a machine that should only
-ever run one set of apps.
+ever run one set of apps. Its data folders, if it has any, are built in too
+([Data files](#data-files)).
 
 ## App hashes
 
@@ -266,16 +279,24 @@ const armored = data.readText("pgp", "alice.asc");
   folder share it; no other permission is needed. An app can't read a
   folder it doesn't list, or leave the folder (`..`, `.`, a leading `/` or a
   `\` in a name are refused).
-- A folder is read on first use (when the app or the launcher first asks
-  for it), all of it, checked and hashed, and kept in memory until
-  power-off: what an app reads is exactly what was hashed. Limits: 4 MB per
-  file, 8 MB and 256 files per folder, 8 levels of sub-folders, 32 MB for all
-  the folders read since boot. A folder over a limit, or with a bad name in
-  it, can't be read at all: `list()`, `read()` and `hash()` throw a
-  `TypeError` saying which file and why, and the launcher shows it.
-- A folder that isn't on the card is empty: `list()` returns `[]`,
-  `hash()` `null`. So is every folder without a card, and in a **sealed**
-  build, which reads no card.
+- Every folder that some installed app lists (built in or on the card) is
+  read **at boot**, with the apps: all of it, checked, hashed, and kept in
+  memory until power-off. Folders no app lists are not read. `gk:data`
+  never touches the card: what an app reads is exactly what was hashed, and
+  the card can be taken out once the launcher is up ([Installing
+  apps](#installing-apps)).
+- Limits: 4 MB per file, 8 MB and 256 files per folder, 8 levels of
+  sub-folders, 32 folders and 32 MB in all. A folder over a limit, or with a
+  bad name in it, is refused at boot: `list()`, `read()` and `hash()` throw
+  a `TypeError` saying which file and why, and the launcher shows it.
+- Reading costs boot time: a keyring of a few files (10 KB) adds well under
+  a millisecond in the simulator and about 7 ms in QEMU; a folder near the
+  limits (255 files, 7.8 MB) about 35 ms in the simulator and 3.2 s in
+  QEMU, whose emulated SD card is slow. Keep data folders to what the apps
+  need.
+- A folder that isn't there is empty: `list()` returns `[]`, `hash()`
+  `null`. So is every folder without a card, and in a **sealed** build
+  without built-in data.
 - The log shows each folder's file count, size and hash when it is read;
   never what the files hold. Don't log it from your app either.
 
@@ -318,6 +339,26 @@ launcher later. In the simulator, `tools/gksim --data ~/gapkeep-data/pgp
 apps/myapp` puts a folder on its card (a `data/` folder beside the app's
 folder, or beside the `apps/` folder holding it, goes too); in the browser
 IDE, **Import** a folder named `data` ([IDE.md](IDE.md)).
+
+### Data in a sealed kernel
+
+A sealed system can carry data too: built into `kernel.img`, like its apps.
+
+```sh
+tools/make_sdcard.sh --sealed --data ~/gapkeep-data     # or: tools/build.sh pi SEALED=1 DATA=~/gapkeep-data
+```
+
+Every folder in `~/gapkeep-data` becomes a data folder, with the same names,
+rules and limits as on a card, and the same hash (`tools/bundle_apps.py
+--data-hash` prints it, and the launcher shows it). The build is
+reproducible: the same source and the same data give the same `kernel.img`,
+byte for byte. But **the kernel's hash is then per person**: it covers the
+data, so it can't be compared with a published one. Check it in two
+parts: build the same commit without data (`tools/make_sdcard.sh --sealed`)
+for the published hash of the code, if you need it, and check each data
+folder's hash, which the launcher shows beside the apps that read it, on
+its own: the keyring is whatever you put in, and only you can say whether
+it is right.
 
 ## Laying out a screen
 

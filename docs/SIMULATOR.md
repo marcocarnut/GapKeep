@@ -42,6 +42,7 @@ on stdin, one per line:
 | `camera <what>` | What the camera films: see [The camera](#the-camera). |
 | `language <tag>` | The language of the apps started from now on (`pt-BR`, `qps`, `en`), as the Settings app sets it. |
 | `keyboard <layout>` | The keyboard layout (`us`, `br-abnt2`), as `keyboard` in `gapkeep.txt` or the Settings app sets it. |
+| `eject` | Take the SD card out: its folder is no longer read (GapKeep must not need it after boot; `tests/card_removal.txt`). |
 | `quit` | Exit. |
 
 Answers to commands start with `#`; everything else on stdout is the log,

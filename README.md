@@ -10,8 +10,9 @@ with no radio). It boots in about two seconds into a graphical app launcher.
 Apps are written in JavaScript and run on [QuickJS](https://bellard.org/quickjs/),
 with an [LVGL](https://lvgl.io) interface driven by a USB keyboard and mouse.
 There is no Linux, no network stack and no radio, and the SD card is only
-ever read: a computer for creating and handling secrets that have no way out
-except what you read off the screen.
+ever read, once, at boot: after startup it can be taken out. A computer for
+creating and handling secrets that have no way out except what you read off
+the screen.
 
 GapKeep keeps nothing. It never writes to the SD card, and what an app holds
 is gone at power-off. Keys are not stored on the device: they live
@@ -163,7 +164,14 @@ everything the card needs in `sdcard-standalone/`: the Pi firmware,
 of a FAT32 card. Add or remove apps by changing `apps` on the card.
 `--sealed` makes `sdcard-sealed/` instead, with every app inside
 `kernel.img`. The settings file at the top of the card is `gapkeep.txt`
-([docs/CLOCK.md](docs/CLOCK.md)).
+([docs/CLOCK.md](docs/CLOCK.md)). `--data DIR` adds data folders (public
+keys, say) for the apps that read them: on the card, or with `--sealed`
+inside `kernel.img` ([docs/APPS.md](docs/APPS.md#data-files)).
+
+The card must be in when the Pi is switched on (its firmware loads
+`kernel.img` from it). GapKeep reads everything it needs from it while
+booting; once the launcher is up, the card can be removed, and everything
+keeps working until power-off.
 Production builds leave the serial port (GPIO 14/15) alone: there is no log.
 Test builds (`tools/build.sh pi TEST=1`) log to it at 921600 baud.
 

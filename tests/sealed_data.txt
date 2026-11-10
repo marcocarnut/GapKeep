@@ -6,6 +6,7 @@
 # from a card, and the launcher shows their hashes.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
 expect data/other \(built in\): 1 files, 32 bytes, sha256 8dd1504f5f5678af545175b70c28bfc976cfa9a42dfc8bd98ded403384f361a8 60
 expect data/testdata \(built in\): 3 files, 357 bytes, sha256 f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
 expect the card is no longer read: it can be removed
