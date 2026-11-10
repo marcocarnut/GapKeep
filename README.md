@@ -151,8 +151,7 @@ everything the card needs in `sdcard-standalone/`: the Pi firmware,
 of a FAT32 card. Add or remove apps by changing `apps` on the card.
 `--sealed` makes `sdcard-sealed/` instead, with every app inside
 `kernel.img`. The settings file at the top of the card is `gapkeep.txt`
-([docs/CLOCK.md](docs/CLOCK.md)); on a card from before the rename from
-ZeroGap, rename `zerogap.txt` to `gapkeep.txt`.
+([docs/CLOCK.md](docs/CLOCK.md)).
 Production builds leave the serial port (GPIO 14/15) alone: there is no log.
 Test builds (`tools/build.sh pi TEST=1`) log to it at 921600 baud.
 
