@@ -51,7 +51,7 @@ assert b[510:] == b'\x55\xaa' and t == 0x0c and start == 8192, (t, start)
 assert (start + count) * 512 == os.path.getsize(sys.argv[1])
 assert b[462:510] == bytes(48)
 PY
-	minfo -i "$img@@4M" | grep -q 'volume label=GAPKEEP ' && echo "PASS  $name: volume GAPKEEP" ||
+	minfo -i "$img@@4M" | grep -q 'disk label="GAPKEEP ' && echo "PASS  $name: volume GAPKEEP" ||
 		fail "$name: volume label"
 
 	# the image's files: those of the folder zip, matching the card's SHA256SUMS
@@ -105,5 +105,7 @@ PY
 	else
 		fail "$name: QEMU ($out)"; tail -5 "$w/qemu.log"
 	fi
+	rm -f "$out/sd.img"		# the harness's copy of the image
+
 done
 exit $FAILED

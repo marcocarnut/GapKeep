@@ -284,7 +284,9 @@ Pi Zero has no memory encryption.
 built-in apps) and the apps on the card. Builds are reproducible: with the
 pinned compiler (`tools/toolchain.sh`), the same commit gives the same
 `kernel.img`, byte for byte, wherever it is built
-(`tools/check_reproducible.sh`). The running kernel shows the SHA-256 of
+(`tools/check_reproducible.sh`); so do the release's SD card images and
+zips (`tools/make_release.sh`, `tools/check_reproducible.sh --release`;
+README.md, "Releases"). The running kernel shows the SHA-256 of
 its own code and constants (launcher, key `i`), which is the SHA-256 of the
 start of `kernel.img`, so what runs can be checked against a published
 build.
