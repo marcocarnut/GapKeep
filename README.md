@@ -2,6 +2,9 @@
 
 **A tiny bare-metal OS for air-gapped apps.**
 
+Site: [gapkeep.org](https://gapkeep.org) (coming soon). Source:
+[github.com/marcocarnut/GapKeep](https://github.com/marcocarnut/GapKeep).
+
 GapKeep is a tiny bare-metal system for the Raspberry Pi Zero (the plain one,
 with no radio). It boots in about two seconds into a graphical app launcher.
 Apps are written in JavaScript and run on [QuickJS](https://bellard.org/quickjs/),
@@ -93,8 +96,8 @@ against a pinned hash). Nothing in the build or the tests talks to a
 network after that.
 
 ```sh
-git submodule update --init                              # Circle, QuickJS, zxing-cpp, libsecp256k1
-git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
+git clone --recursive https://github.com/marcocarnut/GapKeep
+cd GapKeep
 tools/toolchain.sh                                       # the pinned compiler
 
 tools/build.sh qemu          # -> src/kernel.img for QEMU
@@ -107,7 +110,15 @@ tools/build.sh pi SEALED=1   # ... with every app built in and no SD card code
 configures Circle for the target (QEMU lacks a few peripherals, so the two
 need different Circle libraries) and builds Circle, LVGL, QuickJS, the QR
 decoder (zxing-cpp, [docs/CAMERA.md](docs/CAMERA.md#the-qr-decoder)) and the
-kernel. zxing-cpp's own submodule (zint, for writing barcodes) is not needed.
+kernel. `--recursive` also fetches submodules GapKeep doesn't use
+(Circle's Wi-Fi support, zxing-cpp's barcode writer); to fetch only what it
+needs, clone without it and then:
+
+```sh
+git submodule update --init                              # Circle, QuickJS, zxing-cpp, libsecp256k1
+git -C circle submodule update --init --depth 1 addon/lvgl/lvgl   # LVGL 9.4
+```
+
 Switching targets rebuilds everything (about 40 s); otherwise builds are
 incremental. Builds are reproducible: `tools/check_reproducible.sh` builds
 the current commit twice, in fresh checkouts, and compares the images. GapKeep needs Circle's 8 MB kernel limit and a 1 MB stack, which
