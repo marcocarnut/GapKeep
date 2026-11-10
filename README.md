@@ -65,6 +65,7 @@ new ui.Button({ text: "Click", onClick: () => (label.text = "Clicked!") });
 - [The camera and QR codes](docs/CAMERA.md): `ui.Scanner`, and testing it without a camera.
 - [Guide for coding agents](docs/AGENTS.md): writing apps with an AI agent.
 - [Architecture and security model](docs/ARCHITECTURE.md)
+- [Design decisions](docs/DESIGN.md): what GapKeep does and doesn't do, and why.
 - [Hardware test rig](docs/RIG.md)
 
 ## Building

@@ -1,7 +1,7 @@
 // The account's public key, for a watch-only wallet: BIP-84 (native segwit)
 // account m/84'/0'/<account>', on mainnet: its output descriptor,
 // wpkh([fingerprint/84h/0h/<account>h]xpub.../<0;1>/*)#checksum
-// (docs/plans/BITCOIN.md, "Public key export"), and the same key as a
+// (docs/DESIGN.md, "Bitcoin"), and the same key as a
 // SLIP-132 zpub (Electrum's form), with the master key's fingerprint.
 //
 // BIP-39, BIP-32 and descriptors are the signer's (./bip39.js, ./bip32.js,

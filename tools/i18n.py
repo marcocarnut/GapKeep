@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 An app's translations: apps/<app>/lang/<language>.json (docs/APPS.md,
-"Languages"; docs/plans/I18N.md).
+"Languages"; docs/DESIGN.md).
 
   i18n.py check apps/x [--lang pt-BR]
       For each catalog (or the one named): keys the code uses that have no

@@ -409,6 +409,14 @@ import { wordlist } from "./data/bip39-english.js";
 import * as checks from "./lib/checks.js";
 ```
 
+Apps never import each other's files: the [app hash](#app-hashes) covers
+every line of JavaScript an app runs, which shared code would break. To
+build on another app's library, carry a copy of it, made byte for byte by
+`tools/share_libs.py` (add it to its `COPIES`). Data is another matter: a
+coming `gk:data` module will let apps read shared, read-only data sets from
+the card by name (`data/<name>/`, listed in the manifest, as in `"data":
+["pgp"]`), outside the app hash. Why: [DESIGN.md](DESIGN.md#apps).
+
 ## Timers and async code
 
 `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, promises and

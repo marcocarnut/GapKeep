@@ -1,0 +1,151 @@
+# GapKeep's design decisions
+
+The decisions that shape GapKeep, and why they were made. How the pieces
+work is in [ARCHITECTURE.md](ARCHITECTURE.md); how to write an app, in
+[APPS.md](APPS.md). A change to one of these decisions belongs here too,
+with its reason.
+
+## Keys are not stored
+
+GapKeep keeps nothing. A key is not stored on the device, encrypted or
+otherwise: it exists elsewhere, usually on paper, as shares (for example
+[codex32](https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki)
+shares, which dice39 makes) or as seed words. When a task needs it, the
+person brings the shares in, typed or shown to the camera as QR codes; they
+are recombined in memory, used for that task, and forgotten: freed memory is
+zeroed, and an app's memory is all freed when it exits.
+
+**Why:** a device that holds a key must be guarded for as long as the key
+is worth anything; a device that holds none can be lost, stolen or
+inspected and reveals nothing. Shares on paper can be kept in different
+places, and no single one of them is the key. What a person must keep safe
+is then something they can see and count.
+
+## Nothing leaves but the screen
+
+- **The SD card is read-only.** GapKeep reads it once at boot, for the apps
+  and `gapkeep.txt`, through a FAT driver built without its write code, and
+  never writes it. Settings changed while running last until power-off. A
+  sealed build has no SD card code at all.
+- **Production builds never read the serial port.** They have no serial
+  driver: the UART is never set up and its pins are inputs. Test builds log
+  to it and take test commands from it, by design, so tests can drive real
+  hardware; no app logs a secret, since a test build's log leaves the
+  device.
+- **No network, no radio.** The plain Pi Zero has none, and GapKeep has no
+  network stack. The USB drivers are cut down to hubs, keyboards and mice.
+
+**Why:** an air gap is only as good as its narrowest channel. Everything
+that leaves the device does so on the screen, as text a person reads or as
+QR codes another device's camera reads, where the person can see it go.
+
+## Apps
+
+### One app at a time, each in its own runtime
+
+Each app runs in a QuickJS runtime of its own, and only one runs at a time.
+Apps cannot reach each other's objects, files or session stores. An app
+reaches the system only through the `gk:*` modules, and some of those only
+with a permission named in its manifest.
+
+### The app hash covers all the code an app runs
+
+The launcher shows the SHA-256 of each app, to compare with the hash
+published for it ([APPS.md](APPS.md#app-hashes)). That hash covers every
+file of the app, so it covers every line of JavaScript the app runs: a
+published hash says exactly what code will handle your keys.
+
+That is why **apps never share code at run time.** An app imports only its
+own files. If apps could import each other's modules, or libraries from a
+common folder, an app's hash would no longer say what it runs: a change to
+the shared code would change what every app using it does, while their
+hashes stayed the same. So an app that builds on another's library carries
+a copy of it. `tools/share_libs.py` makes the copies byte for byte from the
+library's one home (an app, or `lib/js/`), and the tests check that no copy
+differs from its home. The cost is a few duplicated kilobytes on the card;
+the gain is that one hash pins one app's whole behaviour.
+
+### Data is shared by name
+
+Data is different from code, and will be shared between apps by name
+(a `gk:data` module is coming). A data set is a folder on the card,
+`data/<name>/`, read-only like everything else there. An app lists the data
+sets it reads in its manifest (for example `"data": ["pgp"]`), so what it
+can read is known before it starts. Data is outside the app hash: the same
+app can work on different data, and data can be updated without changing
+the hash of the app that reads it.
+
+**Why the difference:** code decides what happens to a secret; data is only
+read. An app's hash must pin its code, but an app has to treat data the way
+it treats anything typed or scanned: as input to check, never as something
+to run. Sharing data by name avoids carrying a copy of a large data set in
+every app that reads it, without weakening what the app hash promises.
+
+### Suites group apps, nothing more
+
+Suites, planned, group apps in the launcher: a set of apps that belong
+together shown together. A suite is grouping only. Each app in it stays
+self-contained, with its own files, its own hash and its own runtime, for
+the same reasons as above.
+
+## Languages
+
+- **Translations are loaded at run time**, from each app's
+  `lang/<language>.json`. One card image serves every language; the
+  language is chosen in `gapkeep.txt` (or the Settings app, until
+  power-off). Catalogs are JSON, parsed as data, never as code; they are
+  files of the app, so its hash covers them.
+- **The English text is the key**, written where it is used:
+  `t("Sign this transaction?")`. Code stays readable, a missing
+  translation shows the English, and the tools find keys in the code.
+- **Values are always parameters**, never part of a translated text:
+  amounts, addresses, keys and seed words go in as `{name}`. A translation
+  whose placeholders differ from its key's, or that holds control
+  characters, is refused and the English is shown; labels show text as
+  text, not as markup. A translation can reword a sentence but cannot
+  change what it shows.
+- **Dates and times are ISO 8601 with a space:** `2026-11-08 14:03:05`,
+  the same in every language. No month names and no other orders: one form
+  that cannot be misread.
+- **Numbers are formatted by GapKeep itself** (QuickJS has no `Intl`), the
+  same on every build. Bitcoin amounts go from integer satoshis to text and
+  back without floating point, and text that could be read two ways
+  (`1.000`) is refused rather than guessed.
+- Western scripts first. Asian scripts wait until someone needs them: their
+  fonts are megabytes.
+
+The reference is [APPS.md](APPS.md#languages) and [API.md](API.md)
+(`gk:i18n`); the Brazilian Portuguese glossary is [i18n/pt-BR.md](i18n/pt-BR.md).
+
+## Bitcoin
+
+GapKeep is a general offline computer, and Bitcoin is one of its uses: the
+dice39 app makes or imports a key and splits it into codex32 shares, and
+the Signer signs transactions that an online wallet prepared (Electrum, or
+GapWallet, a companion web wallet not yet published). Transactions travel
+between the two only as QR codes.
+
+- **The transaction first, then the keys.** The Signer reads the PSBT and
+  shows what it does before any secret is in memory, and forgets the keys
+  after signing unless asked to keep them for the next transaction.
+- **Change is a claim until checked.** An output a PSBT calls change is
+  shown as claimed until a loaded key derives it at a path the wallet
+  watches; otherwise it is counted as sent, and one a key refutes needs
+  "Sign anyway". A multisig change output must be provably the same wallet
+  as the inputs.
+- **Merging is BIP-174's Combiner:** copies of the same unsigned
+  transaction combine, conflicts are refused, different transactions are
+  never combined.
+- **Keys come as** codex32 shares, BIP-39 words, an xprv or a WIF; for each,
+  the Signer says what it can sign.
+- **Public keys leave as output descriptors** with their origin
+  (`wpkh([fingerprint/84h/0h/0h]xpub…/<0;1>/*)`), one account at a time;
+  a zpub too, for Electrum. A master xpub can't stand in: account paths
+  are hardened.
+- **QR transport:** a single Base43 code when it fits (Electrum reads it),
+  otherwise BBQr, the multi-part format Coldcard and Sparrow use, simpler
+  than UR. Colour QR codes stay experimental and out of this.
+- **PSBTs must carry their origins:** every input and change output its
+  BIP-32 derivation with the master fingerprint; segwit inputs their
+  previous transaction too, by default, which closes the segwit v0 fee
+  attack.

@@ -1,5 +1,5 @@
 // Settings: the language, the marks numbers are written with, and the
-// keyboard layout (docs/plans/I18N.md, "Settings"). Each applies at once,
+// keyboard layout (docs/APPS.md, "Languages"). Each applies at once,
 // for this session: GapKeep never writes to the card, so a choice lasts
 // until power-off. Like the clock app, it shows the gapkeep.txt lines that
 // make it last, to be written on the card from another computer.
