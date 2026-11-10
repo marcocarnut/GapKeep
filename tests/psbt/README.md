@@ -1,4 +1,4 @@
-# Tests for the PSBT modules (apps/signer/lib/psbt)
+# Tests for the PSBT modules (lib/js/bitcoin/psbt)
 
     node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
 

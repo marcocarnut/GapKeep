@@ -1,4 +1,4 @@
-# Tests for the signing library (apps/signer/lib)
+# Tests for the Bitcoin library (lib/js/bitcoin) and the signer's own (apps/signer/lib)
 
     node --experimental-default-type=module tests/signer/run_node.mjs [-v]
 

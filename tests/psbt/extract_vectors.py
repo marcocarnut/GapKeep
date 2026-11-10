@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collects the test vectors for apps/signer/lib/psbt (tests/psbt/run_node.mjs)
+"""Collects the test vectors for lib/js/bitcoin/psbt (tests/psbt/run_node.mjs)
 into tests/psbt/vectors.json, from the sources in tests/psbt/README.md:
 
   BIP-173, BIP-350, BIP-174, BIP-370 (bitcoin/bips, the .mediawiki files)
