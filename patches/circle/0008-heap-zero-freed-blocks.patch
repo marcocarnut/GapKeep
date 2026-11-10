@@ -1,0 +1,17 @@
+diff --git a/lib/heapallocator.cpp b/lib/heapallocator.cpp
+index f1f9383..4d76f48 100644
+--- a/lib/heapallocator.cpp
++++ b/lib/heapallocator.cpp
+@@ -218,6 +218,12 @@ void CHeapAllocator::DoFree (void *pBlock)
+ 	assert (pBlockHeader->nMagic == HEAP_BLOCK_ALLOC_MAGIC);
+ 	pBlockHeader->nMagic = HEAP_BLOCK_FREE_MAGIC;
+ 
++	// gapkeep: a freed block is zeroed, whatever it held (a key, a QR code's
++	// payload, a log line): nothing lingers in free memory. (The block goes
++	// on a free list and is handed out again: the compiler cannot treat
++	// these stores as dead.)
++	memset (pBlock, 0, pBlockHeader->nSize);
++
+ 	for (THeapBlockBucket *pBucket = m_Bucket; pBucket->nSize > 0; pBucket++)
+ 	{
+ 		if (pBlockHeader->nSize == pBucket->nSize)

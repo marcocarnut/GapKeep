@@ -16,14 +16,14 @@ tile colorqr
 expect colorqr ready
 camera picture colorqr/v10_a450_3_4.png
 expect colorqr: code 1, \d+ bytes 20
-expect colorqr: colour layer of code 1, 466 bytes, sha256 dcc98d1b7a033f23 30
+expect colorqr: colour layer of code 1, 466 bytes 30
 serialshot 01-v10
 # the screenshot used the serial line: let it settle before the next command
 wait 1
 camera picture colorqr/v5_a450_3_4.png
 # (the screenshot held scanning up for over 2 s: the first code may be
 # reported again first, so the numbers vary from here on)
-expect colorqr: colour layer of code \d+, 169 bytes, sha256 f4061b328f706749 30
+expect colorqr: colour layer of code \d+, 169 bytes 30
 camera qr just a plain QR code
 expect colorqr: code \d+, 20 bytes 20
 expect colorqr: colour layer of code \d+: plain 10

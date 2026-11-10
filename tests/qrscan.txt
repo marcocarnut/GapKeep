@@ -1,20 +1,20 @@
 # Needs a test build (make TEST=1) or the simulator: QR codes read by
 # apps/qrscan from the synthetic camera (docs/CAMERA.md), through the real
-# decoder. The app logs each code's length and SHA-256, not its contents.
+# decoder. The app logs each code's length only (what the codes hold:
+# tests/scan_digest.txt).
 expect Keyboard attached 60
 expect launcher ready 60
 tile qrscan
 expect qrscan ready
 camera qr hello, air gap
-# sha256("hello, air gap")
-expect qrscan: code 1, 14 bytes, sha256 2ae3a60bb672a3a9 20
+expect qrscan: code 1, 14 bytes 20
 wait 0.5
 shot 01-read
 # the same code again is not reported again; a different one is
 camera qr ur:crypto-psbt/1-3/lpadaxcfaxhlcylf
 expect qrscan: code 2, 35 bytes 20
 camera qr hello, air gap
-expect qrscan: code 3, 14 bytes, sha256 2ae3a60bb672a3a9 20
+expect qrscan: code 3, 14 bytes 20
 # stop and start again (focus starts on Stop)
 key ret
 wait 0.5

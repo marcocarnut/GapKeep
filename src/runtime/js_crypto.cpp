@@ -14,12 +14,14 @@
 #include "../crypto/pbkdf2.h"
 #include "../crypto/secp.h"
 #include "../crypto/hwrng.h"
+#include "../crypto/wipe.h"
 #include <circle/util.h>
 #include <circle/logger.h>
 #include <circle/timer.h>
 
 static const unsigned MaxRandomBytes = 65536;	// as WebCrypto's getRandomValues
 
+// pData 0: zeros
 static JSValue NewUint8Array (JSContext *ctx, const u8 *pData, size_t nLength)
 {
 	JSValue Buffer = JS_NewArrayBufferCopy (ctx, pData, nLength);
@@ -181,7 +183,7 @@ static JSValue Digest (JSContext *ctx, int argc, JSValueConst *argv, const gk_ha
 	Data.Release ();
 
 	JSValue Result = NewUint8Array (ctx, Digest, pHash->digest_size);
-	memset (Digest, 0, sizeof Digest);
+	gk_wipe (Digest, sizeof Digest);
 
 	return Result;
 }
@@ -242,7 +244,7 @@ static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, 
 	Data.Release ();
 
 	JSValue Result = NewUint8Array (ctx, Mac, pHash->digest_size);
-	memset (Mac, 0, sizeof Mac);
+	gk_wipe (Mac, sizeof Mac);
 
 	return Result;
 }
@@ -276,7 +278,7 @@ static JSValue js_crypto_random_bytes (JSContext *ctx, JSValueConst this_val, in
 	}
 
 	JSValue Result = NewUint8Array (ctx, pBuffer, n);
-	memset (pBuffer, 0, n);
+	gk_wipe (pBuffer, n);
 	delete [] pBuffer;
 
 	return Result;
@@ -396,7 +398,7 @@ static boolean SecpOK (JSContext *ctx)
 			return FALSE;
 		}
 		s_nSecpResult = RunSelfTest ("secp256k1", SecpInit);
-		memset (s_SecpSeed, 0, sizeof s_SecpSeed);
+		gk_wipe (s_SecpSeed, sizeof s_SecpSeed);
 	}
 	if (s_nSecpResult != 0)
 	{
@@ -433,7 +435,7 @@ static JSValue Ripemd (JSContext *ctx, int argc, JSValueConst *argv, boolean bHa
 	Data.Release ();
 
 	JSValue Result = NewUint8Array (ctx, Digest, sizeof Digest);
-	memset (Digest, 0, sizeof Digest);
+	gk_wipe (Digest, sizeof Digest);
 	return Result;
 }
 
@@ -468,6 +470,18 @@ static const gk_hash_t *GetHashName (JSContext *ctx, JSValueConst v, const char 
 		JS_ThrowTypeError (ctx, "%s: hash must be \"SHA-1\", \"SHA-256\" or \"SHA-512\"", pFunction);
 	}
 	return pHash;
+}
+
+// gk_pbkdf2_stoppable's question: Home, or the watchdog (millions of
+// iterations take minutes on a Pi Zero)
+static int StopNative (void *pParam)
+{
+	return CAppHost::ShouldInterrupt ((JSContext *) pParam);
+}
+
+static JSValue ThrowInterrupted (JSContext *ctx)
+{
+	return CAppHost::ThrowInterrupted (ctx);
 }
 
 // pbkdf2(hash, password, salt, iterations, length) -> Uint8Array(length)
@@ -510,16 +524,30 @@ static JSValue js_crypto_pbkdf2 (JSContext *ctx, JSValueConst this_val, int argc
 		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "pbkdf2", "salt");
 	}
 
+	// derived straight into the result's buffer (the JS heap, wiped when
+	// freed): no copy of the key elsewhere
 	size_t nLength = (size_t) fLength;
-	u8 *pKey = new u8[nLength];
-	gk_pbkdf2 (pHash, Password.Data (), Password.Length (), Salt.Data (), Salt.Length (),
-		   (uint32_t) fIterations, pKey, nLength);
+	JSValue Result = NewUint8Array (ctx, 0, nLength);
+	JSValue Hold;
+	size_t nResultLength = 0;
+	u8 *pKey = JS_IsException (Result) ? 0 : GetBytes (ctx, Result, &nResultLength, &Hold);
+	if (pKey == 0 || nResultLength != nLength)
+	{
+		if (pKey != 0) JS_FreeValue (ctx, Hold);
+		JS_FreeValue (ctx, Result);
+		return JS_IsException (Result) ? Result : JS_ThrowInternalError (ctx, "pbkdf2: no buffer");
+	}
+	int nStopped = gk_pbkdf2_stoppable (pHash, Password.Data (), Password.Length (),
+					    Salt.Data (), Salt.Length (), (uint32_t) fIterations,
+					    pKey, nLength, StopNative, ctx);
+	JS_FreeValue (ctx, Hold);
 	Password.Release ();
 	Salt.Release ();
-
-	JSValue Result = NewUint8Array (ctx, pKey, nLength);
-	memset (pKey, 0, nLength);
-	delete [] pKey;
+	if (nStopped)
+	{
+		JS_FreeValue (ctx, Result);
+		return ThrowInterrupted (ctx);
+	}
 	return Result;
 }
 
@@ -583,7 +611,7 @@ class CSecret
 {
 public:
 	CSecret (void)			{ memset (m_Data, 0, sizeof m_Data); }
-	~CSecret (void)			{ volatile u8 *p = m_Data; for (size_t i = 0; i < sizeof m_Data; i++) p[i] = 0; }
+	~CSecret (void)			{ gk_wipe (m_Data, sizeof m_Data); }
 	u8 *operator* (void)		{ return m_Data; }
 private:
 	u8 m_Data[32];

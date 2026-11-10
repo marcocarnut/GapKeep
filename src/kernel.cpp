@@ -17,6 +17,7 @@
 #include "runtime/appstore.h"
 #include "runtime/cursor.h"
 #include "runtime/wheel.h"
+#include "crypto/wipe.h"
 
 // same rate as the serial bootloader (FLASHBAUD), so one terminal setting
 // covers both
@@ -26,10 +27,42 @@
 
 static const char FromKernel[] = "kernel";
 
+// What the log keeps. Circle's logger copies every line it writes into a
+// 16 KB ring buffer in RAM, whatever its target, and queues every message
+// as an event (the last 50, on the heap) for whoever reads them. Builds
+// without a serial log write nothing (LogPanic: only a panic, which stops
+// the system, gets that far), so the ring buffer stays empty, whatever
+// cmdline.txt's "loglevel" says. Builds with one keep it: their log leaves
+// the device anyway (docs/ARCHITECTURE.md, "Security model").
+#ifdef GK_SERIAL_LOG
+#define GK_LOG_LEVEL	m_Options.GetLogLevel ()
+#else
+#define GK_LOG_LEVEL	LogPanic
+#endif
+
+// ... and nothing reads the events: each is taken off the queue as soon as
+// it is queued, and its copy here wiped (the event itself is freed, which
+// zeroes it: patches/circle/0008). Every build.
+static void DropLogEvents (void)
+{
+	TLogSeverity Severity;
+	char Source[LOG_MAX_SOURCE];
+	char Message[LOG_MAX_MESSAGE];
+	time_t Time;
+	unsigned nHundredthTime;
+	int nTimeZone;
+	CLogger *pLogger = CLogger::Get ();
+	while (pLogger->ReadEvent (&Severity, Source, Message, &Time, &nHundredthTime, &nTimeZone))
+	{
+	}
+	gk_wipe (Source, sizeof Source);
+	gk_wipe (Message, sizeof Message);
+}
+
 CKernel::CKernel (void)
 :	m_Screen (m_Options.GetWidth (), m_Options.GetHeight ()),
 	m_Timer (&m_Interrupt),
-	m_Logger (m_Options.GetLogLevel (), &m_Timer),
+	m_Logger (GK_LOG_LEVEL, &m_Timer),
 	m_CPUThrottle (CPUSpeedMaximum),
 	m_USBHCI (&m_Interrupt, &m_Timer, TRUE),	// TRUE: plug-and-play
 #ifndef GK_SEALED
@@ -99,6 +132,12 @@ boolean CKernel::Initialize (void)
 		bOK = m_Logger.Initialize (&m_NullLog);
 	}
 #endif
+
+	if (bOK)
+	{
+		m_Logger.RegisterEventNotificationHandler (DropLogEvents);
+		DropLogEvents ();		// those queued before
+	}
 
 	if (bOK)
 	{

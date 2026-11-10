@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "hmac.h"
+#include "wipe.h"
 #include "hexcheck.h"
 #include <string.h>
 
@@ -40,7 +41,7 @@ const gk_hash_t *gk_hash_find (const char *name)
 void gk_hmac_init (gk_hmac_t *ctx, const gk_hash_t *hash, const void *key, size_t keylen)
 {
 	uint8_t k[GK_HASH_MAX_BLOCK];
-	memset (k, 0, sizeof k);
+	gk_wipe (k, sizeof k);
 	if (keylen > hash->block_size)
 	{
 		gk_hash_ctx_t h;
@@ -63,7 +64,7 @@ void gk_hmac_init (gk_hmac_t *ctx, const gk_hash_t *hash, const void *key, size_
 	hash->init (&ctx->outer);
 	hash->update (&ctx->outer, k, hash->block_size);
 
-	memset (k, 0, sizeof k);
+	gk_wipe (k, sizeof k);
 }
 
 void gk_hmac_update (gk_hmac_t *ctx, const void *data, size_t len)
@@ -80,8 +81,8 @@ void gk_hmac_final (gk_hmac_t *ctx, uint8_t *digest)
 	hash->update (&ctx->outer, inner, hash->digest_size);
 	hash->final (&ctx->outer, digest);
 
-	memset (inner, 0, sizeof inner);
-	memset (ctx, 0, sizeof *ctx);
+	gk_wipe (inner, sizeof inner);
+	gk_wipe (ctx, sizeof *ctx);
 }
 
 void gk_hmac (const gk_hash_t *hash, const void *key, size_t keylen,
@@ -161,8 +162,8 @@ int gk_hmac_selftest (void)
 	gk_hmac (&gk_hash_sha512, "Jefe", 4, "what do ya want for nothing?", 28, d);
 	if (memcmp (d, d2, 64) != 0) return 30;
 
-	memset (key, 0, sizeof key);
-	memset (d, 0, sizeof d);
-	memset (d2, 0, sizeof d2);
+	gk_wipe (key, sizeof key);
+	gk_wipe (d, sizeof d);
+	gk_wipe (d2, sizeof d2);
 	return 0;
 }

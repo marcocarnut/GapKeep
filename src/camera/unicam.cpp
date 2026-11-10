@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "unicam.h"
+#include "../crypto/wipe.h"
 #include <circle/bcm2835.h>
 #include <circle/bcm2835int.h>
 #include <circle/bcmpropertytags.h>
@@ -351,7 +352,7 @@ void CGkUnicam::FreeBuffers (void)
 		// secret, and the next start's first frames come from this memory
 		if (m_pBuffer[i] != 0)
 		{
-			memset (m_pBuffer[i], 0, m_nBufferSize);
+			gk_wipe (m_pBuffer[i], m_nBufferSize);
 		}
 		free (m_pBuffer[i]);
 		m_pBuffer[i] = 0;

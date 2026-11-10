@@ -244,7 +244,7 @@ declare module "gk:ui" {
     detect?: Detector[];
     /** *Readable*. What part of the camera's view the scanner sees. `"center"` (the default): the middle, at full detail: about a 26° view on the Pi camera, best for a code at 30-60 cm or a phone at arm's length. `"full"`: all of the camera's view, with less detail per degree, so codes must be larger in the picture. Changing it restarts a running scanner. */
     field?: "center" | "full";
-    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. */
+    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, the bytes of its segments as encoded, without character set conversion: ECI designators are dropped (not applied), and Kanji-mode segments arrive as Shift JIS bytes; `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. */
     onDetect?: (this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null } | { type: "detect"; target: Scanner; kind: "qr-color"; bytes: Uint8Array; text: string | null; status: "ok" | "plain" | "unreadable"; colour: Uint8Array | null }) => void;
     /** Handler for `"error"`: The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. */
     onError?: (this: Scanner, ev: { type: "error"; target: Scanner; reason: string }) => void;
@@ -455,7 +455,7 @@ declare module "gk:ui" {
     /** *Readable*. Clamped to the range. */
     value: number;
   }
-  /** Rows and columns of text. */
+  /** Rows and columns of text: at most 10,000 rows, 100 columns and 100,000 cells (more throws a `RangeError`). */
   export class Table extends Widget {
     constructor(props?: TableProps);
     constructor(parent: Widget, props?: TableProps);
@@ -466,7 +466,7 @@ declare module "gk:ui" {
     rows: number;
     /** *Readable*. */
     cols: number;
-    /** Grows the table if needed. */
+    /** Grows the table if needed (within its limits). */
     setCell(row: number, col: number, text: string): void;
     /** `undefined` outside the table. */
     getCell(row: number, col: number): string | undefined;
@@ -521,7 +521,7 @@ declare module "gk:ui" {
     start(): void;
     /** Turns the camera off. Deleting the widget, or the app ending, does too. */
     stop(): void;
-    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. */
+    /** Handler for `"detect"`: Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, the bytes of its segments as encoded, without character set conversion: ECI designators are dropped (not applied), and Kanji-mode segments arrive as Shift JIS bytes; `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. */
     onDetect: ((this: Scanner, ev: { type: "detect"; target: Scanner; kind: "qr"; bytes: Uint8Array; text: string | null } | { type: "detect"; target: Scanner; kind: "qr-color"; bytes: Uint8Array; text: string | null; status: "ok" | "plain" | "unreadable"; colour: Uint8Array | null }) => void) | null;
     /** Handler for `"error"`: The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. */
     onError: ((this: Scanner, ev: { type: "error"; target: Scanner; reason: string }) => void) | null;
@@ -559,7 +559,7 @@ declare module "gk:ui" {
 }
 
 declare module "gk:sys" {
-  /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
+  /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of `kernel.img`, whole (`hashedBytes` long): its code and constants as they are in memory, and its data as it was loaded, before the kernel changed it. A genuine kernel shows the true hash; a tampered one could show any (docs/ARCHITECTURE.md, "Security model"); `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
   export const kernel: { readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" };
   /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest's `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none). */
   export const app: AppInfo;
@@ -569,7 +569,7 @@ declare module "gk:sys" {
   export function log(...args: any[]): void;
   /** Milliseconds since boot, as a float with microsecond resolution. */
   export function uptime(): number;
-  /** `{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's). */
+  /** `{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's). With the pixels of `ui.Image`s, that may not pass 32 MB: creating a widget or setting a property that would throws a `RangeError`. */
   export function memory(): { used: number; limit: number; objects: number; ui: number };
   /** Run the garbage collector now. */
   export function gc(): void;
@@ -590,7 +590,7 @@ declare module "gk:crypto" {
   export function ripemd160(data: BytesLike): Uint8Array;
   /** RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. */
   export function hash160(data: BytesLike): Uint8Array;
-  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done. */
+  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. */
   export function pbkdf2(hash: "SHA-1" | "SHA-256" | "SHA-512", password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
   /** Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). */
   export function isPrivateKey(key: Bytes): boolean;

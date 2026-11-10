@@ -28,6 +28,7 @@ for n in 1 2; do
 	  git config submodule.circle.url "$ROOT/circle"
 	  git config submodule.third_party/quickjs.url "$ROOT/third_party/quickjs"
 	  git config submodule.third_party/zxing-cpp.url "$ROOT/third_party/zxing-cpp"
+	  git config submodule.third_party/secp256k1.url "$ROOT/third_party/secp256k1"
 	  git -c protocol.file.allow=always submodule -q update --init
 	  git -C circle config submodule.addon/lvgl/lvgl.url "$ROOT/circle/addon/lvgl/lvgl"
 	  git -c protocol.file.allow=always -C circle submodule -q update --init addon/lvgl/lvgl

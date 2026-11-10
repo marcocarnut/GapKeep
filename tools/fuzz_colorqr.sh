@@ -46,7 +46,7 @@ for c in cq_qr cq_ra cq_decode; do
 	OBJS="$OBJS $OUT/$c.o"
 done
 $CXX $INC -I "$ROOT/lib/colorqr/include" -o "$OUT/fuzz_colorqr" "$ROOT/tests/fuzz/fuzz_colorqr.cpp" \
-	"$ROOT/src/runtime/qrdecode.cpp" $OBJS -lm
+	"$ROOT/src/runtime/qrdecode.cpp" "$ROOT/src/crypto/wipe.c" $OBJS -lm
 FRAMES=
 # the test codes (versions 5 and 10), and a large one (version 30, 820x616:
 # colorqr's local grid correction starts at version 20)

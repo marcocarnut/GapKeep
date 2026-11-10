@@ -8,6 +8,7 @@
 #include "appstore.h"
 #include "clock.h"
 #include "markup.h"
+#include "textcheck.h"
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/string.h>
@@ -214,47 +215,17 @@ boolean CGkI18n::Configure (const char *pKey, const char *pValue, unsigned nLine
 
 // --- checking translations ------------------------------------------------------
 
-// The next code point of UTF-8 text, or -1 if it is malformed
-static int NextCodePoint (const u8 **pp, const u8 *pEnd)
-{
-	const u8 *p = *pp;
-	unsigned c = *p++;
-	unsigned nMore = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 : (c & 0xF8) == 0xF0 ? 3 : 9;
-	if (nMore == 9 || p + nMore > pEnd)
-	{
-		*pp = pEnd;
-		return -1;
-	}
-	if (nMore > 0)
-	{
-		c &= 0x3F >> nMore;
-	}
-	while (nMore--)
-	{
-		if ((*p & 0xC0) != 0x80)
-		{
-			*pp = pEnd;
-			return -1;
-		}
-		c = c << 6 | (*p++ & 0x3F);
-	}
-	*pp = p;
-	return (int) c;
-}
-
-// Control characters (C0 but the line feed, DEL, C1), the bidi controls and
-// the line and paragraph separators: what could change how the text around
-// reads (the set GapWallet, the companion web wallet, removes). Lone
-// surrogates too.
+// What a translation may not hold (textcheck.h): control and bidi characters,
+// separators, invisible characters; line feeds are allowed, but not in
+// names (CheckTranslation's callers)
 static boolean IsForbidden (int c)
 {
-	return    c < 0
-	       || (c < 0x20 && c != '\n')
-	       || (c >= 0x7F && c <= 0x9F)
-	       || c == 0x061C || c == 0x200E || c == 0x200F
-	       || (c >= 0x2028 && c <= 0x202E)
-	       || (c >= 0x2066 && c <= 0x2069)
-	       || (c >= 0xD800 && c <= 0xDFFF);
+	return gk_is_forbidden_char (c, 1);
+}
+
+static int NextCodePoint (const u8 **pp, const u8 *pEnd)
+{
+	return gk_next_code_point (pp, pEnd);
 }
 
 struct TNames

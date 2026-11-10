@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "ripemd160.h"
+#include "wipe.h"
 #include "sha256.h"
 #include "hexcheck.h"
 #include <string.h>
@@ -96,7 +97,7 @@ static void compress (uint32_t h[5], const uint8_t block[64])
 	h[4] = h[0] + bl + cr;
 	h[0] = t;
 
-	memset (x, 0, sizeof x);
+	gk_wipe (x, sizeof x);
 }
 
 void gk_ripemd160_init (gk_ripemd160_t *ctx)
@@ -161,7 +162,7 @@ void gk_ripemd160_final (gk_ripemd160_t *ctx, uint8_t digest[GK_RIPEMD160_DIGEST
 		digest[4*i+3] = (uint8_t) (ctx->state[i] >> 24);
 	}
 
-	memset (ctx, 0, sizeof *ctx);
+	gk_wipe (ctx, sizeof *ctx);
 }
 
 void gk_ripemd160 (const void *data, size_t len, uint8_t digest[GK_RIPEMD160_DIGEST_SIZE])
@@ -177,7 +178,7 @@ void gk_hash160 (const void *data, size_t len, uint8_t digest[GK_RIPEMD160_DIGES
 	uint8_t h[GK_SHA256_DIGEST_SIZE];
 	gk_sha256 (data, len, h);
 	gk_ripemd160 (h, sizeof h, digest);
-	memset (h, 0, sizeof h);
+	gk_wipe (h, sizeof h);
 }
 
 int gk_ripemd160_selftest (int full)

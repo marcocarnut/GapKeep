@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "pbkdf2.h"
+#include "wipe.h"
 #include "hexcheck.h"
 #include <string.h>
 
@@ -15,6 +16,16 @@ void gk_pbkdf2 (const gk_hash_t *hash, const void *password, size_t passlen,
 		const void *salt, size_t saltlen, uint32_t iterations,
 		uint8_t *out, size_t outlen)
 {
+	gk_pbkdf2_stoppable (hash, password, passlen, salt, saltlen, iterations, out, outlen, 0, 0);
+}
+
+int gk_pbkdf2_stoppable (const gk_hash_t *hash, const void *password, size_t passlen,
+			 const void *salt, size_t saltlen, uint32_t iterations,
+			 uint8_t *out, size_t outlen, int (*stop) (void *), void *arg)
+{
+	uint8_t *start = out;
+	size_t total = outlen;
+	int stopped = 0;
 	gk_hmac_t keyed, mac;
 	uint8_t u[GK_HASH_MAX_DIGEST], t[GK_HASH_MAX_DIGEST];
 	size_t hlen = hash->digest_size;
@@ -34,8 +45,13 @@ void gk_pbkdf2 (const gk_hash_t *hash, const void *password, size_t passlen,
 		memcpy (t, u, hlen);
 
 		/* U_j = PRF (P, U_{j-1}); T = U_1 ^ ... ^ U_c */
-		for (uint32_t j = 1; j < iterations; j++)
+		for (uint32_t j = 1; j < iterations && !stopped; j++)
 		{
+			if (stop != 0 && j % 256 == 0 && stop (arg))
+			{
+				stopped = 1;
+				break;
+			}
 			mac = keyed;
 			gk_hmac_update (&mac, u, hlen);
 			gk_hmac_final (&mac, u);
@@ -45,16 +61,26 @@ void gk_pbkdf2 (const gk_hash_t *hash, const void *password, size_t passlen,
 			}
 		}
 
+		if (stopped)
+		{
+			break;
+		}
 		size_t n = outlen < hlen ? outlen : hlen;
 		memcpy (out, t, n);
 		out += n;
 		outlen -= n;
 	}
 
-	memset (&keyed, 0, sizeof keyed);
-	memset (&mac, 0, sizeof mac);
-	memset (u, 0, sizeof u);
-	memset (t, 0, sizeof t);
+	gk_wipe (&keyed, sizeof keyed);
+	gk_wipe (&mac, sizeof mac);
+	gk_wipe (u, sizeof u);
+	gk_wipe (t, sizeof t);
+	if (stopped)
+	{
+		gk_wipe (start, total);
+		return -1;
+	}
+	return 0;
 }
 
 int gk_pbkdf2_selftest (int full)

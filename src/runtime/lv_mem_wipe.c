@@ -7,6 +7,13 @@
  * is freed or moved by realloc. Secrets shown on screen do not linger in
  * freed memory.
  *
+ * LVGL's memory is capped (lv_mem_limit.h): an app's widgets could
+ * otherwise take all of it (the JS heap has its own limit, 96 MB). gk:ui
+ * refuses to grow an app's screen past GK_LV_MEM_SOFT_LIMIT (js_ui.cpp,
+ * a RangeError the app sees); the hard limit, above it, is for what LVGL
+ * allocates on its own, and stops the system with a message rather than
+ * hand LVGL a failed allocation (LV_ASSERT_MALLOC would halt silently).
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include <lvgl/lvgl/lvgl.h>
@@ -17,16 +24,14 @@
 void *malloc (size_t);
 void free (void *);
 
+#include "lv_mem_limit.h"
+#include "gk_bridge.h"
+#include "../crypto/wipe.h"
+
 #define HEADER	8		/* keeps 8-byte alignment */
 
 static size_t s_used;		/* bytes currently allocated, for lv_mem_monitor */
 static size_t s_max_used;
-
-static void wipe (volatile unsigned char *p, size_t n)
-{
-	while (n--)
-		*p++ = 0;	/* volatile: not optimized away */
-}
 
 void lv_mem_init (void)
 {
@@ -50,6 +55,8 @@ void lv_mem_remove_pool (lv_mem_pool_t pool)
 
 void *lv_malloc_core (size_t size)
 {
+	if (size > GK_LV_MEM_LIMIT || s_used + size > GK_LV_MEM_LIMIT)
+		gk_fatal ("LVGL: the screen needs more than " GK_LV_MEM_LIMIT_TEXT " of memory");
 	unsigned char *p = malloc (size + HEADER);
 	if (p == NULL)
 		return NULL;
@@ -67,7 +74,7 @@ void lv_free_core (void *ptr)
 	unsigned char *p = (unsigned char *) ptr - HEADER;
 	size_t size = *(size_t *) p;
 	s_used -= size;
-	wipe (p, size + HEADER);
+	gk_wipe (p, size + HEADER);
 	free (p);
 }
 

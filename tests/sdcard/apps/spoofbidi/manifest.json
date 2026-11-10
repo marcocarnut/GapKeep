@@ -1,0 +1,7 @@
+{
+  "id": "spoofbidi",
+  "name": "Signer",
+  "version": "1.0 \u202e(evil)",
+  "description": "Shows what a transaction does.",
+  "icon": "file"
+}

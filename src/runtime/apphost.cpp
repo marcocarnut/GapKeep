@@ -6,6 +6,7 @@
 #include "apphost.h"
 #include "appstore.h"
 #include "i18n.h"
+#include "../crypto/wipe.h"
 #include <circle/logger.h>
 #include <circle/timer.h>
 #include <circle/util.h>
@@ -29,14 +30,6 @@ CAppHost *CAppHost::s_pThis = 0;
 // Freed blocks are zeroed (and realloc always moves, so the old block can
 // be zeroed too): whatever an app held - seed words, keys - does not linger
 // in freed memory after it is released or the app exits.
-
-static void Wipe (volatile u8 *p, size_t n)
-{
-	while (n--)
-	{
-		*p++ = 0;		// volatile: not optimized away
-	}
-}
 
 static const size_t HeaderSize = 8;	// keeps 8-byte alignment
 
@@ -75,7 +68,7 @@ static void GkFree (JSMallocState *s, void *ptr)
 	size_t size = GkUsableSize (ptr);
 	s->malloc_count--;
 	s->malloc_size -= size + HeaderSize;
-	Wipe ((u8 *) ptr - HeaderSize, size + HeaderSize);
+	gk_wipe ((u8 *) ptr - HeaderSize, size + HeaderSize);
 	free ((u8 *) ptr - HeaderSize);
 }
 
@@ -327,6 +320,7 @@ boolean CAppHost::StartApp (const gk_app_t *pApp)
 
 	m_App.nCallDepth = 1;
 	m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
+	m_bInterrupted = FALSE;
 	unsigned nStartTicks = m_App.nCallStartTicks;
 	JSValue Result = JS_Eval (m_App.pContext, pEntry->data, pEntry->size, pEntry->path,
 				  JS_EVAL_TYPE_MODULE);
@@ -402,7 +396,12 @@ void CAppHost::StopApp (void)
 
 void CAppHost::RunJobs (void)
 {
-	m_App.nCallDepth++;
+	if (m_App.nCallDepth++ == 0)
+	{
+		// a new top-level run: an interrupt of an earlier one whose
+		// exception native code swallowed must not hide this one's
+		m_bInterrupted = FALSE;
+	}
 	m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
 
 	JSContext *pContext;
@@ -412,6 +411,10 @@ void CAppHost::RunJobs (void)
 		if (nResult < 0)
 		{
 			ReportException (pContext, "promise job");
+			if (m_App.nCallDepth == 1)
+			{
+				m_bInterrupted = FALSE;		// this run's job is done
+			}
 		}
 	}
 
@@ -426,6 +429,7 @@ JSValue CAppHost::Call (JSValueConst Func, JSValueConst This, int argc, JSValueC
 	if (m_App.nCallDepth++ == 0)
 	{
 		m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
+		m_bInterrupted = FALSE;		// as in RunJobs()
 	}
 
 	// keep the function alive even if the callback drops its last reference
@@ -451,8 +455,14 @@ void CAppHost::ReportException (JSContext *pContext, const char *pWhere)
 
 	if (m_bInterrupted)
 	{
-		// interrupted by Home or the watchdog: already handled
-		m_bInterrupted = FALSE;
+		// interrupted by Home or the watchdog: already handled. The
+		// exception unwinds every JS call under way, each reported here:
+		// the flag stays until the outermost (or the next top-level call
+		// or job run, which clears it).
+		if (m_App.nCallDepth == 0)
+		{
+			m_bInterrupted = FALSE;
+		}
 		JS_FreeValue (pContext, Exception);
 		return;
 	}
@@ -482,6 +492,11 @@ void CAppHost::ReportException (JSContext *pContext, const char *pWhere)
 	Title.Format (LV_SYMBOL_WARNING "  %s: error (%s)",
 		      m_App.pBundle ? m_App.pBundle->name : "?", pWhere);
 	ShowError (Title, Text);
+	// the message may quote a secret (an app's data in an error): its
+	// copies on Circle's heap are wiped (LVGL's own copy, in the banner,
+	// is wiped when the banner goes: lv_mem_wipe.c)
+	gk_wipe ((char *) (const char *) Text, Text.GetLength ());
+	gk_wipe ((char *) (const char *) Title, Title.GetLength ());
 
 	if (pStack != 0)
 	{
@@ -563,6 +578,19 @@ boolean CAppHost::KeyHook (const TGkKey &rKey, void *pParam)
 void CAppHost::HomeHandler (void *pParam)		// IRQ context
 {
 	((CAppHost *) pParam)->m_bHomeRequested = TRUE;
+}
+
+boolean CAppHost::ShouldInterrupt (JSContext *pContext)
+{
+	return s_pThis != 0 && InterruptHandler (JS_GetRuntime (pContext), s_pThis) != 0;
+}
+
+// as QuickJS's own interrupt: an InternalError the app can't catch
+JSValue CAppHost::ThrowInterrupted (JSContext *pContext)
+{
+	JS_ThrowInternalError (pContext, "interrupted");
+	JS_SetUncatchableException (pContext, TRUE);
+	return JS_EXCEPTION;
 }
 
 int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)

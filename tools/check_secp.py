@@ -149,7 +149,7 @@ def build(tmp):
     subprocess.run(["cc", "-O2", "-Wall", "-Wno-unused-function", "-I", "src/crypto", "-I", lib, "-I", f"{lib}/include",
                     "-DENABLE_MODULE_EXTRAKEYS=1", "-DENABLE_MODULE_SCHNORRSIG=1", "-DECMULT_WINDOW_SIZE=8",
                     "-DUSE_EXTERNAL_DEFAULT_CALLBACKS=1", "-DUSE_FORCE_WIDEMUL_INT64=1",
-                    "-o", exe, "tests/native/test_secp.c", "src/crypto/secp.c",
+                    "-o", exe, "tests/native/test_secp.c", "src/crypto/secp.c", "src/crypto/wipe.c",
                     f"{lib}/src/secp256k1.c", f"{lib}/src/precomputed_ecmult.c", f"{lib}/src/precomputed_ecmult_gen.c"],
                    check=True)
     return exe

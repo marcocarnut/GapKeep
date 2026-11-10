@@ -3,10 +3,11 @@
 // one extra permission ("apps" in manifest.json), which gives it the gk:apps
 // module.
 //
-// Below the tiles it shows where the focused app came from and its SHA-256
-// (docs/APPS.md, "App hashes"), so it can be checked against a published
-// one before the app is opened, the hash of each data folder it reads
-// ("Data files"), and any app on the card that was not loaded.
+// Below the tiles it shows the focused app's SHA-256 (docs/APPS.md, "App
+// hashes"), on a line of its own, so it can be checked against a published
+// one before the app is opened; where it came from; the hash of each data
+// folder it reads ("Data files"); and any app on the card that was not
+// loaded.
 //
 // A suite (apps/<suite>/suite.json, "Suites") is one tile; Enter opens it,
 // showing its apps; Back, Escape or Backspace return. Coming back from one
@@ -210,11 +211,17 @@ for (const p of card.problems) {
   });
 }
 
-// the focused app: where it came from, and its hash; and the hash of each
-// data folder it reads (docs/APPS.md, "Data files"), which is not part of
-// the app's hash: whoever prepared the card (or built a sealed kernel)
-// chose those files
-const details = new ui.Label({ text: "", color: "#8a9199", font: 12, width: "100%" });
+// the focused app's SHA-256 (docs/APPS.md, "App hashes"), to check against
+// a published one before it is opened: on a line of its own, the first,
+// in the monospaced font, so no text an app chose (its name, version or
+// description, which may not hold line breaks or control characters
+// anyway) comes before it or moves it. Below it, the app's name, version
+// and where it came from, then the hash of each data folder it reads
+// ("Data files"), which is not part of the app's hash: whoever prepared
+// the card (or built a sealed kernel) chose those files.
+const detailsBox = new ui.Container({ width: "100%", layout: "column", gap: 2 });
+const hashLine = new ui.Label(detailsBox, { text: "", mono: true, font: 12, width: "100%", overflow: "clip" });
+const details = new ui.Label(detailsBox, { text: "", color: "#8a9199", font: 12, width: "100%" });
 const dataHashes = new Map();
 function dataLine(folder) {
   if (!dataHashes.has(folder)) {
@@ -233,10 +240,11 @@ function dataLine(folder) {
 function showDetails(app) {
   const path = app.suite ? app.suite + "/" + app.id : app.id;
   const where = app.source === "sdcard" ? t("SD card, apps/{id}", { id: path }) : t("built in");
-  details.text = [app.name + " " + app.version + "  |  " + where, "SHA-256 " + app.hash,
-                  ...app.data.map(dataLine)].join("\n");
+  hashLine.set({ text: "SHA-256 " + app.hash, hidden: false });
+  details.text = [app.name + " " + app.version + "  |  " + where, ...app.data.map(dataLine)].join("\n");
 }
 function showSuiteDetails(suite) {
+  hashLine.set({ text: "", hidden: true });   // a suite has no hash: its apps have
   details.text = suite.name + "  |  " + t("SD card, apps/{id}", { id: suite.id }) + "  |  " +
     plural(suite.apps.length, "{n} app", "{n} apps");
 }
@@ -247,10 +255,10 @@ function showSystem() {
   // the command stays as it is typed: its number is not written the language's way
   ui.alert(
     t("GapKeep {version} ({build} build)", { version: sys.version.gapkeep, build: k.build }) + "\n\n" +
-      t("Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):",
+      t("Kernel: SHA-256 of kernel.img ({bytes} bytes), as the running kernel computed it:",
         { bytes: formatNumber(k.hashedBytes) }) + "\n" + k.hash + "\n\n" +
       t("Check on another computer:") + "\n" +
-      "head -c " + k.hashedBytes + " kernel.img | sha256sum\n\n" +
+      "sha256sum kernel.img\n\n" +
       (rng.healthy ? t("Random number generator: healthy")
                    : t("Random number generator: FAILED: {failure}", { failure: rng.failure })) + "\n" +
       "Circle " + sys.version.circle + ", LVGL " + sys.version.lvgl + ", QuickJS " + sys.version.quickjs,

@@ -5,6 +5,7 @@
 //
 #include "hwrng.h"
 #include "sha256.h"
+#include "wipe.h"
 #include <circle/logger.h>
 #include <circle/util.h>
 #include <assert.h>
@@ -61,7 +62,7 @@ boolean CGkRandom::Initialize (void)
 			break;
 		}
 	}
-	memset (Buffer, 0, sizeof Buffer);
+	gk_wipe (Buffer, sizeof Buffer);
 
 	if (m_bHealthy)
 	{
@@ -177,12 +178,12 @@ boolean CGkRandom::Get (void *pBuffer, unsigned nLength)
 		nLength -= n;
 	}
 
-	memset (Raw, 0, sizeof Raw);
-	memset (Digest, 0, sizeof Digest);
+	gk_wipe (Raw, sizeof Raw);
+	gk_wipe (Digest, sizeof Digest);
 
 	if (!bOK)
 	{
-		memset (pBuffer, 0, (pOut - (u8 *) pBuffer) + nLength);
+		gk_wipe (pBuffer, (pOut - (u8 *) pBuffer) + nLength);
 	}
 
 	return bOK;

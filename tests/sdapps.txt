@@ -7,17 +7,24 @@ expect apps/badbase64 not loaded: manifest.json: icon "rgba" is not valid base64
 expect apps/badicon not loaded: manifest.json: icon "rgba" must hold width \* height \* 4 = 16 bytes
 expect apps/badjson not loaded: manifest.json: SyntaxError
 expect apps/badutf8 not loaded: main.js: not valid UTF-8 text
+# a folder name with a bidi control (U+202E): shown and logged with a ? instead
+expect apps/bidi\?name not loaded: the folder name must be an app id
 expect apps/hello not loaded: an app with this id is built in
 expect apps/noentry not loaded: entry module "main.js" not found
 # the same hash as "tools/bundle_apps.py --hash tests/sdcard/apps/sdhello"
 expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 08ab835023ad24a18a3de481f20b5b55b44224e738959e3964477cf43695a3ed
+# a name, version or description may not hold a line break, a control, bidi
+# or invisible character: the name with a line break would have put a forged
+# "SHA-256" line under it in the launcher (docs/APPS.md, "App hashes")
+expect apps/spoofbidi not loaded: manifest.json: "version" must be text on one line, without control, bidi or invisible characters
+expect apps/spoofname not loaded: manifest.json: "name" must be text on one line, without control, bidi or invisible characters
 expect apps/unknownkey not loaded: manifest.json: unknown key "network"
 expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
 # tests/suites.txt: an app id is unique across suites
 expect apps/zsuite/suite-peer not loaded: an app with this id was loaded from apps/testsuite/suite-peer
-expect 3 app\(s\) from the SD card, 10 not loaded, 2 suite\(s\)
+expect 3 app\(s\) from the SD card, 13 not loaded, 2 suite\(s\)
 expect launcher ready: .*sdhello 60
-expect sd card: ok 10 problem\(s\)
+expect sd card: ok 13 problem\(s\)
 # the card's apps come after the built-in ones
 tilefocus sdhello
 wait 1

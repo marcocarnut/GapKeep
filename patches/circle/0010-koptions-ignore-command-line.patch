@@ -1,0 +1,17 @@
+diff --git a/lib/koptions.cpp b/lib/koptions.cpp
+index 522295c..2227197 100644
+--- a/lib/koptions.cpp
++++ b/lib/koptions.cpp
+@@ -49,6 +49,12 @@ CKernelOptions::CKernelOptions (void)
+ 
+ 	s_pThis = this;
+ 
++	// gapkeep: the command line (cmdline.txt on the SD card) is not read:
++	// what it sets would change how the system works without showing it
++	// ("usbignore" turns a keyboard off, "width" and "height" change the
++	// screen), from a file outside the kernel's hash. The defaults stay.
++	return;
++
+ 	CBcmPropertyTags Tags;
+ 	if (!Tags.GetTag (PROPTAG_GET_COMMAND_LINE, &m_TagCommandLine, sizeof m_TagCommandLine))
+ 	{

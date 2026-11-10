@@ -30,6 +30,8 @@ import os
 import re
 import sys
 
+from textcheck import FORBIDDEN_IN_NAMES  # src/runtime/textcheck.h's set
+
 PERMISSIONS = {'apps': 'GK_PERM_APPS', 'camera': 'GK_PERM_CAMERA', 'rtc': 'GK_PERM_RTC',
                'settings': 'GK_PERM_SETTINGS'}
 FILE_EXTENSIONS = ('.js', '.json', '.txt')
@@ -241,6 +243,9 @@ def load_app(appdir, app_id):
         v = m.get(k)
         if not isinstance(v, str) or not v or len(v.encode()) > limit or '\0' in v:
             fail('%s: %r must be a non-empty string of at most %d bytes' % (where, k, limit))
+        if k in ('name', 'version', 'description') and FORBIDDEN_IN_NAMES.search(v):
+            fail('%s: %r must be text on one line, without control, bidi or invisible characters'
+                 % (where, k))
     for k in ('hidden', 'experimental'):
         if k in m and not isinstance(m[k], bool):
             fail('%s: "%s" must be true or false' % (where, k))

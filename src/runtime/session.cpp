@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "session.h"
+#include "../crypto/wipe.h"
 #include <circle/util.h>
 
 struct TGkSessionEntry
@@ -31,12 +32,7 @@ static void WipeDelete (void *p, size_t n)
 {
 	if (p != 0)
 	{
-		// volatile: the compiler may not drop stores to memory about to be freed
-		volatile u8 *v = (volatile u8 *) p;
-		while (n-- > 0)
-		{
-			*v++ = 0;
-		}
+		gk_wipe (p, n);		// not a memset the compiler may drop
 		delete [] (u8 *) p;
 	}
 }

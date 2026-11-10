@@ -207,11 +207,12 @@ for them to leave, other than what a person reads off the screen.
 
 | Surface | Notes |
 | --- | --- |
-| USB host controller + HID parsing (Circle) | The only input from outside. Only the hub, keyboard and mouse (boot protocol) drivers are in the image; every other class driver is left out at build time (`EXCLUDE_USB_*` in `tools/build.sh`), including the generic-HID path and its report descriptor parser. Control transfers time out after 3 s (`patches/circle/0003`), so a device that never answers cannot hang the system. |
+| USB host controller + HID parsing (Circle) | The only input from outside. Only the hub, keyboard (with Circle's variant for the 8BitDo Retro Keyboard, picked by its vendor and product ids) and mouse (boot protocol) drivers are in the image; every other class driver is left out at build time (`EXCLUDE_USB_*` in `tools/build.sh`), including the generic-HID path and its report descriptor parser. Control transfers time out after 3 s (`patches/circle/0003`), so a device that never answers cannot hang the system. |
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at power-on (`kernel.img` comes from it, so it must be in then), then by GapKeep, once, at boot: `/apps`, `gapkeep.txt`, and the data folders (`/data/<name>`) the apps list (FAT, read-only driver). Then unmounted; any later FatFs call is refused and logged as an error. Never written; removable once the launcher is up. Sealed builds don't contain the SD code (their data, if any, is built in). |
+| SD card | Read by the firmware at power-on (`kernel.img` comes from it, so it must be in then), then by GapKeep, once, at boot: `/apps`, `gapkeep.txt`, and the data folders (`/data/<name>`) the apps list (FAT, read-only driver). Then unmounted; any later FatFs call is refused and logged as an error. Never written; removable once the launcher is up. Sealed builds don't contain the SD code (their data, if any, is built in). A card can be tampered with while the kernel on it is still the genuine one (checked on another computer), so everything the genuine kernel parses from it must be memory-safe on any input: the FAT file system (FatFs), manifests, `suite.json` and catalogs (QuickJS's JSON parser, then GapKeep's checks), icons, `gapkeep.txt`. What it reads is capped: per file, per app, 64 MB for all the apps on a card and 48 MB for all data folders, refused ones included. Names, versions and descriptions shown by the launcher may not hold line breaks, control, bidi or invisible characters (`src/runtime/textcheck.h`); folder names from the card are shown with such characters as `?`. |
+| Boot files: `config.txt`, `cmdline.txt` | Read by the closed firmware, outside any hash GapKeep shows. `config.txt` decides what the firmware loads and how the screen is set up (it could even name another kernel file), so the defence against a changed one is the same as against a changed `kernel.img`: check the card's boot files on a trusted computer, against the `SHA256SUMS` `tools/make_sdcard.sh` printed when the card was made (not the copy on the card, which whoever changed the card could change too). The firmware passes `cmdline.txt` to the kernel as its command line; Circle would honour some of its options (`usbignore` turns a USB device off, `width` and `height` change the screen, `keymap`, `loglevel`, USB timing, CPU temperature limits), so GapKeep ignores it: Circle's options parser never reads it (`patches/circle/0010`), and every setting has its default. GapKeep's own settings are in `gapkeep.txt`. |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **Nothing is kept.** GapKeep never writes to the card, and the session
@@ -230,8 +231,9 @@ to reach each other (each app's session store is its own).
 
 **Apps on the card** are as trustworthy as the card: whoever can write it
 can replace `kernel.img` too, so loading apps from it does not move the
-trust boundary. The launcher shows each app's SHA-256, to compare with a
-published one. A sealed build (`tools/build.sh pi SEALED=1`) removes the SD and FAT code
+trust boundary. The launcher shows each app's SHA-256, on a line of its
+own in the monospaced font that no app-chosen text precedes, to compare
+with a published one. A sealed build (`tools/build.sh pi SEALED=1`) removes the SD and FAT code
 from the trusted base.
 
 **Data folders and suites**: code is inside the app hash, data
@@ -249,6 +251,16 @@ afterwards changes nothing. A sealed kernel can carry its data instead
 and the data folder's hash lets the keyring be checked on its own. Nothing in the data is executed; what parses it is FatFs and the
 apps' own JavaScript. Apps in a suite share data this way but never code,
 so each app's hash still covers every line it runs.
+
+**Runaway apps:** QuickJS calls the app host's interrupt handler as it
+runs JavaScript, which stops a call after 10 seconds (the watchdog) or when
+the Windows key is pressed. Native work inside one call is not
+interrupted: a built-in like `Array.prototype.sort` on a large array,
+`JSON.parse` of a long text or BigInt arithmetic on huge numbers runs to
+its end (bounded by the 96 MB heap: seconds on a Pi Zero, not minutes),
+then the handler stops the app at its next check. GapKeep's own long
+native work asks too: `gk:crypto`'s `pbkdf2` checks every 256 iterations
+and throws the same uncatchable "interrupted" error.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs
@@ -272,22 +284,46 @@ boot (`src/runtime/stackguard.cpp`). A violation of any of these stops the
 system; `tests/memprotect.txt` makes each one happen on purpose
 (`src/testcrash.cpp`, test builds only) and checks that it does.
 
-**Secrets in memory:** both heaps that hold app data zero every block when
-it is freed: the JS heap (`apphost.cpp`, which also makes `realloc` move so
-the old block can be zeroed) and LVGL's heap (`lv_mem_wipe.c`; labels and
-text areas keep copies of what they show). When an app exits, all its
-memory is freed, so seed words do not linger after the app is closed, and
-the screen is redrawn completely. Data still in use is of course in RAM; a
-Pi Zero has no memory encryption.
+**Secrets in memory:** every heap zeroes every block when it is freed:
+the JS heap (`apphost.cpp`, which also makes `realloc` move so the old
+block can be zeroed), LVGL's heap (`lv_mem_wipe.c`; labels and text areas
+keep copies of what they show), and Circle's heap under them, which also
+holds the QR decoder's results, log messages and everything else the
+kernel allocates (`patches/circle/0008`). Buffers that held a secret, or a
+picture of a QR code, are also wiped explicitly before they go, with
+`gk_wipe()` (`src/crypto/wipe.h`), which the compiler cannot drop as a
+dead store (`tests/native/check_wipes.sh`): keys and digests in
+`src/crypto/`, the decoder's payloads and the scanner's last code, preview
+and camera frames when scanning stops. The log keeps nothing in builds
+without a serial port: Circle's logger would keep the last 16 KB of lines
+and 50 messages in RAM, so nothing is written to it there, and its message
+queue is emptied as it fills (`src/kernel.cpp`). LVGL's memory is capped
+(64 MB; an app's screen at 32 MB, past which gk:ui throws a `RangeError`).
+When an app exits, all its memory is freed, so seed words do not linger
+after the app is closed, and the screen is redrawn completely. Data still
+in use is of course in RAM; a Pi Zero has no memory encryption.
 
 **Trusted code** is the image (Circle, LVGL, QuickJS, FatFs, `src/`, the
 built-in apps) and the apps on the card. Builds are reproducible: with the
 pinned compiler (`tools/toolchain.sh`), the same commit gives the same
 `kernel.img`, byte for byte, wherever it is built
-(`tools/check_reproducible.sh`). The running kernel shows the SHA-256 of
-its own code and constants (launcher, key `i`), which is the SHA-256 of the
-start of `kernel.img`, so what runs can be checked against a published
-build.
+(`tools/check_reproducible.sh`).
+
+**The kernel's hash.** The launcher's system info (key `i`) shows the
+SHA-256 the running kernel computed of its own image: its code and
+constants as they are in memory, and its data as the firmware loaded it
+(Circle hands a copy over before anything changes it,
+`patches/circle/0009`). It equals `sha256sum kernel.img`, for every build
+(`tests/check_kernel_hash.sh`). It identifies an honest kernel, and catches
+a wrong build or a bad copy on the card. It cannot catch a malicious
+kernel: that one can show any hash it likes. So against a card someone may
+have changed, the defence is to check the card itself on a trusted
+computer, with tools that compute the same hashes (`sha256sum` for
+`kernel.img` and the boot files, `tools/bundle_apps.py --hash` for the
+apps, `--data-hash` for data folders); or to use a sealed build you built
+or checked yourself. The app and data hashes the launcher shows are
+computed by the kernel, so they are as trustworthy as the kernel: with a
+genuine kernel they say exactly what code an app runs.
 
 ## Repository layout
 

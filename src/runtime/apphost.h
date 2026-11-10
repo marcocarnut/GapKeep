@@ -97,6 +97,13 @@ public:
 	// Reports the pending exception of pContext (log + on-screen banner).
 	void ReportException (JSContext *pContext, const char *pWhere);
 
+	// For long native work done for the running app (gk:crypto's pbkdf2):
+	// whether to give up now, as QuickJS's interrupt handler would (Home,
+	// or the watchdog: more than 10 s in one call). TRUE: the caller
+	// throws with ThrowInterrupted() and returns.
+	static boolean ShouldInterrupt (JSContext *pContext);
+	static JSValue ThrowInterrupted (JSContext *pContext);
+
 	CKeyboardIndev *GetKeyboard (void) const	{ return m_pKeyboard; }
 
 	// A JS runtime with the zeroing allocator, no memory limit

@@ -1,0 +1,8 @@
+{
+  "id": "scandigest",
+  "name": "Scan digest",
+  "version": "1.0.0",
+  "description": "Test builds only: logs the SHA-256 of each code read (tests/scan_digest.txt).",
+  "icon": "eye-open",
+  "permissions": ["camera"]
+}
