@@ -84,6 +84,14 @@ and the same description (`gk_app_t`):
 After boot nothing more is loaded: apps cannot read files or load code
 other than their own modules, which are already in memory.
 
+Apps never share code at run time: an app's hash covers every line of
+JavaScript it runs, so one that builds on another's library carries a
+byte-for-byte copy (`tools/share_libs.py`). Data, unlike code, will be
+shared by name: read-only folders on the card (`data/<name>/`, through a
+coming `gk:data` module), listed in the manifest and outside the app hash.
+Suites, also planned, only group apps in the launcher. The reasons are in
+[DESIGN.md](DESIGN.md#apps).
+
 ### Widgets (`src/runtime/js_ui.cpp`)
 
 Each widget is a JS object linked to an LVGL object through a `TGkNode`.

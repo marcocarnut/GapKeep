@@ -2,6 +2,8 @@
 // words them in English, for logs and Node; each error carries its code and
 // details, and this module words them again through t(), the English the
 // same as the library's.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { t, plural } from "gk:i18n";
 

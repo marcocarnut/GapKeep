@@ -3,7 +3,9 @@
  *
  * The C self-tests (FIPS 180-4, RFC 2202, RFC 4231, RIPEMD-160's, PBKDF2's),
  * then random inputs printed for tools/check_hashes.py to compare with
- * Python's hashlib. */
+ * Python's hashlib.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
 #include <stdio.h>
 #include <stdlib.h>
 #include "hmac.h"

@@ -1,6 +1,8 @@
 // gk:i18n on the device: its catalog (lang/pt-BR.json over lang/pt.json),
 // where the runtime refuses some translations, each for its own reason,
 // and the rest of the module, logged for tests/i18n.txt. Test builds only.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as ui from "gk:ui";
 import * as i from "gk:i18n";
 import { tm } from "gk:i18n";

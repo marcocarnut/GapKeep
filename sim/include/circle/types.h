@@ -1,4 +1,6 @@
 // Stand-in for Circle's <circle/types.h> in the simulator build (sim/).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef _circle_types_h
 #define _circle_types_h
 #include <stdint.h>

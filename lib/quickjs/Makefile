@@ -3,6 +3,8 @@
 # library for Circle. Only the engine: no quickjs-libc (that is the OS/stdio
 # layer for qjs on Unix, which we deliberately do not have).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 CIRCLEHOME = ../../circle
 QJSDIR     = ../../third_party/quickjs

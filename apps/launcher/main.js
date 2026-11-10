@@ -10,6 +10,8 @@
 // Its text is translated (gk:i18n, lang/<language>.json). Its catalogs are
 // also the system's: they translate the runtime's own messages, like
 // gk:i18n's parseBtc errors (docs/APPS.md, "Languages").
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

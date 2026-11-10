@@ -63,10 +63,6 @@ way numbers are written: [APPS.md](APPS.md#languages). The time itself can't be 
 set it after each boot. Sealed builds have no SD card code and don't read
 it.
 
-GapKeep was called ZeroGap, and the file `zerogap.txt`. On a card made
-before the rename, rename `zerogap.txt` to `gapkeep.txt`: the old name is
-not read.
-
 ## For apps
 
 ```js

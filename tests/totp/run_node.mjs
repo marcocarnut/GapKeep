@@ -2,6 +2,8 @@
 // with Node's HMAC in place of gk:crypto's:
 //   node --experimental-default-type=module tests/totp/run_node.mjs
 // (the flag: apps/totp has no package.json saying its .js files are modules)
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { createHmac } from "node:crypto";
 import { setHmac } from "../../apps/totp/lib/hotp.js";
 import { runSelfTest } from "../../apps/totp/lib/selftest.js";

@@ -10,6 +10,8 @@ The runtime compiles it when an app imports the module. The output is only
 rewritten when it changes, so it rebuilds only what needs it.
 
 Usage: embed_js.py <output.c> <symbol> <module.js>
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import os
 import sys

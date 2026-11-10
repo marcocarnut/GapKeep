@@ -16,6 +16,8 @@ BIPS_DIR holds bip-0173.mediawiki ...; ELECTRUM_TESTS_DIR holds test_psbt.py,
 test_transaction.py, test_bitcoin.py, test_wallet_vertical.py. The extra
 vectors made by tests/psbt/make_electrum_psbts.py (electrum_made.json) are
 merged in when present.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import ast
 import json

@@ -12,6 +12,8 @@
 // The text is translated (gk:i18n, lang/<language>.json): the page's in
 // lib/strings.js, the library's errors in lib/messages.js. The log stays in
 // English.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

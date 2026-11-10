@@ -8,6 +8,8 @@ description of the JavaScript API:
 
 Usage: gen_api.py [--check]
     --check   don't write; exit 1 if a generated file is out of date
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import os
 import re
@@ -211,6 +213,7 @@ def gen_ts(spec):
     ui = spec['ui']
     out = ['// ' + GENERATED,
            '// GapKeep\'s system modules (docs/API.md), for editors: completions and hovers.',
+           '// SPDX-License-Identifier: GPL-3.0-or-later',
            '']
     for name, body in spec['shared_ts'].items():
         out.append('type %s = %s;' % (name, body.rstrip().replace('\n', '\n')))

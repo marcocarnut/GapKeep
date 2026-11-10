@@ -213,7 +213,7 @@ Open questions:
   the full mode). Once the next FS has already been taken, IBWP points
   into the next buffer.
 
-## Measurements on the hardware (Pi Zero v1.3, Camera Module v2.1, rig "five")
+## Measurements on the hardware (Pi Zero v1.3, Camera Module v2.1, on the rig)
 
 - **Stage a (power, I2C):** `picamera: IMX219 found (model 0219)`, in test
   builds (`#camera pi`) and at boot in a production build (with

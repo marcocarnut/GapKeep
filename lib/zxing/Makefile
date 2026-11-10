@@ -31,6 +31,8 @@
 # conversion, structured append merging, JSON, ...) mostly is not, which
 # saves about 80 KiB. The kernel itself is linked as before.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 CIRCLEHOME = ../../circle
 ZXDIR      = ../../third_party/zxing-cpp/core/src

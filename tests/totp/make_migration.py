@@ -6,6 +6,8 @@ independent of the app's decoder. Field numbers: migration.proto of
 https://github.com/dim13/otpauth (migration/migration.proto).
 
     python3 tests/totp/make_migration.py
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 
 import base64

@@ -1,6 +1,8 @@
 // Test builds only: gk:session across runs, and gk:crypto's SHA-1,
 // SHA-512 and HMAC (tests/session.txt). Each run counts itself in the
 // session store and checks what the run before left there.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as session from "gk:session";

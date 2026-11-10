@@ -5,6 +5,8 @@
  *
  * @file lv_conf.h
  * Configuration file for v9.4.0
+ *
+ * SPDX-License-Identifier: MIT
  */
 
 /*

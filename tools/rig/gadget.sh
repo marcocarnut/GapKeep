@@ -10,6 +10,8 @@
 # bash, not sh: the descriptors below need printf's \x escapes, which
 # dash (Debian's sh) does not have.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 G=/sys/kernel/config/usb_gadget/gapkeep
 

@@ -3,6 +3,8 @@
 // "detect" event of kind "qr". Logs "scantest: ok <name>" or
 // "scantest: FAIL <name>: ..." for each check, then "scantest done: N failed".
 // tests/scantest.txt drives the camera.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 

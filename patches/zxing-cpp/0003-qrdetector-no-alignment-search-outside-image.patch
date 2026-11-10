@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: zerogap <zerogap@localhost>
+From: GapKeep <noreply@gapkeep.org>
 Date: Wed, 4 Nov 2026 13:19:29 -0300
 Subject: [PATCH] QRDetector: no alignment pattern search far outside the image
 

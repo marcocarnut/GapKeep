@@ -6,7 +6,7 @@ index 717486c..f5cc3bb 100644
  		_etext = .;
  	}
  
-+	/* zerogap: page-aligned, so the MMU can map code read-only and
++	/* gapkeep: page-aligned, so the MMU can map code read-only and
 +	   executable, constants read-only and not executable, and data
 +	   writable and not executable (lib/pagetable.cpp) */
 +	. = ALIGN(4096);
@@ -35,7 +35,7 @@ index c9cbd2d..4031632 100644
  	u32 GetBaseAddress (void) const;	// with mode bits to be loaded into TTBRn
 +
 +#if RASPPI == 1
-+	// zerogap: makes the exception vector page (0x0-0xFFF) read-only, once
++	// gapkeep: makes the exception vector page (0x0-0xFFF) read-only, once
 +	// the vectors are set up (CExceptionHandler, CInterruptSystem)
 +	static void ProtectVectorPage (void);
 +#endif
@@ -52,7 +52,7 @@ index 3e49bc2..6630907 100644
  
 +#if RASPPI == 1
 +
-+// zerogap: the kernel's memory, from 0 to the end of the kernel stack, is
++// gapkeep: the kernel's memory, from 0 to the end of the kernel stack, is
 +// mapped with 4 KB pages instead of 1 MB sections, so each part gets the
 +// access it needs (W^X):
 +//

@@ -1,6 +1,8 @@
 #
 # Builds colorqr (see colorqr.mk) as a static library for Circle.
 #
+# SPDX-License-Identifier: MIT
+#
 
 CIRCLEHOME = ../../circle
 ROOT       = ../..

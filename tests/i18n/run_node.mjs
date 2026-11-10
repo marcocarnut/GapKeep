@@ -1,5 +1,5 @@
 // gk:i18n's pure parts under Node: messages, plurals, the pseudo-language,
-// numbers, amounts (GapWallet's W4 cases), dates. The runtime's own module,
+// numbers, amounts (GapWallet's cases), dates. The runtime's own module,
 // src/runtime/i18n.js, with fake_native.mjs for "gk:i18n-native".
 //   node --experimental-default-type=module tests/i18n/run_node.mjs
 //
@@ -143,7 +143,7 @@ test("formatSats and formatBtc: integers, never floating point", () => {
   assert.throws(() => i.formatBtc(1, { decimals: 9 }), RangeError);
 });
 
-test("parseBtc: what one language could misread is refused in both (GapWallet W4)", () => {
+test("parseBtc: what one language could misread is refused in both (as in GapWallet)", () => {
   // [typed, en, pt-BR]: sats, or null for refused
   const cases = [
     ["1.000", 100000000, null], ["1,000", null, 100000000],

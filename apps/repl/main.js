@@ -3,6 +3,8 @@
 // sees a `ui` whose new widgets go into the area under the result, cleared
 // before each run. And `btc` (lib/btc.js: btc.help() says what it does),
 // loaded the first time the code says btc.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

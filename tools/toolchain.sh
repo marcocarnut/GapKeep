@@ -6,6 +6,8 @@
 # whatever compiler the system has: with it, the same sources give the same
 # kernel.img, byte for byte (tools/check_reproducible.sh).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 NAME=arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi

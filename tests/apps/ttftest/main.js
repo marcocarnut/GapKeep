@@ -2,6 +2,8 @@
 // for what TinyTTF's bold and italic cost (tests/ttf.txt): the memory LVGL
 // holds after each is drawn, logged; the drawing times come from the
 // kernel ("#fonts", "#redraw": src/testshot.h).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 

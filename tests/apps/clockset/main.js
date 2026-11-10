@@ -5,6 +5,8 @@
 // step 66666666, where RFC 6238's T = 2000000000 vectors apply, for the
 // next 27 s. The button sets 2000000007 instead, 3 s before that step ends,
 // to see a code change at the period mark.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as clock from "gk:clock";

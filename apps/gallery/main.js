@@ -1,5 +1,7 @@
 // Widget Gallery: shows every gk:ui widget and runs the runtime self-test.
 // Every interaction is logged, so tests/*.txt scenarios can check it.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

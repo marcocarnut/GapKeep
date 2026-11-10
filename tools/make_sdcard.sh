@@ -22,6 +22,8 @@
 # commit that Circle pins (circle/boot/Makefile); tools/firmware.sha256 pins
 # the bytes too (checked against that commit's git blob ids when written).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 make -C circle/boot all >/dev/null
@@ -41,7 +43,15 @@ if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
 		cp "circle/boot/$f" $OUT/
 	done
 	cp src/kernel.img $OUT/
-	# kernel.img holds zxing-cpp (the QR decoder), whose licence goes with it
+	# kernel.img is GapKeep (GPL-3.0-or-later) on Circle (GPL-3.0), with
+	# LVGL and QuickJS (MIT) and, unless sealed, FatFs (its own BSD-style
+	# licence): their notices go with it
+	cp LICENSE $OUT/LICENCE.gapkeep
+	cp circle/LICENSE $OUT/LICENCE.circle
+	cp circle/addon/lvgl/lvgl/LICENCE.txt $OUT/LICENCE.lvgl
+	cp third_party/quickjs/LICENSE $OUT/LICENCE.quickjs
+	[ $OUT = sdcard-sealed ] || cp circle/addon/fatfs/LICENSE.txt $OUT/LICENCE.fatfs
+	# and zxing-cpp (the QR decoder), whose licence goes with it
 	[ ! -f third_party/zxing-cpp/LICENSE ] || cp third_party/zxing-cpp/LICENSE $OUT/LICENCE.zxing-cpp
 	# and libsecp256k1 and colorqr (MIT: their notices go with copies)
 	cp third_party/secp256k1/COPYING $OUT/LICENCE.secp256k1
@@ -75,6 +85,7 @@ else
 	for f in bootcode.bin start.elf fixup.dat LICENCE.broadcom kernel.img; do
 		cp "circle/boot/$f" $OUT/
 	done
+	cp circle/LICENSE $OUT/LICENCE.circle	# kernel.img: Circle's bootloader
 	cat > $OUT/config.txt <<'CFG'
 # GapKeep development card: boots Circle's serial bootloader, which waits
 # for a kernel on GPIO 14/15.

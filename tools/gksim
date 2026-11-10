@@ -19,6 +19,8 @@
 # launcher replaces the built-in launcher (simulator only, see --builtin
 # in docs/SIMULATOR.md):  tools/gksim apps/launcher
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ARGS=

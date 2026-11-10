@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 An app's translations: apps/<app>/lang/<language>.json (docs/APPS.md,
-"Languages"; docs/plans/I18N.md).
+"Languages"; docs/DESIGN.md).
 
   i18n.py check apps/x [--lang pt-BR]
       For each catalog (or the one named): keys the code uses that have no
@@ -34,6 +34,8 @@ catalogs are also the system's: its keys include those of the runtime's
 own JavaScript (src/runtime/*.js, ts()).
 
 The checks are the runtime's (src/runtime/i18n.cpp): keep them in step.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import json
 import os

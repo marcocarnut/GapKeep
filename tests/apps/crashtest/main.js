@@ -1,6 +1,8 @@
 // Misbehaves on purpose, so tests can check that the system copes:
 // exceptions are reported, runaway scripts are stopped, and leftovers
 // (timers, handlers, widgets) are cleaned up when the app exits.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

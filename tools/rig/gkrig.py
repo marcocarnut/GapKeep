@@ -22,6 +22,8 @@ Keyboard and mouse come from this machine's USB gadget (gadget.sh up):
 
 Kernels from "make kernel.hex" in src/. The SD card holds Circle's serial
 bootloader (tools/make_sdcard.sh).
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import argparse
 import os

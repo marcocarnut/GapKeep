@@ -9,6 +9,8 @@ BIP-380's definition, in Python: nothing is shared with the app.
 Usage: check_descriptor.py <screenshot-dir>
        check_descriptor.py --vectors    prints multipath descriptors with
                                         checksums, for descriptor_vectors.json
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import hashlib
 import json

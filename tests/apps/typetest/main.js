@@ -2,6 +2,8 @@
 // pressed, and every key name ui.onKey sees, as Unicode code points so the
 // scenarios' patterns stay ASCII (tests/keyboard.txt). Never use this for
 // anything secret: the log goes to the serial port.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 

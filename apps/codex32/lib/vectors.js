@@ -1,6 +1,8 @@
 // The BIP-93 test vectors, all of them, as published in
 // https://github.com/bitcoin/bips/blob/master/bip-0093.mediawiki
 // (fetched 2026-11-05). Used by lib/selftest.js, in the app and under Node.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // Valid: each recovers `seed` (hex) and the codex32 secret `secret`.
 // `shares` are what is typed; `derived` are more shares of the same split,

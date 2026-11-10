@@ -12,6 +12,8 @@ Usage:
   tools/share_libs.py           copy (after changing a library at home)
   tools/share_libs.py --check   exit 1 if a copy differs from its home
                                 (tools/run_sim_tests.sh runs this)
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import os
 import sys

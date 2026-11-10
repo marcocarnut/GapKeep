@@ -2,6 +2,8 @@
 // HID reports and the strings Circle's keymap would make of them, so
 // src/kbdindev.cpp runs unchanged. The keymap ("US", "BR") is Circle's
 // (sim/src/sim.cpp reads its tables).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef _circle_usb_usbkeyboard_h
 #define _circle_usb_usbkeyboard_h
 #include <circle/device.h>

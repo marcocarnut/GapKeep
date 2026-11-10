@@ -10,6 +10,8 @@
 #
 # Needs third_party/zxing-cpp and Python's PIL (to turn the PNGs into PPM).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ZX=$ROOT/third_party/zxing-cpp/core/src

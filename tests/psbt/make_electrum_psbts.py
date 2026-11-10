@@ -13,6 +13,8 @@ Needs Electrum, installed in a throwaway virtualenv (nothing system-wide):
 Wallets come from the BIP-39 test mnemonic "abandon ... about" (public; no
 real funds), funded by made-up transactions the wallets take on trust (as
 Electrum's own tests do), so every value here is reproducible.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import asyncio
 import copy

@@ -61,6 +61,8 @@ under the OFL too; LICENCE.jetbrainsmono, the OFL).
 
 The output is the same on every run with the same inputs and the same
 lv_font_conv: the command line is written at the top of every file.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import argparse, hashlib, os, re, shutil, subprocess, sys, tempfile, zipfile
 

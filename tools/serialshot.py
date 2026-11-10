@@ -7,6 +7,8 @@ PNG. Used on the hardware rig against the Pi Zero's UART, and by
 qemu_harness.py ("serialshot" command) against QEMU's serial port.
 
 Usage: serialshot.py [--port /dev/ttyAMA0] [--baud 921600] out.png
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import argparse
 import re

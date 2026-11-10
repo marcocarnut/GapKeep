@@ -20,3 +20,5 @@ lib/fatfs/src/
 /toolchain/
 /sim/build/
 /sim/web/vendor/
+# agent tooling (worktrees, local settings)
+.claude/

@@ -9,6 +9,8 @@
 #
 # Usage: tools/run_tests.sh [output-dir]
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 OUT=${1:-$(mktemp -d -t gapkeep-tests-XXXXXX)}
