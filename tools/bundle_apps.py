@@ -9,7 +9,10 @@ holding each app's metadata, hash and the contents of its files (.js, .json,
 The checks are the same as for apps loaded from the SD card at boot
 (src/runtime/appstore.cpp); keep the two in step.
 
-Usage: bundle_apps.py <output.c> [--only id,...] <apps-dir> [<apps-dir> ...]
+Usage: bundle_apps.py <output.c> [--only id,...] [--data <dir>] <apps-dir> [<apps-dir> ...]
+           --data: every folder in <dir> is built in as a data folder
+           (sealed builds: make SEALED=1 DATA=dir), with the hash
+           --data-hash gives it
        bundle_apps.py --hash <app-dir> [<app-dir> ...]
            prints each app's hash, as the launcher shows it
        bundle_apps.py --data-hash <data-dir> [<data-dir> ...]
@@ -43,6 +46,8 @@ DATA_NAME_RE = re.compile(r'^[\x20-\x2e\x30-\x5b\x5d-\x7e]{1,128}$')
 MAX_DATA_FILES = 256
 MAX_DATA_FILE_SIZE = 4 << 20
 MAX_DATA_SIZE = 8 << 20
+MAX_DATA_FOLDERS = 32   # all data folders read (src/runtime/appstore.cpp)
+MAX_DATA_TOTAL = 32 << 20
 ICON_MAX_SIDE = 128    # GK_ICON_MAX_SIDE in src/runtime/bundle.h
 
 # Keep in sync with the symbol table in src/runtime/js_ui.cpp (ui.symbols).
@@ -275,6 +280,51 @@ def load_app(appdir, app_id):
     }
 
 
+def builtin_data(datadirs, apps):
+    """C for the data folders built into the kernel (sealed builds, make
+    SEALED=1 DATA=dir): every folder in each of datadirs, read as the
+    device reads data/<name> from a card, with the same limits."""
+    folders = {}
+    for datadir in datadirs:
+        for d in sorted(os.listdir(datadir)):
+            full = os.path.join(datadir, d)
+            if d.startswith('.') or not os.path.isdir(full):
+                continue
+            if not ID_RE.match(d):
+                fail('%s: a data folder\'s name must match %s' % (full, ID_RE.pattern))
+            if d in folders:
+                fail('data folder %r is in both %s and %s' % (d, folders[d][0], datadir))
+            folders[d] = (datadir, sorted(read_data(full), key=lambda f: f[0].encode()))
+    if len(folders) > MAX_DATA_FOLDERS:
+        fail('more than %d data folders' % MAX_DATA_FOLDERS)
+    if sum(len(b) for _, files in folders.values() for _, b in files) > MAX_DATA_TOTAL:
+        fail('the data folders hold more than %d MB' % (MAX_DATA_TOTAL >> 20))
+    listed = {d for a in apps for d in a['data']}
+    for d in folders:
+        if d not in listed:
+            print('bundle_apps: warning: no built-in app lists the data folder %r' % d, file=sys.stderr)
+
+    lines = ['']
+    for n, d in enumerate(sorted(folders)):
+        files = folders[d][1]
+        for k, (path, data) in enumerate(files):
+            lines.append('static const char data%d_file%d[] =\n\t%s;' % (n, k, c_string(data)))
+        lines.append('static const gk_file_t data%d_files[] = {' % n)
+        for k, (path, data) in enumerate(files):
+            lines.append('\t{ %s, data%d_file%d, %d },' % (c_string(path.encode()), n, k, len(data)))
+        lines.append('\t{ 0, 0, 0 }')     # (never empty)
+        lines.append('};')
+    lines.append('const gk_data_t gk_builtin_data[] = {')
+    for n, d in enumerate(sorted(folders)):
+        files = folders[d][1]
+        lines.append('\t{ %s, data%d_files, %d, %d, "%s" },' % (
+            c_string(d.encode()), n, len(files), sum(len(b) for _, b in files), app_hash(files)))
+    lines.append('\t{ 0, 0, 0, 0, 0 }')     # (never empty)
+    lines.append('};')
+    lines.append('const unsigned gk_builtin_data_count = %d;' % len(folders))
+    return lines
+
+
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == '--hash':
         for appdir in sys.argv[2:]:
@@ -294,8 +344,12 @@ def main():
     out = sys.argv[1]
     args = sys.argv[2:]
     only = None
-    if args[0] == '--only':
-        only = set(args[1].split(','))
+    datadirs = []
+    while args and args[0] in ('--only', '--data'):
+        if args[0] == '--only':
+            only = set(args[1].split(','))
+        else:
+            datadirs.append(args[1])
         args = args[2:]
     found = {}
     # apps sorted by id within each directory, directories in the order
@@ -344,6 +398,7 @@ def main():
             'app%d_data' % n if a['data'] else '0', len(a['data'])))
     lines.append('};')
     lines.append('const unsigned gk_builtin_app_count = %d;' % len(apps))
+    lines += builtin_data(datadirs, apps)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     data = '\n'.join(lines) + '\n'
     try:

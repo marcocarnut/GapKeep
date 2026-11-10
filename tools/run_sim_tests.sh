@@ -33,6 +33,10 @@ done
 
 for t in $SCENARIOS; do
 	name=$(basename "$t" .txt)
+	if head -1 "$t" | grep -q "Needs a sealed build"; then
+		echo "SKIP  sim:$name   (a sealed kernel: tools/run_tests.sh)"
+		continue
+	fi
 	if grep -q "^# Rig only" "$t"; then
 		echo "SKIP  sim:$name   (rig only: tools/rig/run_hw_tests.sh)"
 		continue

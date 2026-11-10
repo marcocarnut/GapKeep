@@ -67,6 +67,12 @@ Scenario file: one command per line, '#' starts a comment.
     reset                       reset the machine (on the rig: and upload
                                 the kernel again); "expect" only looks at
                                 what was logged after the reset
+    eject                       take the SD card out (QEMU: the monitor's
+                                "eject -f sd0"; the simulator stops reading
+                                its card folder)
+    reject <regex>              fails if the whole log so far matches, e.g.
+                                "reject after boot: the card" at the end of
+                                a scenario
 
 Usage:
     qemu_harness.py [--kernel K] [--sd IMG] [--out DIR] [--keep] scenario.txt
@@ -320,6 +326,10 @@ class Machine:
     def send(self, line):
         self.ser.sendall((line + '\n').encode())
 
+    def eject(self):
+        # QEMU's raspi0 SD card is the drive "sd0" (info block)
+        self.monitor('eject -f sd0', delay=0.5)
+
     def reset(self):
         # QEMU's system_reset does not reboot the raspi machine: restart QEMU
         self.mark = len(self.serial())
@@ -479,6 +489,11 @@ class SimMachine:
 
     def send(self, line):
         raise SystemExit('send: the simulator has no serial port')
+
+    def eject(self):
+        # its card folder is no longer read, as if the card were pulled out
+        self._cmd('eject')
+        time.sleep(0.1)
 
     def camera(self, args):
         self._cmd('camera %s' % args)
@@ -645,6 +660,18 @@ def run_scenario(m, path, outdir):
                 ok = m.expect(pattern, timeout)
                 print('[%s] expect %r: %s' % (where, pattern, 'ok' if ok else 'FAILED'))
                 if not ok:
+                    failures += 1
+                    break
+            elif cmd == 'eject':
+                if not hasattr(m, 'eject'):
+                    raise SystemExit('%s: eject works on QEMU and the simulator' % where)
+                m.eject()
+                print('[%s] eject: the SD card is out' % where)
+            elif cmd == 'reject':
+                pattern = rest.strip()
+                found = re.search(pattern, m.serial())
+                print('[%s] reject %r: %s' % (where, pattern, 'FOUND: ' + found.group(0) if found else 'ok'))
+                if found:
                     failures += 1
                     break
             else:

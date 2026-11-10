@@ -9,6 +9,9 @@
 expect Keyboard attached 60
 expect apps/testsuite: suite testsuite, 2 app folder\(s\)
 expect apps/testsuite/suite-reader: suite-reader 1.0.0
+# read at boot, whole, as some app lists it: names and sizes only
+expect data/testdata: 3 files, 357 bytes, sha256 f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+expect the card is no longer read: it can be removed
 # an app id is unique across suites
 expect apps/zsuite/suite-peer not loaded: an app with this id was loaded from apps/testsuite/suite-peer
 expect launcher ready: .*sdhello, testsuite 60
@@ -19,8 +22,6 @@ mark
 key ret
 expect launcher suite testsuite: suite-peer, suite-reader
 expect launcher shows suite testsuite as "Test Suite"
-# read when first needed (the launcher shows its hash): names and sizes only
-expect data/testdata: 3 files, 357 bytes, sha256 f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
 wait 1
 shot 02-suite
 # Escape: back home, on the suite's tile
@@ -46,7 +47,7 @@ expect suite-reader refused backslash: TypeError: read: "notes\\hello.txt" is no
 expect suite-reader refused missing file: TypeError: read: no file "nothere.txt" in data/testdata
 expect suite-reader refused dotfile: TypeError: read: no file "._key.bin" in data/testdata
 expect suite-reader refused binary as text: TypeError: readText: data/testdata/key.bin is not UTF-8 text
-expect suite-reader refused no folder: TypeError: read: no file "x.txt": data/absent is not on the card
+expect suite-reader refused no folder: TypeError: read: no file "x.txt": there is no data/absent
 expect suite-reader absent: \[\] null
 # names and sizes; the dotfile (._key.bin) is skipped
 expect suite-reader list: alice@example.org key.asc 88, key.bin 256, notes/hello.txt 13
