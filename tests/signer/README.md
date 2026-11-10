@@ -61,7 +61,8 @@ any earlier step.
 - **multisig**: BIP-143's and BIP-174's vectors; signing and finalizing,
   P2WSH and P2SH-P2WSH, the witness run as a node would (written here, from
   OP_CHECKMULTISIG's definition); refused scripts; proving change, and each
-  attack on the proof. The fixture with xpubs is made here, in Electrum's
+  attack on the proof (attack d: the keys of sortedmulti change out of
+  order, from the security review's M3; plain multi's order of cosigners). The fixture with xpubs is made here, in Electrum's
   form, not by Electrum.
 - **combine**: BIP-174's Combiner: merging, refusals, two signatures by a key.
 - **review**: change claimed, proved, refuted, unverifiable and stray (each
@@ -71,7 +72,11 @@ any earlier step.
   input type, and each safety rule broken one at a time (fingerprint, key
   at the path, script, redeemScript, taproot tweak and script tree, missing
   amounts, previous transaction txid, sighash types, fake change outputs,
-  odd paths).
+  odd paths). The segwit v0 fee attack as the security review's M2 showed it
+  (two rounds, each with an amount understated, whose signatures pay the
+  real fee together): red whenever it applies, and not for one input, for
+  taproot, or with the previous transactions. Amounts over 21 million BTC;
+  finalize refusing a held signature that doesn't verify.
 - **electrum**: PSBTs from Electrum itself (`electrum.json`, below).
 
 ## Where the vectors come from
