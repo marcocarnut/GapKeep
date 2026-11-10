@@ -337,8 +337,7 @@ def app_keys(appdir):
 # --- the runtime's checks (src/runtime/i18n.cpp) -----------------------------------
 
 PLACEHOLDER = re.compile(r'\{\{|\}\}|\{(\w+)\}', re.ASCII)
-FORBIDDEN = re.compile('[\u0000-\u0009\u000b-\u001f\u007f-\u009f؜‎‏'
-                       ' -‮⁦-⁩\ud800-\udfff]')
+from textcheck import FORBIDDEN  # noqa: E402  (src/runtime/textcheck.h's set)
 
 
 def names(text):

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "picamera.h"
+#include "../crypto/wipe.h"
 #include <circle/bcm2835.h>
 #include <circle/logger.h>
 #include <circle/memio.h>
@@ -106,6 +107,9 @@ CGkPiCamera::CGkPiCamera (void)
 CGkPiCamera::~CGkPiCamera (void)
 {
 	Stop ();
+	if (m_pGrey != 0) gk_wipe (m_pGrey, m_nWidth * m_nHeight);
+	if (m_pRaw != 0) gk_wipe (m_pRaw, m_nRawStride * m_nRawHeight);
+	if (m_pRGB != 0) gk_wipe (m_pRGB, m_nRGBSize);
 	delete [] m_pGrey;
 	delete [] m_pRaw;
 	delete [] m_pRGB;
@@ -279,6 +283,10 @@ boolean CGkPiCamera::StartStreaming (void)
 	m_nStride = (m_pMode->nWidth + 31) & ~31;
 	if (m_pGrey == 0 || m_nWidth != m_pMode->nWidth / 2u || m_nHeight != m_pMode->nHeight / 2u)
 	{
+		if (m_pGrey != 0)
+		{
+			gk_wipe (m_pGrey, m_nWidth * m_nHeight);
+		}
 		delete [] m_pGrey;
 		m_nWidth = m_pMode->nWidth / 2;
 		m_nHeight = m_pMode->nHeight / 2;
@@ -287,6 +295,10 @@ boolean CGkPiCamera::StartStreaming (void)
 
 	if (m_bColour && (m_pRGB == 0 || m_nRGBSize != m_nWidth * m_nHeight * 3))
 	{
+		if (m_pRGB != 0)
+		{
+			gk_wipe (m_pRGB, m_nRGBSize);
+		}
 		delete [] m_pRGB;
 		m_nRGBSize = m_nWidth * m_nHeight * 3;
 		m_pRGB = new u8[m_nRGBSize];
@@ -345,11 +357,13 @@ void CGkPiCamera::Stop (void)
 	m_bStreaming = FALSE;
 
 	// as the receiver's buffers: nothing of the picture stays
-	memset (m_pGrey, 0, m_nWidth * m_nHeight);
+	gk_wipe (m_pGrey, m_nWidth * m_nHeight);
 	if (m_pRGB != 0)
 	{
-		memset (m_pRGB, 0, m_nRGBSize);
+		gk_wipe (m_pRGB, m_nRGBSize);
 	}
+	// (a raw frame, which only test builds take, stays until the next is
+	// taken: the serial port may not have sent it yet)
 
 	CLogger::Get ()->Write (FromCamera, LogNotice,
 		"stopped: %u frames started, %u complete, %u shown, %u replaced unread, %u incomplete;"
@@ -413,6 +427,10 @@ const u8 *CGkPiCamera::GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *
 		// two frames after the request: any change it follows shows by then
 		if (m_bRawWanted && m_nRawWait-- == 0)
 		{
+			if (m_pRaw != 0)
+			{
+				gk_wipe (m_pRaw, m_nRawStride * m_nRawHeight);
+			}
 			delete [] m_pRaw;
 			m_nRawWidth = m_pMode->nWidth;
 			m_nRawHeight = m_pMode->nHeight;

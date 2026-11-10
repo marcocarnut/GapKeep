@@ -1,0 +1,22 @@
+# Needs a test build (make TEST=1) and the test SD card, whose gapkeep.txt
+# says "experimental = yes": what the decoders return, byte for byte,
+# through tests/apps/scandigest, a test-only app that logs the start of
+# each code's SHA-256 (the real apps, qrscan and colorqr, log lengths
+# only: tests/qrscan.txt, tests/colorqr.txt). The colour layers' payloads
+# are tests/colorqr/*.bin (sha256sum tests/colorqr/*.bin).
+expect Keyboard attached 60
+expect experimental features on 60
+expect launcher ready 60
+tile scandigest
+expect scandigest ready
+camera qr hello, air gap
+# sha256("hello, air gap")
+expect scandigest: code 1, 14 bytes, sha256 2ae3a60bb672a3a9 20
+camera picture colorqr/v10_a450_3_4.png
+expect scandigest: colour layer of code 2, 466 bytes, sha256 dcc98d1b7a033f23 30
+camera picture colorqr/v5_a450_3_4.png
+expect scandigest: colour layer of code 3, 169 bytes, sha256 f4061b328f706749 30
+camera picture colorqr/v5_q433_3_4.png
+expect scandigest: colour layer of code 4, 169 bytes, sha256 fcc2b07d0e41cf16 30
+key meta_l
+expect launcher ready

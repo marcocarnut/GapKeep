@@ -9,6 +9,7 @@
  */
 #include "secp.h"
 #include "hexcheck.h"
+#include "wipe.h"
 #include <secp256k1.h>
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_schnorrsig.h>
@@ -37,16 +38,6 @@ void secp256k1_default_error_callback_fn (const char *str, void *data)
 
 static secp256k1_context *s_ctx;
 static uint64_t s_ctxmem[64];		/* the context, preallocated: no malloc */
-
-/* volatile: a memset of a dead variable may be optimised away */
-static void wipe (void *p, size_t n)
-{
-	volatile uint8_t *v = p;
-	while (n-- > 0)
-	{
-		*v++ = 0;
-	}
-}
 
 int gk_secp_init (const uint8_t seed[32])
 {
@@ -90,7 +81,7 @@ int gk_secp_pubkey_create (const uint8_t seckey[32], int compressed, uint8_t *ou
 	secp256k1_pubkey pk;
 	int ok = s_ctx != 0 && secp256k1_ec_pubkey_create (s_ctx, &pk, seckey)
 		 && serialize (&pk, compressed, out);
-	wipe (&pk, sizeof pk);
+	gk_wipe (&pk, sizeof pk);
 	return ok;
 }
 
@@ -110,7 +101,7 @@ int gk_secp_seckey_tweak_add (const uint8_t seckey[32], const uint8_t tweak[32],
 	{
 		memcpy (out, k, 32);
 	}
-	wipe (k, sizeof k);
+	gk_wipe (k, sizeof k);
 	return ok;
 }
 
@@ -154,9 +145,9 @@ int gk_secp_ecdsa_sign (const uint8_t hash[32], const uint8_t seckey[32],
 		*derlen = GK_SECP_DER_MAX;
 		ok = secp256k1_ecdsa_signature_serialize_der (s_ctx, der, derlen, &sig);
 	}
-	wipe (extra, sizeof extra);
-	wipe (compact, sizeof compact);
-	wipe (&sig, sizeof sig);
+	gk_wipe (extra, sizeof extra);
+	gk_wipe (compact, sizeof compact);
+	gk_wipe (&sig, sizeof sig);
 	return ok;
 }
 
@@ -177,7 +168,7 @@ int gk_secp_xonly_pubkey (const uint8_t seckey[32], uint8_t out[32], int *parity
 	int ok = s_ctx != 0 && secp256k1_keypair_create (s_ctx, &kp, seckey)
 		 && secp256k1_keypair_xonly_pub (s_ctx, &xpk, parity, &kp)
 		 && secp256k1_xonly_pubkey_serialize (s_ctx, out, &xpk);
-	wipe (&kp, sizeof kp);
+	gk_wipe (&kp, sizeof kp);
 	return ok;
 }
 
@@ -187,7 +178,7 @@ int gk_secp_schnorr_sign (const uint8_t msg[32], const uint8_t seckey[32], const
 	secp256k1_keypair kp;
 	int ok = s_ctx != 0 && secp256k1_keypair_create (s_ctx, &kp, seckey)
 		 && secp256k1_schnorrsig_sign32 (s_ctx, sig, msg, &kp, aux);
-	wipe (&kp, sizeof kp);
+	gk_wipe (&kp, sizeof kp);
 	return ok;
 }
 
@@ -216,7 +207,7 @@ int gk_secp_seckey_taproot_tweak (const uint8_t seckey[32], const uint8_t tweak[
 	int ok = s_ctx != 0 && secp256k1_keypair_create (s_ctx, &kp, seckey)
 		 && secp256k1_keypair_xonly_tweak_add (s_ctx, &kp, tweak)
 		 && secp256k1_keypair_sec (s_ctx, out, &kp);
-	wipe (&kp, sizeof kp);
+	gk_wipe (&kp, sizeof kp);
 	return ok;
 }
 
@@ -295,8 +286,8 @@ int gk_secp_selftest (void)
 		}
 	}
 
-	wipe (k, sizeof k);
-	wipe (m, sizeof m);
-	wipe (out, sizeof out);
+	gk_wipe (k, sizeof k);
+	gk_wipe (m, sizeof m);
+	gk_wipe (out, sizeof out);
 	return 0;
 }

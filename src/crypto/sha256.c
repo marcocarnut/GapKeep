@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "sha256.h"
+#include "wipe.h"
 #include <string.h>
 
 static const uint32_t K[64] =
@@ -56,7 +57,7 @@ static void compress (uint32_t state[8], const uint8_t block[64])
 	state[0] += a; state[1] += b; state[2] += c; state[3] += d;
 	state[4] += e; state[5] += f; state[6] += g; state[7] += h;
 
-	memset (w, 0, sizeof w);
+	gk_wipe (w, sizeof w);
 }
 
 void gk_sha256_init (gk_sha256_t *ctx)
@@ -122,7 +123,7 @@ void gk_sha256_final (gk_sha256_t *ctx, uint8_t digest[GK_SHA256_DIGEST_SIZE])
 		digest[4*i+3] = (uint8_t) (ctx->state[i]);
 	}
 
-	memset (ctx, 0, sizeof *ctx);	/* don't leave hashed secrets behind */
+	gk_wipe (ctx, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
 void gk_sha256 (const void *data, size_t len, uint8_t digest[GK_SHA256_DIGEST_SIZE])

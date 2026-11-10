@@ -11,6 +11,7 @@
 #include <circle/timer.h>
 #include <circle/util.h>
 #include <circle/string.h>
+#include "../crypto/wipe.h"
 #include <math.h>
 #include <assert.h>
 
@@ -142,28 +143,50 @@ CGkScanner::CGkScanner (void)
 CGkScanner::~CGkScanner (void)
 {
 	Stop ();
-	delete [] m_pPreviewFrame;
-	delete [] m_pLast;
+	FreePreview ();
+	FreeLast ();
 	FreeColour ();
 }
 
-// What a colour code held may be a secret: zeroed before it goes.
+// What a code held may be a secret, and a picture of it is as good: each
+// is zeroed before it goes (gk_wipe: not a memset the compiler may drop).
 void CGkScanner::FreeColour (void)
 {
 	if (m_pWork != 0)
 	{
-		memset (m_pWork, 0, m_nWorkSize);
+		gk_wipe (m_pWork, m_nWorkSize);
 		delete [] m_pWork;
 		m_pWork = 0;
 		m_nWorkSize = 0;
 	}
 	if (m_pColour != 0)
 	{
-		memset (m_pColour, 0, GK_QR_MAX_COLOUR);
+		gk_wipe (m_pColour, GK_QR_MAX_COLOUR);
 		delete [] m_pColour;
 		m_pColour = 0;
 	}
 	m_nColourLength = 0;
+}
+
+void CGkScanner::FreeLast (void)
+{
+	if (m_pLast != 0)
+	{
+		gk_wipe (m_pLast, m_nLastLength + 1);
+		delete [] m_pLast;
+		m_pLast = 0;
+	}
+	m_nLastLength = 0;
+}
+
+void CGkScanner::FreePreview (void)
+{
+	if (m_pPreviewFrame != 0)
+	{
+		gk_wipe (m_pPreviewFrame, m_nPreviewWidth * m_nPreviewHeight);
+		delete [] m_pPreviewFrame;
+		m_pPreviewFrame = 0;
+	}
 }
 
 boolean CGkScanner::Start (void)
@@ -203,9 +226,7 @@ boolean CGkScanner::Start (void)
 	m_nNextDecodeAt = 0;
 
 	// a fresh start: the code in view is reported, even if it was before
-	delete [] m_pLast;
-	m_pLast = 0;
-	m_nLastLength = 0;
+	FreeLast ();
 	m_nCornersUntil = 0;
 	m_nFrames = m_nDecodes = m_nFound = 0;
 	m_nSideSum = 0;
@@ -253,6 +274,17 @@ void CGkScanner::Stop (void)
 			(unsigned) (m_nMaxColourTicks / (CLOCKHZ / 1000)));
 	}
 	FreeColour ();
+	// the last code read, and the decoder's copies: kept while scanning to
+	// tell a new code from the same one again, not after (the app has
+	// what it was given; the preview keeps its last picture, below)
+	FreeLast ();
+	GkDecodeQRWipe ();
+	// the preview's last frame stays until the widget goes (it is drawn
+	// when the screen is): blanked now instead, as the camera's own buffers
+	if (m_pPreviewFrame != 0)
+	{
+		gk_wipe (m_pPreviewFrame, m_nPreviewWidth * m_nPreviewHeight);
+	}
 	assert (s_pActive == this);
 	s_pActive = 0;
 }
@@ -304,7 +336,7 @@ unsigned CGkScanner::Poll (void)
 	// keep a copy for the preview (the camera may reuse its buffer)
 	if (m_pPreviewFrame == 0 || nWidth * nHeight != m_nPreviewWidth * m_nPreviewHeight)
 	{
-		delete [] m_pPreviewFrame;
+		FreePreview ();
 		m_pPreviewFrame = new u8[nWidth * nHeight];
 	}
 	memcpy (m_pPreviewFrame, pFrame, nWidth * nHeight);
@@ -384,7 +416,7 @@ unsigned CGkScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 
 	if (!bSame)
 	{
-		delete [] m_pLast;
+		FreeLast ();
 		m_pLast = new u8[rCode.nLength + 1];
 		memcpy (m_pLast, rCode.pData, rCode.nLength);
 		m_nLastLength = rCode.nLength;
@@ -404,6 +436,7 @@ unsigned CGkScanner::PollQR (const u8 *pFrame, unsigned nWidth, unsigned nHeight
 		unsigned long long nEnd = CTimer::GetClockTicks64 ();
 		m_nNextDecodeAt = nEnd + (nEnd - nNow);
 	}
+	GkDecodeQRWipe ();		// copied (m_pLast) and used: the decoder's copies go
 	return nResult;
 }
 
@@ -434,7 +467,7 @@ unsigned CGkScanner::PollColour (const TGkQRCode &rCode, unsigned nWidth, unsign
 		{
 			if (m_pWork != 0)
 			{
-				memset (m_pWork, 0, m_nWorkSize);
+				gk_wipe (m_pWork, m_nWorkSize);
 				delete [] m_pWork;
 			}
 			m_pWork = new u64[(nNeeded + 7) / 8];	// 8-byte aligned, as colorqr needs

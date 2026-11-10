@@ -10,6 +10,7 @@
 //
 #include "qrdecode.h"
 #include "gk_bridge.h"
+#include "../crypto/wipe.h"
 #include <string.h>
 
 #ifdef GK_HAVE_ZXING
@@ -23,6 +24,8 @@ static const unsigned MaxSide = 4096;
 
 static u8 s_Payload[MaxCodes][GK_QR_MAX_PAYLOAD];
 static u8 s_DataCodewords[MaxCodes][GK_QR_MAX_DATA_CODEWORDS];
+static unsigned s_nPayloadUsed[MaxCodes];	// bytes of each to wipe
+static unsigned s_nCodewordsUsed[MaxCodes];
 
 // The reader's settings, chosen by measurement (docs/CAMERA.md, "The QR
 // decoder") for the Pi camera's 320x240 frames on a 1 GHz ARM1176 without
@@ -104,6 +107,7 @@ static void Describe (const ZXing::Barcode &rResult, TGkQRCode *pCode, u8 *pBuff
 		pBuffer[i / 2] = (u8) (nHigh << 4 | nLow);
 	}
 	pCode->nDataCodewords = (unsigned) (Hex.size () / 2);
+	// the hex text (a std::string on the heap) is zeroed as it is freed
 }
 
 int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
@@ -122,6 +126,8 @@ int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 	ZXing::ImageView Image (pGrey, (int) (nWidth * nHeight), (int) nWidth, (int) nHeight,
 				ZXing::ImageFormat::Lum);
 	ZXing::Barcodes Results = ZXing::ReadBarcodes (Image, Options (nMax));
+
+	GkDecodeQRWipe ();			// the last call's, if not done yet
 
 	unsigned nFound = 0;
 	for (const ZXing::Barcode &rResult : Results)
@@ -143,6 +149,7 @@ int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 		}
 
 		memcpy (s_Payload[nFound], rBytes.data (), rBytes.size ());
+		s_nPayloadUsed[nFound] = (unsigned) rBytes.size ();
 		pCodes[nFound].pData = s_Payload[nFound];
 		pCodes[nFound].nLength = (unsigned) rBytes.size ();
 		const ZXing::Position &rCorners = rResult.position ();	// in the image's pixels
@@ -152,10 +159,23 @@ int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 			pCodes[nFound].Corners[k][1] = rCorners[k].y;
 		}
 		Describe (rResult, &pCodes[nFound], s_DataCodewords[nFound]);
+		s_nCodewordsUsed[nFound] = GK_QR_MAX_DATA_CODEWORDS;	// partly written if malformed
 		nFound++;
 	}
 
+	// Results (zxing-cpp's copies of the payloads, on the heap) go now:
+	// zeroed as they are freed
 	return (int) nFound;
+}
+
+void GkDecodeQRWipe (void)
+{
+	for (unsigned i = 0; i < MaxCodes; i++)
+	{
+		gk_wipe (s_Payload[i], s_nPayloadUsed[i]);
+		gk_wipe (s_DataCodewords[i], s_nCodewordsUsed[i]);
+		s_nPayloadUsed[i] = s_nCodewordsUsed[i] = 0;
+	}
 }
 
 // zxing-cpp is built without exceptions: what it would throw (an internal
@@ -175,6 +195,10 @@ int GkDecodeQR (const u8 *pGrey, unsigned nWidth, unsigned nHeight,
 {
 	(void) pGrey; (void) nWidth; (void) nHeight; (void) pCodes; (void) nMax;
 	return -1;
+}
+
+void GkDecodeQRWipe (void)
+{
 }
 
 #endif

@@ -38,6 +38,13 @@ const actions = {
     for (let i = 0; i < 200; i++) keep.push(new Uint8Array(1024 * 1024));
     console.log("crashtest: allocated", keep.length);
   },
+  // the watchdog stops a loop inside console.log's JSON.stringify, which
+  // swallows the exception it gets; the app carries on, and its next
+  // uncaught exception must still be reported (it once was not)
+  "Swallowed interrupt": () => {
+    console.log({ toJSON() { for (;;) {} } });
+    setTimeout(() => null.afterTheWatchdog(), 0);
+  },
 };
 
 ui.screen.set({ layout: "row-wrap", gap: 12 });

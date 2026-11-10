@@ -16,6 +16,19 @@ For apps, a manifest's `"experimental": true` marks an app as one
 ([APPS.md](APPS.md)); `sys.app.experimental` and the `apps.list()` entries
 say it too.
 
+**The code is in every image.** Experimental features are turned on per
+card, not per build: production and sealed kernels contain them too, the
+colour QR decoder included (`lib/colorqr`, about 37 KiB of code), so one
+kernel, with one published hash, serves cards with and without
+`experimental = yes`. Off, nothing reaches that code: the detector's name
+is unknown to `ui.Scanner`, so the camera makes no colour frames and the
+decoder is never called. It is still part
+of what the kernel's hash covers and of what must be correct: a bug in it
+matters only with experimental features on, but it is fuzzed like the QR
+decoder (`tools/fuzz_colorqr.sh`). Building it out of production images
+would give them a second hash and a second set of builds to check, for
+code that is dormant there.
+
 ## Colour QR codes
 
 A colour QR code is an ordinary QR code whose data modules are coloured so
@@ -102,8 +115,9 @@ camera. A colour code weakens both sides:
 
 Like everything the camera sees, colour codes are untrusted input: the
 decoder is fuzzed (`tools/fuzz_colorqr.sh`, through the QR decoder as the
-scanner calls it), and the log gets lengths and the start of SHA-256s,
-never the contents.
+scanner calls it), and the log gets lengths only, never the contents or
+their hashes (a test-only app, `tests/apps/scandigest`, logs hashes for the
+tests: `tests/scan_digest.txt`).
 
 ### How it works
 
@@ -131,7 +145,8 @@ never the contents.
 
 - `tests/colorqr.txt` (simulator and QEMU): the Color QR app reads colour
   codes made by the colorqr project (`tests/colorqr`, with their payloads),
-  and a plain code.
+  and a plain code; `tests/scan_digest.txt` checks the payloads read are
+  those.
 - `tests/colorqr_hw.txt` (the rig): the same on a Pi Zero, for its timing;
   test builds turn experimental features on with `#experimental on` on the
   serial line, as the rig's card never changes.

@@ -163,6 +163,22 @@ export async function runSelfTest(parent) {
     t.setCell(1, 1, "d");
     eq(t.getCell(1, 1), "d");
     eq(t.getCell(9, 9), undefined);
+    eq(t.getCell(1e9, 0), undefined);
+    // capped: LVGL keeps a pointer for every cell
+    throws(() => t.setCell(4294967295, 0, "x"), RangeError, "setCell far away");
+    throws(() => t.setCell(0, 100, "x"), RangeError, "column 100");
+    throws(() => (t.rows = 20000), RangeError, "rows");
+    throws(() => t.set({ data: Array(10001).fill(["x"]) }), RangeError, "data");
+    t.setCell(9999, 9, "last");
+    eq(t.rows, 10000);
+    throws(() => (t.cols = 11), RangeError, "cells");
+    t.rows = 2;
+  });
+
+  await test("ui memory is capped", () => {
+    const l = new ui.Label(box);
+    throws(() => (l.text = "x".repeat(12e6)), RangeError, "a 12 MB text");
+    l.delete();
   });
 
   await test("qrcode", () => {

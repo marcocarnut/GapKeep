@@ -80,9 +80,9 @@ handlers and timers.
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Unique id, `[a-z0-9-]`, must match the directory name. |
-| `name` | yes | Shown in the launcher. |
-| `version` | yes | Free-form string, shown in logs. |
-| `description` | no | One line for the launcher tile. |
+| `name` | yes | Shown in the launcher. At most 64 bytes of text (below). |
+| `version` | yes | Shown in the launcher and logs, e.g. `"1.0.0"`: any text (below), at most 32 bytes. |
+| `description` | no | One line for the launcher tile, at most 256 bytes of text (below). |
 | `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
 | `permissions` | no | Extra rights: `"apps"` (import `gk:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
@@ -90,9 +90,18 @@ handlers and timers.
 | `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `gapkeep.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 | `data` | no | The card's data folders the app reads with `gk:data`, e.g. `["pgp"]`: at most 8 names, each `[a-z0-9-]`, at most 32. See [Data files](#data-files). |
 
+`name`, `version` and `description` (an app's and a suite's, and their
+translations) are text on one line: no line break and no other control
+character (U+0000-U+001F, U+007F-U+009F), no bidi control or separator
+(U+061C, U+200E, U+200F, U+2028-U+202E, U+2066-U+2069), no invisible
+character (U+00AD soft hyphen, U+200B-U+200D, U+2060-U+2065, U+FEFF). They
+could otherwise change how the launcher's lines read: a name with a line
+break could draw a line of its own under it, such as a forged "SHA-256"
+([App hashes](#app-hashes)).
+
 GapKeep checks every manifest, and refuses an app with unknown keys, a bad
-id, an unknown or malformed icon, an unknown permission, or a missing entry
-module. The build does
+id, a name, version or description that is not such text, an unknown or
+malformed icon, an unknown permission, or a missing entry module. The build does
 it for built-in apps (`tools/bundle_apps.py`); for apps on the SD card the
 system does it at boot, and the launcher lists each refused app with the
 reason.
@@ -171,7 +180,8 @@ ever run one set of apps. Its data folders, if it has any, are built in too
 
 Whoever can change the card can change the apps on it, so the launcher shows
 the SHA-256 of the focused app below the tiles (as `sys.app.hash` and in
-`apps.list()`). Compare it with the hash published for the app before you
+`apps.list()`): on a line of its own, first, in the monospaced font, before
+the app's name and version, so nothing an app chose comes before it. Compare it with the hash published for the app before you
 open it. It covers exactly what GapKeep loads, so it is the same on any card
 and for the built-in copy:
 
@@ -624,8 +634,13 @@ widgets, timers, handlers and memory are freed.
 
 Uncaught exceptions and unhandled promise rejections show a red banner with
 the message and stack, and are written to the serial log. The app keeps
-running. Long-running code is stopped after 10 seconds, and each app may use
-up to 96 MB of memory.
+running. Long-running code is stopped after 10 seconds, or when the
+Windows key is pressed; one built-in operation on a lot of data (sorting a
+million-element array, say) finishes first, and `gk:crypto`'s `pbkdf2` is
+stopped too. Each app may use up to 96 MB of memory for its JavaScript, and
+32 MB for what it shows (widgets, their text, pictures: a `RangeError`
+past it; `sys.memory().ui`). A `ui.Table` has at most 10,000 rows, 100
+columns and 100,000 cells. The apps on a card may hold 64 MB in all.
 
 `console.log` (and `info`, `warn`, `error`, `debug`) write to the serial
 log, prefixed with `app:<id>`. Objects are printed as JSON.

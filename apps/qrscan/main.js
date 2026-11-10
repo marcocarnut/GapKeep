@@ -9,7 +9,6 @@
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
-import { sha256 } from "gk:crypto";
 import { t, plural } from "gk:i18n";
 
 const hex = (bytes) => Array.from (bytes, (b) => b.toString (16).padStart (2, "0")).join (" ");
@@ -28,7 +27,9 @@ const scanner = new ui.Scanner ({
       ? plural (bytes.length, "Code {count}: {n} byte, binary", "Code {count}: {n} bytes, binary", { count })
       : plural (bytes.length, "Code {count}: {n} byte", "Code {count}: {n} bytes", { count });
     content.text = text ?? hex (bytes);
-    console.log (`qrscan: code ${count}, ${bytes.length} bytes, sha256 ${hex (sha256 (bytes).subarray (0, 8)).replaceAll (" ", "")}`);
+    // the length only: a code may hold a secret, and a test build's log
+    // leaves the device (tests check contents with tests/apps/scandigest)
+    console.log (`qrscan: code ${count}, ${bytes.length} bytes`);
   },
   onError: ({ reason }) => {
     title.text = t ("The camera stopped");

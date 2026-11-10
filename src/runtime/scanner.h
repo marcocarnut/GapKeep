@@ -97,6 +97,8 @@ private:
 	unsigned PollColour (const TGkQRCode &rCode, unsigned nWidth, unsigned nHeight,
 			     boolean bNewAppearance, unsigned long long nNow);
 	void FreeColour (void);
+	void FreeLast (void);
+	void FreePreview (void);
 
 private:
 	unsigned m_nDetectors;			// GK_DETECT_* bits

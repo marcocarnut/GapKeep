@@ -14,7 +14,7 @@ names = {"SHA-1": "sha1", "SHA-256": "sha256", "SHA-512": "sha512"}
 
 with tempfile.TemporaryDirectory() as tmp:
     exe = os.path.join(tmp, "hmactest")
-    src = ["tests/native/test_hmac.c"] + [f"src/crypto/{f}.c" for f in ("sha1", "sha256", "sha512", "hmac", "ripemd160", "pbkdf2")]
+    src = ["tests/native/test_hmac.c"] + [f"src/crypto/{f}.c" for f in ("sha1", "sha256", "sha512", "hmac", "ripemd160", "pbkdf2", "wipe")]
     subprocess.run(["cc", "-O2", "-Wall", "-Werror", "-I", "src/crypto", "-o", exe] + src, check=True)
     out = subprocess.run([exe, str(cases)], check=True, capture_output=True, text=True).stdout
 

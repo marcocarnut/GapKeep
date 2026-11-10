@@ -39,6 +39,6 @@ done
 # qrcodegen with its internals visible (QRCODEGEN_TEST), for crafted codes
 gcc $SAN $DEF -DQRCODEGEN_TEST $INC -c "$ROOT/circle/addon/lvgl/lvgl/src/libs/qrcode/qrcodegen.c" -o "$OUT/qrcodegen.o"
 $CXX $INC -o "$OUT/fuzz_qr" "$ROOT/tests/fuzz/fuzz_qr.cpp" \
-	"$ROOT/src/runtime/qrdecode.cpp" "$ROOT/src/runtime/synthcam.cpp" \
+	"$ROOT/src/runtime/qrdecode.cpp" "$ROOT/src/crypto/wipe.c" "$ROOT/src/runtime/synthcam.cpp" \
 	$OBJS "$OUT/qrcodegen.o" -lm
 exec "$OUT/fuzz_qr" "${1:-2000}" "${2:-1}"

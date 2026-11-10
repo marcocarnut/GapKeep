@@ -23,7 +23,10 @@ ZXING_SOURCES = \
 	qrcode/QRDecoder.cpp qrcode/QRDetector.cpp qrcode/QRErrorCorrectionLevel.cpp \
 	qrcode/QRFormatInformation.cpp qrcode/QRReader.cpp qrcode/QRVersion.cpp
 
-# ZXING_INTERNAL: as zxing-cpp's own build. One core, one thread: the
-# scratch buffers zxing-cpp keeps between calls are static, not thread_local
-# (Circle has no thread-local storage).
-ZXING_DEFINES = -DZXING_INTERNAL -DZX_THREAD_LOCAL=static
+# ZXING_INTERNAL: as zxing-cpp's own build. The scratch buffers zxing-cpp
+# would keep between calls in thread_local variables (Circle has no
+# thread-local storage) are plain local variables instead (ZX_THREAD_LOCAL
+# empty): allocated for each call and freed after it, so nothing derived
+# from a picture (a row of a QR code, binarised) stays in memory between
+# scans; freed memory is zeroed (patches/circle/0011).
+ZXING_DEFINES = -DZXING_INTERNAL -DZX_THREAD_LOCAL=

@@ -89,6 +89,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
+	    $(ROOT)/src/crypto/wipe.c \
 	    $(ROOT)/src/kbdindev.cpp \
 	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c

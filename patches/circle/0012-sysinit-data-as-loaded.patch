@@ -1,0 +1,33 @@
+diff --git a/lib/sysinit.cpp b/lib/sysinit.cpp
+index 95d5689..3e636a2 100644
+--- a/lib/sysinit.cpp
++++ b/lib/sysinit.cpp
+@@ -307,6 +307,12 @@ static void vfpinit (void)
+ 
+ char circle_version_string[10];
+ 
++// gapkeep: called once at boot, before anything writes to .data, with the
++// initialised data as loaded from kernel.img (up to the image's end); the
++// caller copies what it needs, as the memory is not mapped yet (caches off,
++// no unaligned access). Optional (weak).
++extern "C" void sysinit_data_loaded (const void *pData, size_t nSize) WEAK;
++
+ void sysinit (void)
+ {
+ 	EnableFIQs ();		// go to IRQ_LEVEL, EnterCritical() will not work otherwise
+@@ -338,6 +344,15 @@ void sysinit (void)
+ 	extern unsigned char __tbss_end;
+ 	memset (&__tbss_start, 0, &__tbss_end - &__tbss_start);
+ 
++	// gapkeep: the data sections as the firmware loaded them, before
++	// anything changes them, for the kernel's hash of its own image
++	if (sysinit_data_loaded != 0)
++	{
++		extern unsigned char __data_start;
++		extern unsigned char __tdata_end;
++		sysinit_data_loaded (&__data_start, &__tdata_end - &__data_start);
++	}
++
+ 	// halt, if KERNEL_MAX_SIZE is not properly set
+ 	// cannot inform the user here
+ 	extern unsigned char _end;

@@ -50,8 +50,9 @@ check() {	# name, command...
 	name=$1; shift
 	if "$@" > "$OUT/$name.log" 2>&1; then echo "PASS  $name"; else echo "FAIL  $name   (see $OUT/$name.log)"; FAILED=1; fi
 }
-check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/crypto/sha256.c -o "$0/sha256test" && "$0/sha256test"' "$OUT"
+check native_sha256 sh -c 'cc -O2 -I src/crypto tests/native/test_sha256.c src/crypto/sha256.c src/crypto/wipe.c -o "$0/sha256test" && "$0/sha256test"' "$OUT"
 check native_hmac python3 tools/check_hashes.py
+check native_wipes tests/native/check_wipes.sh "$OUT/wipes"
 check native_secp python3 tools/check_secp.py
 check secp256k1_suite python3 tools/check_secp.py --suite 2
 check dice39_node node tests/dice39/run_node.mjs
@@ -75,7 +76,7 @@ for t in tests/*.txt; do
 	needs_test_build "$t" || needs_sealed_build "$t" || run "$t" "$OUT/sd-apps.img"
 done
 
-# the kernel hash the launcher shows must be that of kernel.img
+# the kernel hash the launcher shows must be that of kernel.img, whole
 if [ -f "$OUT/boot_launcher/serial.log" ]; then
 	check kernel_hash tests/check_kernel_hash.sh "$OUT/boot_launcher/serial.log" src/kernel.img
 fi
@@ -89,6 +90,10 @@ tools/build.sh qemu TEST=1 >/dev/null
 for t in tests/*.txt; do
 	! needs_test_build "$t" || run "$t" "$OUT/sd-test.img"
 done
+# and in a test build (the launcher's log of tests/crash.txt)
+if [ -f "$OUT/crash/serial.log" ]; then
+	check kernel_hash_test tests/check_kernel_hash.sh "$OUT/crash/serial.log" src/kernel.img
+fi
 
 # the public keys the Signer shows, decoded from the screenshots
 if [ -f "$OUT/signer/23-descriptor.png" ]; then
@@ -102,6 +107,10 @@ tools/build.sh qemu SEALED=1 DATA=tests/sdcard/data EXTRA_APPS=tests/sdcard/apps
 for t in tests/*.txt; do
 	! needs_sealed_build "$t" || run "$t" ""
 done
+# and in a sealed build with data
+if [ -f "$OUT/sealed_data/serial.log" ]; then
+	check kernel_hash_sealed tests/check_kernel_hash.sh "$OUT/sealed_data/serial.log" src/kernel.img
+fi
 
 tools/build.sh qemu >/dev/null	# back to the production app set
 

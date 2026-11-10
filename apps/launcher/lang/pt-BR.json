@@ -18,7 +18,7 @@
     "built in": "embutido",
     "No apps installed.": "Nenhum aplicativo instalado.",
     "GapKeep {version} ({build} build)": "GapKeep {version} (build {build})",
-    "Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):": "Kernel: SHA-256 dos primeiros {bytes} bytes do kernel.img\n(o código e as constantes dele, como estão rodando agora):",
+    "Kernel: SHA-256 of kernel.img ({bytes} bytes), as the running kernel computed it:": "Kernel: SHA-256 do kernel.img ({bytes} bytes), calculado pelo próprio kernel em execução:",
     "Check on another computer:": "Confira em outro computador:",
     "Random number generator: healthy": "Gerador de números aleatórios: íntegro",
     "Random number generator: FAILED: {failure}": "Gerador de números aleatórios: FALHOU: {failure}",
@@ -41,6 +41,6 @@
     "apps/{folder} not loaded: {error}": "{error} is the runtime's reason, in English.",
     "“{text}” could be read two ways. Leave out the thousands separator, and write decimals with {d}: 1000 or 1{d}5.": "gk:i18n's parseNumber and parseBtc: {text} is what the person typed, {d} the decimal mark.",
     "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "gk:i18n's parseNumber and parseBtc: {d} is the decimal mark, {g} the thousands separator.",
-    "Kernel: SHA-256 of the first {bytes} bytes of kernel.img\n(its code and constants, as running now):": "In the system info (key i); the hash follows on the next line."
+    "Kernel: SHA-256 of kernel.img ({bytes} bytes), as the running kernel computed it:": "In the system info (key i); the hash follows on the next line."
   }
 }

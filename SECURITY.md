@@ -22,7 +22,12 @@ come in a later release.
 - The kernel (`src/`) and Circle as GapKeep configures and patches it
   (`patches/circle/`): USB, keyboard and mouse handling, memory protection.
 - The runtime (`src/runtime/`): the app host, the `gk:*` modules, the app
-  loader and the SD card reader, `gapkeep.txt`.
+  loader and the SD card reader, `gapkeep.txt`. A tampered card under a
+  genuine kernel is in scope: everything the genuine kernel parses from
+  the card (the FAT file system, manifests, `suite.json`, catalogs, icons,
+  data folders, `gapkeep.txt`) must be memory-safe on any input, and must
+  not be able to make the launcher show a forged hash (an app's name that
+  draws a fake "SHA-256" line, say).
 - The QR decoder (zxing-cpp as patched in `patches/zxing-cpp/`, and
   `src/runtime/qrdecode.cpp`) and the experimental colour QR decoder
   (`lib/colorqr`).
@@ -40,9 +45,19 @@ come in a later release.
   use a test build (`TEST=1`) with real secrets. Production builds have no
   serial driver and never read the serial port. (An app logging a secret,
   in any build, is a bug: please report it.)
-- Whoever can write the SD card can replace `kernel.img` and every app on
-  it; the launcher shows each app's hash, and the kernel its own, to be
-  compared with published ones ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model)).
+- Whoever can write the SD card can replace `kernel.img`, and a
+  replaced kernel can show any hash it likes: the hashes the device shows
+  (its own, the apps', the data folders') identify an honest kernel and
+  catch build and copying mistakes, but cannot catch a malicious kernel.
+  Against a card that may have been changed, the defence is to check the
+  card itself on a trusted computer (`sha256sum kernel.img`; every file
+  against the `SHA256SUMS` that `tools/make_sdcard.sh` printed when the
+  card was made, not the copy on the card; `tools/bundle_apps.py --hash`
+  for apps), or to use
+  a sealed build you built or checked yourself
+  ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model)). A
+  genuine kernel that can be made to misbehave by what is on the card
+  *is* a vulnerability (above).
 - Physical attacks on a running device (probing its RAM, its bus or its
   power): a Pi Zero has no memory encryption.
 - The closed VideoCore firmware, which every Pi system shares.

@@ -12,11 +12,9 @@
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
-import { sha256 } from "gk:crypto";
 import { t, plural } from "gk:i18n";
 
 const hex = (bytes, sep = " ") => Array.from (bytes, (b) => b.toString (16).padStart (2, "0")).join (sep);
-const digest = (bytes) => hex (sha256 (bytes).subarray (0, 8), "");
 // the bytes as text if they are valid UTF-8 (decodeURIComponent checks it
 // strictly), else null
 function utf8 (bytes) {
@@ -78,7 +76,9 @@ function showBase ({ bytes, text }) {
     colour.color = AMBER;
   }, 3000);
   status.text = t ("Code {count}", { count });
-  console.log (`colorqr: code ${count}, ${bytes.length} bytes, sha256 ${digest (bytes)}`);
+  // lengths only: a code may hold a secret, and a test build's log leaves
+  // the device (tests check contents with tests/apps/scandigest)
+  console.log (`colorqr: code ${count}, ${bytes.length} bytes`);
 }
 
 function showColour ({ status: result, colour: data }) {
@@ -86,7 +86,7 @@ function showColour ({ status: result, colour: data }) {
   if (result === "ok") {
     colour.text = describe (data, utf8 (data));
     colour.color = GREEN;
-    console.log (`colorqr: colour layer of code ${count}, ${data.length} bytes, sha256 ${digest (data)}`);
+    console.log (`colorqr: colour layer of code ${count}, ${data.length} bytes`);
   } else {
     colour.text = result === "plain" ? t ("None: a plain QR code") : t ("Not read (hold the code steady, closer, without glare)");
     colour.color = AMBER;

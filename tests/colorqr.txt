@@ -3,7 +3,8 @@
 # (docs/EXPERIMENTAL.md), through apps/colorqr. The synthetic camera films
 # colour codes made by the colorqr project (tests/colorqr: version 10 and
 # 5, profile a4.50 at rate 3/4, 6 px a module, with the payloads expected),
-# then a plain code. The app logs lengths and the start of SHA-256s only.
+# then a plain code. The app logs lengths only (what the codes and their
+# colours hold: tests/scan_digest.txt).
 expect Keyboard attached 60
 expect experimental features on 60
 expect launcher ready 60
@@ -11,17 +12,17 @@ tile colorqr
 expect colorqr ready
 camera picture colorqr/v10_a450_3_4.png
 expect colorqr: code 1, \d+ bytes 20
-expect colorqr: colour layer of code 1, 466 bytes, sha256 dcc98d1b7a033f23 30
+expect colorqr: colour layer of code 1, 466 bytes 30
 expect scanner: colour layer read: 466 bytes, version 10 5
 shot 01-v10
 camera picture colorqr/v5_a450_3_4.png
 expect colorqr: code 2, \d+ bytes 20
-expect colorqr: colour layer of code 2, 169 bytes, sha256 f4061b328f706749 30
+expect colorqr: colour layer of code 2, 169 bytes 30
 shot 02-v5
 # q4.33, the paper profile (colorqr 1.1), from colorqr's zero sheet
 camera picture colorqr/v5_q433_3_4.png
 expect colorqr: code 3, \d+ bytes 20
-expect colorqr: colour layer of code 3, 169 bytes, sha256 fcc2b07d0e41cf16 30
+expect colorqr: colour layer of code 3, 169 bytes 30
 shot 03-v5-paper
 # an ordinary QR code: "plain", after a second of trying
 camera qr just a plain QR code

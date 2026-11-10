@@ -8,6 +8,7 @@
 #include "clock.h"
 #include "settings.h"
 #include "i18n.h"
+#include "textcheck.h"
 #include "../crypto/sha256.h"
 #include <circle/logger.h>
 #include <circle/util.h>
@@ -27,6 +28,10 @@ static const unsigned MaxCardApps = 64;
 static const unsigned MaxFiles = 256;			// per app
 static const unsigned MaxFileSize = 4 * 1024 * 1024;
 static const unsigned MaxAppSize = 16 * 1024 * 1024;	// all files of one app
+// all the apps' files read from the card, those of refused apps too (their
+// memory may not come back: Circle's heap keeps blocks larger than 512 KB),
+// so a card can't take the memory the system needs at boot
+static const unsigned MaxCardAppBytes = 64 * 1024 * 1024;
 static const unsigned MaxDepth = 8;			// folder levels inside an app
 static const unsigned MaxNameLength = 64;		// of one file or folder name
 static const unsigned MaxProblems = 16;
@@ -40,6 +45,7 @@ static const unsigned MaxDataNameLength = 128;		// of one file or folder name
 static const unsigned MaxDataFolders = 32;		// read (at boot, kept until power-off)
 static const unsigned MaxDataEntries = 64;		// read or refused
 static const unsigned MaxDataTotal = 32 * 1024 * 1024;	// all folders read
+static const unsigned MaxDataBytesRead = 48 * 1024 * 1024; // all files read, refused folders' too
 
 static const gk_app_t **s_ppApps = 0;
 static unsigned s_nApps = 0;
@@ -363,13 +369,26 @@ static void AddDataError (const char *pName, const char *pError)
 
 static void AddProblem (const char *pFolder, const char *pText)
 {
-	CLogger::Get ()->Write (From, LogWarning, "apps/%s not loaded: %s", pFolder, pText);
+	// shown by the launcher, and logged: a folder's or file's name from
+	// the card could hold anything FAT allows (control characters, bidi
+	// controls, invisible characters): those become '?'
+	char *pShownFolder = StrDup (pFolder);
+	char *pShownText = StrDup (pText);
+	gk_text_sanitise (pShownFolder);
+	gk_text_sanitise (pShownText);
+
+	CLogger::Get ()->Write (From, LogWarning, "apps/%s not loaded: %s", pShownFolder, pShownText);
 
 	if (s_nProblems < MaxProblems)
 	{
-		s_Problems[s_nProblems].pFolder = StrDup (pFolder);
-		s_Problems[s_nProblems].pText = StrDup (pText);
+		s_Problems[s_nProblems].pFolder = pShownFolder;
+		s_Problems[s_nProblems].pText = pShownText;
 		s_nProblems++;
+	}
+	else
+	{
+		delete [] pShownFolder;
+		delete [] pShownText;
 	}
 }
 
@@ -383,10 +402,17 @@ struct TReadRules
 	unsigned nMaxFileSize;
 	unsigned nMaxTotal;
 	const char *pWhat;		// "app" or "folder", for the messages
+	unsigned *pnRead;		// bytes read so far by all folders of this kind
+	unsigned nMaxRead;		// ... at most
+	const char *pAll;		// what that is, for the message
 };
 
-static const TReadRules AppRules = {FALSE, MaxFiles, MaxFileSize, MaxAppSize, "app"};
-static const TReadRules DataRules = {TRUE, MaxDataFiles, MaxDataFileSize, MaxDataSize, "folder"};
+static unsigned s_nCardAppBytes = 0;
+static unsigned s_nDataBytesRead = 0;
+static const TReadRules AppRules = {FALSE, MaxFiles, MaxFileSize, MaxAppSize, "app",
+				    &s_nCardAppBytes, MaxCardAppBytes, "the apps on the card"};
+static const TReadRules DataRules = {TRUE, MaxDataFiles, MaxDataFileSize, MaxDataSize, "folder",
+				     &s_nDataBytesRead, MaxDataBytesRead, "the data folders"};
 
 struct TFileList
 {
@@ -433,7 +459,14 @@ static boolean ReadFile (const char *pFullPath, const char *pRelPath, FSIZE_t nF
 				pRules->pWhat);
 		return FALSE;
 	}
+	if (*pRules->pnRead + (unsigned) nFileSize > pRules->nMaxRead)
+	{
+		pError->Format ("%s: %s would take more than %u MB in all", pRelPath,
+				pRules->pAll, pRules->nMaxRead >> 20);
+		return FALSE;
+	}
 	unsigned nSize = (unsigned) nFileSize;
+	*pRules->pnRead += nSize;		// counted even if this folder is refused
 
 	FIL File;
 	if (f_open (&File, pFullPath, FA_READ) != FR_OK)
@@ -576,9 +609,12 @@ static const gk_file_t *FindFile (const TFileList *pList, const char *pPath)
 // --- manifest.json ----------------------------------------------------------
 
 // A string property of the manifest: FALSE and *pError set if it has the
-// wrong type, is empty or too long; *ppValue stays 0 if it is absent.
+// wrong type, is empty or too long, or, if bShown (what the launcher shows:
+// name, version, description), holds a line break or another character
+// that could change how the text around it reads (textcheck.h); *ppValue
+// stays 0 if it is absent.
 static boolean GetString (JSContext *ctx, JSValueConst Obj, const char *pKey, unsigned nMaxLength,
-			  boolean bRequired, char **ppValue, CString *pError)
+			  boolean bRequired, char **ppValue, CString *pError, boolean bShown = FALSE)
 {
 	*ppValue = 0;
 
@@ -600,6 +636,14 @@ static boolean GetString (JSContext *ctx, JSValueConst Obj, const char *pKey, un
 		const char *p = JS_ToCStringLen (ctx, &nLength, Value);
 		if (p != 0 && nLength > 0 && nLength <= nMaxLength && strlen (p) == nLength)
 		{
+			if (bShown && !gk_text_is_clean (p, nLength, 0))
+			{
+				pError->Format ("manifest.json: \"%s\" must be text on one line, without"
+						" control, bidi or invisible characters", pKey);
+				JS_FreeCString (ctx, p);
+				JS_FreeValue (ctx, Value);
+				return FALSE;
+			}
 			*ppValue = StrDup (p);
 			bOK = TRUE;
 		}
@@ -912,9 +956,9 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 
 		char *pName = 0, *pVersion = 0;
 		if (   !GetString (ctx, Obj, "id", 32, TRUE, &pID, pError)
-		    || !GetString (ctx, Obj, "name", 64, TRUE, &pName, pError)
-		    || !GetString (ctx, Obj, "version", 32, !bSuite, &pVersion, pError)
-		    || !GetString (ctx, Obj, "description", 256, FALSE, &pDescription, pError)
+		    || !GetString (ctx, Obj, "name", 64, TRUE, &pName, pError, TRUE)
+		    || !GetString (ctx, Obj, "version", 32, !bSuite, &pVersion, pError, TRUE)
+		    || !GetString (ctx, Obj, "description", 256, FALSE, &pDescription, pError, TRUE)
 		    || (!bPicture && !GetString (ctx, Obj, "icon", 32, FALSE, &pIcon, pError))
 		    || !GetString (ctx, Obj, "entry", 255, FALSE, &pEntry, pError))
 		{

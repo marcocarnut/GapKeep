@@ -135,6 +135,13 @@ else
 	echo "FAIL  sim:check_api   (see $OUT/check_api.log)"; FAILED=1
 fi
 
+# the wipes of secrets survive the compiler (src/crypto/wipe.h)
+if tests/native/check_wipes.sh "$OUT/wipes" > "$OUT/wipes.log" 2>&1; then
+	echo "PASS  sim:wipes"
+else
+	echo "FAIL  sim:wipes   (see $OUT/wipes.log)"; FAILED=1
+fi
+
 # apps that carry a copy of another app's library (tools/share_libs.py)
 if python3 tools/share_libs.py --check > "$OUT/share_libs.log" 2>&1; then
 	echo "PASS  sim:share_libs"

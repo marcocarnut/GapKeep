@@ -1,0 +1,7 @@
+{
+  "id": "spoofname",
+  "name": "Signer\nSHA-256 431c62f99a3d38bd4b9ede21c0c2a564f59e7af225880bc6b",
+  "version": "951983fbf632509 0.2.0",
+  "description": "Shows what a transaction does, then signs it.",
+  "icon": "file"
+}

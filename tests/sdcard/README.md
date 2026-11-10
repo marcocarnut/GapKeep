@@ -12,7 +12,10 @@ other folder must be refused, each for its own reason:
 | `badicon` | the icon's pixels are the wrong size for its width and height |
 | `badjson` | manifest.json is not valid JSON |
 | `badutf8` | a module is not valid UTF-8 |
+| `0bidi‮name` | the folder name is not an app id (and holds U+202E, a bidi control: the launcher and the log show it as `0bidi?name`; on QEMU's card image, made by mtools, only its short name `0BIDI~1` is there) |
 | `noentry` | the entry module does not exist |
+| `spoofbidi` | its version holds a bidi control (U+202E) |
+| `spoofname` | its name holds a line break: it would put a forged `SHA-256` line under the app's name in the launcher |
 | `unknownkey` | manifest.json has a key GapKeep doesn't know |
 | `wrongid` | the manifest's id differs from the folder name |
 | `zsuite/suite-peer` | `testsuite` has an app with that id (ids are unique across suites) |

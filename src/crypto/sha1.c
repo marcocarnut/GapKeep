@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "sha1.h"
+#include "wipe.h"
 #include "hexcheck.h"
 #include <string.h>
 
@@ -53,7 +54,7 @@ static void compress (uint32_t state[5], const uint8_t block[64])
 
 	state[0] += a; state[1] += b; state[2] += c; state[3] += d; state[4] += e;
 
-	memset (w, 0, sizeof w);
+	gk_wipe (w, sizeof w);
 }
 
 void gk_sha1_init (gk_sha1_t *ctx)
@@ -118,7 +119,7 @@ void gk_sha1_final (gk_sha1_t *ctx, uint8_t digest[GK_SHA1_DIGEST_SIZE])
 		digest[4*i+3] = (uint8_t) (ctx->state[i]);
 	}
 
-	memset (ctx, 0, sizeof *ctx);	/* don't leave hashed secrets behind */
+	gk_wipe (ctx, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
 void gk_sha1 (const void *data, size_t len, uint8_t digest[GK_SHA1_DIGEST_SIZE])

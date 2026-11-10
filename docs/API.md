@@ -262,13 +262,13 @@ displays a value.
 
 #### Table
 
-Rows and columns of text.
+Rows and columns of text: at most 10,000 rows, 100 columns and 100,000 cells (more throws a `RangeError`).
 
 | Property / method | Value | Notes |
 | --- | --- | --- |
 | `data` | string[][] | Replaces all cells; rows may have different lengths. |
 | `rows`, `cols` | number | *Readable*. |
-| `setCell(row, col, text)` |  | Grows the table if needed. |
+| `setCell(row, col, text)` |  | Grows the table if needed (within its limits). |
 | `getCell(row, col)` | → string | `undefined` outside the table. |
 | `setColumnWidth(col, px)` |  |  |
 
@@ -319,7 +319,7 @@ throws). See [CAMERA.md](CAMERA.md).
 | `scanning` | boolean | *Read-only*. Whether the camera is on for this scanner. |
 | `start()` |  | Turns the camera on again after `stop()` or an error. Scanning starts by itself when the widget is created. |
 | `stop()` |  | Turns the camera off. Deleting the widget, or the app ending, does too. |
-| `onDetect` | handler | Event `"detect"`. Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. |
+| `onDetect` | handler | Event `"detect"`. Something was found; `kind` says what. `"qr"`: `bytes` (a `Uint8Array`) is the code's content, the bytes of its segments as encoded, without character set conversion: ECI designators are dropped (not applied), and Kanji-mode segments arrive as Shift JIS bytes; `text` the same as a string if it is valid UTF-8, else `null`; fired again only when the content changes, or when the same code comes back after 2 s out of sight, so each part of an animated code arrives once. `"qr-color"` (experimental): the same code's colour layer, in an event of its own: `bytes` and `text` as for `"qr"`, `status` `"ok"` with the colours' data in `colour`, or, after a second of trying, `"plain"` (no colour layer) or `"unreadable"`, with `colour` `null`; a later `"ok"` for the same code may still follow. With both detectors, a code gives a `"qr"` event and a `"qr-color"` one. |
 | `onError` | handler | Event `"error"`. The camera could not start or stopped working; `reason` says why (`"no camera"`, `"the camera is in use by another scanner"`, ...). Scanning has stopped; `start()` tries again. |
 
 The view is 320×240 unless you set `width` and `height`; the picture
@@ -422,12 +422,12 @@ import * as sys from "gk:sys";
 
 | Name | Description |
 | --- | --- |
-| `kernel` | The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of the kernel's code and constants as they are in memory, equal to the SHA-256 of the first `hashedBytes` bytes of `kernel.img`; `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). |
+| `kernel` | The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of `kernel.img`, whole (`hashedBytes` long): its code and constants as they are in memory, and its data as it was loaded, before the kernel changed it. A genuine kernel shows the true hash; a tampered one could show any (docs/ARCHITECTURE.md, "Security model"); `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). |
 | `app` | This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest's `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none). |
 | `version` | `{ gapkeep, quickjs, lvgl, circle }` version strings. |
 | `log(...args)` | Same as `console.log`. |
 | `uptime()` | Milliseconds since boot, as a float with microsecond resolution. |
-| `memory()` | `{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's). |
+| `memory()` | `{ used, limit, objects, ui }`: this app's JS heap in bytes and its object count, and the bytes LVGL holds for everything on screen (widgets, their text and styles; the system's too, not only this app's). With the pixels of `ui.Image`s, that may not pass 32 MB: creating a widget or setting a property that would throws a `RangeError`. |
 | `gc()` | Run the garbage collector now. |
 | `exit()` | Leave the app and return to the launcher (after the current handler returns). |
 
@@ -447,7 +447,7 @@ import * as crypto from "gk:crypto";
 | `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
 | `ripemd160(data)` | RIPEMD-160, a `Uint8Array(20)`. |
 | `hash160(data)` | RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. |
-| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done. |
+| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. |
 | `isPrivateKey(key)` | Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). |
 | `isPublicKey(key)` | Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). |
 | `publicKey(privateKey, compressed = true)` | The public key, 33 bytes (compressed) or 65. |

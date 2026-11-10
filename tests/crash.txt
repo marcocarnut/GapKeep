@@ -23,6 +23,12 @@ key ret
 expect crashtest: allocated|out of memory 60
 wait 1
 shot 03-memory
+# an interrupt whose exception native code swallowed: the next uncaught
+# exception is reported all the same
+key tab
+key ret
+expect script ran for more than 10 s, interrupted 20
+expect uncaught exception \(callback\): TypeError: cannot read property 'afterTheWatchdog' of null 10
 key meta_l
 expect launcher ready
 # again, and this time leak everything and exit

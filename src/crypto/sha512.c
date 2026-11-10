@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "sha512.h"
+#include "wipe.h"
 #include "hexcheck.h"
 #include <string.h>
 
@@ -70,7 +71,7 @@ static void compress (uint64_t state[8], const uint8_t block[128])
 	state[0] += a; state[1] += b; state[2] += c; state[3] += d;
 	state[4] += e; state[5] += f; state[6] += g; state[7] += h;
 
-	memset (w, 0, sizeof w);
+	gk_wipe (w, sizeof w);
 }
 
 void gk_sha512_init (gk_sha512_t *ctx)
@@ -140,7 +141,7 @@ void gk_sha512_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA512_DIGEST_SIZE])
 		}
 	}
 
-	memset (ctx, 0, sizeof *ctx);	/* don't leave hashed secrets behind */
+	gk_wipe (ctx, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
 void gk_sha512 (const void *data, size_t len, uint8_t digest[GK_SHA512_DIGEST_SIZE])

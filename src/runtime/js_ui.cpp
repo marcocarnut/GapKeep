@@ -27,6 +27,8 @@
 #include "markup.h"
 #include "ttfstyles.h"
 #include "scanner.h"
+#include "lv_mem_limit.h"
+#include "../crypto/wipe.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
 #include <lvgl/lvgl/src/libs/qrcode/qrcodegen.h>
 #include <lvgl/lvgl/src/misc/cache/instance/lv_image_cache.h>
@@ -131,6 +133,12 @@ struct TGkNode
 	boolean bMarkup;		// Label with "markup": an LVGL spangroup
 	char *pMarkup;			// its text as set (the markup)
 };
+
+// the Images' pixels (Circle's heap, not LVGL's): counted with LVGL's
+// memory against the app's limit (CheckUIMemory)
+static size_t s_nImageBytes = 0;
+static int CheckUIMemory (JSContext *ctx, size_t nMore);
+static size_t TextSize (JSContext *ctx, JSValueConst v);
 
 struct TGkQR
 {
@@ -317,6 +325,7 @@ static void WidgetFinalizer (JSRuntime *rt, JSValue Val)
 	if (pNode->pImage != 0)
 	{
 		lv_image_cache_drop (pNode->pImage);
+		s_nImageBytes -= pNode->pImage->data_size;
 		delete [] (u8 *) pNode->pImage;
 	}
 	delete pNode;
@@ -1511,8 +1520,43 @@ GETTER (GetMax)   { return JS_NewInt32 (ctx, pNode->Type == WSlider ? lv_slider_
 GETTER (GetValue) { return JS_NewInt32 (ctx, pNode->Type == WSlider ? lv_slider_get_value (OBJ) : lv_bar_get_value (OBJ)); }
 
 // Table
-SETTER (SetRows) { int32_t n; if (ToInt (ctx, v, pProp, &n)) return -1; lv_table_set_row_count (OBJ, n > 0 ? n : 0); return 0; }
-SETTER (SetCols) { int32_t n; if (ToInt (ctx, v, pProp, &n)) return -1; lv_table_set_column_count (OBJ, n > 0 ? n : 0); return 0; }
+//
+// Its size is capped: LVGL keeps a pointer for every cell (rows x columns,
+// in 32 bits), and grows the table to reach any cell set.
+static const uint32_t MaxTableRows = 10000;
+static const uint32_t MaxTableCols = 100;
+static const uint32_t MaxTableCells = 100000;
+
+static int CheckTableSize (JSContext *ctx, uint32_t nRows, uint32_t nCols, const char *pWhat)
+{
+	if (nRows > MaxTableRows || nCols > MaxTableCols || nRows * nCols > MaxTableCells)
+	{
+		JS_ThrowRangeError (ctx, "%s: a Table has at most %u rows, %u columns and %u cells",
+				    pWhat, (unsigned) MaxTableRows, (unsigned) MaxTableCols,
+				    (unsigned) MaxTableCells);
+		return -1;
+	}
+	return 0;
+}
+
+SETTER (SetRows)
+{
+	int32_t n;
+	if (ToInt (ctx, v, pProp, &n)) return -1;
+	if (n < 0) n = 0;
+	if (CheckTableSize (ctx, n, lv_table_get_column_count (OBJ), pProp)) return -1;
+	lv_table_set_row_count (OBJ, n);
+	return 0;
+}
+SETTER (SetCols)
+{
+	int32_t n;
+	if (ToInt (ctx, v, pProp, &n)) return -1;
+	if (n < 0) n = 0;
+	if (CheckTableSize (ctx, lv_table_get_row_count (OBJ), n, pProp)) return -1;
+	lv_table_set_column_count (OBJ, n);
+	return 0;
+}
 GETTER (GetRows) { return JS_NewUint32 (ctx, lv_table_get_row_count (OBJ)); }
 GETTER (GetCols) { return JS_NewUint32 (ctx, lv_table_get_column_count (OBJ)); }
 
@@ -1528,6 +1572,7 @@ SETTER (SetData)
 	JSValue Len = JS_GetPropertyStr (ctx, v, "length");
 	JS_ToUint32 (ctx, &nRows, Len);
 	JS_FreeValue (ctx, Len);
+	if (CheckTableSize (ctx, nRows, 0, pProp)) return -1;
 
 	for (uint32_t r = 0; r < nRows; r++)
 	{
@@ -1544,6 +1589,7 @@ SETTER (SetData)
 		JS_FreeValue (ctx, Len);
 		JS_FreeValue (ctx, Row);
 		if (n > nCols) nCols = n;
+		if (CheckTableSize (ctx, nRows, nCols, pProp)) return -1;
 	}
 
 	lv_table_set_row_count (OBJ, nRows);
@@ -1555,6 +1601,12 @@ SETTER (SetData)
 		for (uint32_t c = 0; c < nCols; c++)
 		{
 			JSValue Cell = JS_GetPropertyUint32 (ctx, Row, c);
+			if (CheckUIMemory (ctx, TextSize (ctx, Cell)))
+			{
+				JS_FreeValue (ctx, Cell);
+				JS_FreeValue (ctx, Row);
+				return -1;
+			}
 			const char *s = JS_IsUndefined (Cell) ? 0 : ToString (ctx, Cell, pProp);
 			JS_FreeValue (ctx, Cell);
 			if (s == 0 && JS_HasException (ctx))
@@ -1742,8 +1794,15 @@ SETTER (SetImageSrc)
 		return -1;
 	}
 
+	if (CheckUIMemory (ctx, nPixelBytes))
+	{
+		JS_FreeValue (ctx, Buffer);
+		return -1;
+	}
+
 	// descriptor and pixels in one block; LVGL's ARGB8888 is B, G, R, A in memory
 	u8 *pBlock = new u8[sizeof (lv_image_dsc_t) + nPixelBytes];
+	s_nImageBytes += nPixelBytes;
 	lv_image_dsc_t *pDesc = (lv_image_dsc_t *) pBlock;
 	memset (pDesc, 0, sizeof *pDesc);
 	u8 *pPixels = pBlock + sizeof (lv_image_dsc_t);
@@ -1769,6 +1828,7 @@ SETTER (SetImageSrc)
 	if (pNode->pImage != 0)
 	{
 		lv_image_cache_drop (pNode->pImage);
+		s_nImageBytes -= pNode->pImage->data_size;
 		delete [] (u8 *) pNode->pImage;
 	}
 	pNode->pImage = pDesc;
@@ -1996,8 +2056,43 @@ static JSValue GetValueProp (JSContext *ctx, TGkNode *pNode)
 	}
 }
 
+// LVGL's memory is capped (lv_mem_limit.h): an app may not grow its screen
+// past the soft limit. nMore: what is about to be added, if known (a
+// string's UTF-8 bytes at most). A RangeError the app sees, not a failed
+// allocation inside LVGL.
+static int CheckUIMemory (JSContext *ctx, size_t nMore)
+{
+	size_t nUsed = gk_lv_mem_used () + s_nImageBytes;
+	if (nUsed > GK_LV_MEM_SOFT_LIMIT || nMore > GK_LV_MEM_SOFT_LIMIT - nUsed)
+	{
+		JS_ThrowRangeError (ctx, "the app's widgets would use more than "
+				    GK_LV_MEM_SOFT_LIMIT_TEXT " of memory");
+		return -1;
+	}
+	return 0;
+}
+
+// The most bytes v takes as UTF-8 text, if it is a string; else 0
+static size_t TextSize (JSContext *ctx, JSValueConst v)
+{
+	if (!JS_IsString (v))
+	{
+		return 0;
+	}
+	uint32_t nLength = 0;
+	JSValue Length = JS_GetPropertyStr (ctx, v, "length");
+	JS_ToUint32 (ctx, &nLength, Length);
+	JS_FreeValue (ctx, Length);
+	return (size_t) nLength * 3;		// UTF-16 units: at most 3 bytes each
+}
+
 static int ApplyProp (JSContext *ctx, TGkNode *pNode, const char *pName, JSValueConst v)
 {
+	if (CheckUIMemory (ctx, TextSize (ctx, v)))
+	{
+		return -1;
+	}
+
 	for (unsigned i = 0; i < EvCount; i++)
 	{
 		if (strcmp (pName, Events[i].pProp) == 0 && (Events[i].nTypes & T (pNode->Type)))
@@ -2285,11 +2380,25 @@ static int CellArgs (JSContext *ctx, TGkNode *pNode, int argc, JSValueConst *arg
 	return 0;
 }
 
+// Whether the table may grow to have row nRow and column nCol (LVGL grows
+// it to reach a cell set beyond it)
+static int CheckTableReach (JSContext *ctx, lv_obj_t *pTable, uint32_t nRow, uint32_t nCol, const char *pWhat)
+{
+	if (nRow >= MaxTableRows || nCol >= MaxTableCols)
+	{
+		return CheckTableSize (ctx, MaxTableRows + 1, 0, pWhat);	// throws
+	}
+	uint32_t nRows = lv_table_get_row_count (pTable), nCols = lv_table_get_column_count (pTable);
+	return CheckTableSize (ctx, nRow >= nRows ? nRow + 1 : nRows, nCol >= nCols ? nCol + 1 : nCols, pWhat);
+}
+
 static JSValue js_table_set_cell (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	TGkNode *pNode = GetNode (ctx, this_val);
 	uint32_t r, c;
 	if (pNode == 0 || CellArgs (ctx, pNode, argc, argv, &r, &c)) return JS_EXCEPTION;
+	if (CheckTableReach (ctx, pNode->pObj, r, c, "setCell")) return JS_EXCEPTION;
+	if (CheckUIMemory (ctx, TextSize (ctx, argc > 2 ? argv[2] : JS_UNDEFINED))) return JS_EXCEPTION;
 
 	const char *s = ToString (ctx, argc > 2 ? argv[2] : JS_UNDEFINED, "setCell");
 	if (s == 0) return JS_EXCEPTION;
@@ -2324,6 +2433,10 @@ static JSValue js_table_set_column_width (JSContext *ctx, JSValueConst this_val,
 	if (pNode->Type != WTable || argc < 2 || JS_ToUint32 (ctx, &c, argv[0]) || ToInt (ctx, argv[1], "width", &w))
 	{
 		return JS_ThrowTypeError (ctx, "setColumnWidth(column, width) expected");
+	}
+	if (CheckTableReach (ctx, pNode->pObj, 0, c, "setColumnWidth"))
+	{
+		return JS_EXCEPTION;
 	}
 	lv_table_set_column_width (pNode->pObj, c, w);
 
@@ -2554,6 +2667,7 @@ static void FreeScan (TGkNode *pNode)
 	if (pScan->pPixels != 0)
 	{
 		lv_image_cache_drop (&pScan->Preview);
+		gk_wipe (pScan->pPixels, pScan->Preview.data_size);	// a picture of a code
 		delete [] pScan->pPixels;
 	}
 	delete pScan;
@@ -2606,6 +2720,7 @@ static void ScanDrawCallback (lv_event_t *e)
 			if (pScan->pPixels != 0)
 			{
 				lv_image_cache_drop (&pScan->Preview);
+				gk_wipe (pScan->pPixels, pScan->Preview.data_size);
 				delete [] pScan->pPixels;
 			}
 			pScan->pPixels = new u16[nWidth * nHeight];
@@ -2671,6 +2786,11 @@ static JSValue js_scanner_stop (JSContext *ctx, JSValueConst this_val, int argc,
 	if (pNode == 0) return JS_EXCEPTION;
 	pNode->pScan->bErrorPending = FALSE;
 	pNode->pScan->pScanner->Stop ();
+	if (pNode->pScan->pPixels != 0)
+	{
+		// not drawn while stopped: the last picture goes now
+		gk_wipe (pNode->pScan->pPixels, pNode->pScan->Preview.data_size);
+	}
 	lv_obj_invalidate (pNode->pObj);
 	return JS_UNDEFINED;
 }
@@ -2777,6 +2897,10 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 	if (Type == WScanner && !(pApp->pBundle->permissions & GK_PERM_CAMERA))
 	{
 		return JS_ThrowTypeError (ctx, "ui.Scanner needs \"permissions\": [\"camera\"] in manifest.json");
+	}
+	if (CheckUIMemory (ctx, 0))
+	{
+		return JS_EXCEPTION;
 	}
 
 	// support subclasses: class MyButton extends ui.Button { ... }

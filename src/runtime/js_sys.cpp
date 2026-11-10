@@ -258,7 +258,7 @@ static JSValue js_sys_uptime (JSContext *ctx, JSValueConst this_val, int argc, J
 	return JS_NewFloat64 (ctx, nSec * 1000.0 + nUsec / 1000.0);	// microsecond resolution
 }
 
-extern "C" size_t gk_lv_mem_used (void);	// lv_mem_wipe.c
+#include "lv_mem_limit.h"		// gk_lv_mem_used
 
 static JSValue js_sys_memory (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -288,10 +288,41 @@ static JSValue js_sys_gc (JSContext *ctx, JSValueConst this_val, int argc, JSVal
 	return JS_UNDEFINED;
 }
 
-// The SHA-256 of the running kernel's code and constants: the memory from
-// MEM_KERNEL_START (0x8000, where the firmware puts kernel.img) up to
-// __data_start, which the MMU maps read-only. It equals the SHA-256 of the
-// first (__data_start - 0x8000) bytes of kernel.img. Computed once.
+// The SHA-256 of the running kernel: of kernel.img, byte for byte. The
+// firmware loads the image at MEM_KERNEL_START (0x8000); its code and
+// constants (up to __data_start) the MMU keeps read-only, and are hashed
+// where they are. Its initialised data (.data, up to the image's end,
+// __tdata_end) changes as the kernel runs (the stack canary, self-test
+// results, pointers), so Circle's sysinit() hands it over before anything
+// writes to it (patches/circle/0012), and the copy kept here is hashed.
+// Computed once.
+#ifndef GK_SIM
+
+static const unsigned MaxKernelData = 16 * 1024;
+static u32 s_KernelData[MaxKernelData / sizeof (u32)];
+static unsigned s_nKernelDataSize = 0;		// 0: not handed over, or too large
+
+// Circle's sysinit(), right after clearing .bss: the MMU is not set up yet
+// (caches off, no unaligned access), so a plain word copy, through volatile
+// pointers so the compiler does not make it a call to memcpy (which might
+// not be safe this early). The start is page aligned.
+extern "C" void sysinit_data_loaded (const void *pData, size_t nSize)
+{
+	if (nSize > MaxKernelData)
+	{
+		return;		// KernelInfo() reports it
+	}
+	const volatile u32 *pFrom = (const volatile u32 *) pData;
+	volatile u32 *pTo = s_KernelData;
+	for (size_t i = 0; i < (nSize + 3) / 4; i++)
+	{
+		pTo[i] = pFrom[i];	// the last word may hold bytes past the end: not hashed
+	}
+	s_nKernelDataSize = nSize;
+}
+
+#endif
+
 static JSValue KernelInfo (JSContext *ctx)
 {
 	static char s_Hash[2 * GK_SHA256_DIGEST_SIZE + 1];
@@ -303,17 +334,34 @@ static JSValue KernelInfo (JSContext *ctx)
 #else
 	extern u8 __data_start;
 	const u8 *pStart = (const u8 *) MEM_KERNEL_START;
-	unsigned nSize = &__data_start - pStart;
+	unsigned nSize = 0;
 
-	if (s_Hash[0] == '\0')
+	if (s_nKernelDataSize == 0)
 	{
-		u8 Digest[GK_SHA256_DIGEST_SIZE];
-		gk_sha256 (pStart, nSize, Digest);
-		for (unsigned i = 0; i < GK_SHA256_DIGEST_SIZE; i++)
+		// never happens with patches/circle/0012 and .data below 16 KB
+		// (tests/check_kernel_hash.sh would fail): say so, never a hash
+		// of something else
+		strcpy (s_Hash, "unknown");
+		CLogger::Get ()->Write ("sys", LogError, "kernel hash: the data section was not handed over"
+					" at boot, or is larger than %u bytes", MaxKernelData);
+	}
+	else
+	{
+		nSize = (&__data_start - pStart) + s_nKernelDataSize;
+		if (s_Hash[0] == '\0')
 		{
-			static const char Digits[] = "0123456789abcdef";
-			s_Hash[2 * i] = Digits[Digest[i] >> 4];
-			s_Hash[2 * i + 1] = Digits[Digest[i] & 15];
+			gk_sha256_t Context;
+			gk_sha256_init (&Context);
+			gk_sha256_update (&Context, pStart, &__data_start - pStart);
+			gk_sha256_update (&Context, s_KernelData, s_nKernelDataSize);
+			u8 Digest[GK_SHA256_DIGEST_SIZE];
+			gk_sha256_final (&Context, Digest);
+			for (unsigned i = 0; i < GK_SHA256_DIGEST_SIZE; i++)
+			{
+				static const char Digits[] = "0123456789abcdef";
+				s_Hash[2 * i] = Digits[Digest[i] >> 4];
+				s_Hash[2 * i + 1] = Digits[Digest[i] & 15];
+			}
 		}
 	}
 #endif
