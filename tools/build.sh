@@ -33,11 +33,12 @@ export SOURCE_DATE_EPOCH
 tools/apply_patches.sh circle
 tools/apply_patches.sh zxing-cpp
 
-# Circle's configuration. USB: only hubs, keyboards and mice (boot
-# protocol); every other class driver is left out of the image, since a USB
+# Circle's configuration. USB: only hubs, keyboards (boot protocol) and
+# mice; every other class driver is left out of the image, since a USB
 # device is the only way in from outside. (EXCLUDE_USB_TOUCHSCREEN also
 # turns off the generic-HID path, whose report descriptor parser is the
-# riskiest code a device could feed.)
+# riskiest code a device could feed. The mouse driver's own, smaller parser
+# stays: patches/circle/0009 bounds it, tools/fuzz_usbmouse.sh fuzzes it.)
 CONFIG="-r 1 $QEMUOPT --keymap US --kernel-max-size 8 -d KERNEL_STACK_SIZE=0x100000"
 
 # The compiler: the pinned one in toolchain/ (tools/toolchain.sh) if it is

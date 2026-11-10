@@ -138,6 +138,16 @@ else
 	echo "FAIL  sim:share_libs   (see $OUT/share_libs.log)"; FAILED=1
 fi
 
+# the USB mouse's report descriptor parser (Circle, patches/circle/0009):
+# its fixed cases and a short fuzz run (tools/fuzz_usbmouse.sh for long ones)
+if [ -f circle/Rules.mk ]; then
+	if tools/fuzz_usbmouse.sh 20000 > "$OUT/fuzz_usbmouse.log" 2>&1; then
+		echo "PASS  sim:fuzz_usbmouse"
+	else
+		echo "FAIL  sim:fuzz_usbmouse   (see $OUT/fuzz_usbmouse.log)"; FAILED=1
+	fi
+fi
+
 # libraries outside apps (lib/js), under Node
 if command -v node >/dev/null; then
 	if node --experimental-default-type=module tests/i18n/run_node.mjs > "$OUT/i18n_node.log" 2>&1; then
