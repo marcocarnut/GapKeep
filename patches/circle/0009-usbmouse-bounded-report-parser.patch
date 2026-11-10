@@ -1,0 +1,854 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: usbmouse: a bounded report descriptor parser
+
+GapKeep keeps the mouse's report protocol (the wheel, 0006), so the mouse
+driver parses the HID report descriptor the device sends. The parser
+(DecodeReport) trusted it: five usages overflowed a 4-entry array on the
+stack, item data was read past the descriptor's end (and its u16 length
+could wrap), a report size over 32 bits asserted, and the bit offsets
+could wrap, so that ExtractUnsigned() read anywhere.
+
+The parser and the field extraction move to usbmousereport.cpp, where
+GapKeep's fuzzer (tools/fuzz_usbmouse.sh) compiles them on the host:
+
+- every item's data is checked against the remaining length; long items
+  are skipped by their size;
+- at most 4 usages before an input item, report sizes up to 32 bits,
+  collections nested up to 16 deep and closed only when open, report IDs
+  1-255, reports up to 64 bytes and descriptors up to 4096;
+- every field found must lie inside the report;
+- fields are read bit by bit, only inside the report actually received;
+- a report with another report ID than the mouse's is not the mouse's.
+
+A malformed descriptor gets the mouse refused, with a log line. For a
+well-formed one the parser finds what the original found. This replaces
+the code patch 0001 fixed (the layout is still zeroed first). The
+keyboard and mouse drivers also check that the HID class descriptor is
+whole before they read it.
+
+diff --git a/include/circle/usb/usbmouse.h b/include/circle/usb/usbmouse.h
+index 63426dd..418463d 100644
+--- a/include/circle/usb/usbmouse.h
++++ b/include/circle/usb/usbmouse.h
+@@ -22,31 +22,9 @@
+ 
+ #include <circle/usb/usbhiddevice.h>
+ #include <circle/input/mouse.h>
++#include <circle/usb/usbmousereport.h>	// gapkeep: the parser, bounded
+ #include <circle/types.h>
+ 
+-enum TMouseReportType
+-{
+-	MouseItemButtons,
+-	MouseItemXAxis,
+-	MouseItemYAxis,
+-	MouseItemWheel,
+-
+-	MouseItemCount
+-};
+-
+-struct TMouseReportItem
+-{
+-	unsigned bitSize;
+-	unsigned bitOffset;
+-};
+-
+-struct TMouseReport
+-{
+-	unsigned id;
+-	unsigned byteSize;
+-	TMouseReportItem items[MouseItemCount];
+-};
+-
+ class CUSBMouseDevice : public CUSBHIDDevice
+ {
+ public:
+@@ -57,9 +35,6 @@ public:
+ 
+ private:
+ 	void ReportHandler (const u8 *pReport, unsigned nReportSize);
+-	void DecodeReport (void);
+-	u32 ExtractUnsigned (const void *buffer, u32 offset, u32 length);
+-	s32 ExtractSigned (const void *buffer, u32 offset, u32 length);
+ 
+ private:
+ 	CMouseDevice *m_pMouseDevice;
+diff --git a/include/circle/usb/usbmousereport.h b/include/circle/usb/usbmousereport.h
+new file mode 100644
+index 0000000..74c9da9
+--- /dev/null
++++ b/include/circle/usb/usbmousereport.h
+@@ -0,0 +1,74 @@
++//
++// usbmousereport.h
++//
++// gapkeep: the USB mouse's HID report descriptor parser and report field
++// extraction, taken out of usbmouse.cpp and bounded: the descriptor and
++// the reports come from the device, so every length, index and offset in
++// them is checked. Kept apart from the driver so that it can be compiled
++// and fuzzed on its own (GapKeep's tools/fuzz_usbmouse.sh).
++//
++// Circle - A C++ bare metal environment for Raspberry Pi
++// Copyright (C) 2014-2026  R. Stange <rsta2@gmx.net>
++//
++// USB mouse wheel support including HID report parser:
++// Copyright (C) 2020  H. Kocevar <hinxx@protonmail.com>
++//
++// This program is free software: you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation, either version 3 of the License, or
++// (at your option) any later version.
++//
++// This program is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public License
++// along with this program.  If not, see <http://www.gnu.org/licenses/>.
++//
++#ifndef _circle_usb_usbmousereport_h
++#define _circle_usb_usbmousereport_h
++
++#include <circle/types.h>
++
++enum TMouseReportType
++{
++	MouseItemButtons,
++	MouseItemXAxis,
++	MouseItemYAxis,
++	MouseItemWheel,
++
++	MouseItemCount
++};
++
++struct TMouseReportItem
++{
++	unsigned bitSize;
++	unsigned bitOffset;
++};
++
++struct TMouseReport
++{
++	unsigned id;			// report ID (first byte of each report), 0: none
++	unsigned byteSize;		// 0: no mouse described
++	TMouseReportItem items[MouseItemCount];
++};
++
++#define USBMOUSE_MAX_DESCRIPTOR_SIZE	4096	// report descriptor, bytes
++#define USBMOUSE_MAX_REPORT_SIZE	64	// mouse report, bytes (with its ID)
++#define USBMOUSE_MAX_COLLECTION_DEPTH	16
++
++// Fills *pReport from a report descriptor. Returns 0 if it is well-formed
++// (pReport->byteSize == 0 then means that it describes no mouse), else a
++// short description of what is wrong with it, and *pReport is all zero.
++const char *USBMouseDecodeReport (const u8 *pDescriptor, unsigned nLength,
++				  TMouseReport *pReport);
++
++// A field of a report of nReportSize bytes; a field that is not entirely
++// inside the report reads as 0. nBitSize up to 32.
++u32 USBMouseExtractUnsigned (const u8 *pReport, unsigned nReportSize,
++			     unsigned nBitOffset, unsigned nBitSize);
++s32 USBMouseExtractSigned (const u8 *pReport, unsigned nReportSize,
++			   unsigned nBitOffset, unsigned nBitSize);
++
++#endif
+diff --git a/lib/usb/Makefile b/lib/usb/Makefile
+index 36fe850..8803187 100644
+--- a/lib/usb/Makefile
++++ b/lib/usb/Makefile
+@@ -29,7 +29,7 @@ OBJS	= lan7800.o smsc951x.o usbbluetooth.o usbcdcethernet.o usbfloppydevice.o \
+ 	  usbgamepad.o usbgamepadps3.o usbgamepadps4.o usbgamepadstandard.o usbgamepadswitchpro.o \
+ 	  usbgamepad8bitdo.o usbgamepad8bitdopro.o usbgamepad8bitdoxinput.o \
+ 	  usbgamepadxbox360.o usbgamepadxbox360pcwireless.o usbgamepadxboxone.o usbhiddevice.o usbhostcontroller.o \
+-	  usbkeyboard.o usbkeyboard8bitdo.o usbmassdevice.o usbmidi.o usbmidihost.o usbmouse.o usbprinter.o usbrequest.o \
++	  usbkeyboard.o usbkeyboard8bitdo.o usbmassdevice.o usbmidi.o usbmidihost.o usbmouse.o usbmousereport.o usbprinter.o usbrequest.o \
+ 	  usbstandardhub.o usbstring.o usbserial.o usbserialhost.o usbserialch341.o usbserialcp210x.o \
+ 	  usbserialpl2303.o usbserialft231x.o usbserialcdc.o usbtouchscreen.o dwhciregister.o
+ 
+diff --git a/lib/usb/usbkeyboard.cpp b/lib/usb/usbkeyboard.cpp
+index 9bcfbf3..465cdf5 100644
+--- a/lib/usb/usbkeyboard.cpp
++++ b/lib/usb/usbkeyboard.cpp
+@@ -66,6 +66,7 @@ boolean CUSBKeyboardDevice::Configure (void)
+ 	if (   pDeviceDesc->idVendor == 0x1C59
+ 	    && pDeviceDesc->idProduct == 0x99
+ 	    && pHIDDesc != 0
++	    && pHIDDesc->bLength >= sizeof *pHIDDesc	// gapkeep: it is read whole
+ 	    && pHIDDesc->wReportDescriptorLength == 78)
+ 	{
+ 		m_nReportSize++;
+diff --git a/lib/usb/usbmouse.cpp b/lib/usb/usbmouse.cpp
+index b1835a3..65d9356 100644
+--- a/lib/usb/usbmouse.cpp
++++ b/lib/usb/usbmouse.cpp
+@@ -26,26 +26,6 @@
+ #include <circle/util.h>
+ #include <assert.h>
+ 
+-// HID Report Items from HID 1.11 Section 6.2.2
+-#define HID_USAGE_PAGE      0x04
+-#define HID_USAGE           0x08
+-#define HID_COLLECTION      0xA0
+-#define HID_END_COLLECTION  0xC0
+-#define HID_REPORT_COUNT    0x94
+-#define HID_REPORT_SIZE     0x74
+-#define HID_INPUT           0x80
+-#define HID_REPORT_ID       0x84
+-
+-// HID Report Usage Pages from HID Usage Tables 1.12 Section 3, Table 1
+-#define HID_USAGE_PAGE_BUTTONS         0x09
+-
+-// HID Report Usages from HID Usage Tables 1.12 Section 4, Table 6
+-#define HID_USAGE_POINTER   0x01
+-#define HID_USAGE_MOUSE     0x02
+-#define HID_USAGE_X         0x30
+-#define HID_USAGE_Y         0x31
+-#define HID_USAGE_WHEEL     0x38
+-
+ static const char FromUSBMouse[] = "umouse";
+ 
+ CUSBMouseDevice::CUSBMouseDevice (CUSBFunction *pFunction)
+@@ -68,6 +48,7 @@ boolean CUSBMouseDevice::Configure (void)
+ {
+ 	TUSBHIDDescriptor *pHIDDesc = (TUSBHIDDescriptor *) GetDescriptor (DESCRIPTOR_HID);
+ 	if (   pHIDDesc == 0
++	    || pHIDDesc->bLength < sizeof *pHIDDesc		// gapkeep: it is read whole
+ 	    || pHIDDesc->wReportDescriptorLength == 0)
+ 	{
+ 		ConfigurationError (FromUSBMouse);
+@@ -76,6 +57,14 @@ boolean CUSBMouseDevice::Configure (void)
+ 	}
+ 
+ 	m_usReportDescriptorLength = pHIDDesc->wReportDescriptorLength;
++	if (m_usReportDescriptorLength > USBMOUSE_MAX_DESCRIPTOR_SIZE)	// gapkeep
++	{
++		CLogger::Get ()->Write (FromUSBMouse, LogError,
++					"Report descriptor refused: too long (%u bytes)",
++					(unsigned) m_usReportDescriptorLength);
++
++		return FALSE;
++	}
+ 	m_pHIDReportDescriptor = new u8[m_usReportDescriptorLength];
+ 	assert (m_pHIDReportDescriptor != 0);
+ 
+@@ -90,7 +79,18 @@ boolean CUSBMouseDevice::Configure (void)
+ 		return FALSE;
+ 	}
+ 
+-	DecodeReport ();
++	// gapkeep: the descriptor comes from the device; a malformed one gets
++	// the mouse refused (usbmousereport.cpp)
++	const char *pError = USBMouseDecodeReport (m_pHIDReportDescriptor,
++						   m_usReportDescriptorLength,
++						   &m_MouseReport);
++	if (pError != 0)
++	{
++		CLogger::Get ()->Write (FromUSBMouse, LogError,
++					"Report descriptor refused: %s", pError);
++
++		return FALSE;
++	}
+ 
+ 	// ignoring unsupported HID interface
+ 	if (m_MouseReport.byteSize == 0)
+@@ -116,7 +116,9 @@ boolean CUSBMouseDevice::Configure (void)
+ void CUSBMouseDevice::ReportHandler (const u8 *pReport, unsigned nReportSize)
+ {
+ 	if (   pReport != 0
+-	    && nReportSize == m_MouseReport.byteSize)
++	    && nReportSize == m_MouseReport.byteSize
++	    && (   m_MouseReport.id == 0			// gapkeep: another report's
++		|| pReport[0] == m_MouseReport.id))	// fields are elsewhere
+ 	{
+ 		if (m_pMouseDevice != 0)
+ 		{
+@@ -125,21 +127,21 @@ void CUSBMouseDevice::ReportHandler (const u8 *pReport, unsigned nReportSize)
+ 			s32 yMove = 0;
+ 			s32 wheelMove = 0;
+ 			TMouseReportItem *item = &m_MouseReport.items[MouseItemButtons];
+-			ucHIDButtons = ExtractUnsigned(pReport, item->bitOffset, item->bitSize);
++			ucHIDButtons = USBMouseExtractUnsigned(pReport, nReportSize, item->bitOffset, item->bitSize);
+ 			item = &m_MouseReport.items[MouseItemXAxis];
+-			xMove = ExtractSigned(pReport, item->bitOffset, item->bitSize);
++			xMove = USBMouseExtractSigned(pReport, nReportSize, item->bitOffset, item->bitSize);
+ 			if (xMove > 127)
+ 				xMove = 127;
+ 			if (xMove < -127)
+ 				xMove = -127;
+ 			item = &m_MouseReport.items[MouseItemYAxis];
+-			yMove = ExtractSigned(pReport, item->bitOffset, item->bitSize);
++			yMove = USBMouseExtractSigned(pReport, nReportSize, item->bitOffset, item->bitSize);
+ 			if (yMove > 127)
+ 				yMove = 127;
+ 			if (yMove < -127)
+ 				yMove = -127;
+ 			item = &m_MouseReport.items[MouseItemWheel];
+-			wheelMove = ExtractSigned(pReport, item->bitOffset, item->bitSize);
++			wheelMove = USBMouseExtractSigned(pReport, nReportSize, item->bitOffset, item->bitSize);
+ 
+ 			u32 nButtons = 0;
+ 			if (ucHIDButtons & USBHID_BUTTON1)
+@@ -168,224 +170,3 @@ void CUSBMouseDevice::ReportHandler (const u8 *pReport, unsigned nReportSize)
+ 	}
+ }
+ 
+-u32 CUSBMouseDevice::ExtractUnsigned(const void *buffer, u32 offset, u32 length)
+-{
+-	assert(buffer != 0);
+-	assert(length <= 32);
+-
+-	if (length == 0)
+-	{
+-		return 0;
+-	}
+-
+-	u8 *bits = (u8 *)buffer;
+-	unsigned shift = offset % 8;
+-	offset = offset / 8;
+-	bits = bits + offset;
+-	unsigned number = bits[0];
+-	if (length > 8) number |= (u16) bits[1] << 8;
+-	if (length > 16) number |= (u32) bits[2] << 16;
+-	offset = shift;
+-
+-	unsigned result = 0;
+-	if (length > 24)
+-	{
+-		result = (((1 << 24) - 1) & (number >> offset));
+-		bits = bits + 3;
+-		length = length - 24;
+-		number = bits[0];
+-		if (length > 8) number |= (u16) bits[1] << 8;
+-		if (length > 16) number |= (u32) bits[2] << 16;
+-		unsigned result2 = (((1 << length) - 1) & (number >> offset));
+-		result = (result2 << 24) | result;
+-	}
+-	else
+-	{
+-		result = (((1 << length) - 1) & (number >> offset));
+-	}
+-
+-	return result;
+-}
+-
+-s32 CUSBMouseDevice::ExtractSigned(const void *buffer, u32 offset, u32 length)
+-{
+-	assert(buffer != 0);
+-	assert(length <= 32);
+-
+-	unsigned result = ExtractUnsigned(buffer, offset, length);
+-	if ((length == 0) || (length == 32))
+-	{
+-		return result;
+-	}
+-
+-	if (result & (1 << (length - 1)))
+-	{
+-		result |= 0xffffffff - ((1 << length) - 1);
+-	}
+-
+-	return result;
+-}
+-
+-void CUSBMouseDevice::DecodeReport (void)
+-{
+-	s32 item, arg;
+-	u32 offset = 0, size = 0, count = 0;
+-	u32 id = 0;
+-	u32 nCollections = 0;
+-	u32 itemIndex = 0;
+-	boolean parse = FALSE;
+-	boolean foundMouseUsage = FALSE;
+-	u32 itemIndexes[MouseItemCount] = {0};
+-
+-	// items the descriptor does not describe (no wheel, say) must read as
+-	// absent, not as whatever was on the heap
+-	memset (&m_MouseReport, 0, sizeof m_MouseReport);
+-
+-	assert (m_pHIDReportDescriptor != 0);
+-	s8 *pHIDReportDescriptor = (s8 *) m_pHIDReportDescriptor;
+-
+-	for (u16 usReportDescriptorLength = m_usReportDescriptorLength; usReportDescriptorLength > 0; )
+-	{
+-		item = *pHIDReportDescriptor++;
+-		usReportDescriptorLength--;
+-
+-		switch(item & 0x03)
+-		{
+-		case 0:
+-			arg = 0;
+-			break;
+-		case 1:
+-			arg = *pHIDReportDescriptor++;
+-			usReportDescriptorLength--;
+-			break;
+-		case 2:
+-			arg = *pHIDReportDescriptor++ & 0xFF;
+-			arg = arg | (*pHIDReportDescriptor++ << 8);
+-			usReportDescriptorLength -= 2;
+-			break;
+-		default:
+-			arg = *pHIDReportDescriptor++;
+-			arg = arg | (*pHIDReportDescriptor++ << 8);
+-			arg = arg | (*pHIDReportDescriptor++ << 16);
+-			arg = arg | (*pHIDReportDescriptor++ << 24);
+-			usReportDescriptorLength -= 4;
+-			break;
+-		}
+-
+-		switch(item & 0xFC)
+-		{
+-		case HID_COLLECTION:
+-			nCollections++;
+-			break;
+-		case HID_END_COLLECTION:
+-			nCollections--;
+-			if (nCollections == 0)
+-				parse = FALSE;
+-			break;
+-		case HID_USAGE:
+-			if (arg == HID_USAGE_MOUSE)
+-			{
+-				foundMouseUsage = TRUE;
+-			}
+-			else if (arg == HID_USAGE_POINTER)
+-			{
+-				if (id == 0)
+-				{
+-					parse = true;
+-				}
+-			}
+-			break;
+-		case HID_REPORT_ID:
+-			if (foundMouseUsage)
+-			{
+-				if (id == 0)
+-				{
+-					id = arg;
+-					offset += 8;
+-					parse = TRUE;
+-				}
+-				else
+-				{
+-					if ((u32)arg != id)
+-					{
+-						parse = FALSE;
+-					}
+-					else
+-					{
+-						parse = TRUE;
+-					}
+-				}
+-			}
+-			break;
+-		}
+-
+-		if (! parse)
+-			continue;
+-
+-		switch(item & 0xFC)
+-		{
+-		case HID_USAGE_PAGE:
+-			switch(arg)
+-			{
+-			case HID_USAGE_PAGE_BUTTONS:
+-				itemIndexes[itemIndex] = MouseItemButtons;
+-				itemIndex++;
+-				break;
+-			}
+-			break;
+-		case HID_USAGE:
+-			switch(arg)
+-			{
+-			case HID_USAGE_X:
+-				itemIndexes[itemIndex] = MouseItemXAxis;
+-				itemIndex++;
+-				break;
+-			case HID_USAGE_Y:
+-				itemIndexes[itemIndex] = MouseItemYAxis;
+-				itemIndex++;
+-				break;
+-			case HID_USAGE_WHEEL:
+-				itemIndexes[itemIndex] = MouseItemWheel;
+-				itemIndex++;
+-				break;
+-			}
+-			break;
+-		case HID_REPORT_SIZE:
+-			size = arg;
+-			break;
+-		case HID_REPORT_COUNT:
+-			count = arg;
+-			break;
+-		case HID_INPUT:
+-			if ((arg & 0x03) == 0x02)
+-			{
+-				u32 bitOffset = offset;
+-				u32 bitSize = 0;
+-				u32 index = 0;
+-				u32 item = 0;
+-				assert(itemIndex < MouseItemCount);
+-				while (index < itemIndex)
+-				{
+-					item = itemIndexes[index];
+-					assert(item < MouseItemCount);
+-					bitSize = size;
+-					if (item == MouseItemButtons)
+-					{
+-						bitSize = count;
+-					}
+-					m_MouseReport.items[item].bitSize = bitSize;
+-					m_MouseReport.items[item].bitOffset = bitOffset;
+-					bitOffset += bitSize;
+-					index++;
+-				}
+-				itemIndex = 0;
+-			}
+-
+-			offset += count * size;
+-			break;
+-		}
+-	}
+-
+-	m_MouseReport.id = id;
+-	m_MouseReport.byteSize = (offset + 7) / 8;
+-}
+diff --git a/lib/usb/usbmousereport.cpp b/lib/usb/usbmousereport.cpp
+new file mode 100644
+index 0000000..03e3720
+--- /dev/null
++++ b/lib/usb/usbmousereport.cpp
+@@ -0,0 +1,332 @@
++//
++// usbmousereport.cpp
++//
++// gapkeep: the USB mouse's HID report descriptor parser, out of
++// usbmouse.cpp, with every length, index and offset checked (see
++// usbmousereport.h). For a well-formed descriptor it finds what the
++// original parser found.
++//
++// Circle - A C++ bare metal environment for Raspberry Pi
++// Copyright (C) 2014-2026  R. Stange <rsta2@gmx.net>
++//
++// USB mouse wheel support including HID report parser:
++// Copyright (C) 2020  H. Kocevar <hinxx@protonmail.com>
++//
++// This program is free software: you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation, either version 3 of the License, or
++// (at your option) any later version.
++//
++// This program is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public License
++// along with this program.  If not, see <http://www.gnu.org/licenses/>.
++//
++#include <circle/usb/usbmousereport.h>
++
++// HID Report Items from HID 1.11 Section 6.2.2
++#define HID_USAGE_PAGE      0x04
++#define HID_USAGE           0x08
++#define HID_COLLECTION      0xA0
++#define HID_END_COLLECTION  0xC0
++#define HID_REPORT_COUNT    0x94
++#define HID_REPORT_SIZE     0x74
++#define HID_INPUT           0x80
++#define HID_REPORT_ID       0x84
++#define HID_LONG_ITEM       0xFE
++
++// HID Report Usage Pages from HID Usage Tables 1.12 Section 3, Table 1
++#define HID_USAGE_PAGE_BUTTONS         0x09
++
++// HID Report Usages from HID Usage Tables 1.12 Section 4, Table 6
++#define HID_USAGE_POINTER   0x01
++#define HID_USAGE_MOUSE     0x02
++#define HID_USAGE_X         0x30
++#define HID_USAGE_Y         0x31
++#define HID_USAGE_WHEEL     0x38
++
++#define MAX_REPORT_BITS     (USBMOUSE_MAX_REPORT_SIZE * 8)
++
++static void ClearReport (TMouseReport *pReport)
++{
++	pReport->id = 0;
++	pReport->byteSize = 0;
++	for (unsigned i = 0; i < MouseItemCount; i++)
++	{
++		pReport->items[i].bitSize = 0;
++		pReport->items[i].bitOffset = 0;
++	}
++}
++
++static const char *Fail (TMouseReport *pReport, const char *pWhy)
++{
++	ClearReport (pReport);
++
++	return pWhy;
++}
++
++const char *USBMouseDecodeReport (const u8 *pDescriptor, unsigned nLength,
++				  TMouseReport *pReport)
++{
++	u32 offset = 0, size = 0, count = 0;	// offset: bits, at most MAX_REPORT_BITS
++	u32 id = 0;
++	u32 nCollections = 0;
++	u32 itemIndex = 0;
++	boolean parse = FALSE;
++	boolean foundMouseUsage = FALSE;
++	u32 itemIndexes[MouseItemCount] = {0};
++
++	// items the descriptor does not describe (no wheel, say) must read as
++	// absent, not as whatever was on the heap
++	ClearReport (pReport);
++
++	if (pDescriptor == 0)
++	{
++		return "no descriptor";
++	}
++
++	if (nLength > USBMOUSE_MAX_DESCRIPTOR_SIZE)
++	{
++		return Fail (pReport, "descriptor too long");
++	}
++
++	unsigned i = 0;
++	while (i < nLength)
++	{
++		u8 prefix = pDescriptor[i++];
++
++		if (prefix == HID_LONG_ITEM)		// HID 1.11 6.2.2.3: size, tag, data
++		{
++			if (nLength - i < 2)
++			{
++				return Fail (pReport, "truncated long item");
++			}
++			unsigned nDataSize = pDescriptor[i];
++			i += 2;
++			if (nLength - i < nDataSize)
++			{
++				return Fail (pReport, "truncated long item");
++			}
++			i += nDataSize;
++
++			continue;
++		}
++
++		unsigned nArgSize = prefix & 0x03;
++		if (nArgSize == 3)
++		{
++			nArgSize = 4;
++		}
++		if (nLength - i < nArgSize)
++		{
++			return Fail (pReport, "truncated item");
++		}
++
++		// unsigned: the items read here (usages, sizes, counts, IDs) are
++		u32 arg = 0;
++		for (unsigned k = 0; k < nArgSize; k++)
++		{
++			arg |= (u32) pDescriptor[i++] << (8 * k);
++		}
++
++		switch (prefix & 0xFC)
++		{
++		case HID_COLLECTION:
++			if (++nCollections > USBMOUSE_MAX_COLLECTION_DEPTH)
++			{
++				return Fail (pReport, "collections nested too deep");
++			}
++			break;
++		case HID_END_COLLECTION:
++			if (nCollections == 0)
++			{
++				return Fail (pReport, "end of a collection never opened");
++			}
++			nCollections--;
++			if (nCollections == 0)
++				parse = FALSE;
++			break;
++		case HID_USAGE:
++			if (arg == HID_USAGE_MOUSE)
++			{
++				foundMouseUsage = TRUE;
++			}
++			else if (arg == HID_USAGE_POINTER)
++			{
++				if (id == 0)
++				{
++					parse = TRUE;
++				}
++			}
++			break;
++		case HID_REPORT_ID:
++			if (foundMouseUsage)
++			{
++				if (arg == 0 || arg > 0xFF)	// HID 1.11 6.2.2.7
++				{
++					return Fail (pReport, "bad report ID");
++				}
++
++				if (id == 0)
++				{
++					if (offset != 0)
++					{
++						return Fail (pReport, "report ID after report data");
++					}
++					id = arg;
++					offset += 8;
++					parse = TRUE;
++				}
++				else
++				{
++					parse = arg == id ? TRUE : FALSE;
++				}
++			}
++			break;
++		}
++
++		if (! parse)
++			continue;
++
++		u32 newItem = MouseItemCount;
++		switch(prefix & 0xFC)
++		{
++		case HID_USAGE_PAGE:
++			if (arg == HID_USAGE_PAGE_BUTTONS)
++			{
++				newItem = MouseItemButtons;
++			}
++			break;
++		case HID_USAGE:
++			switch(arg)
++			{
++			case HID_USAGE_X:
++				newItem = MouseItemXAxis;
++				break;
++			case HID_USAGE_Y:
++				newItem = MouseItemYAxis;
++				break;
++			case HID_USAGE_WHEEL:
++				newItem = MouseItemWheel;
++				break;
++			}
++			break;
++		case HID_REPORT_SIZE:
++			if (arg > 32)
++			{
++				return Fail (pReport, "report size over 32 bits");
++			}
++			size = arg;
++			break;
++		case HID_REPORT_COUNT:
++			if (arg > MAX_REPORT_BITS)
++			{
++				return Fail (pReport, "report count too large");
++			}
++			count = arg;
++			break;
++		case HID_INPUT:
++			if ((arg & 0x03) == 0x02)
++			{
++				u32 bitOffset = offset;
++				for (u32 index = 0; index < itemIndex; index++)
++				{
++					u32 item = itemIndexes[index];
++					u32 bitSize = item == MouseItemButtons ? count : size;
++					if (bitSize > 32)
++					{
++						return Fail (pReport, "more than 32 buttons");
++					}
++					pReport->items[item].bitSize = bitSize;
++					pReport->items[item].bitOffset = bitOffset;
++					bitOffset += bitSize;	// <= MAX_REPORT_BITS + 4*32
++				}
++				itemIndex = 0;
++			}
++
++			// both <= MAX_REPORT_BITS: no overflow in u32
++			if (count * size > MAX_REPORT_BITS - offset)
++			{
++				return Fail (pReport, "report too long");
++			}
++			offset += count * size;
++			break;
++		}
++
++		if (newItem < MouseItemCount)
++		{
++			if (itemIndex >= MouseItemCount)
++			{
++				return Fail (pReport, "too many usages before an input item");
++			}
++			itemIndexes[itemIndex++] = newItem;
++		}
++	}
++
++	pReport->id = id;
++	pReport->byteSize = (offset + 7) / 8;
++	if (   pReport->byteSize == 0
++	    || (id != 0 && pReport->byteSize == 1))	// an ID and nothing else
++	{
++		ClearReport (pReport);
++
++		return 0;				// not a mouse
++	}
++
++	// every field inside the report (the original parser could place one
++	// after its end, when an input item had fewer fields than usages)
++	for (unsigned item = 0; item < MouseItemCount; item++)
++	{
++		const TMouseReportItem *pItem = &pReport->items[item];
++		if (   pItem->bitSize > 0
++		    && pItem->bitOffset + pItem->bitSize > pReport->byteSize * 8)
++		{
++			return Fail (pReport, "field outside the report");
++		}
++	}
++
++	return 0;
++}
++
++u32 USBMouseExtractUnsigned (const u8 *pReport, unsigned nReportSize,
++			     unsigned nBitOffset, unsigned nBitSize)
++{
++	if (   pReport == 0
++	    || nBitSize == 0
++	    || nBitSize > 32
++	    || nReportSize > USBMOUSE_MAX_REPORT_SIZE
++	    || nBitOffset > nReportSize * 8
++	    || nBitSize > nReportSize * 8 - nBitOffset)
++	{
++		return 0;
++	}
++
++	u32 nResult = 0;
++	for (unsigned i = 0; i < nBitSize; i++)
++	{
++		unsigned nBit = nBitOffset + i;
++		if ((pReport[nBit / 8] >> (nBit % 8)) & 1)
++		{
++			nResult |= (u32) 1 << i;
++		}
++	}
++
++	return nResult;
++}
++
++s32 USBMouseExtractSigned (const u8 *pReport, unsigned nReportSize,
++			   unsigned nBitOffset, unsigned nBitSize)
++{
++	u32 nResult = USBMouseExtractUnsigned (pReport, nReportSize, nBitOffset, nBitSize);
++	if (   nBitSize > 0
++	    && nBitSize < 32
++	    && (nResult & ((u32) 1 << (nBitSize - 1))))
++	{
++		nResult |= ~(((u32) 1 << nBitSize) - 1);
++	}
++
++	return (s32) nResult;
++}

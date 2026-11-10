@@ -1,0 +1,368 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: dwhci: bound the time the system waits on control transfers
+
+The main loop waits for control transfers: enumeration (plug and play)
+and keyboard LEDs. Since 0003 one gives up after 3 s, but a device could
+still freeze the system 3 s at a time: by timing out on request after
+request, by disconnecting and reconnecting to be enumerated again, or, as
+a keyboard that NAKs SET_REPORT, on every Caps Lock.
+
+- After USB_CONTROL_MAX_TIMEOUTS (2) timed-out control transfers, a
+  device's control transfers fail at once, until it is replugged (a new
+  CUSBDevice).
+- Full-length timeouts are budgeted across devices: 3 of them, then one
+  more per minute. Past that, control transfers give up after 250 ms, so
+  a device that keeps reconnecting cannot freeze the system for long.
+- ControlMessage() takes an optional, shorter timeout. The keyboard's
+  LED requests get 100 ms, and after one failure no more are sent.
+
+diff --git a/include/circle/usb/dwhcidevice.h b/include/circle/usb/dwhcidevice.h
+index e3c0051..1d2978c 100644
+--- a/include/circle/usb/dwhcidevice.h
++++ b/include/circle/usb/dwhcidevice.h
+@@ -43,6 +43,18 @@
+ // device 5 s for a request with no data stage, 500 ms per data packet)
+ #define USB_CONTROL_TIMEOUT_MS	3000
+ 
++// gapkeep: the main loop waits for control transfers (enumeration, keyboard
++// LEDs), so timeouts are bounded: a device's control transfers fail at once
++// after USB_CONTROL_MAX_TIMEOUTS of them timed out, until it is replugged;
++// and, since a device can disconnect and reconnect by itself, timeouts are
++// budgeted across devices: USB_CONTROL_TIMEOUT_CREDIT of them may take the
++// full time, then one more per USB_CONTROL_CREDIT_MS; beyond that a control
++// transfer gives up after USB_CONTROL_SHORT_TIMEOUT_MS.
++#define USB_CONTROL_MAX_TIMEOUTS	2
++#define USB_CONTROL_TIMEOUT_CREDIT	3
++#define USB_CONTROL_CREDIT_MS		60000
++#define USB_CONTROL_SHORT_TIMEOUT_MS	250
++
+ class CDWHCIDevice : public CUSBHostController
+ {
+ public:
+@@ -71,6 +83,7 @@ private:
+ 	void BeginRecoveryBackoff (void);
+ 	void AbortActiveChannels (void);
+ 	boolean AbortRequest (CUSBRequest *pURB);	// gapkeep: control transfer timeout
++	unsigned GetControlTimeout (unsigned nTimeoutMs);	// gapkeep: see above
+ 
+ 	void ResetRecoveryState (void)			// called on genuine unplug
+ 	{
+@@ -175,6 +188,9 @@ private:
+ 	unsigned m_nRecoveryRetryAtTicks;	// tick count (HZ units) at which the next retry is allowed
+ 	boolean  m_bRecoveryGiveUp;		// set once the retry limit has been reached
+ 
++	unsigned m_nTimeoutCredit = USB_CONTROL_TIMEOUT_CREDIT;	// gapkeep: control
++	unsigned m_nTimeoutCreditTicks = 0;		// transfer timeouts left, since when
++
+ #ifdef USE_USB_FIQ
+ 	volatile int m_nPortStatusChanged;
+ 	CDWHCICompletionQueue m_CompletionQueue;
+diff --git a/include/circle/usb/usbdevice.h b/include/circle/usb/usbdevice.h
+index d188be6..e273598 100644
+--- a/include/circle/usb/usbdevice.h
++++ b/include/circle/usb/usbdevice.h
+@@ -82,6 +82,12 @@ public:
+ 
+ 	void LogWrite (TLogSeverity Severity, const char *pMessage, ...);
+ 
++	// gapkeep: control transfers to this device that timed out. The host
++	// controller gives up on its control transfers after a few: they fail
++	// at once, until the device is replugged (a new CUSBDevice).
++	void ControlTimedOut (void)			{ m_nControlTimeouts++; }
++	unsigned GetControlTimeouts (void) const	{ return m_nControlTimeouts; }
++
+ #if RASPPI >= 4
+ 	virtual boolean EnableHubFunction (void) = 0;
+ 
+@@ -123,6 +129,8 @@ private:
+ 
+ 	CUSBConfigurationParser *m_pConfigParser;
+ 
++	unsigned m_nControlTimeouts = 0;	// gapkeep
++
+ 	CUSBFunction *m_pFunction[USBDEV_MAX_FUNCTIONS];
+ 
+ #if RASPPI >= 4
+diff --git a/include/circle/usb/usbhostcontroller.h b/include/circle/usb/usbhostcontroller.h
+index 71c5239..41edd1a 100644
+--- a/include/circle/usb/usbhostcontroller.h
++++ b/include/circle/usb/usbhostcontroller.h
+@@ -54,9 +54,12 @@ public:
+ 	boolean SetConfiguration (CUSBEndpoint *pEndpoint, u8 ucConfigurationValue);
+ 	
+ 	// returns resulting length or < 0 on failure
++	// gapkeep: nTimeoutMs, per stage, shorter than the host's default
++	// (for requests the system waits on while it runs: keyboard LEDs)
+ 	int ControlMessage (CUSBEndpoint *pEndpoint,
+ 			    u8 ucRequestType, u8 ucRequest, u16 usValue, u16 usIndex,
+-			    void *pData, u16 usDataSize);
++			    void *pData, u16 usDataSize,
++			    unsigned nTimeoutMs = USB_TIMEOUT_NONE);
+ 
+ 	// returns resulting length or < 0 on failure
+ 	int Transfer (CUSBEndpoint *pEndpoint, void *pBuffer, unsigned nBufSize,
+diff --git a/include/circle/usb/usbkeyboard.h b/include/circle/usb/usbkeyboard.h
+index 558e3fe..9fc6e6b 100644
+--- a/include/circle/usb/usbkeyboard.h
++++ b/include/circle/usb/usbkeyboard.h
+@@ -28,6 +28,11 @@
+ 
+ #define USBKEYB_REPORT_SIZE	8
+ 
++// gapkeep: UpdateLEDs() runs in the main loop, which waits for it: a
++// keyboard gets this long to take its LED state, and after one failure
++// no more LED updates (until it is replugged)
++#define USBKEYB_LED_TIMEOUT_MS	100
++
+ // The raw handler is called when the keyboard sends a status report (on status change and/or continously).
+ typedef void TKeyStatusHandlerRaw (unsigned char	ucModifiers,	// see usbhid.h
+ 				   const unsigned char	RawKeys[6]);	// key code or 0 in each byte
+@@ -86,6 +91,7 @@ private:
+ 	u8 m_LastReport[USBKEYB_REPORT_SIZE];
+ 
+ 	u8 m_ucLastLEDStatus;
++	boolean m_bLEDsFailed = FALSE;		// gapkeep: see USBKEYB_LED_TIMEOUT_MS
+ 
+ 	unsigned m_nDeviceNumber;
+ 	static CNumberPool s_DeviceNumberPool;
+diff --git a/lib/usb/dwhcidevice.cpp b/lib/usb/dwhcidevice.cpp
+index 96c4a0f..dc5178f 100644
+--- a/lib/usb/dwhcidevice.cpp
++++ b/lib/usb/dwhcidevice.cpp
+@@ -307,7 +307,17 @@ boolean CDWHCIDevice::SubmitBlockingRequest (CUSBRequest *pURB, unsigned nTimeou
+ 	
+ 	if (pURB->GetEndpoint ()->GetType () == EndpointTypeControl)
+ 	{
+-		assert (nTimeoutMs == USB_TIMEOUT_NONE);
++		// gapkeep: nTimeoutMs, if given, shortens the control timeout
++		// (TransferStage()); a device that timed out too often gets
++		// none of its control transfers done, until it is replugged
++		CUSBDevice *pDevice = pURB->GetEndpoint ()->GetDevice ();
++		assert (pDevice != 0);
++		if (pDevice->GetControlTimeouts () >= USB_CONTROL_MAX_TIMEOUTS)
++		{
++			pURB->SetUSBError (USBErrorTimeout);
++
++			return FALSE;
++		}
+ 
+ 		TSetupData *pSetup = pURB->GetSetupData ();
+ 		assert (pSetup != 0);
+@@ -316,9 +326,9 @@ boolean CDWHCIDevice::SubmitBlockingRequest (CUSBRequest *pURB, unsigned nTimeou
+ 		{
+ 			assert (pURB->GetBufLen () > 0);
+ 			
+-			if (   !TransferStage (pURB, FALSE, FALSE)
+-			    || !TransferStage (pURB, TRUE,  FALSE)
+-			    || !TransferStage (pURB, FALSE, TRUE))
++			if (   !TransferStage (pURB, FALSE, FALSE, nTimeoutMs)
++			    || !TransferStage (pURB, TRUE,  FALSE, nTimeoutMs)
++			    || !TransferStage (pURB, FALSE, TRUE, nTimeoutMs))
+ 			{
+ 				return FALSE;
+ 			}
+@@ -327,17 +337,17 @@ boolean CDWHCIDevice::SubmitBlockingRequest (CUSBRequest *pURB, unsigned nTimeou
+ 		{
+ 			if (pURB->GetBufLen () == 0)
+ 			{
+-				if (   !TransferStage (pURB, FALSE, FALSE)
+-				    || !TransferStage (pURB, TRUE,  TRUE))
++				if (   !TransferStage (pURB, FALSE, FALSE, nTimeoutMs)
++				    || !TransferStage (pURB, TRUE,  TRUE, nTimeoutMs))
+ 				{
+ 					return FALSE;
+ 				}
+ 			}
+ 			else
+ 			{
+-				if (   !TransferStage (pURB, FALSE, FALSE)
+-				    || !TransferStage (pURB, FALSE, FALSE)
+-				    || !TransferStage (pURB, TRUE,  TRUE))
++				if (   !TransferStage (pURB, FALSE, FALSE, nTimeoutMs)
++				    || !TransferStage (pURB, FALSE, FALSE, nTimeoutMs)
++				    || !TransferStage (pURB, TRUE,  TRUE, nTimeoutMs))
+ 				{
+ 					return FALSE;
+ 				}
+@@ -861,6 +871,18 @@ boolean CDWHCIDevice::TransferStage (CUSBRequest *pURB, boolean bIn, boolean bSt
+ 	assert (!m_bWaiting[nWaitBlock]);
+ 	m_bWaiting[nWaitBlock] = TRUE;
+ 
++	// gapkeep: control transfers had no timeout, so a device that never
++	// completes one (it NAKs forever) hung enumeration, and with it the
++	// whole system. Give up after a while (GetControlTimeout()). The
++	// stage's own timeout is for interrupt endpoints only.
++	boolean bControl = pURB->GetEndpoint ()->GetType () == EndpointTypeControl;
++	unsigned nControlTimeoutMs = 0;
++	if (bControl)
++	{
++		nControlTimeoutMs = GetControlTimeout (nTimeoutMs);
++		nTimeoutMs = USB_TIMEOUT_NONE;
++	}
++
+ 	if (!TransferStageAsync (pURB, bIn, bStatusStage, nTimeoutMs))
+ 	{
+ 		m_bWaiting[nWaitBlock] = FALSE;
+@@ -869,10 +891,6 @@ boolean CDWHCIDevice::TransferStage (CUSBRequest *pURB, boolean bIn, boolean bSt
+ 		return FALSE;
+ 	}
+ 
+-	// gapkeep: control transfers had no timeout, so a device that never
+-	// completes one (it NAKs forever) hung enumeration, and with it the
+-	// whole system. Give up after USB_CONTROL_TIMEOUT_MS, like Linux does.
+-	boolean bControl = pURB->GetEndpoint ()->GetType () == EndpointTypeControl;
+ 	unsigned nStartTicks = CTimer::Get ()->GetClockTicks ();
+ 	boolean bAborted = FALSE;
+ 
+@@ -884,7 +902,7 @@ boolean CDWHCIDevice::TransferStage (CUSBRequest *pURB, boolean bIn, boolean bSt
+ 		if (   bControl
+ 		    && !bAborted
+ 		    && CTimer::Get ()->GetClockTicks () - nStartTicks
+-		       >= USB_CONTROL_TIMEOUT_MS * (CLOCKHZ / 1000))
++		       >= nControlTimeoutMs * (CLOCKHZ / 1000))
+ 		{
+ 			// not on a channel yet (queued for the next frame): try again
+ 			bAborted = AbortRequest (pURB);
+@@ -893,7 +911,20 @@ boolean CDWHCIDevice::TransferStage (CUSBRequest *pURB, boolean bIn, boolean bSt
+ 
+ 	if (bAborted)
+ 	{
+-		LOGWARN ("Control transfer timed out");
++		LOGWARN ("Control transfer timed out (%u ms)", nControlTimeoutMs);
++
++		if (m_nTimeoutCredit > 0)
++		{
++			m_nTimeoutCredit--;
++		}
++
++		CUSBDevice *pDevice = pURB->GetEndpoint ()->GetDevice ();
++		assert (pDevice != 0);
++		pDevice->ControlTimedOut ();
++		if (pDevice->GetControlTimeouts () == USB_CONTROL_MAX_TIMEOUTS)
++		{
++			LOGWARN ("Device does not answer: giving up on it until it is replugged");
++		}
+ 	}
+ 
+ 	FreeWaitBlock (nWaitBlock);
+@@ -901,6 +932,38 @@ boolean CDWHCIDevice::TransferStage (CUSBRequest *pURB, boolean bIn, boolean bSt
+ 	return pURB->GetStatus ();
+ }
+ 
++unsigned CDWHCIDevice::GetControlTimeout (unsigned nTimeoutMs)
++{
++	// the budget of full-length timeouts (see dwhcidevice.h), refilled
++	// one per USB_CONTROL_CREDIT_MS from the first one used
++	unsigned nNow = CTimer::Get ()->GetTicks ();
++	if (m_nTimeoutCredit >= USB_CONTROL_TIMEOUT_CREDIT)
++	{
++		m_nTimeoutCreditTicks = nNow;
++	}
++	while (   m_nTimeoutCredit < USB_CONTROL_TIMEOUT_CREDIT
++	       && nNow - m_nTimeoutCreditTicks >= MSEC2HZ (USB_CONTROL_CREDIT_MS))
++	{
++		m_nTimeoutCredit++;
++		m_nTimeoutCreditTicks += MSEC2HZ (USB_CONTROL_CREDIT_MS);
++	}
++
++	unsigned nResult = USB_CONTROL_TIMEOUT_MS;
++	if (   nTimeoutMs != USB_TIMEOUT_NONE
++	    && nTimeoutMs < nResult)
++	{
++		nResult = nTimeoutMs;
++	}
++
++	if (   m_nTimeoutCredit == 0
++	    && nResult > USB_CONTROL_SHORT_TIMEOUT_MS)
++	{
++		nResult = USB_CONTROL_SHORT_TIMEOUT_MS;
++	}
++
++	return nResult;
++}
++
+ void CDWHCIDevice::CompletionRoutine (CUSBRequest *pURB, void *pParam, void *pContext)
+ {
+ 	CDWHCIDevice *pThis = (CDWHCIDevice *) pContext;
+diff --git a/lib/usb/usbhostcontroller.cpp b/lib/usb/usbhostcontroller.cpp
+index 5fa62c5..eba7957 100644
+--- a/lib/usb/usbhostcontroller.cpp
++++ b/lib/usb/usbhostcontroller.cpp
+@@ -97,7 +97,8 @@ boolean CUSBHostController::SetConfiguration (CUSBEndpoint *pEndpoint, u8 ucConf
+ int CUSBHostController::ControlMessage (CUSBEndpoint *pEndpoint,
+ 					u8 ucRequestType, u8 ucRequest,
+ 					u16 usValue, u16 usIndex,
+-					void *pData, u16 usDataSize)
++					void *pData, u16 usDataSize,
++					unsigned nTimeoutMs)
+ {
+ 	TSetupData *pSetup = new TSetupData;
+ 	assert (pSetup != 0);
+@@ -112,7 +113,7 @@ int CUSBHostController::ControlMessage (CUSBEndpoint *pEndpoint,
+ 
+ 	int nResult = -1;
+ 
+-	if (SubmitBlockingRequest (&URB))
++	if (SubmitBlockingRequest (&URB, nTimeoutMs))
+ 	{
+ 		nResult = URB.GetResultLength ();
+ 	}
+diff --git a/lib/usb/usbkeyboard.cpp b/lib/usb/usbkeyboard.cpp
+index 465cdf5..43a1094 100644
+--- a/lib/usb/usbkeyboard.cpp
++++ b/lib/usb/usbkeyboard.cpp
+@@ -85,7 +85,10 @@ boolean CUSBKeyboardDevice::ConfigureKeyboard (unsigned nReportSize)
+ 	}
+ 
+ 	// setting the LED status forces some keyboard adapters to work
+-	SetLEDs (m_ucLastLEDStatus);
++	if (!SetLEDs (m_ucLastLEDStatus))
++	{
++		m_bLEDsFailed = TRUE;		// gapkeep: see UpdateLEDs()
++	}
+ 
+ 	m_nDeviceNumber = s_DeviceNumberPool.AllocateNumber (TRUE, FromUSBKbd);
+ 
+@@ -118,9 +121,16 @@ void CUSBKeyboardDevice::UpdateLEDs (void)
+ 		if (ucLEDStatus != m_ucLastLEDStatus)
+ 		{
+ 			m_ucLastLEDStatus = ucLEDStatus;
+-			if (!SetLEDs (m_ucLastLEDStatus))
++
++			// gapkeep: the caller (the main loop) waits for this; a
++			// keyboard that did not take its LEDs once does not get
++			// to make it wait again
++			if (   !m_bLEDsFailed
++			    && !SetLEDs (m_ucLastLEDStatus))
+ 			{
+-				CLogger::Get ()->Write (FromUSBKbd, LogError, "Cannot set LED status");
++				m_bLEDsFailed = TRUE;
++				CLogger::Get ()->Write (FromUSBKbd, LogError,
++							"Cannot set LED status (no more LED updates)");
+ 			}
+ 		}
+ 	}
+@@ -188,7 +198,8 @@ boolean CUSBKeyboardDevice::SetLEDs (u8 ucStatus)
+ 	if (GetHost ()->ControlMessage (GetEndpoint0 (),
+ 					REQUEST_OUT | REQUEST_CLASS | REQUEST_TO_INTERFACE,
+ 					SET_REPORT, REPORT_TYPE_OUTPUT << 8,
+-					GetInterfaceNumber (), Buffer, 1) < 0)
++					GetInterfaceNumber (), Buffer, 1,
++					USBKEYB_LED_TIMEOUT_MS) < 0)	// gapkeep
+ 	{
+ 		return FALSE;
+ 	}
+diff --git a/lib/usb/usbkeyboard8bitdo.cpp b/lib/usb/usbkeyboard8bitdo.cpp
+index a540bda..b57f13d 100644
+--- a/lib/usb/usbkeyboard8bitdo.cpp
++++ b/lib/usb/usbkeyboard8bitdo.cpp
+@@ -46,7 +46,8 @@ boolean CUSBKeyboard8BitDoDevice::SetLEDs (u8 ucStatus)
+ 					   REQUEST_OUT | REQUEST_CLASS | REQUEST_TO_INTERFACE,
+ 					   SET_REPORT,
+ 					   (REPORT_TYPE_OUTPUT << 8) | USBKEYB8BITDO_REPORT_ID,
+-					   GetInterfaceNumber (), Buffer, 2) >= 0;
++					   GetInterfaceNumber (), Buffer, 2,
++					   USBKEYB_LED_TIMEOUT_MS) >= 0;	// gapkeep
+ }
+ 
+ void CUSBKeyboard8BitDoDevice::ReportHandler (const u8 *pReport, unsigned nReportSize)
