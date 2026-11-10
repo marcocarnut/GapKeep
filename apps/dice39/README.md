@@ -63,9 +63,9 @@ the descriptor first), and the master fingerprint. Account 0 and no
 passphrase at first; the account number and the BIP-39 passphrase can be
 changed, and Enter derives the key again (PBKDF2 of 2048 rounds: about
 0.1 s on a Pi Zero, with "Working" on screen first). `lib/pubkey.js` does
-it with the signer's `bip39.js`, `bip32.js` and `descriptor.js` (and
-`crypto.js`, `psbt/bytes.js`, `psbt/basen.js`, `psbt/hashes.js`), copies
-made by `tools/share_libs.py`: never edit them here. The log has the keys'
+it with `bip39.js`, `bip32.js` and `descriptor.js` (and `crypto.js`,
+`psbt/bytes.js`, `psbt/basen.js`, `psbt/hashes.js`), copies from
+`lib/js/bitcoin/` made by `tools/share_libs.py`: never edit them here. The log has the keys'
 lengths, never the keys or the fingerprint.
 
 **codex32 shares**: a share's QR code is shown directly, with one warning

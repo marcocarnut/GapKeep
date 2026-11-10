@@ -13,7 +13,7 @@ vectors. Test-only: slow and not constant-time. `tools/run_tests.sh` runs
 it as `signer_node`.
 
 On the device, the app (or a gallery self-test) calls
-`selfTest(crypto)` from `apps/signer/lib/selftest.js` with `gk:crypto`:
+`selfTest(crypto)` from `apps/signer/lib/selftest.js` (the signer's own) with `gk:crypto`:
 four known answers through the real libsecp256k1.
 
 ## The scenario
