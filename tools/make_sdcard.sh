@@ -137,6 +137,7 @@ if [ -n "$DATA" ]; then
 	done
 fi
 
-( cd $OUT && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS )
+# (-print0: data file names may hold spaces)
+( cd $OUT && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS )
 echo "$OUT/ ready:"
 cat $OUT/SHA256SUMS
