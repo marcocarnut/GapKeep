@@ -4,6 +4,8 @@ Checks tools/i18n.py: the keys it finds in code, check on the test app
 (tests/apps/i18ntest, whose catalog has a translation of each kind the
 runtime refuses: tests/i18n.txt sees the runtime refuse the same ones), and
 extract on a copy of the clock. Run by tools/run_sim_tests.sh.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import json
 import os

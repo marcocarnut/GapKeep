@@ -22,6 +22,8 @@
 # commit that Circle pins (circle/boot/Makefile); tools/firmware.sha256 pins
 # the bytes too (checked against that commit's git blob ids when written).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 make -C circle/boot all >/dev/null

@@ -13,6 +13,8 @@
 # card") are skipped unless GK_RIG_SDAPPS=1 says the rig's card has its
 # apps/ folder (tools/make_sdcard.sh puts it on the development card).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/../.."
 RIG=${GK_RIG:-mac@five.local}

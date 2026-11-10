@@ -1,5 +1,7 @@
 // Runtime self-test. Exercises the gk:ui object model, timers, promises,
 // modules and permissions. Returns { passed, failed: [names] }.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

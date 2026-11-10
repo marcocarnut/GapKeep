@@ -2,6 +2,8 @@
 // global level (an indirect eval), so a `var` stays for the next run; it
 // sees a `ui` whose new widgets go into the area under the result, cleared
 // before each run.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

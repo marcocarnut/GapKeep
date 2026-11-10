@@ -5,6 +5,8 @@ codes (tests/signer/electrum.json) and those tests/signer/run_node.mjs makes
 (--made-out). The codes are public test data ("abandon ... about").
 
   python3 tests/signer/make_scenario.py
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import hashlib
 import json

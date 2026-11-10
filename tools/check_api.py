@@ -9,6 +9,8 @@ Also checks that the generated files are up to date (tools/gen_api.py).
 
 Usage: check_api.py [path/to/gksim-test]     (default: builds sim TEST=1)
 Exit status 1 on any difference, each one listed.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import json
 import os

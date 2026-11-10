@@ -12,6 +12,8 @@ The checks are the same as for apps loaded from the SD card at boot
 Usage: bundle_apps.py <output.c> [--only id,...] <apps-dir> [<apps-dir> ...]
        bundle_apps.py --hash <app-dir> [<app-dir> ...]
            prints each app's hash, as the launcher shows it
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import base64
 import binascii

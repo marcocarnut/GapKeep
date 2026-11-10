@@ -4,6 +4,8 @@
 // The log gets each code's length and the start of its SHA-256, never its
 // contents: a QR code may hold a secret, and the log goes to the serial
 // port in test builds.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

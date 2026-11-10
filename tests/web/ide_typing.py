@@ -20,6 +20,8 @@ Ctrl+Alt plus the AltGraph state, which DevTools can't set), macOS's
 Option, and a real clipboard.
 
     python3 tests/web/ide_typing.py [--chrome PATH]
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import argparse, asyncio, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request
 

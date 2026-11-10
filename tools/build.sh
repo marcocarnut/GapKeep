@@ -13,6 +13,8 @@
 # GapKeep's changes to Circle and zxing-cpp (patches/*/) are applied to the
 # submodules first, once (tools/apply_patches.sh).
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 TARGET=$1; shift || true

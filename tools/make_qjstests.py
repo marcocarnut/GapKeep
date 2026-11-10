@@ -4,6 +4,8 @@ Wrap QuickJS's own test scripts (third_party/quickjs/tests) into a module
 for the test-only "qjstests" app, which runs them on the target.
 
 Usage: make_qjstests.py <quickjs-dir> <output.js>
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import json
 import os

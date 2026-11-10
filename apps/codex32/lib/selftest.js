@@ -3,6 +3,8 @@
 // the app at start, after the first screen is up, and under Node
 // (tests/codex32/run_node.mjs). Needs a global `crypto` with subtle.digest
 // (the app's lib/cryptoshim.js, or Node's webcrypto) for the words.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { VALID, ALTERNATIVES, INVALID } from "./vectors.js";
 import { recover, recoverSeed, checkShare, findSubstitution, Codex32Error } from "./codex32.js";

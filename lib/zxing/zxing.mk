@@ -10,6 +10,8 @@
 # zxing-cpp would throw calls ZXing::Fatal() (src/runtime/qrdecode.cpp),
 # patches/zxing-cpp/.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 ZXING_SOURCES = \
 	Barcode.cpp BarcodeFormat.cpp BinaryBitmap.cpp BitMatrix.cpp BitSource.cpp \

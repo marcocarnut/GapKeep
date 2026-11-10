@@ -3,6 +3,8 @@
 // tests/psbt/README.md):
 //   node --experimental-default-type=module tests/psbt/run_node.mjs [-v]
 // (the flag: apps/signer has no package.json saying its .js files are modules)
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { setHashes } from "../../apps/signer/lib/psbt/hashes.js";

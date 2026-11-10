@@ -3,6 +3,8 @@
 // GapKeep's native SHA-256, so the extracted code runs unmodified (as
 // apps/dice39/lib/cryptoshim.js does). Only the app imports this: the
 // codex32 module itself needs no crypto.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as gkcrypto from "gk:crypto";
 

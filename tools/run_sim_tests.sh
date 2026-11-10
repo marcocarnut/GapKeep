@@ -10,6 +10,8 @@
 #
 # Usage: tools/run_sim_tests.sh [-o output-dir] [scenario.txt ...]
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 OUT=

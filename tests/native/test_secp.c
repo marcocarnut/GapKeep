@@ -10,6 +10,8 @@
  *   schnorrverify XONLY MSG SIG -> 1 or 0   (MSG may be empty: "-")
  *   ecdsaverify DER HASH PUBKEY -> 1 or 0
  *   convert PUBKEY              -> pub33 pub65, or "- -"
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef GK_SIM_HOSTDIR_H
 #define GK_SIM_HOSTDIR_H
 #include <stddef.h>

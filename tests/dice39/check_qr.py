@@ -6,6 +6,8 @@ SeedQR (raw entropy) and the words as text must all be the same phrase,
 with a valid BIP-39 checksum, starting with the words the scenario typed.
 
 Usage: check_qr.py <screenshot-dir> <bip39-wordlist.js>
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import hashlib
 import json

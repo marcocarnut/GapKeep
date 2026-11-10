@@ -11,6 +11,8 @@
 // app in more than one language (docs/APPS.md, "Languages"). Numbers on
 // screen are written the language's way; the gapkeep.txt lines it shows are
 // not, since that file is read the same way whatever the language.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

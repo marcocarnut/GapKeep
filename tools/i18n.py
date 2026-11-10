@@ -34,6 +34,8 @@ catalogs are also the system's: its keys include those of the runtime's
 own JavaScript (src/runtime/*.js, ts()).
 
 The checks are the runtime's (src/runtime/i18n.cpp): keep them in step.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import json
 import os

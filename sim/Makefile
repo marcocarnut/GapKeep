@@ -13,6 +13,8 @@
 #
 # Objects go to build/<native|web>-<mode>/, so builds don't mix.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 ROOT     := ..
 LVGL     := $(ROOT)/circle/addon/lvgl/lvgl

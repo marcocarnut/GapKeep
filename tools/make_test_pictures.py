@@ -7,6 +7,8 @@ and on the rig, as "camera picture <file>" does in the simulator.
 
 Usage: make_test_pictures.py out.c tests/colorqr/*.png
 Writes out.c only if it changed. Needs Python's PIL.
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import os
 import sys

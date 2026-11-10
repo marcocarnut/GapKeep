@@ -6,6 +6,8 @@
 //
 // The text is translated (gk:i18n, lang/<language>.json; most of it in
 // lib/strings.js). The log stays in English, and holds no secret.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

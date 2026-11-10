@@ -7,6 +7,8 @@
 // Its text is in every language it offers (lang/), and the languages are
 // named in themselves ("Português (Brasil)"). It logs each change, never
 // what is typed in the box for trying the keyboard.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";

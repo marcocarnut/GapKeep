@@ -10,6 +10,8 @@
 # Prints the SHA-256 of the kernel image, which anyone building the same
 # commit the same way must get too.
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)

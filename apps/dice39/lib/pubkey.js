@@ -12,6 +12,8 @@
 //
 // Nothing here logs. The keys and the fingerprint identify the wallet: the
 // caller logs their lengths at most.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import { seedFromMnemonic } from "./bip39.js";
 import { HARDENED, fromSeed, derive, neuter, wipe, fingerprintHex, serializeXpub } from "./bip32.js";

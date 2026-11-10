@@ -10,6 +10,8 @@ the 640x480 grey picture the scanner works on, over the serial line.
 
 The lines mark the middle of the picture. s saves the frame as camview-N.pgm
 here; q or Esc quits. The rig: $GK_RIG, default mac@five.local (docs/RIG.md).
+
+SPDX-License-Identifier: GPL-3.0-or-later
 """
 import argparse
 import os
