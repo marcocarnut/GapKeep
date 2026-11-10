@@ -702,13 +702,13 @@ declare module "gk:i18n" {
 }
 
 declare module "gk:data" {
-  /** The folder's files, `{ name, size }`, sorted by name (byte order): `name` is the path inside the folder, with `/` between folders (`"keys/alice.asc"`), `size` in bytes. `[]` if the folder is not on the card. */
+  /** The folder's files, `{ name, size }`, sorted by name (byte order): `name` is the path inside the folder, with `/` between folders (`"keys/alice.asc"`), `size` in bytes. `[]` if there is no such folder. */
   export function list(folder: string): { name: string; size: number }[];
   /** The file's bytes, a fresh copy. `name` as `list()` gives it. */
   export function read(folder: string, name: string): Uint8Array;
   /** The file as UTF-8 text. A `TypeError` if it isn't valid UTF-8 (or holds a NUL byte); `read()` gives its bytes. */
   export function readText(folder: string, name: string): string;
-  /** The SHA-256 of the folder's files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)'s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if the folder is not on the card. */
+  /** The SHA-256 of the folder's files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)'s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if there is no such folder. */
   export function hash(folder: string): string | null;
 }
 
@@ -717,7 +717,7 @@ declare module "gk:apps" {
   export function list(): AppInfo[];
   /** The [suites](APPS.md#suites) on the card (`apps/<id>/suite.json`), sorted by id: `{ id, name, description, icon, image }`, as for apps (`name` and `description` in the language, from the suite's own `lang/` catalogs). A suite whose apps were all refused is listed too; the launcher shows only suites with apps. */
   export function suites(): { id: string; name: string; description: string; icon: string; image: { width: number; height: number; data: Uint8Array } | null }[];
-  /** The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`'s `hash()` gives it, for any folder: the launcher shows those an app lists. `null` if it is not on the card; a `TypeError` if it can't be read (too big, a bad name). */
+  /** The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`'s `hash()` gives it: the launcher shows those an app lists (only those are read, at boot). `null` if there is no such folder, or no app lists it; a `TypeError` if it was refused (too big, a bad name). */
   export function dataHash(folder: string): string | null;
   /** Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off. */
   export function launch(id: string): void;

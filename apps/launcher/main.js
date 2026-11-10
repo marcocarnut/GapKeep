@@ -212,7 +212,8 @@ for (const p of card.problems) {
 
 // the focused app: where it came from, and its hash; and the hash of each
 // data folder it reads (docs/APPS.md, "Data files"), which is not part of
-// the app's hash: whoever prepared the card chose those files
+// the app's hash: whoever prepared the card (or built a sealed kernel)
+// chose those files
 const details = new ui.Label({ text: "", color: "#8a9199", font: 12, width: "100%" });
 const dataHashes = new Map();
 function dataLine(folder) {
@@ -221,7 +222,7 @@ function dataLine(folder) {
     try {
       const hash = apps.dataHash(folder);
       text = hash ? "data/" + folder + " SHA-256 " + hash
-                  : t("data/{folder}: not on the SD card", { folder });
+                  : t("data/{folder}: no such data folder", { folder });
     } catch (e) {
       text = ui.symbols.warning + " " + e.message;
     }

@@ -1,0 +1,36 @@
+# Needs a sealed build with data, and no SD card: tools/run_tests.sh builds
+# tools/build.sh qemu SEALED=1 DATA=tests/sdcard/data
+# EXTRA_APPS=tests/sdcard/apps/testsuite. The data folders are built into
+# the kernel like the apps (docs/APPS.md, "Data files"), with the hash
+# "tools/bundle_apps.py --data-hash" gives; gk:data serves them as it would
+# from a card, and the launcher shows their hashes.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect data/other \(built in\): 1 files, 32 bytes, sha256 8dd1504f5f5678af545175b70c28bfc976cfa9a42dfc8bd98ded403384f361a8 60
+expect data/testdata \(built in\): 3 files, 357 bytes, sha256 f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+expect the card is no longer read: it can be removed
+expect launcher ready: .*suite-peer, suite-reader 60
+expect sd card: disabled 0 problem\(s\)
+expect kernel: sealed
+# the launcher shows the data folder's hash with the app's (screenshot)
+tilefocus suite-reader
+wait 1
+shot 01-launcher
+key ret
+expect suite-reader app: suite null, data testdata absent
+expect suite-reader refused not in the manifest: TypeError: list: the data folder "other" is not in the manifest's "data"
+expect suite-reader refused parent path: TypeError: read: "../other/secret.txt" is not a path inside the folder
+expect suite-reader refused no folder: TypeError: read: no file "x.txt": there is no data/absent
+expect suite-reader absent: \[\] null
+expect suite-reader list: alice@example.org key.asc 88, key.bin 256, notes/hello.txt 13
+expect suite-reader hash: f84baa0da9115a8bc46fcebfc4994c8a2a2bd91fe57b42b6f38eba4994f501aa
+expect suite-reader ready
+key tab
+key ret
+expect suite-reader read key.bin: 256 bytes, binary, sha256 40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880
+key tab
+key ret
+expect suite-reader read notes/hello.txt: 13 bytes, text, 12 characters, sha256 0f593121e2491513935f3a42950951093a2cd700e53eb231b1deb31957c114d8
+wait 1
+shot 02-reader

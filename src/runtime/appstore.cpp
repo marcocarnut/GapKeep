@@ -12,10 +12,11 @@
 #include <circle/logger.h>
 #include <circle/util.h>
 #include <circle/string.h>
+#include <circle/timer.h>
 #include <assert.h>
 
 #ifndef GK_SEALED
-#include <ff.h>				// lib/fatfs: read-only FatFs
+#include "cardfs.h"			// FatFs (read-only), at boot only
 #endif
 
 static const char From[] = "appstore";
@@ -36,7 +37,8 @@ static const unsigned MaxDataFiles = 256;		// per folder
 static const unsigned MaxDataFileSize = 4 * 1024 * 1024;
 static const unsigned MaxDataSize = 8 * 1024 * 1024;	// all files of one folder
 static const unsigned MaxDataNameLength = 128;		// of one file or folder name
-static const unsigned MaxDataFolders = 32;		// read until power-off
+static const unsigned MaxDataFolders = 32;		// read (at boot, kept until power-off)
+static const unsigned MaxDataEntries = 64;		// read or refused
 static const unsigned MaxDataTotal = 32 * 1024 * 1024;	// all folders read
 
 static const gk_app_t **s_ppApps = 0;
@@ -44,6 +46,8 @@ static unsigned s_nApps = 0;
 static const gk_app_t *s_pSuites[MaxSuites];
 static unsigned s_nSuites = 0;
 static TGkCardStatus s_CardStatus = GkCardDisabled;
+
+static void CloseCard (void);		// at the end of boot
 
 struct TProblem
 {
@@ -285,7 +289,77 @@ boolean CAppStore::IsValidUTF8 (const u8 *p, unsigned n)
 	return TRUE;
 }
 
+// --- data folders: what was read at boot -------------------------------------
+
+// Each data folder some app lists, read at boot (from the kernel image or
+// the card), or the reason it could not be. A folder no app lists, or that
+// isn't there, has no entry: gk:data finds nothing (GkDataMissing).
+struct TDataFolder
+{
+	const char *pName;
+	TGkDataStatus Status;		// GkDataOK or GkDataError
+	const gk_file_t *pFiles;	// GkDataOK: sorted by path
+	unsigned nCount;
+	unsigned nSize;
+	const char *pHash;		// GkDataOK
+	const char *pError;		// GkDataError
+};
+
+static TDataFolder s_Data[MaxDataEntries];
+static unsigned s_nData = 0;
+static unsigned s_nDataOK = 0;		// of them, read
+static unsigned s_nDataBytes = 0;	// all folders read
+
+static TDataFolder *FindData (const char *pName)
+{
+	for (unsigned i = 0; i < s_nData; i++)
+	{
+		if (strcmp (s_Data[i].pName, pName) == 0)
+		{
+			return &s_Data[i];
+		}
+	}
+
+	return 0;
+}
+
+// The data folders built into the kernel (sealed builds with DATA=dir)
+static void AddBuiltinData (void)
+{
+	for (unsigned i = 0; i < gk_builtin_data_count && s_nData < MaxDataEntries; i++)
+	{
+		const gk_data_t *pBuiltin = &gk_builtin_data[i];
+		TDataFolder *pData = &s_Data[s_nData++];
+		pData->pName = pBuiltin->name;
+		pData->Status = GkDataOK;
+		pData->pFiles = pBuiltin->files;
+		pData->nCount = pBuiltin->file_count;
+		pData->nSize = pBuiltin->size;
+		pData->pHash = pBuiltin->hash;
+		pData->pError = 0;
+		s_nDataOK++;
+		s_nDataBytes += pBuiltin->size;
+		// names and sizes only: the contents may be private
+		CLogger::Get ()->Write (From, LogNotice, "data/%s (built in): %u files, %u bytes, sha256 %s",
+					pData->pName, pData->nCount, pData->nSize, pData->pHash);
+	}
+}
+
 #ifndef GK_SEALED
+
+// A refused folder: kept, so gk:data and the launcher can say why
+static void AddDataError (const char *pName, const char *pError)
+{
+	CLogger::Get ()->Write (From, LogWarning, "data/%s: %s", pName, pError);
+	if (s_nData < MaxDataEntries)
+	{
+		TDataFolder *pData = &s_Data[s_nData++];
+		memset (pData, 0, sizeof *pData);
+		pData->pName = StrDup (pName);
+		pData->Status = GkDataError;
+		pData->pError = StrDup (pError);
+	}
+}
 
 static void AddProblem (const char *pFolder, const char *pText)
 {
@@ -1304,84 +1378,82 @@ static void LoadCard (void)
 	}
 }
 
-// --- data folders -----------------------------------------------------------
+// --- data folders on the card -----------------------------------------------
 
-struct TDataFolder
+// Reads data/<pName> from the card, whole, at boot (ReadAllData)
+static void ReadData (const char *pName)
 {
-	char *pName;
-	TGkDataStatus Status;
-	TFileList List;			// GkDataOK: the files, sorted
-	char *pHash;			// GkDataOK
-	char *pError;			// GkDataError
-};
-
-static TDataFolder s_Data[MaxDataFolders];
-static unsigned s_nData = 0;
-static unsigned s_nDataBytes = 0;	// all folders read
-
-static TDataFolder *ReadData (const char *pName)
-{
-	for (unsigned i = 0; i < s_nData; i++)
-	{
-		if (strcmp (s_Data[i].pName, pName) == 0)
-		{
-			return &s_Data[i];
-		}
-	}
-
-	// a folder that isn't there takes no place: it is looked for again
-	static TDataFolder Missing = {0, GkDataMissing, {0, 0, 0, 0}, 0, 0};
 	CString Dir;
 	Dir.Format ("SD:/data/%s", pName);
 	DIR Probe;
 	if (   (s_CardStatus != GkCardOK && s_CardStatus != GkCardNoApps)	// not mounted
 	    || f_opendir (&Probe, Dir) != FR_OK)
 	{
-		return &Missing;
+		CLogger::Get ()->Write (From, LogNotice, "data/%s: not on the card", pName);
+		return;
 	}
 	f_closedir (&Probe);
 
-	static TDataFolder TooMany;
-	if (s_nData == MaxDataFolders)
+	if (s_nDataOK == MaxDataFolders)
 	{
 		CString Error;
-		Error.Format ("more than %u data folders in use", MaxDataFolders);
-		delete [] TooMany.pError;
-		TooMany.Status = GkDataError;
-		TooMany.pError = StrDup (Error);
-		return &TooMany;
+		Error.Format ("more than %u data folders", MaxDataFolders);
+		AddDataError (pName, Error);
+		return;
 	}
-
-	TDataFolder *pData = &s_Data[s_nData++];
-	memset (pData, 0, sizeof *pData);
-	pData->pName = StrDup (pName);
 
 	CString Error;
-	InitFiles (&pData->List, &DataRules);
-	boolean bOK = ReadFolder (Dir, "", 1, &pData->List, &Error);
-	if (bOK && s_nDataBytes + pData->List.nTotalSize > MaxDataTotal)
+	TFileList List;
+	InitFiles (&List, &DataRules);
+	boolean bOK = ReadFolder (Dir, "", 1, &List, &Error);
+	if (bOK && s_nDataBytes + List.nTotalSize > MaxDataTotal)
 	{
-		Error.Format ("the data folders in use would hold more than %u MB", MaxDataTotal >> 20);
+		Error.Format ("the data folders would hold more than %u MB", MaxDataTotal >> 20);
 		bOK = FALSE;
 	}
-	if (!bOK)
+	if (!bOK || s_nData == MaxDataEntries)
 	{
-		FreeFiles (&pData->List);
-		pData->Status = GkDataError;
-		pData->pError = StrDup (Error);
-		CLogger::Get ()->Write (From, LogWarning, "data/%s: %s", pName, (const char *) Error);
-		return pData;
+		FreeFiles (&List);
+		AddDataError (pName, Error);
+		return;
 	}
 
-	SortFiles (&pData->List);
-	pData->pHash = HashApp (pData->List.pFiles, pData->List.nCount);
+	SortFiles (&List);
+	TDataFolder *pData = &s_Data[s_nData++];
+	pData->pName = StrDup (pName);
 	pData->Status = GkDataOK;
-	s_nDataBytes += pData->List.nTotalSize;
+	pData->pFiles = List.pFiles;
+	pData->nCount = List.nCount;
+	pData->nSize = List.nTotalSize;
+	pData->pHash = HashApp (List.pFiles, List.nCount);
+	pData->pError = 0;
+	s_nDataOK++;
+	s_nDataBytes += List.nTotalSize;
 	// names and sizes only: the contents may be private
 	CLogger::Get ()->Write (From, LogNotice, "data/%s: %u files, %u bytes, sha256 %s",
-				pName, pData->List.nCount, pData->List.nTotalSize, pData->pHash);
+				pName, pData->nCount, pData->nSize, pData->pHash);
+}
 
-	return pData;
+// Every data folder an installed app (built in or on the card) lists,
+// read at boot: afterwards nothing reads the card
+static void ReadAllData (void)
+{
+	unsigned nStart = CTimer::Get ()->GetClockTicks ();
+	unsigned nBytes = s_nDataBytes;
+	for (unsigned i = 0; i < s_nApps; i++)
+	{
+		const gk_app_t *pApp = s_ppApps[i];
+		for (unsigned k = 0; k < pApp->data_count; k++)
+		{
+			if (FindData (pApp->data[k]) == 0)
+			{
+				ReadData (pApp->data[k]);
+			}
+		}
+	}
+	unsigned nMicros = CTimer::Get ()->GetClockTicks () - nStart;
+	CLogger::Get ()->Write (From, LogNotice, "data folders: %u read, %u bytes from the card in %u.%03u ms",
+				s_nDataOK, s_nDataBytes - nBytes, nMicros / 1000, nMicros % 1000);
 }
 
 #ifdef GK_SIM
@@ -1440,21 +1512,25 @@ void CAppStore::Initialize (boolean bCardPresent)
 	CLogger::Get ()->Write (From, LogNotice, "%u app(s) built in", gk_builtin_app_count);
 	CGkI18n::Initialize ();		// the build's language (it needs the launcher's catalogs)
 
+	AddBuiltinData ();		// sealed builds with DATA=dir
+
 #ifndef GK_SEALED
 	if (!bCardPresent)
 	{
 		s_CardStatus = GkCardNone;
 		CLogger::Get ()->Write (From, LogNotice, "No SD card");
-		return;
 	}
-
-	LoadCard ();
-
-	CLogger::Get ()->Write (From, LogNotice, "%u app(s) from the SD card, %u not loaded, %u suite(s)",
-				s_nApps - gk_builtin_app_count, s_nProblems, s_nSuites);
+	else
+	{
+		LoadCard ();
+		CLogger::Get ()->Write (From, LogNotice, "%u app(s) from the SD card, %u not loaded, %u suite(s)",
+					s_nApps - gk_builtin_app_count, s_nProblems, s_nSuites);
+	}
+	ReadAllData ();			// what the apps list; then the card can go
 #else
 	s_CardStatus = GkCardDisabled;
 #endif
+	CloseCard ();
 }
 
 TGkDataStatus CAppStore::GetData (const char *pName, const gk_file_t **ppFiles, unsigned *pCount,
@@ -1466,18 +1542,50 @@ TGkDataStatus CAppStore::GetData (const char *pName, const gk_file_t **ppFiles, 
 	*ppError = 0;
 	assert (IsValidID (pName));
 
-#ifndef GK_SEALED
-	const TDataFolder *pData = ReadData (pName);
+	// read at boot (ReadAllData): never the card now
+	const TDataFolder *pData = FindData (pName);
+	if (pData == 0)
+	{
+		return GkDataMissing;
+	}
 	if (pData->Status == GkDataOK)
 	{
-		*ppFiles = pData->List.pFiles;
-		*pCount = pData->List.nCount;
+		*ppFiles = pData->pFiles;
+		*pCount = pData->nCount;
 		*ppHash = pData->pHash;
 	}
 	*ppError = pData->pError;
 
 	return pData->Status;
-#else
-	return GkDataMissing;		// a sealed build has no card
+}
+
+// --- the card is read at boot only ---------------------------------------------
+
+static boolean s_bCardClosed = FALSE;
+
+#ifndef GK_SEALED
+boolean GkCardGuard (const char *pFunction)
+{
+	if (!s_bCardClosed)
+	{
+		return TRUE;
+	}
+
+	// a bug: nothing may need the card after boot (it may be gone)
+	CLogger::Get ()->Write (From, LogError, "%s after boot: the card is read at boot only", pFunction);
+	return FALSE;
+}
 #endif
+
+// After boot: everything is in memory, and the card can be removed
+static void CloseCard (void)
+{
+#ifndef GK_SEALED
+	if (s_CardStatus == GkCardOK || s_CardStatus == GkCardNoApps)
+	{
+		f_mount (0, "SD:", 0);		// unmount: FatFs refuses everything now
+	}
+#endif
+	s_bCardClosed = TRUE;
+	CLogger::Get ()->Write (From, LogNotice, "the card is no longer read: it can be removed");
 }

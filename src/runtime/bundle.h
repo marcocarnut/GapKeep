@@ -71,6 +71,22 @@ gk_app_t;
 extern const gk_app_t gk_builtin_apps[];
 extern const unsigned gk_builtin_app_count;
 
+/* A data folder built into the kernel image (sealed builds: make SEALED=1
+   DATA=dir, docs/APPS.md, "Data files"), served by gk:data as one read from
+   the card's data/<name> would be. */
+typedef struct
+{
+	const char *name;		/* the folder's name, an id */
+	const gk_file_t *files;		/* sorted by path; binary (each still NUL-terminated) */
+	unsigned file_count;
+	unsigned size;			/* all files */
+	const char *hash;		/* as tools/bundle_apps.py --data-hash computes it */
+}
+gk_data_t;
+
+extern const gk_data_t gk_builtin_data[];
+extern const unsigned gk_builtin_data_count;
+
 #ifdef __cplusplus
 }
 #endif

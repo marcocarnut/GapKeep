@@ -23,6 +23,7 @@
 //   camera none             there is no camera
 //   language <tag>          the language of the apps started from now on
 //                           (pt-BR, qps...), as a settings app sets it
+//   eject                   remove the SD card (its folder is no longer read)
 //   quit                    exit
 //
 // Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]
@@ -43,6 +44,7 @@
 //
 #include "sim.h"
 #include <circle/timer.h>
+#include <ff.h>
 #include <lvgl/lvgl/lvgl.h>
 #include <poll.h>
 #include <stdio.h>
@@ -239,6 +241,11 @@ static int Command (char *pLine)
 		{
 			printf ("#error no keyboard layout %s\n", pArgs);
 		}
+	}
+	else if (strcmp (pLine, "eject") == 0)
+	{
+		GkSimSetCardRoot (0);	// the card is gone: nothing may need it now
+		printf ("#eject\n");
 	}
 	else if (strcmp (pLine, "quit") == 0)
 	{

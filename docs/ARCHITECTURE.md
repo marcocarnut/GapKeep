@@ -3,7 +3,8 @@
 GapKeep is a single-purpose, bare-metal system for the Raspberry Pi Zero
 (BCM2835, one ARM1176 core, 512 MB). It boots straight into a JavaScript app
 runtime with a graphical interface. There is no Linux, no network stack and
-no radio; the SD card is read once at boot, for the apps, and never written.
+no radio; the SD card is read once at boot, for the apps and their data, and
+never written: once the launcher is up it can be removed.
 
 ```
  ┌──────────────────────────────────────────────────────────────┐
@@ -31,9 +32,10 @@ no radio; the SD card is read once at boot, for the apps, and never written.
 3. Circle's startup code sets up the stack (1 MB), MMU and caches, and calls
    `main()` → `CKernel` (`src/kernel.cpp`).
 4. The kernel brings up the screen, the serial log, interrupts, the timer and
-   USB (keyboard and mouse are found by plug-and-play), reads the apps from
-   the SD card (`CAppStore`), then brings up LVGL, the keyboard input device
-   and the app host.
+   USB (keyboard and mouse are found by plug-and-play), reads the apps,
+   `gapkeep.txt` and the data folders the apps list from the SD card
+   (`CAppStore`) and unmounts it, then brings up LVGL, the keyboard input
+   device and the app host.
 5. The app host starts the launcher.
 
 ## Main loop
@@ -79,12 +81,16 @@ and the same description (`gk_app_t`):
   write code is even compiled) over Circle's SD driver. Each app is checked
   (manifest, names, UTF-8, size limits) and hashed; refused apps are listed
   in the launcher with the reason. A card app cannot take a built-in app's
-  id.
+  id. The data folders the apps list (`/data/<name>`) are read at the same
+  time, whole, and hashed. Then the card is unmounted: every FatFs call
+  goes through `GkCardGuard` (`src/runtime/cardfs.h`), which after boot
+  refuses it and logs an error, so nothing can come to depend on the card
+  staying in (`tests/card_removal.txt` takes it out).
 
 After boot no code is loaded: apps cannot load code
 other than their own modules, which are already in memory, and the only
-files they read are the card's data folders their manifest names
-(`gk:data`, read whole and hashed on first use).
+files they read are the data folders their manifest names (`gk:data`,
+read whole and hashed at boot, served from memory).
 
 Apps never share code at run time: an app's hash covers every line of
 JavaScript it runs, so one that builds on another's library carries a
@@ -205,7 +211,7 @@ for them to leave, other than what a person reads off the screen.
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
-| SD card | Read by the firmware at boot, then by GapKeep: once, for `/apps` and `gapkeep.txt`, and each data folder (`/data/<name>`) once, when first used (FAT, read-only driver). Never written. Sealed builds don't contain the SD code. |
+| SD card | Read by the firmware at power-on (`kernel.img` comes from it, so it must be in then), then by GapKeep, once, at boot: `/apps`, `gapkeep.txt`, and the data folders (`/data/<name>`) the apps list (FAT, read-only driver). Then unmounted; any later FatFs call is refused and logged as an error. Never written; removable once the launcher is up. Sealed builds don't contain the SD code (their data, if any, is built in). |
 | VideoCore firmware | Closed. Shared by every Pi OS; out of our control. Pinned by hash (`tools/firmware.sha256`). |
 
 **Nothing is kept.** GapKeep never writes to the card, and the session
@@ -235,10 +241,12 @@ must be the same on every card, the data differs per card
 change the card can change the data, as they can the apps, and the defence
 is the same: the launcher shows each data folder's hash beside the app's,
 and apps show what matters before using it (a key's fingerprint). Apps read
-only the folders their hashed manifest names, never write, and a folder is
-read whole, hashed and kept in memory on first use (`appstore.cpp`), so
-what an app reads is what was hashed even if the card were swapped while
-running. Nothing in the data is executed; what parses it is FatFs and the
+only the folders their hashed manifest names, never write, and the folders
+are read whole, hashed and kept in memory at boot (`appstore.cpp`), so
+what an app reads is what was hashed, and swapping or removing the card
+afterwards changes nothing. A sealed kernel can carry its data instead
+(`SEALED=1 DATA=dir`): then the kernel's hash covers it and is per person,
+and the data folder's hash lets the keyring be checked on its own. Nothing in the data is executed; what parses it is FatFs and the
 apps' own JavaScript. Apps in a suite share data this way but never code,
 so each app's hash still covers every line it runs.
 

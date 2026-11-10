@@ -23,10 +23,22 @@ is then something they can see and count.
 
 ## Nothing leaves but the screen
 
-- **The SD card is read-only.** GapKeep reads it once at boot, for the apps
-  and `gapkeep.txt`, through a FAT driver built without its write code, and
-  never writes it. Settings changed while running last until power-off. A
-  sealed build has no SD card code at all.
+- **The SD card is read-only.** GapKeep reads it once at boot, for the apps,
+  `gapkeep.txt` and the data folders the apps list, through a FAT driver
+  built without its write code, and never writes it. Settings changed while
+  running last until power-off. A sealed build has no SD card code at all.
+- **After startup the card can go, in every mode.** The card must be in at
+  power-on, because the Pi's firmware loads `kernel.img` from it. Everything
+  GapKeep needs from it is read during boot, and then it is unmounted:
+  once the launcher is up, the card can be taken out and kept somewhere
+  else, and nothing changes until power-off. Why: a card left in a device
+  is a card someone can take, copy or swap, and a device that needs its card
+  all the time ties the two together. It also makes what runs fixed: what
+  was read and hashed at boot is all there is, whatever happens to the card.
+  The cost is boot time and memory for the data folders (they are read
+  whole, even if an app uses one file), so they have limits (32 MB in
+  all). Anything that reads the card after boot is a bug, logged as an
+  error and caught by `tests/card_removal.txt`.
 - **Production builds never read the serial port.** They have no serial
   driver: the UART is never set up and its pins are inputs. Test builds log
   to it and take test commands from it, by design, so tests can drive real
@@ -89,9 +101,16 @@ Bob's key for theirs), as they could change the apps. The defence is to
 show it: the launcher shows each data folder's hash beside the app's
 (`tools/bundle_apps.py --data-hash` computes it on a computer), and apps
 show what matters at the moment it matters (a key's fingerprint before
-encrypting to it). A folder is read whole, hashed and kept in memory on
-first use, so what an app reads is what was hashed, even if the card were
-swapped while it runs.
+encrypting to it). A folder is read whole, hashed and kept in memory at
+boot, so what an app reads is what was hashed, even if the card is swapped
+or taken out afterwards.
+
+A sealed system can carry its data in the kernel (`SEALED=1 DATA=dir`),
+for someone who wants no card at all after power-on and no FAT code. Then
+the kernel's hash covers the data, so it is per person and can't be
+compared with a published one; the data folder's hash, which the launcher
+still shows, lets the keyring be checked on its own, and building the same
+commit without data gives the published hash of the code.
 
 ### Suites group apps, nothing more
 

@@ -21,13 +21,19 @@
 // Neither is an app that fails a check; each such problem is kept, for the
 // launcher to show.
 //
-// Data folders (docs/APPS.md, "Data files") are read on first use, all
-// their files at once, and kept in memory until power-off: what an app
-// reads is always what was hashed, even if the card were swapped while
-// running. They are not part of any app's hash.
+// Data folders (docs/APPS.md, "Data files"): every one that an installed
+// app lists is read at boot, whole, hashed, and kept in memory until
+// power-off; folders no app lists are not read. They are not part of any
+// app's hash.
+//
+// The card is read at boot only: the apps, gapkeep.txt (settings.cpp) and
+// those data folders. Then it is unmounted, and every FatFs call is
+// refused and logged as an error (cardfs.h): after startup the card can
+// be removed, in every mode.
 //
 // Sealed builds (make SEALED=1) have every app built in and no SD card
-// code at all: no suites and no data folders.
+// code at all: no suites; their data folders, if any (DATA=dir), are built
+// into the kernel too.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -82,8 +88,9 @@ public:
 
 	// The data folder /data/<pName> (pName: a valid id): its files, sorted
 	// by path (binary, each NUL-terminated after its size), and their hash
-	// (64 hex digits, the app hash's scheme). Read on the first call, then
-	// kept. GkDataError: *ppError says why. Access is checked by the caller
+	// (64 hex digits, the app hash's scheme), as read at boot (never the
+	// card now). GkDataMissing: no app lists it, or it isn't there.
+	// GkDataError: *ppError says why it was refused. Access is checked by the caller
 	// (gk:data: the app's manifest; gk:apps: the "apps" permission).
 	static TGkDataStatus GetData (const char *pName, const gk_file_t **ppFiles, unsigned *pCount,
 				      const char **ppHash, const char **ppError);

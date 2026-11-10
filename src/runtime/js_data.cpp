@@ -5,8 +5,9 @@
 // data/<name>/..., shared by name between apps (docs/APPS.md, "Data
 // files"; docs/API.md). An app reads only the folders its manifest lists
 // in "data"; nothing can write. The folders are read and hashed by
-// appstore.cpp, on first use, and kept: what an app reads is what was
-// hashed.
+// appstore.cpp at boot (those some app lists; in sealed builds, built into
+// the kernel) and kept in memory: this never touches the card, which can
+// be gone, and what an app reads is what was hashed.
 //
 // Nothing here logs what the files hold: they may be private (whose keys
 // someone has is itself worth hiding).
@@ -144,7 +145,7 @@ static const gk_file_t *GetFile (JSContext *ctx, int argc, JSValueConst *argv, c
 		}
 		if (pFound == 0)
 		{
-			JS_ThrowTypeError (ctx, Status == GkDataMissing ? "%s: no file \"%.64s\": data/%s is not on the card"
+			JS_ThrowTypeError (ctx, Status == GkDataMissing ? "%s: no file \"%.64s\": there is no data/%s"
 									: "%s: no file \"%.64s\" in data/%s",
 					   pFunction, pName, pFolder);
 			break;

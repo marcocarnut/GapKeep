@@ -2,8 +2,9 @@
 #
 # Builds src/kernel.img for QEMU or for the real Pi Zero.
 #
-# Usage: tools/build.sh qemu|pi [TEST=1 | SEALED=1]
-#   (see src/Makefile for what TEST and SEALED build)
+# Usage: tools/build.sh qemu|pi [TEST=1 | SEALED=1 [DATA=dir] [EXTRA_APPS=dir]]
+#   (see src/Makefile for what TEST and SEALED build; DATA=dir builds
+#   the data folders in dir into a sealed kernel, docs/APPS.md, "Data files")
 #
 # The two targets need differently configured Circle libraries (QEMU lacks
 # some peripherals the real board has). When the target changes, Circle,
@@ -24,6 +25,19 @@ case "$TARGET" in
 	*)    echo "usage: $0 qemu|pi [TEST=1]" >&2; exit 2 ;;
 esac
 J=-j"$(nproc)"
+
+# DATA=dir and EXTRA_APPS=dir (sealed builds, src/Makefile): as absolute
+# paths, since make runs in src/
+for a in "$@"; do
+	shift
+	case $a in
+	DATA=*|EXTRA_APPS=*)
+		d=${a#*=}
+		[ -d "$d" ] || { echo "build: ${a%%=*}: $d is not a folder" >&2; exit 2; }
+		a="${a%%=*}=$(cd "$d" && pwd)" ;;
+	esac
+	set -- "$@" "$a"
+done
 
 # Reproducible builds: __DATE__ and __TIME__ (in the boot log) are the time
 # of the last commit, not of the build.

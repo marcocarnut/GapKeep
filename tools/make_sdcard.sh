@@ -21,11 +21,14 @@
 #   --data DIR (with --standalone, or for the development card; more than
 #   once is fine): every folder in DIR goes on the card as data/<name>, the
 #   read-only data folders apps read with gk:data (docs/APPS.md, "Data
-#   files"), e.g. DIR/pgp/alice.asc -> data/pgp/alice.asc. Their hashes,
-#   as the launcher shows them, are printed. A sealed build reads no card,
-#   so it has no data folders.
+#   files"), e.g. DIR/pgp/alice.asc -> data/pgp/alice.asc. GapKeep reads
+#   them at boot, with the apps; then the card can be removed.
+#   With --sealed (once): every folder in DIR is built into kernel.img
+#   instead (tools/build.sh pi SEALED=1 DATA=DIR); the card holds no data.
+#   Either way their hashes, as the launcher shows them, are printed.
 #
 #   tools/make_sdcard.sh --standalone --data ~/gapkeep-data
+#   tools/make_sdcard.sh --sealed --data ~/gapkeep-data
 #
 # The Pi firmware (closed, Broadcom's) comes from the raspberrypi/firmware
 # commit that Circle pins (circle/boot/Makefile); tools/firmware.sha256 pins
@@ -44,8 +47,9 @@ while [ $# -gt 0 ]; do
 	*) echo "make_sdcard: unknown argument $1" >&2; exit 2 ;;
 	esac
 done
-[ -z "$DATA" ] || [ "$MODE" != --sealed ] || {
-	echo "make_sdcard: a sealed build reads no card: --data has no use" >&2; exit 2; }
+if [ "$MODE" = --sealed ] && [ $(echo $DATA | wc -w) -gt 1 ]; then
+	echo "make_sdcard: --sealed takes one --data folder" >&2; exit 2
+fi
 set -- $MODE
 cd "$(dirname "$0")/.."
 make -C circle/boot all >/dev/null
@@ -55,7 +59,7 @@ make -C circle/boot all >/dev/null
 if [ "$1" = "--standalone" ] || [ "$1" = "--sealed" ]; then
 	if [ "$1" = "--sealed" ]; then
 		OUT=sdcard-sealed
-		tools/build.sh pi SEALED=1
+		tools/build.sh pi SEALED=1 ${DATA:+DATA=$DATA}
 	else
 		OUT=sdcard-standalone
 		tools/build.sh pi
@@ -122,7 +126,12 @@ CFG
 fi
 
 # data folders (--data): never part of an app's hash, so print theirs
-if [ -n "$DATA" ]; then
+if [ -n "$DATA" ] && [ $OUT = sdcard-sealed ]; then
+	echo "built into kernel.img (its hash depends on them):"
+	for f in $DATA/*/; do
+		[ ! -d "$f" ] || python3 tools/bundle_apps.py --data-hash "$f"
+	done
+elif [ -n "$DATA" ]; then
 	mkdir -p $OUT/data
 	for d in $DATA; do
 		for f in "$d"/*/; do
