@@ -7,7 +7,8 @@ you typed was kept verbatim.
 
 `vendor/` is dice39's own code, copied byte for byte from
 `bip39_generator.html` by `tools/extract_dice39.py`. Each file names the
-source and its SHA-256. To update, run:
+source and its SHA-256. To update, with a checkout of
+[dice39](https://github.com/marcocarnut/dice39) in `../dice39`, run:
 
     python3 tools/extract_dice39.py ../dice39/bip39_generator.html apps/dice39/vendor
     git diff apps/dice39/vendor

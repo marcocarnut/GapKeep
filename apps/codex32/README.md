@@ -53,8 +53,8 @@ BIP-93 encodes a **BIP-32 master seed**. dice39 puts **BIP-39 entropy** in
 the shares instead, and this app (like the page) turns it back into the
 words. The two give different wallets: a wallet handed the entropy as a raw
 BIP-32 seed opens a different, empty wallet. The words are what to restore
-from. (The master fingerprint and xpub, which will come with gk:crypto's
-PBKDF2 and secp256k1, are derived from the words' BIP-39 seed: see
+from. (This app does not show the master fingerprint or the xpub yet; dice39
+and the Signer do. When it does, they come from the words' BIP-39 seed: see
 `showKeys` in `main.js`.)
 
 ## For other apps: `lib/codex32.js`
@@ -98,8 +98,10 @@ It needs `vendor/codex32.js` beside it in `../vendor/`.
 ## How it works
 
 - `vendor/`: dice39's code, copied byte for byte from `codex32_recover.html`
-  by `tools/extract_codex32.py` (`python3 tools/extract_codex32.py
-  ../dice39/codex32_recover.html apps/codex32/vendor`): the codex32 block
+  by `tools/extract_codex32.py` (with a checkout of
+  [dice39](https://github.com/marcocarnut/dice39) in `../dice39`:
+  `python3 tools/extract_codex32.py ../dice39/codex32_recover.html
+  apps/codex32/vendor`): the codex32 block
   (`codex32.js`, the same code as in dice39's generator page), the BIP-39
   wordlist, and from the page's own script its strings, entropy to words
   and the SeedQR digits (`recover.js`). Each file names the source and its

@@ -380,7 +380,7 @@ group_mark = .          # . or , or nothing (no grouping)
 ```
 
 An unknown language is English, with a line in the log. Sealed builds read
-no card: `make SEALED=1 LANGUAGE=pt-BR`. The Settings app changes all of
+no card: `tools/build.sh pi SEALED=1 LANGUAGE=pt-BR`. The Settings app changes all of
 these while running, until power-off (an app needs the `"settings"`
 permission to). Languages fall back from `pt-BR` to `pt` (`lang/pt.json`,
 if the app has one) to English. A language exists if the launcher has a
