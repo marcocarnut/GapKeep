@@ -4,15 +4,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GapKeep IDE</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="ide.css">
-<link rel="stylesheet" href="vendor/monaco/vs/editor/editor.main.css">
 <script type="module" src="ide.js"></script>
 </head>
 <body>
 <header id="top">
-  <span class="brand"><a href="https://gapkeep.org" target="_blank" rel="noopener" title="gapkeep.org: the project's site">GapKeep</a> <b>IDE</b></span>
+  <span class="brand"><a id="site" href="https://gapkeep.org" target="_blank" rel="noopener" title="gapkeep.org: the project's site">GapKeep</a> <b>IDE</b></span>
   <span id="status">loading...</span>
   <span class="spacer"></span>
   <span class="hint"><kbd>Ctrl</kbd>+<kbd>S</kbd> save &middot; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> run</span>
@@ -23,7 +23,7 @@
 
 <main id="layout">
   <section id="files-pane" class="pane">
-    <div class="pane-head"><span class="title">SD card</span><span class="dim">apps/</span></div>
+    <div class="pane-head"><button class="fold" aria-expanded="true" aria-controls="files-pane" title="Show or hide the SD card"></button><span class="title">SD card</span><span class="dim">apps/</span></div>
     <div class="toolbar">
       <button id="new-app" title="New app from a template">New app</button>
       <button id="new-file" title="New file in the selected app or folder">New file</button>
@@ -42,7 +42,7 @@
   </section>
 
   <section id="editor-pane" class="pane">
-    <div class="pane-head"><span id="file-title" class="title">No file open</span></div>
+    <div class="pane-head"><button class="fold" aria-expanded="true" aria-controls="editor-pane" title="Show or hide the editor"></button><span id="file-title" class="title">No file open</span></div>
     <div id="editor"></div>
   </section>
 
@@ -57,6 +57,19 @@
       <select id="size" title="Screen size (reboots)"></select>
     </div>
     <div id="screen-box"><canvas id="screen" width="640" height="480"></canvas><textarea id="screen-input" aria-label="Keyboard for GapKeep's screen" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0"></textarea></div>
+    <div id="keybar" role="toolbar" aria-label="Keys a phone's keyboard lacks">
+      <button data-key="Escape" title="Escape">Esc</button>
+      <button data-key="Tab" title="Tab: the next control">Tab</button>
+      <button data-key="Tab" data-shift="1" title="Shift+Tab: the previous control">&#8679;Tab</button>
+      <button data-key="Meta" title="Home (the Windows key): back to the launcher">Home</button>
+      <button data-key="Backspace" title="Backspace" aria-label="Backspace">&#9003;</button>
+      <button id="kbd-toggle" title="Show or hide the phone's keyboard" aria-label="Keyboard">&#9000;</button>
+      <button data-key="ArrowLeft" title="Left" aria-label="Left">&#8592;</button>
+      <button data-key="ArrowUp" title="Up" aria-label="Up">&#8593;</button>
+      <button data-key="ArrowDown" title="Down" aria-label="Down">&#8595;</button>
+      <button data-key="ArrowRight" title="Right" aria-label="Right">&#8594;</button>
+      <button data-key="Enter" class="wide" title="Enter" aria-label="Enter">&#8629; Enter</button>
+    </div>
     <div id="screen-foot"><span id="screen-info"></span><span id="screen-hint"></span></div>
     <div id="camera-bar" title="What GapKeep's camera sees (for apps with ui.Scanner)">
       <span class="label">Camera</span>
@@ -77,7 +90,7 @@
   </section>
 
   <section id="console-pane" class="pane">
-    <div class="pane-head"><span class="title">Console</span><span class="spacer"></span><button id="clear">Clear</button></div>
+    <div class="pane-head"><button class="fold" aria-expanded="true" aria-controls="console-pane" title="Show or hide the console"></button><span class="title">Console</span><span class="spacer"></span><button id="clear">Clear</button></div>
     <div id="console" role="log"></div>
   </section>
 </main>

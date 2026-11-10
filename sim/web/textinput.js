@@ -103,6 +103,18 @@ export class TextInput {
     return true;
   }
 
+  // ev: { isComposing, inputType }, before the textarea changes. A phone's
+  // keyboard (Android's) sends Backspace as "Unidentified" keydowns and
+  // then this edit, on an empty textarea: it is GapKeep's Backspace. (A real
+  // Backspace's keydown was prevented: no edit follows it.) Returns true if
+  // the edit must be prevented.
+  beforeinput (ev) {
+    if (!this.machine || this.composing || ev.isComposing) return false;   // editing a word being composed
+    if (ev.inputType !== "deleteContentBackward") return false;
+    if (this.machine.keyDown ("Backspace", 0)) this.machine.keyUp ();
+    return true;
+  }
+
   // value: the textarea's text once composed (dead key and letter, an
   // input method's word). Returns true: empty the textarea.
   compositionend (value) {
