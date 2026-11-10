@@ -20,9 +20,10 @@ import { plan, signPsbt, verifyChange, finalize, planKeys, signKeys, partialSigG
 import { parsePrivateKey, parseWif, KeyError } from "../../lib/js/bitcoin/keys.js";
 import { combine, CombineError } from "../../lib/js/bitcoin/combine.js";
 import { applyPlan } from "../../apps/signer/lib/review.js";
+import { SignedMemory, MAX_ENTRIES } from "../../apps/signer/lib/memory.js";
 import { analyze } from "../../lib/js/bitcoin/psbt/analyze.js";
 import { base58CheckEncode, base58CheckDecode } from "../../lib/js/bitcoin/psbt/basen.js";
-import { CodeReader, seriesFor } from "../../apps/signer/lib/codes.js";
+import { CodeReader, seriesFor, sizeProblem } from "../../apps/signer/lib/codes.js";
 // codes.js is the signer's own: it throws the DecodeError of the signer's copy of bytes.js
 import { DecodeError as CodesDecodeError } from "../../apps/signer/lib/psbt/bytes.js";
 import { split, deflateRaw, toBase32, Joiner } from "../../lib/js/bbqr.js";
@@ -376,9 +377,11 @@ const txOut = (value, script) => new Writer().u64(value).varBytes(script).done()
 
 // A PSBT spending coins of `master` (default: "abandon ... about").
 //   inputs:  [{ kind, path, amount, fp?, pubkey?, script?, utxo?: false, sighash?, merkleRoot?, internalKey?, extra?,
-//              noOrigin?: true, prevOutputs? (more outputs in a P2PKH coin's previous transaction) }]
+//              noOrigin?: true, prevOutputs? (more outputs in a P2PKH coin's previous transaction),
+//              full?: true (a segwit coin's previous transaction too), witnessAmount? (its witness UTXO's, a lie) }]
 //   outputs: [{ kind, path, amount, fp?, pubkey?, script? } | { script, amount }]
-function build({ inputs, outputs, master = abandon, version = 2, locktime = 0, globals = [] }) {
+// salt: other made-up coins (their txids), for PSBTs that must not share coins
+function build({ inputs, outputs, master = abandon, version = 2, locktime = 0, globals = [], salt = "" }) {
   const ins = [], inMaps = [];
   inputs.forEach((x, i) => {
     const path = parsePath(x.path || "m/84'/1'/0'/0/" + i);
@@ -392,16 +395,17 @@ function build({ inputs, outputs, master = abandon, version = 2, locktime = 0, g
     else script = p2wpkhScript(h);
     if (x.script) script = x.script;
     const entries = [];
-    let txid = sha("coin " + i), vout = i;
-    if (x.kind === "p2pkh") {
+    let txid = sha(salt + "coin " + i), vout = i;
+    if (x.kind === "p2pkh" || x.full) {
       const prev = { version: 2, inputs: [{ txid: sha("from " + i), vout: 0, scriptSig: new Uint8Array(0), sequence: 0, witness: [] }],
         outputs: [{ value: 1, script: p2pkhScript(new Uint8Array(20)) }, { value: x.amount, script },
           ...Array.from({ length: x.prevOutputs || 0 }, (_, n) => ({ value: 1000 + n, script: p2pkhScript(new Uint8Array(20).fill(n & 255)) }))], locktime: 0 };
       vout = 1;
       txid = fromHex(txidOf(prev)).reverse();
       if (x.utxo !== false) entries.push([IN.NON_WITNESS_UTXO, [], serializeTx(prev)]);
-    } else if (x.utxo !== false) {
-      entries.push([IN.WITNESS_UTXO, [], txOut(x.amount, script)]);
+    }
+    if (x.kind !== "p2pkh" && x.utxo !== false && x.witnessUtxo !== false) {
+      entries.push([IN.WITNESS_UTXO, [], txOut(x.witnessAmount ?? x.amount, script)]);
     }
     if (x.sighash !== undefined) entries.push([IN.SIGHASH_TYPE, [], new Writer().u32(x.sighash).done()]);
     if (x.kind === "p2sh-p2wpkh") entries.push([IN.REDEEM_SCRIPT, [], x.redeemScript || p2wpkhScript(h)]);
@@ -818,8 +822,15 @@ check("keyring", "an account xprv signs what the master signs, byte for byte (fu
   const p = build(TWO);
   const acct = derive(abandon, ACCOUNT);
   const pl = plan(p, acct, ZERO_AUX);
-  eq([pl.signable, pl.complete, pl.outputs[1].ours, pl.outputs[1].path, pl.outputs[1].role], [2, true, true, "m/84'/1'/0'/1/0", "change"]);
+  // the steps above the account are the PSBT's word: shown below the key only
+  eq([pl.signable, pl.complete, pl.outputs[1].ours, pl.outputs[1].path, pl.outputs[1].role], [2, true, true, "key/1/0", "change"]);
   eq(serialize(signPsbt(p, acct, ZERO_AUX).psbt), serialize(signPsbt(p, abandon, ZERO_AUX).psbt));
+});
+check("keyring", "an account xprv: the path above it is the PSBT's word, not shown nor judged", () => {
+  // the master's fingerprint, and a purpose and coin type that are lies: only account 0' is checked
+  const lie = (i) => ({ kind: "p2wpkh", amount: 50000, path: `${ACCOUNT}/0/${i}`, claimPath: `m/49'/0'/0'/0/${i}` });
+  const pl = plan(build({ inputs: [lie(0), lie(1)], outputs: [EXTERNAL] }), derive(abandon, ACCOUNT), ZERO_AUX);
+  eq([pl.signable, pl.inputs.map((r) => r.path), pl.inputs.flatMap((r) => r.oddities)], [2, ["key/0/0", "key/0/1"], []]);
 });
 check("keyring", "an account xprv: another account, same number, is another wallet", () => {
   const other = fromSeed(new Uint8Array(32).fill(5));
@@ -1178,18 +1189,163 @@ const hash65 = (path) => hash160(uncompressed(path).publicKey);
 const oneOut = [{ ...EXTERNAL, amount: 49000 }];
 const spending = (kind, script, extra = {}) => build({ inputs: [{ kind, path: LEGACY, amount: 50000, script, ...extra }], outputs: oneOut });
 
-check("rules", "segwit v0 with only WITNESS_UTXO signs, and two inputs get the note on amounts", () => {
+// The segwit v0 fee attack (the security review's M2): an amber warning with
+// what to do, and the Signer's memory of what it signed (memory below).
+const FEE_ATTACK = "their amounts are only the PSBT's word";
+const feeAttack = (a) => a.warnings.filter((w) => w.text.includes("leave out the previous transaction"));
+check("rules", "segwit v0 with only WITNESS_UTXO signs, and two such inputs are amber", () => {
   const p = build(TWO);
   if (p.inputs.some((m) => !m.fields.witnessUtxo || m.fields.nonWitnessUtxo)) throw new Error("not the case under test");
   const pl = plan(p, abandon, ZERO_AUX);
   eq([pl.signable, pl.complete], [2, true]);
   eq(parseTx(finalize(signPsbt(p, abandon, ZERO_AUX).psbt).tx).inputs.map((i) => i.witness.length), [2, 2]);
-  const a = reviewed(p, [abandon]);
-  eq(a.warnings.filter((w) => w.level === "info" && w.text.startsWith("Inputs 1, 2: amounts as the PSBT states them")).length, 1);
+  const w = feeAttack(reviewed(p, [abandon]));
+  eq(w.map((x) => x.level), ["warn"]);
+  has(w[0].text, "Inputs 1, 2: " + FEE_ATTACK);
+  has(w[0].text, "much larger fee than shown");
+  has(w[0].text, "sign the same coins again, don't, unless the amounts are the same");
 });
-check("rules", "with one input there is no second signature to play against: no note", () => {
+check("rules", "the fee attack, as the review showed it: each round amber; the two signatures pay the real fee", () => {
+  const REAL = 100000000, LIE = 10000, out = [{ ...EXTERNAL, amount: REAL }];
+  const round = (amounts) => build({ inputs: amounts.map((amount) => ({ kind: "p2wpkh", amount })), outputs: out });
+  const sigs = [];
+  for (const [k, amounts] of [[0, [REAL, LIE]], [1, [LIE, REAL]]]) {
+    const p = round(amounts), a = analyze(p, { network: "testnet" });
+    eq(a.fee, LIE, "the fee shown");
+    eq(feeAttack(a).map((x) => x.level), ["warn"]);
+    sigs.push(signPsbt(p, abandon, ZERO_AUX).psbt.inputs[k].fields.partialSigs[0]);
+  }
+  const real = round([REAL, REAL]);
+  sigs.forEach((s, i) => {
+    const h = segwitV0Sighash(real.tx, i, p2wpkhScriptCode(hash160(s.pubkey)), REAL, 1);
+    if (!ref.ecdsaVerify(s.signature.subarray(0, s.signature.length - 1), h, s.pubkey)) throw new Error("not the attack");
+  });
+});
+check("rules", "with the previous transactions the amounts are proved: no warning, and a lie is refused", () => {
+  const p = build({ inputs: [{ kind: "p2wpkh", amount: 100000, full: true }, { kind: "p2wpkh", amount: 20000, full: true, utxo: true }], outputs: [EXTERNAL, CHANGE] });
+  const a = reviewed(p, [abandon]);
+  eq([feeAttack(a), a.inputs.map((i) => i.utxo), a.fee], [[], ["both", "both"], 30000]);
+  eq(plan(p, abandon, ZERO_AUX).signable, 2);
+  // the witness UTXO understates input 2: the previous transaction says otherwise
+  const lie = build({ inputs: [{ kind: "p2wpkh", amount: 100000, full: true }, { kind: "p2wpkh", amount: 20000, full: true, witnessAmount: 10 }], outputs: [EXTERNAL, CHANGE] });
+  const b = reviewed(lie, [abandon]);
+  eq([feeAttack(b), b.inputs[1].amount, b.fee], [[], 20000, 30000], "the previous transaction's amount");
+  has(b.warnings.find((w) => w.level === "danger").text, "disagree");
+  has(plan(lie, abandon, ZERO_AUX).inputs[1].reason, "disagree");
+  // the previous transaction alone: its amount is the one shown
+  const only = build({ inputs: [{ kind: "p2wpkh", amount: 100000, full: true, witnessUtxo: false }, { kind: "p2wpkh", amount: 20000, full: true, witnessUtxo: false }], outputs: [EXTERNAL, CHANGE] });
+  const c = reviewed(only, [abandon]);
+  eq([feeAttack(c), c.inputs.map((i) => [i.utxo, i.amount]), plan(only, abandon, ZERO_AUX).signable], [[], [["full", 100000], ["full", 20000]], 2]);
+});
+check("rules", "one input of two without its previous transaction is amber, naming it", () => {
+  const a = reviewed(build({ inputs: [{ kind: "p2wpkh", amount: 100000, full: true }, { kind: "p2wpkh", amount: 20000 }], outputs: [EXTERNAL, CHANGE] }), [abandon]);
+  eq(feeAttack(a).map((w) => w.level), ["warn"]);
+  has(feeAttack(a)[0].text, "Input 2: its amount is only the PSBT's word");
+});
+check("rules", "one segwit v0 input: its signature covers its amount, no warning", () => {
   const a = reviewed(build({ inputs: [TWO.inputs[0]], outputs: oneOut }), [abandon]);
-  eq(a.warnings.filter((w) => w.text.includes("amounts as the PSBT")), []);
+  eq(feeAttack(a), []);
+});
+check("rules", "taproot inputs are exempt: their signatures cover every amount", () => {
+  const tr = (i, amount) => ({ kind: "p2tr", path: `m/86'/1'/0'/0/${i}`, amount });
+  eq(feeAttack(reviewed(build({ inputs: [tr(0, 80000), tr(1, 1000)], outputs: oneOut }), [abandon])), []);
+  // one segwit v0 input beside taproot: still only one v0 signature
+  eq(feeAttack(reviewed(build({ inputs: [tr(0, 80000), { kind: "p2wpkh", amount: 1000 }], outputs: oneOut }), [abandon])), []);
+  // two v0 inputs beside taproot: amber
+  const a = reviewed(build({ inputs: [tr(0, 80000), { kind: "p2wpkh", amount: 1000 }, { kind: "p2wpkh", amount: 2000 }], outputs: oneOut }), [abandon]);
+  has(feeAttack(a)[0].text, "Inputs 2, 3: ");
+});
+check("rules", "an input amount over 21 million BTC is red (the review's I2)", () => {
+  const a = analyze(build({ inputs: [{ kind: "p2wpkh", amount: 2100000000000001 }], outputs: oneOut }), { network: "testnet" });
+  has(a.warnings.find((w) => w.level === "danger").text, "Input 1: the amount is larger than all bitcoin there can be");
+  eq([a.inputs[0].amount, a.fee], [null, null]);
+  eq(analyze(build({ inputs: [{ kind: "p2wpkh", amount: 2100000000000000 }], outputs: oneOut }), { network: "testnet" })
+    .warnings.filter((w) => w.text.includes("all bitcoin")), []);
+});
+// The Signer's memory of what it signed since power-on (apps/signer/lib/memory.js),
+// over a stand-in for gk:session: values copied in and out, as there.
+const sessionStore = () => {
+  const m = new Map();
+  return { get: (k) => structuredClone(m.get(k)), set: (k, v) => void m.set(k, structuredClone(v)), map: m };
+};
+const amountsOf = (p) => analyze(p, { network: "testnet" }).inputs.map((i) => i.amount);
+{
+  const REAL = 100000000, LIE = 10000, out = [{ ...EXTERNAL, amount: REAL }];
+  const round = (amounts, more = {}) => build({ inputs: amounts.map((amount) => ({ kind: "p2wpkh", amount, ...more })), outputs: out });
+  check("memory", "round 1 signs and records; round 2, the amounts swapped, is red and names both", () => {
+    const memory = new SignedMemory(sessionStore());
+    const one = round([REAL, LIE]);
+    eq(memory.check(one, amountsOf(one)), { same: [], changed: [] });
+    const r = signPsbt(one, abandon, ZERO_AUX);
+    memory.record(one, r.signed.map((s) => s.input), amountsOf(one));
+    const two = round([LIE, REAL]);
+    const seen = memory.check(two, amountsOf(two));
+    eq(seen, { same: [], changed: [{ index: 0, before: REAL, now: LIE }, { index: 1, before: LIE, now: REAL }] });
+    const w = memory.warnings(seen);
+    eq(w.map((x) => x.level), ["danger", "danger"]);
+    has(w[0].text, "Input 1 was signed before, since this device was switched on, as spending 1.00000000 BTC; now it says 0.00010000 BTC.");
+    has(w[1].text, "segwit fee attack");
+    has(w[1].text, "It is not signed");
+  });
+  check("memory", "the same amounts again: an info line, nothing refused", () => {
+    const memory = new SignedMemory(sessionStore());
+    const p = round([REAL, LIE]);
+    memory.record(p, [0, 1], amountsOf(p));
+    const seen = memory.check(round([REAL, LIE]), amountsOf(p));
+    eq(seen, { same: [0, 1], changed: [] });
+    eq(memory.warnings(seen).map((x) => [x.level, String(x.text)]),
+      [["info", "Inputs 1, 2: signed before since this device was switched on, with the same amounts."]]);
+  });
+  check("memory", "only what was signed is recorded, and only outpoints and amounts", () => {
+    const store = sessionStore(), memory = new SignedMemory(store);
+    const p = round([REAL, LIE]);
+    memory.record(p, [1], amountsOf(p));
+    eq(memory.check(round([LIE, REAL]), [LIE, REAL]).changed.map((c) => c.index), [1]);
+    const kept = store.get("signed");
+    eq(Object.values(kept), [LIE]);
+    eq(Object.keys(kept), [`${toHex(p.tx.inputs[1].txid.slice().reverse())}:1`]);
+    eq([...store.map.keys()], ["signed"]);
+  });
+  check("memory", "power-off (a fresh store) forgets it all", () => {
+    const memory = new SignedMemory(sessionStore());
+    const p = round([REAL, LIE]);
+    memory.record(p, [0, 1], amountsOf(p));
+    eq(new SignedMemory(sessionStore()).check(round([LIE, REAL]), [LIE, REAL]), { same: [], changed: [] });
+  });
+  check("memory", "proved amounts and taproot are recorded and checked too", () => {
+    const memory = new SignedMemory(sessionStore());
+    const full = round([REAL, LIE], { full: true });
+    memory.record(full, [0, 1], amountsOf(full));
+    eq(memory.check(full, amountsOf(full)).same, [0, 1]);
+    const tr = build({ inputs: [{ kind: "p2tr", path: "m/86'/1'/0'/0/0", amount: 80000 }], outputs: oneOut });
+    memory.record(tr, [0], amountsOf(tr));
+    eq(memory.check(tr, [79999]).changed.map((c) => c.index), [0]);
+  });
+  check("memory", `at most ${MAX_ENTRIES} coins, the oldest forgotten; a full store keeps half`, () => {
+    const store = sessionStore(), memory = new SignedMemory(store);
+    const coin = (i) => ({ tx: { inputs: [{ txid: sha("m" + i), vout: 0 }] } });
+    for (let i = 0; i <= MAX_ENTRIES; i++) memory.record(coin(i), [0], [i + 1]);
+    eq([memory.check(coin(0), [1]).same, memory.check(coin(1), [2]).same, Object.keys(store.get("signed")).length], [[], [0], MAX_ENTRIES]);
+    const small = { ...sessionStore(), set(k, v) {
+      if (Object.keys(v).length > MAX_ENTRIES / 2) throw new RangeError("full");
+      this.v = structuredClone(v);
+    }, get() { return structuredClone(this.v); } };
+    const m2 = new SignedMemory(small);
+    for (let i = 0; i <= MAX_ENTRIES; i++) m2.record(coin(i), [0], [i + 1]);
+    eq(m2.check(coin(MAX_ENTRIES), [MAX_ENTRIES + 1]).same, [0]);
+  });
+}
+check("rules", "finalize takes no signature that doesn't verify (a merged copy's)", () => {
+  const p = build(TWO), s = signPsbt(p, abandon, ZERO_AUX).psbt;
+  const q = parsePsbt(serializePsbt(s)), sig = q.inputs[1].fields.partialSigs[0];
+  setEntry(q.inputs[1], IN.PARTIAL_SIG, sig.pubkey, flipped(sig.signature));
+  const bad = parsePsbt(serializePsbt(q));
+  has(throws(() => finalize(bad), SignError).message, "input 2: its signature doesn't verify");
+  eq(planKeys(bad, [], {}).complete, false);
+  const t = build({ inputs: [{ kind: "p2tr", path: "m/86'/1'/0'/0/0", amount: 80000 }], outputs: oneOut });
+  const ts = parsePsbt(serializePsbt(signPsbt(t, abandon, ZERO_AUX).psbt));
+  setEntry(ts.inputs[0], IN.TAP_KEY_SIG, new Uint8Array(0), flipped(ts.inputs[0].fields.tapKeySig));
+  has(throws(() => finalize(parsePsbt(serializePsbt(ts))), SignError).message, "input 1: its signature doesn't verify");
 });
 check("p2pkh", "an uncompressed key signs its P2PKH coin, checked apart from the library", () => {
   const k = uncompressed(LEGACY), script = p2pkhScript(hash65(LEGACY));
@@ -1406,6 +1562,27 @@ check("codes", "a deflate bomb stops at the limit", () => {
   const text = "B$ZP0100" + toBase32(deflateRaw(big));
   return has(throws(() => new CodeReader().read(text), CodesDecodeError).message, "don't make a file");
 });
+check("codes", "a PSBT over 256 KiB is refused, also uncompressed (the review's L3)", () => {
+  const big = concat([MAGIC, new Uint8Array((256 << 10) + 1 - MAGIC.length).fill(0x41)]);
+  const r = new CodeReader();
+  let e = null;
+  for (const t of split(big, "P", { encoding: "2" }).parts) {
+    try {
+      r.read(t);
+    } catch (x) {
+      e = x;
+    }
+  }
+  has(e && e.message, "More than 262144 bytes");
+  const text = "B$ZP0100" + toBase32(deflateRaw(new Uint8Array(300 << 10)));
+  has(throws(() => new CodeReader().read(text), CodesDecodeError).message, "more than 262144 bytes");
+});
+check("codes", "more than 200 inputs or 500 outputs are refused, saying so", () => {
+  const tx = (ins, outs) => ({ inputs: new Array(ins).fill({}), outputs: new Array(outs).fill({}) });
+  eq([sizeProblem(tx(200, 500)), sizeProblem(tx(1, 1))], [null, null]);
+  eq(String(sizeProblem(tx(201, 1))), "This transaction has 201 inputs: this signer checks at most 200.");
+  eq(String(sizeProblem(tx(1, 501))), "This transaction has 501 outputs: this signer checks at most 500.");
+});
 check("codes", "two contents for one part are refused", () => {
   const { parts } = split(BIG, "P", { encoding: "2", maxVersion: 8, maxParts: 20 });
   const r = new CodeReader();
@@ -1444,21 +1621,22 @@ const xpubEntry = (c, { fp = fingerprint(COSIGNERS[c]), path = MS } = {}) => {
 const decodeBase58 = (text) => base58CheckDecode(text);
 const XPUBS = [0, 1, 2].map((c) => xpubEntry(c));
 const compare = (a, b) => (toHex(a) < toHex(b) ? -1 : 1);
-// The keys of a script: [cosigner, relative path, options], sorted.
-function msScript(places, m = 2) {
-  const keys = places.map(([c, at, o = {}]) => ({ pub: o.pub || msPub(c, at), fp: o.fp || fingerprint(COSIGNERS[c]), path: o.path || `${MS}/${at}` }))
-    .sort((a, b) => compare(a.pub, b.pub));
+// The keys of a script: [cosigner, relative path, options], sorted
+// (sortedmulti), or as they come (sort false: plain multi).
+function msScript(places, m = 2, sort = true) {
+  const keys = places.map(([c, at, o = {}]) => ({ pub: o.pub || msPub(c, at), fp: o.fp || fingerprint(COSIGNERS[c]), path: o.path || `${MS}/${at}` }));
+  if (sort) keys.sort((a, b) => compare(a.pub, b.pub));
   return { ws: multisigScript(m, keys.map((k) => k.pub)), keys };
 }
 const coinScript = (ws, type) => (type === "p2sh-p2wsh" ? p2shScript(hash160(p2wshScript(ref.sha256(ws)))) : p2wshScript(ref.sha256(ws)));
-const msInput = (places, { m = 2, type = "p2wsh", amount = 100000, ws: over } = {}) => {
-  const { ws, keys } = msScript(places, m), script = over || ws;
+const msInput = (places, { m = 2, type = "p2wsh", amount = 100000, ws: over, sort = true } = {}) => {
+  const { ws, keys } = msScript(places, m, sort), script = over || ws;
   return { kind: "p2wpkh", amount, noOrigin: true, script: coinScript(script, type), extra: [[IN.WITNESS_SCRIPT, [], script],
     ...(type === "p2sh-p2wsh" ? [[IN.REDEEM_SCRIPT, [], p2wshScript(ref.sha256(script))]] : []),
     ...keys.map((k) => [IN.BIP32_DERIVATION, k.pub, origin(k.fp, parsePath(k.path))])] };
 };
-const msOutput = (places, { m = 2, type = "p2wsh", amount = 40000 } = {}) => {
-  const { ws, keys } = msScript(places, m);
+const msOutput = (places, { m = 2, type = "p2wsh", amount = 40000, sort = true } = {}) => {
+  const { ws, keys } = msScript(places, m, sort);
   return { script: coinScript(ws, type), amount, extra: [[OUT.WITNESS_SCRIPT, [], ws],
     ...(type === "p2sh-p2wsh" ? [[OUT.REDEEM_SCRIPT, [], p2wshScript(ref.sha256(ws))]] : []),
     ...keys.map((k) => [OUT.BIP32_DERIVATION, k.pub, origin(k.fp, parsePath(k.path))])] };
@@ -1597,7 +1775,7 @@ check("multisig", "a WIF and an account xprv find their key", () => {
   const p = build({ inputs: [msInput(WALLET("0/3"))], outputs: [EXTERNAL] });
   const k = derive(abandon, `${MS}/0/3`);
   eq(planKeys(p, [{ single: true, privateKey: k.privateKey, publicKey: k.publicKey }], {}).inputs[0].sign, true);
-  eq(planKeys(p, [derive(abandon, MS)], {}).inputs[0].path, `${MS}/0/3`);
+  eq(planKeys(p, [derive(abandon, MS)], {}).inputs[0].path, "key/0/3");
   const own = build({ inputs: [msInput([[0, "0/3", { fp: fingerprint(derive(abandon, MS)), path: "m/0/3" }], [1, "0/3"], [2, "0/3"]])], outputs: [EXTERNAL] });
   eq(planKeys(own, [abandon], {}).inputs[0].sign, true); // the account's own fingerprint, as Electrum names a key from an xpub
 });
@@ -1707,6 +1885,49 @@ check("multisig", "attack c: keys at different paths are stray, and count as sen
   const a = msReview({ outputs: [EXTERNAL, msOutput([[0, "1/3"], [1, "0/3"], [2, "1/3"]])] });
   eq([a.outputs[1].mine, a.toSelf, a.sent], [false, 0, a.totalOut]);
   has(change({ outputs: [EXTERNAL, msOutput(WALLET("1/3/0"))] }).stray, "two steps");
+});
+// The security review's M3: same cosigners, m, n and path, but the keys in
+// another order make another address, one the wallet never scans.
+const keysSorted = (places) => {
+  const ks = places.map(([c, at]) => msPub(c, at));
+  return ks.every((k, i) => i === 0 || compare(ks[i - 1], k) < 0);
+};
+check("multisig", "attack d: sortedmulti change with its keys out of order is stray, and counts as sent", () => {
+  const { ws } = msScript(WALLET("1/3"));
+  const reversed = msOutput(WALLET("1/3"));
+  const back = parseMultisig(ws).pubkeys.reverse();
+  reversed.script = coinScript(multisigScript(2, back), "p2wsh");
+  reversed.extra[0] = [OUT.WITNESS_SCRIPT, [], multisigScript(2, back)];
+  const o = change({ outputs: [EXTERNAL, reversed] });
+  eq([o.ours, o.problem, o.unproved], [true, null, null]);
+  has(o.stray, "not sorted as the inputs' are");
+  const a = msReview({ outputs: [EXTERNAL, reversed] });
+  eq([a.outputs[1].mine, a.toSelf, a.sent], [false, 0, a.totalOut]);
+  eq(change({}).stray, null); // sorted, as the inputs: at home
+});
+// Plain multi: a fixed order of cosigners. Found by trying: inputs whose keys
+// are not sorted, so the order is the only rule.
+const ORDERS = [[2, 0, 1], [1, 2, 0], [2, 1, 0], [1, 0, 2], [0, 2, 1]];
+const inOrder = (order, at) => order.map((c) => [c, at]);
+const plainWallet = ORDERS.find((o) => !keysSorted(inOrder(o, "0/3")) && !keysSorted(inOrder(o, "0/4")));
+check("multisig", "plain multi: change in the inputs' order of cosigners is at home, in another stray", () => {
+  const inputs = [msInput(inOrder(plainWallet, "0/3"), { sort: false }), msInput(inOrder(plainWallet, "0/4"), { sort: false, amount: 5000 })];
+  const same = change({ inputs, outputs: [EXTERNAL, msOutput(inOrder(plainWallet, "1/3"), { sort: false })] });
+  eq([same.ours, same.stray, same.unproved], [true, null, null]);
+  const other = ORDERS.find((o) => o.join() !== plainWallet.join());
+  const moved = change({ inputs, outputs: [EXTERNAL, msOutput(inOrder(other, "1/3"), { sort: false })] });
+  eq([moved.ours, moved.unproved], [true, null]);
+  has(moved.stray, "not in the inputs' order of cosigners");
+  // sorted change of a plain multi wallet: stray too (unless sorted is its order there)
+  if (!keysSorted(inOrder(plainWallet, "1/3"))) has(change({ inputs, outputs: [EXTERNAL, msOutput(inOrder(plainWallet, "1/3"))] }).stray, "order of cosigners");
+  else throw new Error("pick another index: the order is sorted at 1/3");
+});
+check("multisig", "inputs neither sorted nor in one order are no wallet's: change unproved", () => {
+  const second = ORDERS.find((o) => o.join() !== plainWallet.join() && !keysSorted(inOrder(o, "0/4")));
+  const inputs = [msInput(inOrder(plainWallet, "0/3"), { sort: false }), msInput(inOrder(second, "0/4"), { sort: false, amount: 5000 })];
+  const o = change({ inputs, outputs: [EXTERNAL, msOutput(inOrder(plainWallet, "1/3"), { sort: false })] });
+  eq(o.ours, false);
+  has(o.unproved, "neither sorted (sortedmulti) nor in one order of cosigners");
 });
 check("multisig", "attack: an xpub that is the input key itself, change hidden below it", () => {
   const globals = [0, 1, 2].map((c) => xpubEntry(c, { path: `${MS}/0/3` }));
@@ -1867,8 +2088,12 @@ if (madeOut) {
     half0: qr(halfSigned(plain, "m/84'/1'/0'/0/0")),
     half1: qr(halfSigned(plain, "m/84'/1'/0'/0/1")),
     other: qr(build(FEE_OK({ path: "m/84'/1'/0'/1/1" }))),
+    // coins of its own: the memory of what was signed would see the others' told with other amounts
     big: split(serializePsbt(build({ inputs: Array.from({ length: 30 }, (_, i) => ({ kind: "p2wpkh", path: `m/84'/1'/0'/0/${i}`, amount: 10000 })),
-      outputs: [{ ...EXTERNAL, amount: 290000 }, { ...CHANGE, path: "m/84'/1'/0'/1/0", amount: 9000 }] })), "P", { maxVersion: 12, maxParts: 20, encoding: "2" }).parts,
+      outputs: [{ ...EXTERNAL, amount: 290000 }, { ...CHANGE, path: "m/84'/1'/0'/1/0", amount: 9000 }], salt: "big " })), "P", { maxVersion: 12, maxParts: 20, encoding: "2" }).parts,
+    // plain's coins, told with each other's amounts: the fee attack's second round
+    swapped: qr(build({ inputs: [{ kind: "p2wpkh", amount: 20000 }, { kind: "p2wpkh", amount: 100000 }],
+      outputs: [{ ...EXTERNAL, amount: 80000 }, { kind: "p2wpkh", path: "m/84'/1'/0'/1/0", amount: 39000 }] })),
     legacy: split(serializePsbt(legacyBig), "P", { maxVersion: 12, maxParts: 60, encoding: "2" }).parts,
     legacyHash: hashOf(finalize(signPsbt(legacyBig, abandon, ZERO_AUX).psbt).tx),
     uncompressedPsbt: qr(spending("p2pkh", p2pkhScript(hash65(LEGACY)), { noOrigin: true })),

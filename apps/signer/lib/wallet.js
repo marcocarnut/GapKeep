@@ -126,11 +126,12 @@ const nodes = (keys) => keys.map((k) => k.node);
 export const plan = (psbt, keys, options) => planKeys(psbt, nodes(keys), options);
 
 // -> { psbt (bytes), tx (bytes, when every input is signed) | null, txid (hex,
-// as wallets show it) | null, count }
+// as wallets show it) | null, count, inputs (the indices signed) }
 export function sign(psbt, keys, options) {
   const r = signKeys(psbt, nodes(keys), options);
   const final = r.plan.complete ? finalize(r.psbt) : null;
-  return { psbt: serializePsbt(r.psbt), tx: final && final.tx, txid: final && final.txid, count: new Set(r.signed.map((s) => s.input)).size };
+  const inputs = [...new Set(r.signed.map((s) => s.input))];
+  return { psbt: serializePsbt(r.psbt), tx: final && final.tx, txid: final && final.txid, count: inputs.length, inputs };
 }
 
 // -> { passed, failed: [names] }

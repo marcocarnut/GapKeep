@@ -13,7 +13,7 @@
 import { t, plural, btcValue, satsValue, numberValue, numbers } from "../text.js";
 import { toHex, toHexReversed, equal, compactSizeLength } from "./bytes.js";
 import { sha256, hash160, haveRipemd160 } from "./hashes.js";
-import { txid as txidOf, inputBaseSize, outputSize, witnessSize } from "./tx.js";
+import { txid as txidOf, inputBaseSize, outputSize, witnessSize, MAX_MONEY } from "./tx.js";
 import { classify, scriptToAddress, parseMultisig, parseScript, NETWORKS, TYPE_NAMES } from "./script.js";
 
 export const HARDENED = 0x80000000;
@@ -201,7 +201,7 @@ function analyzeInput(psbt, i, network, warn) {
       a.utxo = "witness";
     }
   }
-  if (typeof a.amount === "bigint") {
+  if (typeof a.amount === "bigint" || a.amount > MAX_MONEY) {
     a.problems.push(t("its amount is impossible"));
     warn("danger", t("Input {n}: the amount is larger than all bitcoin there can be.", { n }));
     a.amount = null;
@@ -214,7 +214,7 @@ function analyzeInput(psbt, i, network, warn) {
       warn("danger", t("Input {n}: {problem}.", { n, problem: p }));
     }
   }
-  const segwitV0 = a.type === "p2wpkh" || a.type === "p2wsh" || a.type === "p2sh-p2wpkh" || a.type === "p2sh-p2wsh";
+  const segwitV0 = a.segwitV0 = a.type === "p2wpkh" || a.type === "p2wsh" || a.type === "p2sh-p2wpkh" || a.type === "p2sh-p2wsh";
   // how far the amount can be trusted: grouped over all inputs in analyze()
   if (a.utxo === "none" && !a.problems.length) a.caveat = "unknown";
   else if (a.utxo === "witness" && a.script) {
@@ -264,7 +264,7 @@ function analyzeOutput(psbt, i, network, inputFingerprints, warn) {
     address: scriptToAddress(txout.script, network), derivations: [], fingerprints: [], mine: false, role: "external",
     problems: [], unchecked: false,
   };
-  if (typeof o.amount === "bigint" || o.amount > 2100000000000000) {
+  if (typeof o.amount === "bigint" || o.amount > MAX_MONEY) {
     warn("danger", t("Output {n}: the amount is larger than all bitcoin there can be.", { n }));
   }
   for (const d of f.bip32) o.derivations.push({ key: toHex(d.pubkey), fingerprint: fpHex(d), path: formatPath(d.path), raw: d });
@@ -360,13 +360,32 @@ export function analyze(psbt, { network = null, complete = false } = {}) {
       "do). For a non-segwit coin the amount can't be checked, and signing needs that transaction.",
     { list: list(legacy) }));
   }
-  if (v0.length && inputs.length > 1) {
-    warn("info", plural(v0.length, "Input {list}: amounts as the PSBT states them (as in Electrum's QR codes). A " +
-      "segwit v0 signature covers its own input's amount only: if asked to sign a changed version of this " +
-      "transaction again, refuse (two such signatures can make a transaction with a much larger fee).",
-    "Inputs {list}: amounts as the PSBT states them (as in Electrum's QR codes). A segwit v0 signature covers its " +
-      "own input's amount only: if asked to sign a changed version of this transaction again, refuse (two such " +
-      "signatures can make a transaction with a much larger fee).", { list: list(v0) }));
+  // The segwit v0 fee attack. A segwit v0 signature (BIP-143) covers its own
+  // input's amount, but not the others'. Asked twice to sign the same
+  // transaction, each time with a different input's amount understated, the
+  // signer shows a modest fee both times; the two signatures, each valid,
+  // make a transaction that pays the difference as fee. The previous
+  // transaction (non_witness_utxo) proves an amount: its txid is checked
+  // above, and the amount taken from it. Electrum's QR codes never carry it,
+  // so a red warning there would be on nearly every transaction, and soon
+  // clicked through. Instead: amber, when there is more than one segwit v0
+  // input and any of them is described by its output alone, with what to do;
+  // and the app remembers what it signed until power-off, refusing the same
+  // coin told with another amount (apps/signer/lib/memory.js).
+  //   - A single input can't be attacked this way: its own signature covers
+  //     its amount, and the fee shown is computed from that amount alone.
+  //   - Taproot inputs don't count: a BIP-341 signature covers every input's
+  //     amount and script, so a lie about any of them makes it invalid.
+  const v0All = inputs.filter((a) => a.segwitV0);
+  if (v0.length && v0All.length > 1) {
+    warn("warn", plural(v0.length, "Input {list}: its amount is only the PSBT's word (Electrum's QR codes leave out " +
+      "the previous transaction), and two signatures made with different amounts could pay a much larger fee than " +
+      "shown. If a transaction \"failed\" and you're asked to sign the same coins again, don't, unless the amounts " +
+      "are the same.",
+    "Inputs {list}: their amounts are only the PSBT's word (Electrum's QR codes leave out the previous " +
+      "transactions), and two signatures made with different amounts could pay a much larger fee than shown. If a " +
+      "transaction \"failed\" and you're asked to sign the same coins again, don't, unless the amounts are the same.",
+    { list: list(v0) }));
   }
 
   // wallets: whose keys sign

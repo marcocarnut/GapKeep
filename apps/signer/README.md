@@ -125,14 +125,50 @@ malformed or truncated, with what is wrong.
   (`convert_all_utxos_to_witness_utxos()`, to make the code fit). For
   segwit v0 inputs the amounts are then the PSBT's word: a signature covers
   its own input's amount only, so two signatures of differently-described
-  versions can make a transaction with a much larger fee. Shown (blue) when
-  there are several inputs. For non-segwit inputs the amount can't be
-  checked at all, and a signer needs the previous transaction (amber).
+  versions can make a transaction with a much larger fee (the segwit v0 fee
+  attack). So with more than one segwit v0 input, any of them without its
+  previous transaction (every multi-input PSBT from Electrum's QR codes),
+  an amber warning says so, with what to do: if a transaction "failed" and
+  you're asked to sign the same coins again, don't, unless the amounts are
+  the same. One input alone is safe (its signature covers the amount the
+  fee is computed from), and so is taproot (its signatures cover every
+  input's amount). With the previous transaction, the amount is its own.
+- **Coins signed before** (`lib/memory.js`): the Signer remembers each input
+  it signed since the device was switched on, its outpoint and the amount it
+  was told (nothing else: no keys, scripts or addresses), in gk:session: RAM
+  only, until power-off, never on the card, and kept across the app's runs.
+  Recorded once signed, not when reviewed. The same coin told with another
+  amount is red, and not signed: a coin's amount never changes, so one of
+  the two was a lie. With the same amount, a blue line says it was signed
+  before. Every kind of input is checked and recorded, proved amounts and
+  taproot too: it costs nothing. Up to 500 coins, then the oldest go. After
+  a power-off the memory is gone, and the amber warning above is what is
+  left. For non-segwit inputs the amount
+  can't be checked at all, and a signer needs the previous transaction
+  (amber).
+- Input and output amounts over 21 million BTC (red).
+- **The network** decides the addresses shown: the one chosen with the
+  Network button; else the loaded keys' (an xprv's or WIF's version;
+  mainnet if any says so); else the PSBT's guess from its paths and xpubs,
+  and a guess other than mainnet gets an amber warning, as a mainnet
+  transaction shown as a test one would look harmless. Seed words and
+  codex32 shares don't say.
 - Inputs with no key origin, inputs from different wallets, non-ALL
   sighash types, dust and OP_RETURN outputs, unmeetable locktimes.
 
 The size and fee rate are estimated for the signed transaction as Electrum
 does (72-byte signatures): the same vsize as Electrum for every test PSBT.
+
+## Limits
+
+Everything a code holds is checked in one handler, which has 10 s, and a
+hostile computer could aim past that. So the Signer reads at most 256 KiB
+(a PSBT with its previous transactions: some 200 inputs of ordinary ones),
+and checks at most 200 inputs and 500 outputs, refusing more with a
+sentence that says so. In the simulator, parsing a 486 KB PSBT takes
+77 ms, and analysing and planning 200 inputs that each hold a signature to
+verify about 30 ms; a Pi Zero is some 30 to 40 times slower. Each held
+signature is verified once per PSBT, however often it is asked about.
 
 ## Speed
 
@@ -202,7 +238,9 @@ Errors: `Bip32Error`. Private keys are never serialized.
 - a private BIP-32 node at depth 0, a master key;
 - a private node deeper down, as an account's xprv. It doesn't know the
   master's fingerprint, so it knows its keys by its own fingerprint or by
-  the path and public key the PSBT names: deriving must give that key;
+  the path and public key the PSBT names: deriving must give that key. The
+  path above it is the PSBT's word, so paths are shown below the key
+  (`key/0/3`) and not judged as oddities;
 - a single key, `{ single: true, privateKey, publicKey }`, from `keys.js`. It
   has no paths: what pays to it is its own.
 
@@ -279,9 +317,12 @@ Our key in a change script proves nothing by itself: a hostile computer can
 write 2-of-3 with it and two keys of its own. Nothing is stored here, so the
 others are proved from the PSBT's global xpubs. Change is ours only when
 every input is one wallet (same type, m, n and xpubs), each script's keys and
-xpubs match one to one, the change has exactly that m and n, and its keys share
-one relative path (else it is stray), and each input's keys share one suffix of
-exactly two steps below their xpubs. Change the proved inputs show isn't their
+xpubs match one to one, the change has exactly that m and n, its keys share
+one relative path and are in the inputs' order (else it is stray: an address
+the wallet never scans), and each input's keys share one suffix of exactly two
+steps below their xpubs. The order: sorted (sortedmulti, BIP-67) when every
+input's keys are; the same order of cosigners as every input's (plain multi);
+inputs that follow neither prove nothing. Change the proved inputs show isn't their
 wallet's is red (`problem`, `notWallet`), and counted as sent. Where the proof
 can't be made (no xpubs, inputs not proved, too much to derive) `unproved` says
 why: amber, and counted as sent. The reasoning is at the top of `multisig.js`.

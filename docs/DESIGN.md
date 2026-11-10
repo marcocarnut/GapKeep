@@ -180,6 +180,21 @@ between the two only as QR codes.
   otherwise BBQr, the multi-part format Coldcard and Sparrow use, simpler
   than UR. Colour QR codes stay experimental and out of this.
 - **PSBTs must carry their origins:** every input and change output its
-  BIP-32 derivation with the master fingerprint; segwit inputs their
-  previous transaction too, by default, which closes the segwit v0 fee
-  attack.
+  BIP-32 derivation with the master fingerprint.
+- **The segwit v0 fee attack: a memory of what was signed, and an amber
+  warning.** A segwit v0 signature covers its own input's amount only: asked
+  twice for the same coins, each time with another amount understated, a
+  signer shows a modest fee twice, and the two signatures pay a large one.
+  Electrum's QR codes never carry the previous transactions that prove the
+  amounts, so a red warning (Trezor's and Ledger's stance) would be on
+  nearly every transaction, and soon clicked through. Instead the Signer
+  remembers each coin it signed (outpoint and amount, nothing else) in
+  gk:session, in RAM until power-off, never on the card, and refuses the
+  same coin told with another amount: red, not signed. A transaction with
+  more than one segwit v0 input, any of them without its previous
+  transaction, gets an amber warning that says what to do after a power-off
+  (the memory is gone then): if a transaction "failed" and you're asked to
+  sign the same coins again, don't, unless the amounts are the same. With
+  the previous transaction, its txid is checked and the amount is its own.
+  One input alone can't be attacked this way, and taproot signatures cover
+  every input's amount.

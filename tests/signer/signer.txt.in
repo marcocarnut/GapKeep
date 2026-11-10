@@ -297,7 +297,7 @@ key esc
 wait 0.3
 
 # 11. A PSBT with only WITNESS_UTXO, as another wallet may still send: it
-# signs, and the screen says the amounts are the PSBT's word. Seed words, a
+# signs, after an amber warning that the amounts are the PSBT's word. Seed words, a
 # word wrong then right, signing with the account's tprv too
 mark
 key ret
@@ -305,7 +305,7 @@ wait 0.3
 mark
 camera qr @plain@
 expect signer: change: 1 claimed 15
-expect signer: info: Inputs 1, 2: amounts as the PSBT states th 5
+expect signer: warn: Inputs 1, 2: their amounts are only the PSBT 5
 camera scene
 wait 0.5
 shot 20-witness-utxo-only
@@ -562,6 +562,23 @@ mark
 key esc
 expect signer: keys forgotten 5
 wait 0.3
+# First, step 11's coins again, each told with the other's amount: the fee
+# attack's second round. The Signer remembers what it signed since power-on
+# (outpoints and amounts, in gk:session): red, and refused
+mark
+key ret
+wait 0.3
+mark
+camera qr @swapped@
+expect signer: signed before: 0 same amount, 2 another amount 15
+expect signer: danger: Input 1 was signed before, since this 5
+camera scene
+wait 0.5
+shot 26b-signed-before
+key esc
+wait 0.3
+
+# Then the series
 key ret
 wait 0.3
 mark
