@@ -15,6 +15,7 @@ modules below, imported by name:
 | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
 | [`gk:data`](#gkdata) | every app (only the folders its manifest lists in `"data"`) | Read-only files from the card's data folders, shared by name |
 | [`gk:usb`](#gkusb) | apps that list devices in `"usb"` (only those) | Control transfers to USB devices claimed for them |
+| [`gk:zlib`](#gkzlib) | every app | Decompression (DEFLATE, zlib), with a limit on the output |
 | [`gk:apps`](#gkapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -476,7 +477,9 @@ import * as crypto from "gk:crypto";
 | `x25519PrivateKey(secret)` | An X25519 key (RFC 7748) from its 32-byte secret, held natively: `publicKey` (32 bytes), `sharedSecret(peerPublic)` (the 32-byte shared secret with a peer's 32-byte public key) and `destroy()` (wipes the secret; `publicKey` stays, `sharedSecret` then throws a `TypeError`). Byte order and clamping are RFC 7748's: the secret and public keys are little-endian, the secret is clamped where it is used (any 32 bytes are a secret), a public key's top bit is ignored. **An all-zero shared secret is refused** (a `RangeError`: the peer's key is of small order). OpenPGP's legacy Curve25519 keys (ECDH, RFC 9580, 5.5.5.6) store the secret as a big-endian MPI: reverse its 32 bytes; their public key and ephemeral key have a 0x40 byte in front: drop it. RFC 9580's X25519 keys (algorithm 25) are native: as they are. The KDF (RFC 6637's, or RFC 9580's HKDF) is the app's, with the hashes here; then `aesKeyUnwrap`. About 2 ms on a Pi Zero. |
 | `aesKeyWrap(kek, key)` | AES key wrap (RFC 3394, its default IV): `kek` 16, 24 or 32 bytes, `key` a multiple of 8 bytes, 16 to 4096; returns 8 bytes more. |
 | `aesKeyUnwrap(kek, wrapped)` | The other way (RFC 3394), for OpenPGP's ECDH (RFC 9580, 11.5): `wrapped` a multiple of 8 bytes, 24 to 4096; returns 8 bytes fewer. Its integrity check is compared without a shortcut; if it fails (a wrong key, or changed data), an `Error` (not a `TypeError` or `RangeError`) and nothing else. |
-| `seipdV1Decrypt(sessionKey, data, options?)` | Decrypts OpenPGP's Symmetrically Encrypted Integrity Protected Data, version 1 (RFC 9580, 5.13.1; GnuPG's usual encryption): `data` is the packet's body after its version octet (1), at least 40 bytes and at most 8 MiB, `sessionKey` 16, 24 or 32 bytes (AES-128, -192, -256: the session key's algorithm 7, 8 or 9). AES-CFB with a zero IV over the random prefix, the plaintext and the MDC packet (0xD3 0x14 and SHA-1 of everything before it); a promise of the plaintext (the packets inside: literal data, compressed data, signatures...) **only if the MDC matches**. Otherwise the promise rejects with an `Error`, the same one whatever went wrong (a wrong key, a changed or cut message): nothing decrypted reaches JavaScript, and the prefix's repeated bytes (the "quick check") play no part. A [long operation](#long-operations): about 6.5 MB/s on a Pi Zero (1 MiB in 0.16 s, in slices of at most 28 ms). The data is copied when the call is made. There is no function for the old Symmetrically Encrypted Data packet (tag 9, no integrity): refuse it. Other ciphers and OpenPGP's AEAD packets (SEIPD v2, OCB) aren't there yet. |
+| `seipdV1Decrypt(sessionKey, data, options?)` | Decrypts OpenPGP's Symmetrically Encrypted Integrity Protected Data, version 1 (RFC 9580, 5.13.1; GnuPG's usual encryption): `data` is the packet's body after its version octet (1), at least 40 bytes and at most 8 MiB, `sessionKey` 16, 24 or 32 bytes (AES-128, -192, -256: the session key's algorithm 7, 8 or 9). AES-CFB with a zero IV over the random prefix, the plaintext and the MDC packet (0xD3 0x14 and SHA-1 of everything before it); a promise of the plaintext (the packets inside: literal data, compressed data, signatures...) **only if the MDC matches**. Otherwise the promise rejects with an `Error`, the same one whatever went wrong (a wrong key, a changed or cut message): nothing decrypted reaches JavaScript, and the prefix's repeated bytes (the "quick check") play no part. A [long operation](#long-operations): about 6.5 MB/s on a Pi Zero (1 MiB in 0.16 s, in slices of at most 28 ms). The data is copied when the call is made. There is no function for the old Symmetrically Encrypted Data packet (tag 9, no integrity): refuse it. For AEAD packets: `seipdV2Decrypt`, `ocbedDecrypt`. |
+| `seipdV2Decrypt(sessionKey, data, options?)` | Decrypts a version 2 SEIPD packet (RFC 9580, 5.13.2: OpenPGP's AEAD, what RFC 9580 implementations write): `data` is the packet's body after its version octet (2): cipher, AEAD mode, chunk size octet (0 to 16), 32-byte salt, the chunks with their tags, the final tag; at most 8 MiB. `sessionKey` as long as the cipher's key (AES-128, -192, -256: 16, 24, 32 bytes; else a `RangeError`). The message key and IV come from HKDF-SHA256; each chunk is decrypted and its tag checked, and then the final tag, over the total length, so a message cut after a chunk fails too: a promise of the plaintext **only if every tag matched**, else an `Error`, the same one whatever went wrong. AEAD mode: OCB only for now (EAX and GCM: a `RangeError`). A [long operation](#long-operations). The data is copied when the call is made. |
+| `ocbedDecrypt(sessionKey, data, options?)` | Decrypts GnuPG's OCB Encrypted Data packet (tag 20, version 1: LibrePGP, draft-koch-librepgp, 5.16): **what GnuPG 2.4 writes by default** (to its own keys, which announce AEAD). Not RFC 9580's: the session key is the key itself (no HKDF), a chunk's nonce is the packet's 15-byte IV xor the chunk's index, and its associated data has the index too. `data` is the body after its version octet (1); otherwise as `seipdV2Decrypt`: every chunk's tag and the final tag checked before anything is given, one `Error` for every failure, at most 8 MiB. About 6 MB/s on a Pi Zero. |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
@@ -543,8 +546,9 @@ SHA-256 16 MB/s.
 
 <a id="long-operations"></a>**Long operations.** What can take more
 than a quarter of a second on a Pi Zero returns a promise:
-`openpgpS2k`, `pbkdf2Async`, `seipdV1Decrypt`, and an RSA key's `sign`
-and `decrypt`. The work is done natively in
+`openpgpS2k`, `pbkdf2Async`, `seipdV1Decrypt`, `seipdV2Decrypt`,
+`ocbedDecrypt`, an RSA key's `sign` and `decrypt`, and
+[`gk:zlib`](#gkzlib)'s `inflate`. The work is done natively in
 slices of about 20 ms, one each time round the main loop, between the
 screen being drawn and keys being read: the app stays responsive (it
 can show a progress bar, from `onProgress`; the longest wait between
@@ -588,22 +592,25 @@ usual settings): the app parses the packets; the public-key encrypted
 session key packet gives the session key, with an RSA key's `decrypt`
 (implicit rejection: always some bytes) or, for ECDH, with
 `x25519PrivateKey`, the KDF and `aesKeyUnwrap`; the app checks the
-session key's algorithm and checksum, then `seipdV1Decrypt` decrypts
-the message and checks its integrity before anything of it is given.
+session key's algorithm and checksum, then `seipdV1Decrypt`,
+`seipdV2Decrypt` or `ocbedDecrypt` (by the packet) decrypts the message
+and checks its integrity before anything of it is given; a compressed
+data packet inside goes to [`gk:zlib`](#gkzlib).
 **The session key does pass through JavaScript** (the app reads its
 algorithm octet and checksum), as the private key does on import:
 wipe it (`.fill(0)`) once used. Keeping it native would need the
 session key packet parsed natively too (its RSA and ECDH forms,
 the KDF, the checksum), returning a handle that `seipdV1Decrypt`
-takes instead of bytes. GnuPG 2.4 encrypts with OCB (its AEAD
-packet, tag 20) to keys that announce AEAD, as its own new keys do:
-that isn't there yet, nor decompression (most messages are
-compressed).
+takes instead of bytes. GnuPG 2.4 writes its own OCB packet (tag 20,
+`ocbedDecrypt`) to keys that announce AEAD, as its own new keys do,
+and SEIPD v1 to others; RFC 9580 implementations write SEIPD v2. EAX
+and GCM are not there yet.
 
 Each group (RIPEMD-160, PBKDF2, secp256k1, Ed25519, X25519, RSA, AES,
-S2K, SEIPD)
-checks itself against known answers before its first use; if that
-fails, it throws an `InternalError` until reboot.
+S2K, SEIPD, OCB, AEAD packets) checks itself against known answers
+before its first use (RSA's, longer, in the slices of its first long
+operation, not at import); if that fails, it throws an
+`InternalError` until reboot.
 
 **Where the randomness comes from.** The BCM2835's hardware random number
 generator, treated as a noise source of unknown quality. Every raw byte
@@ -873,6 +880,35 @@ has none.
 | `open(device)` | A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first). |
 | `onAttach(fn)` | Calls `fn` with each listed device plugged in while the app runs. Returns a function that removes it. |
 | `onDetach(fn)` | Calls `fn` with each listed device unplugged. Its handle's transfers fail from then on (`"detached"`); plugged in again it is a new device, with a new `id`. |
+
+---
+
+## gk:zlib
+
+```js
+import * as zlib from "gk:zlib";
+```
+
+Decompression of DEFLATE data (RFC 1951), raw or in zlib's format (RFC
+1950): what OpenPGP's compressed data packets hold (their algorithm 1,
+ZIP, is raw DEFLATE; 2, ZLIB, zlib's format; BZip2, 3, isn't here), and
+what other formats use. zlib's own inflate ([zlib](https://zlib.net)
+1.3.2, zlib License), checked against known answers before its first
+use and fuzzed (tools/fuzz_inflate.sh).
+
+**You must say how big the result may be** (`maxOutput`, at most 32
+MiB): a few hundred bytes can decompress to gigabytes, and the limit
+is checked as the output grows, so such data is refused (a
+`RangeError`) with nothing more allocated than the limit allows.
+Decompression is a [long operation](#long-operations) (gk:crypto's): a
+promise, the work done in slices while the screen keeps being drawn,
+about 1 MiB in 0.1 s on a Pi Zero. Data that isn't valid in the
+format, is cut short, or has more after its end rejects with an
+`Error`. What it decompresses is wiped from native memory when done.
+
+| Name | Description |
+| --- | --- |
+| `inflate(data, { format, maxOutput, onProgress })` | A promise of `data` (at most 8 MiB, copied when the call is made) decompressed: `format` `"raw"` (DEFLATE) or `"zlib"`, `maxOutput` the most bytes it may decompress to, 1 to 33,554,432 (32 MiB). Missing or wrong options throw at once (a `TypeError` or `RangeError`). |
 
 ---
 

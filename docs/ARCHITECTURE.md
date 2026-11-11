@@ -215,6 +215,15 @@ TLS's AES block. SEIPD v1 (`seipd.*`, RFC 9580, 5.13.1) decrypts a copy
 of the message in steps, hashing as it goes, and gives the plaintext only
 if the MDC matches, the prefix's quick-check bytes ignored; there is no
 code for the old unprotected packet.
+OpenPGP's AEAD packets (`aead.*`: RFC 9580's SEIPD v2, and GnuPG 2.4's
+own OCB packet, tag 20, from LibrePGP) are decrypted in steps on OCB
+(`ocb.*`, RFC 7253, written here over Mbed TLS's AES block, streaming) and
+HKDF-SHA256 (`hmac.*`): every chunk's tag and the final tag (over the total
+length) are checked before the plaintext, decrypted in place in a copy of
+the message, is given. Decompression (`runtime/inflate.*`, gk:zlib) is
+zlib's inflate (`third_party/zlib`, decompression only, no gzip, the
+caller's allocator, which wipes), in steps, its output limited as it
+grows; `tools/fuzz_inflate.sh` fuzzes it with sanitizers.
 OpenPGP's S2K (`s2k.*`, RFC 9580) is written here, over `gk_hash_t`, and
 hashes the repeated salt and passphrase from a 1 KiB buffer, in steps (a
 job, below). Both
@@ -411,10 +420,11 @@ genuine kernel they say exactly what code an app runs.
 | `third_party/zxing-cpp/` | zxing-cpp, the QR decoder (submodule), plus the fixes in `patches/zxing-cpp/`. |
 | `third_party/secp256k1/` | Bitcoin Core's libsecp256k1 (submodule, unmodified). |
 | `third_party/mbedtls/`, `third_party/monocypher/` | A crypto-only subset of Mbed TLS (bignum, RSA, AES) and Monocypher (Ed25519), vendored unmodified from their releases. |
+| `third_party/zlib/` | zlib's inflate (decompression only), vendored unmodified from its signed release. |
 | `lib/lvgl/` | Builds LVGL with `gk_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
-| `lib/zxing/`, `lib/secp256k1/`, `lib/mbedtls/`, `lib/monocypher/` | Build the QR decoder and the crypto libraries for the kernel. |
+| `lib/zxing/`, `lib/secp256k1/`, `lib/mbedtls/`, `lib/monocypher/`, `lib/zlib/` | Build the QR decoder, the crypto libraries and zlib's inflate for the kernel. |
 | `lib/colorqr/` | The experimental colour QR decoder, vendored ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 | `lib/js/` | JavaScript libraries that apps carry copies of (`tools/share_libs.py`). |
 | `patches/` | GapKeep's changes to Circle and zxing-cpp, applied at build time by `tools/apply_patches.sh`. |
