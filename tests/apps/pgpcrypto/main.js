@@ -558,10 +558,11 @@ group("gk:zlib", async () => {
   throws(() => zlib.inflate(d, { format: "zlib", maxOutput: (32 << 20) + 1 }), RangeError, "inflate maxOutput over 32 MiB");
   throws(() => zlib.inflate(d, { format: "zlib", maxOutput: 0 }), RangeError, "inflate maxOutput 0");
   throws(() => zlib.inflate("x", { format: "zlib", maxOutput: 10 }), TypeError, "inflate a string");
-  const mib = await timeJob("inflate 1 MiB", (onProgress) => zlib.inflate(unhex(V.zlibMiB.data),
+  const mibData = unhex(V.zlibMiB.data), bomb = unhex(V.zlibBomb.data);	// not timed
+  const mib = await timeJob("inflate 1 MiB", (onProgress) => zlib.inflate(mibData,
     { format: "zlib", maxOutput: 1 << 20, onProgress }));
   ok(hex(crypto.sha256(mib)) === V.zlibMiB.sha256, "inflate 1 MiB");
-  await rejects(timeJob("inflate bomb, to the limit", (onProgress) => zlib.inflate(unhex(V.zlibBomb.data),
+  await rejects(timeJob("inflate bomb, to the limit", (onProgress) => zlib.inflate(bomb,
     { format: "zlib", maxOutput: 32 << 20, onProgress })), RangeError, "inflate a bomb (33 MiB of zeros): refused at 32 MiB");
 });
 
