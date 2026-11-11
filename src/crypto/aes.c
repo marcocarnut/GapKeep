@@ -1,5 +1,5 @@
 /*
- * aes.c - AES-CFB128 on Mbed TLS's AES (see aes.h).
+ * aes.c - AES-CFB128 and AES key wrap on Mbed TLS's AES (see aes.h).
  *
  * Mbed TLS's AES uses lookup tables (MBEDTLS_AES_ROM_TABLES): not
  * constant-time against an attacker who shares the processor's cache.
@@ -73,6 +73,147 @@ static int unhex (const char *hex, uint8_t *out)
 	return n;
 }
 
+/* --- AES key wrap (RFC 3394, 2.2.1 and 2.2.2, the index-based form) ----- */
+
+static const uint8_t s_WrapIV[8] = { 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6, 0xa6 };
+
+int gk_aes_wrap (const uint8_t *kek, size_t keklen, const uint8_t *in, size_t len, uint8_t *out)
+{
+	if (keklen != 16 && keklen != 24 && keklen != 32)
+	{
+		return -2;
+	}
+	if (len < 16 || len % 8 != 0)
+	{
+		return -4;
+	}
+	mbedtls_aes_context aes;
+	mbedtls_aes_init (&aes);
+	if (mbedtls_aes_setkey_enc (&aes, kek, (unsigned) keklen * 8) != 0)
+	{
+		mbedtls_aes_free (&aes);
+		return -2;
+	}
+
+	size_t n = len / 8;
+	uint8_t a[8], b[16];
+	memcpy (a, s_WrapIV, 8);
+	memmove (out + 8, in, len);		/* R[1..n] */
+	for (unsigned j = 0; j <= 5; j++)
+	{
+		for (size_t i = 1; i <= n; i++)
+		{
+			/* B = AES (K, A | R[i]); A = MSB64 (B) ^ t; R[i] = LSB64 (B) */
+			memcpy (b, a, 8);
+			memcpy (b + 8, out + 8 * i, 8);
+			mbedtls_aes_crypt_ecb (&aes, MBEDTLS_AES_ENCRYPT, b, b);
+			uint64_t t = (uint64_t) n * j + i;
+			for (int x = 0; x < 8; x++)
+			{
+				a[x] = b[x] ^ (uint8_t) (t >> (56 - 8 * x));
+			}
+			memcpy (out + 8 * i, b + 8, 8);
+		}
+	}
+	memcpy (out, a, 8);
+
+	mbedtls_aes_free (&aes);
+	gk_wipe (b, sizeof b);
+	return 0;
+}
+
+int gk_aes_unwrap (const uint8_t *kek, size_t keklen, const uint8_t *in, size_t len, uint8_t *out)
+{
+	if (keklen != 16 && keklen != 24 && keklen != 32)
+	{
+		return -2;
+	}
+	if (len < 24 || len % 8 != 0)
+	{
+		return -4;
+	}
+	mbedtls_aes_context aes;
+	mbedtls_aes_init (&aes);
+	if (mbedtls_aes_setkey_dec (&aes, kek, (unsigned) keklen * 8) != 0)
+	{
+		mbedtls_aes_free (&aes);
+		return -2;
+	}
+
+	size_t n = len / 8 - 1;
+	uint8_t a[8], b[16];
+	memcpy (a, in, 8);
+	memmove (out, in + 8, len - 8);		/* R[1..n] at out[0..] */
+	for (int j = 5; j >= 0; j--)
+	{
+		for (size_t i = n; i >= 1; i--)
+		{
+			/* B = AES-1 (K, (A ^ t) | R[i]); A = MSB64 (B); R[i] = LSB64 (B) */
+			uint64_t t = (uint64_t) n * (unsigned) j + i;
+			for (int x = 0; x < 8; x++)
+			{
+				b[x] = a[x] ^ (uint8_t) (t >> (56 - 8 * x));
+			}
+			memcpy (b + 8, out + 8 * (i - 1), 8);
+			mbedtls_aes_crypt_ecb (&aes, MBEDTLS_AES_DECRYPT, b, b);
+			memcpy (a, b, 8);
+			memcpy (out + 8 * (i - 1), b + 8, 8);
+		}
+	}
+	mbedtls_aes_free (&aes);
+	gk_wipe (b, sizeof b);
+
+	uint8_t diff = 0;
+	for (int x = 0; x < 8; x++)
+	{
+		diff |= a[x] ^ s_WrapIV[x];	/* not a shortcut */
+	}
+	gk_wipe (a, sizeof a);
+	if (diff != 0)
+	{
+		gk_wipe (out, len - 8);
+		return -1;
+	}
+	return 0;
+}
+
+static int WrapTest (void)
+{
+	static const struct { const char *kek, *key, *wrapped; } v[] =
+	{
+		/* RFC 3394, 4.1, 4.4, 4.6 */
+		{ "000102030405060708090a0b0c0d0e0f", "00112233445566778899aabbccddeeff",
+		  "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5" },
+		{ "000102030405060708090a0b0c0d0e0f1011121314151617", "00112233445566778899aabbccddeeff0001020304050607",
+		  "031d33264e15d33268f24ec260743edce1c6c7ddee725a936ba814915c6762d2" },
+		{ "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+		  "00112233445566778899aabbccddeeff000102030405060708090a0b0c0d0e0f",
+		  "28c9f404c4b810f4cbccb35cfb87f8263f5786e2d80ed326cbc7f0e71a99f43bfb988b9b7a02dd21" },
+	};
+	uint8_t kek[32], key[32], wrapped[40], out[40];
+	for (unsigned i = 0; i < sizeof v / sizeof v[0]; i++)
+	{
+		int keklen = unhex (v[i].kek, kek), keylen = unhex (v[i].key, key);
+		unhex (v[i].wrapped, wrapped);
+		if (gk_aes_wrap (kek, keklen, key, keylen, out) != 0 || !gk_hex_equal (out, keylen + 8, v[i].wrapped))
+		{
+			return 1;
+		}
+		if (gk_aes_unwrap (kek, keklen, wrapped, keylen + 8, out) != 0 || memcmp (out, key, keylen) != 0)
+		{
+			return 2;
+		}
+		wrapped[keylen] ^= 1;
+		if (gk_aes_unwrap (kek, keklen, wrapped, keylen + 8, out) != -1)
+		{
+			return 3;
+		}
+	}
+	gk_wipe (key, sizeof key);
+	gk_wipe (out, sizeof out);
+	return 0;
+}
+
 int gk_aes_selftest (void)
 {
 	static const char Plain[] =
@@ -123,5 +264,5 @@ int gk_aes_selftest (void)
 	}
 
 	gk_wipe (key, sizeof key);
-	return 0;
+	return WrapTest () ? 200 + WrapTest () : 0;
 }

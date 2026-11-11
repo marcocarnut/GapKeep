@@ -9,7 +9,7 @@ modules below, imported by name:
 | --- | --- | --- |
 | [`gk:ui`](#gkui) | every app | Widgets, layout, input, alerts |
 | [`gk:sys`](#gksys) | every app | App info, versions, uptime, memory, exit |
-| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), OpenPGP's Ed25519, RSA signatures, AES-CFB and S2K, hardware random bytes |
+| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), OpenPGP's Ed25519, X25519, RSA signatures and decryption, AES-CFB, key wrap, S2K and message decryption, hardware random bytes |
 | [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
 | [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
 | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
@@ -447,11 +447,12 @@ import * as crypto from "gk:crypto";
 | `sha512(data)` | SHA-512, a `Uint8Array(64)`. |
 | `sha224(data)` | SHA-224, a `Uint8Array(28)`. |
 | `sha384(data)` | SHA-384, a `Uint8Array(48)`. |
-| `createHash(hash)` | A hash to feed in pieces: `update(data)` (returns the hash, so calls chain), `digest()` (the result; the hash is then finished, and using it again throws a `TypeError`), `copy()` (a new hash in the same state: hash what is common once, then each copy's own end), `destroy()` (wipes the state now, rather than when the object is collected) and `algorithm` (its name). `hash` as for `hmac`. For data too big for one array, or that arrives in parts. |
+| `createHash(hash)` | A hash to feed in pieces: `update(data)` (returns the hash, so calls chain), `digest()` (the result; the hash is then finished, and using it again throws a `TypeError`), `copy()` (a new hash in the same state: hash what is common once, then each copy's own end), `destroy()` (wipes the state now, rather than when the object is collected) and `algorithm` (its name). `hash` as for `hmac`. For data too big for one array, or that arrives in parts. Like the one-shot hashes, each `update` blocks while it hashes ([how long](#hashing-big-data)). |
 | `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto (`"SHA-1"`, `"SHA-224"`, `"SHA-256"`, `"SHA-384"` or `"SHA-512"`): a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
 | `ripemd160(data)` | RIPEMD-160, a `Uint8Array(20)`. |
 | `hash160(data)` | RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. |
-| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. |
+| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. |
+| `pbkdf2Async(hash, password, salt, iterations, length, options?)` | The same as a [long operation](#long-operations): a promise, the work done in slices while the screen keeps being drawn (about 13,000 SHA-512 iterations a second on a Pi Zero). Arguments as `pbkdf2`'s, checked at once. |
 | `isPrivateKey(key)` | Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). |
 | `isPublicKey(key)` | Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). |
 | `publicKey(privateKey, compressed = true)` | The public key, 33 bytes (compressed) or 65. |
@@ -465,13 +466,17 @@ import * as crypto from "gk:crypto";
 | `schnorrVerify(signature, message, publicKey)` | Checks a BIP-340 signature against an x-only public key; the message may have any length. |
 | `taprootTweakPublicKey(publicKey, tweak)` | Taproot's output key Q = P + tweak·G for the x-only internal key P (BIP-341): `key` is Q's X, `parity` its Y's (a script path's control block needs it). The tweak is the app's: the `TapTweak` tagged hash of P (and the script tree's root, if any). |
 | `taprootTweakPrivateKey(privateKey, tweak)` | The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. |
-| `ed25519PrivateKey(seed)` | An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. |
-| `ed25519Verify(signature, message, publicKey)` | Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. |
-| `rsaPrivateKey({ n, e, d, p, q, u })` | An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest, options?), destroy() }`. `sign` returns a promise of the RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-224 to SHA-512; SHA-1 throws a `TypeError`), as many bytes as `n`: a [long operation](#long-operations), about 90 ms with 2048 bits on a Pi Zero, 460 ms with 4096. Wrong arguments throw at once; a fault caught by the checks rejects with an `InternalError`, and `destroy()` before the signature is made rejects it with a `TypeError`. `destroy()` wipes the key; `sign` then throws a `TypeError`. |
+| `ed25519PrivateKey(seed)` | An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Ed25519 hashes the message itself (SHA-512, twice when signing), at about 9 MB/s on a Pi Zero: a digest takes no time, a big message would block (sign a digest). Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. |
+| `ed25519Verify(signature, message, publicKey)` | Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. Hashes the message (SHA-512, about 9 MB/s on a Pi Zero). |
+| `rsaPrivateKey({ n, e, d, p, q, u })` | An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest, options?), decrypt(ciphertext, options?), destroy() }`. `sign` returns a promise of the RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-224 to SHA-512; SHA-1 throws a `TypeError`), as many bytes as `n`: a [long operation](#long-operations), about 90 ms with 2048 bits on a Pi Zero, 460 ms with 4096. Wrong arguments throw at once; a fault caught by the checks rejects with an `InternalError`, and `destroy()` before the signature is made rejects it with a `TypeError`. `decrypt` returns a promise of the message in an RSAES-PKCS1-v1_5 ciphertext (RFC 8017, 7.2.2), a long operation like `sign` (460 ms with 4096 bits): `ciphertext` exactly as long as `n` (pad an OpenPGP MPI with zeros on the left) and below `n`, else a `RangeError` at once. **Bad padding is not an error**: with *implicit rejection* (draft-irtf-cfrg-rsa-guidance, 7.2, as written), it decrypts to a message derived from the key and the ciphertext, the same each time, unpredictable without the key, 0 to `n`'s length − 11 bytes, so neither the app nor an attacker can tell. Check what comes out: for OpenPGP, the session key's algorithm, length and checksum, and then the message's integrity, will fail. `destroy()` wipes the key; `sign` and `decrypt` then throw a `TypeError`. |
 | `rsaVerify(signature, hash, digest, publicKey)` | Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }`: 1024 to 4096 bits, else `false`. **Keys under 2048 bits are weak** (1024-bit RSA is within reach of a well-funded attacker): they verify for old signatures only, and the app should say so (the size is that of `n`, which the app has); they can't be imported to sign. `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. |
-| `aesCfbEncrypt(key, iv, data)` | AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 16 MiB, no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. |
+| `aesCfbEncrypt(key, iv, data)` | AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 2 MiB (about 0.2 s on a Pi Zero), no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. For OpenPGP's encrypted messages, use `seipdV1Decrypt`, which checks them, and has no such limit. |
 | `aesCfbDecrypt(key, iv, data)` | The other way, as `aesCfbEncrypt`. |
 | `openpgpS2k(type, hash, passphrase, salt, count, length, options?)` | OpenPGP's string-to-key (RFC 9580, 3.7.1): a promise of the `length`-byte key (1 to 64) a passphrase (at most 64 KiB) gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. A [long operation](#long-operations), every type (one API): on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), twice that when the key is longer than the hash (AES-256 from SHA-1). The passphrase is copied when the call is made. Wrong arguments throw at once. |
+| `x25519PrivateKey(secret)` | An X25519 key (RFC 7748) from its 32-byte secret, held natively: `publicKey` (32 bytes), `sharedSecret(peerPublic)` (the 32-byte shared secret with a peer's 32-byte public key) and `destroy()` (wipes the secret; `publicKey` stays, `sharedSecret` then throws a `TypeError`). Byte order and clamping are RFC 7748's: the secret and public keys are little-endian, the secret is clamped where it is used (any 32 bytes are a secret), a public key's top bit is ignored. **An all-zero shared secret is refused** (a `RangeError`: the peer's key is of small order). OpenPGP's legacy Curve25519 keys (ECDH, RFC 9580, 5.5.5.6) store the secret as a big-endian MPI: reverse its 32 bytes; their public key and ephemeral key have a 0x40 byte in front: drop it. RFC 9580's X25519 keys (algorithm 25) are native: as they are. The KDF (RFC 6637's, or RFC 9580's HKDF) is the app's, with the hashes here; then `aesKeyUnwrap`. About 6 ms on a Pi Zero. |
+| `aesKeyWrap(kek, key)` | AES key wrap (RFC 3394, its default IV): `kek` 16, 24 or 32 bytes, `key` a multiple of 8 bytes, 16 to 4096; returns 8 bytes more. |
+| `aesKeyUnwrap(kek, wrapped)` | The other way (RFC 3394), for OpenPGP's ECDH (RFC 9580, 11.5): `wrapped` a multiple of 8 bytes, 24 to 4096; returns 8 bytes fewer. Its integrity check is compared without a shortcut; if it fails (a wrong key, or changed data), an `Error` (not a `TypeError` or `RangeError`) and nothing else. |
+| `seipdV1Decrypt(sessionKey, data, options?)` | Decrypts OpenPGP's Symmetrically Encrypted Integrity Protected Data, version 1 (RFC 9580, 5.13.1; GnuPG's usual encryption): `data` is the packet's body after its version octet (1), at least 40 bytes and at most 8 MiB, `sessionKey` 16, 24 or 32 bytes (AES-128, -192, -256: the session key's algorithm 7, 8 or 9). AES-CFB with a zero IV over the random prefix, the plaintext and the MDC packet (0xD3 0x14 and SHA-1 of everything before it); a promise of the plaintext (the packets inside: literal data, compressed data, signatures...) **only if the MDC matches**. Otherwise the promise rejects with an `Error`, the same one whatever went wrong (a wrong key, a changed or cut message): nothing decrypted reaches JavaScript, and the prefix's repeated bytes (the "quick check") play no part. A [long operation](#long-operations): about 6 MB/s on a Pi Zero (1 MiB in 0.2 s). The data is copied when the call is made. There is no function for the old Symmetrically Encrypted Data packet (tag 9, no integrity): refuse it. Other ciphers and OpenPGP's AEAD packets (SEIPD v2, OCB) aren't there yet. |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
@@ -538,7 +543,8 @@ SHA-256 16 MB/s.
 
 <a id="long-operations"></a>**Long operations.** What can take more
 than a quarter of a second on a Pi Zero returns a promise:
-`openpgpS2k` and an RSA key's `sign`. The work is done natively in
+`openpgpS2k`, `pbkdf2Async`, `seipdV1Decrypt`, and an RSA key's `sign`
+and `decrypt`. The work is done natively in
 slices of about 20 ms, one each time round the main loop, between the
 screen being drawn and keys being read: the app stays responsive (it
 can show a progress bar, from `onProgress`; the longest wait between
@@ -552,10 +558,50 @@ dropped and wiped, their promises never settled; when the watchdog
 stops one of its scripts, they are rejected with an `InternalError`.
 The last argument may be `{ onProgress }`: a function called after each
 slice that moved the work on, with a fraction (more than 0, at most 1).
-`pbkdf2` stays synchronous (like the hashes, Ed25519, verification, AES
-and importing keys, which are fast at the sizes apps use).
+`pbkdf2` stays synchronous, and so do Ed25519, X25519, verification,
+key wrap, AES-CFB (at most 2 MiB a call) and importing keys, which are
+fast at the sizes apps use; and the hashes (below).
 
-Each group (RIPEMD-160, PBKDF2, secp256k1, Ed25519, RSA, AES, S2K)
+<a id="hashing-big-data"></a>**Hashing big data.** The hashes
+(`sha256(data)`, ..., `hmac`, and each `update` of `createHash`) take
+any amount, and block while they hash: on a Pi Zero, about 16 MB/s
+with SHA-1 and SHA-256, 9 MB/s with SHA-384 and SHA-512 (a 4 MB file:
+a quarter and half a second). For more than a megabyte or two, feed a
+hash in pieces of 1 to 2 MiB and let the main loop run between them,
+so the screen stays alive and the watchdog (10 s per call) is never
+near:
+
+```js
+async function sha256Of(bytes, onProgress) {
+  const h = crypto.createHash("SHA-256"), piece = 1 << 20;
+  for (let at = 0; at < bytes.length; at += piece) {
+    h.update(bytes.subarray(at, at + piece));
+    onProgress?.(Math.min(1, (at + piece) / bytes.length));
+    await new Promise((resolve) => setTimeout(resolve, 0));	// let the screen be drawn
+  }
+  return h.digest();
+}
+```
+
+**Decrypting OpenPGP messages** (RFC 9580; what GnuPG makes with its
+usual settings): the app parses the packets; the public-key encrypted
+session key packet gives the session key, with an RSA key's `decrypt`
+(implicit rejection: always some bytes) or, for ECDH, with
+`x25519PrivateKey`, the KDF and `aesKeyUnwrap`; the app checks the
+session key's algorithm and checksum, then `seipdV1Decrypt` decrypts
+the message and checks its integrity before anything of it is given.
+**The session key does pass through JavaScript** (the app reads its
+algorithm octet and checksum), as the private key does on import:
+wipe it (`.fill(0)`) once used. Keeping it native would need the
+session key packet parsed natively too (its RSA and ECDH forms,
+the KDF, the checksum), returning a handle that `seipdV1Decrypt`
+takes instead of bytes. GnuPG 2.4 encrypts with OCB (its AEAD
+packet, tag 20) to keys that announce AEAD, as its own new keys do:
+that isn't there yet, nor decompression (most messages are
+compressed).
+
+Each group (RIPEMD-160, PBKDF2, secp256k1, Ed25519, X25519, RSA, AES,
+S2K, SEIPD)
 checks itself against known answers before its first use; if that
 fails, it throws an `InternalError` until reboot.
 

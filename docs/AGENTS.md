@@ -97,7 +97,9 @@ hashing: `crypto.sha1`, `sha224`, `sha256`, `sha384`, `sha512` (or in pieces:
 `createHash`), `ripemd160`, `hash160`, `hmac(hash, key, data)`, `pbkdf2`,
 secp256k1 (`publicKey`, `ecdsaSign`, `schnorrSign`, the BIP-32 and Taproot
 tweaks...), and OpenPGP's primitives (`ed25519PrivateKey`, `ed25519Verify`,
-`rsaPrivateKey`, `rsaVerify`, `aesCfbEncrypt`/`Decrypt`, `openpgpS2k`), all
+`x25519PrivateKey`, `rsaPrivateKey`, `rsaVerify`, `aesCfbEncrypt`/`Decrypt`,
+`aesKeyWrap`/`Unwrap`, `openpgpS2k`, `seipdV1Decrypt`; the slow ones return
+promises), all
 native: don't write hashes, ciphers or curve and bignum arithmetic in
 JavaScript, and don't vendor JS crypto libraries. To keep data while the person uses
 other apps (until power-off; never on the card): `gk:session`'s

@@ -20,7 +20,7 @@ from the top of the tree. Needs cc and Python's cryptography.
 
 SPDX-License-Identifier: GPL-3.0-or-later
 """
-import argparse, glob, hashlib, json, os, random, re, subprocess, sys, tempfile
+import argparse, glob, hashlib, hmac, json, os, random, re, subprocess, sys, tempfile
 
 from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
@@ -113,7 +113,8 @@ def build():
     mbed_src = re.search(r"MBEDTLS_SOURCES\s*=\s*((?:[^\n]*\\\n)*[^\n]*)",
                          open("lib/mbedtls/mbedtls.mk").read()).group(1).replace("\\", " ").split()
     src = ["tests/native/test_pgp.c"] + [f"src/crypto/{f}.c" for f in
-                                          ("sha1", "sha256", "sha512", "hmac", "s2k", "aes", "ed25519", "rsa", "wipe")]
+                                          ("sha1", "sha256", "sha512", "hmac", "s2k", "aes", "ed25519", "rsa", "x25519",
+                                           "seipd", "wipe")]
     src += [mbed + f for f in mbed_src]
     src += ["third_party/monocypher/src/monocypher.c", "third_party/monocypher/src/optional/monocypher-ed25519.c"]
     subprocess.run(["cc", "-O2", "-Wall", "-I", "src/crypto", "-I", "lib/mbedtls", "-I", "third_party/mbedtls/include",
@@ -297,6 +298,184 @@ def check_rsa(native, rnd, cases, wy_dirs):
         check(native("rsaverify", "SHA-256", h(bytes(32)), sig, nums[0], nums[1]) == want, f"RSA-{bits} verify")
 
 
+# --- RSA decryption with implicit rejection: an independent reference -----
+# (draft-irtf-cfrg-rsa-guidance-10, 7.1 and 7.2), itself checked against
+# the draft's own vectors below
+
+def irprf(kdk, label, length):
+    out, i = b"", 0
+    while len(out) < length:
+        out += hmac.new(kdk, i.to_bytes(2, "big") + label + (length * 8).to_bytes(2, "big"), hashlib.sha256).digest()
+        i += 1
+    return out[:length]
+
+
+def rsa_decrypt_ref(n, d, c):
+    k = (n.bit_length() + 7) // 8
+    em = pow(int.from_bytes(c, "big"), d, n).to_bytes(k, "big")
+    kdk = hmac.new(hashlib.sha256(d.to_bytes(k, "big")).digest(), c, hashlib.sha256).digest()
+    cl = irprf(kdk, b"length", 256)
+    am = irprf(kdk, b"message", k)
+    mx = k - 11
+    mask = (1 << mx.bit_length()) - 1
+    al = 0
+    for i in range(0, 256, 2):
+        cand = int.from_bytes(cl[i:i + 2], "big") & mask
+        if cand <= mx:
+            al = cand
+    good = em[0] == 0 and em[1] == 2
+    sep = em.find(b"\0", 2)
+    good = good and sep >= 10
+    if good:
+        return em[sep + 1:]
+    return am[k - al:] if al else b""
+
+
+def check_rsa_decrypt(native, rnd, cases, wy_dirs):
+    # the draft's vectors: the reference, then ours
+    n_draft = 0
+    for key in json.load(open("tests/native/rsa_implicit_rejection.json")):
+        k = key["key"]
+        n, e, d, p, q = (int(k[x], 16) for x in ("n", "e", "d", "p", "q"))
+        for case in key["cases"]:
+            c = bytes.fromhex(case["c"])
+            check(rsa_decrypt_ref(n, d, c).hex() == case["m"], f"reference: draft {key['name']} {case['name']}")
+            got = native("rsadecrypt", h(c), h(i2b(n)), h(i2b(e)), h(i2b(d)), h(i2b(p)), h(i2b(q)))
+            check(got == (case["m"] or "-"), f"draft {key['name']} {case['name']}")
+            n_draft += 1
+    print(f"  implicit rejection, draft-irtf-cfrg-rsa-guidance-10: {n_draft} cases")
+
+    # Wycheproof: valid ones decrypt to msg, invalid ones (bad padding) to
+    # the reference's synthetic message; bad formats (length, c >= n) fail
+    counts = {}
+    for dr in wy_dirs:
+        for f in sorted(glob.glob(os.path.join(dr, "rsa_pkcs1_*_test.json"))):
+            if "sig_gen" in f:
+                continue
+            for g in json.load(open(f))["testGroups"]:
+                k = g["privateKey"]
+                n, e, d, p, q = (int(k[x], 16) for x in ("modulus", "publicExponent", "privateExponent",
+                                                           "prime1", "prime2"))
+                nb = (n.bit_length() + 7) // 8
+                for t in g["tests"]:
+                    c = bytes.fromhex(t["ct"])
+                    got = native("rsadecrypt", h(c), h(i2b(n)), h(i2b(e)), h(i2b(d)), h(i2b(p)), h(i2b(q)))
+                    if len(c) != nb or int.from_bytes(c, "big") >= n:
+                        want = "error -7"
+                    elif t["result"] == "valid":
+                        want = t["msg"] or "-"
+                    else:
+                        want = rsa_decrypt_ref(n, d, c).hex() or "-"
+                    key = (os.path.basename(f)[10:14], t["result"], got == want)
+                    counts[key] = counts.get(key, 0) + 1
+                    check(got == want, f"Wycheproof {os.path.basename(f)} {t['tcId']} {t['flags']}")
+    for k in sorted(counts):
+        print("  Wycheproof RSA decrypt", k, counts[k])
+
+    # random keys and messages (OpenSSL encrypts), and bad paddings
+    for c_ in range(cases):
+        bits = rnd.choice((2048, 3072, 4096))
+        key = rsa.generate_private_key(65537, bits)
+        pn = key.private_numbers()
+        n, d = pn.public_numbers.n, pn.d
+        nums = [h(i2b(x)) for x in (n, 65537, d, pn.p, pn.q)]
+        k = (bits + 7) // 8
+        m = rnd.randbytes(rnd.choice((0, 1, 16, 35, k - 11)))
+        c = key.public_key().encrypt(m, padding.PKCS1v15())
+        check(native("rsadecrypt", h(c), *nums) == (m.hex() or "-"), f"RSA-{bits} decrypt {len(m)}")
+        # an encoded message with a fault: decrypts to the reference's
+        for fault in ("first", "second", "short", "nosep"):
+            em = bytearray(b"\0\2" + bytes(rnd.randrange(1, 256) for _ in range(k - 3 - 16)) + b"\0" + rnd.randbytes(16))
+            if fault == "first": em[0] = 1
+            if fault == "second": em[1] = 1
+            if fault == "short": em[5] = 0
+            if fault == "nosep": em[k - 17] = 7
+            cb = pow(int.from_bytes(em, "big"), 65537, n).to_bytes(k, "big")
+            want = rsa_decrypt_ref(n, d, cb).hex() or "-"
+            check(native("rsadecrypt", h(cb), *nums) == want, f"RSA-{bits} bad padding ({fault})")
+        check(native("rsadecrypt", h(c[1:]), *nums) == "error -7", "RSA decrypt short ciphertext")
+        check(native("rsadecrypt", h(i2b(n)), *nums) == "error -7", "RSA decrypt c = n")
+
+
+def check_x25519(native, rnd, cases, wy_dirs):
+    from cryptography.hazmat.primitives.asymmetric import x25519
+    counts = {}
+    for dr in wy_dirs:
+        for f in sorted(glob.glob(os.path.join(dr, "x25519_test.json"))):
+            for g in json.load(open(f))["testGroups"]:
+                for t in g["tests"]:
+                    got = native("x25519", t["private"], t["public"]).split(" ")[1]
+                    zero = t["shared"] == "00" * 32
+                    want = "error" if zero else t["shared"]
+                    counts[(t["result"], zero, got == want)] = counts.get((t["result"], zero, got == want), 0) + 1
+                    check(got == want, f"Wycheproof X25519 {t['tcId']} {t['flags']}")
+    print("  Wycheproof X25519 (result, zero shared, ours right):", counts)
+    for c_ in range(cases):
+        a, b = rnd.randbytes(32), rnd.randbytes(32)
+        ka = x25519.X25519PrivateKey.from_private_bytes(a)
+        kb = x25519.X25519PrivateKey.from_private_bytes(b)
+        pa = ka.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        pb = kb.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        check(native("x25519", h(a), h(pb)) == pa.hex() + " " + ka.exchange(kb.public_key()).hex(), "X25519")
+
+
+def check_wrap(native, rnd, cases, wy_dirs):
+    from cryptography.hazmat.primitives.keywrap import aes_key_wrap
+    counts = {}
+    for dr in wy_dirs:
+        for f in sorted(glob.glob(os.path.join(dr, "aes_wrap_test.json"))):
+            for g in json.load(open(f))["testGroups"]:
+                for t in g["tests"]:
+                    got = native("unwrap", t["key"], t["ct"] or "-")
+                    if t["result"] == "valid":
+                        check(got == t["msg"], f"Wycheproof key wrap {t['tcId']}")
+                        check(native("wrap", t["key"], t["msg"]) == t["ct"], f"Wycheproof key wrap {t['tcId']} wrap")
+                    elif t["result"] == "invalid":
+                        check(got.startswith("error"), f"Wycheproof key wrap {t['tcId']} {t['flags']}")
+                    counts[(t["result"], got.startswith("error"))] = counts.get((t["result"], got.startswith("error")), 0) + 1
+    print("  Wycheproof AES key wrap (result, refused):", counts)
+    for c_ in range(cases):
+        kek, key = rnd.randbytes(rnd.choice((16, 24, 32))), rnd.randbytes(8 * rnd.randrange(2, 9))
+        w = aes_key_wrap(kek, key)
+        check(native("wrap", h(kek), h(key)) == w.hex(), "key wrap")
+        check(native("unwrap", h(kek), h(w)) == key.hex(), "key unwrap")
+        bad = bytearray(w)
+        bad[rnd.randrange(len(bad))] ^= 1 << rnd.randrange(8)
+        check(native("unwrap", h(kek), h(bad)) == "error -1", "key unwrap corrupted")
+    check(native("unwrap", h(bytes(16)), h(bytes(20))) == "error -4", "key unwrap 20 bytes")
+    check(native("unwrap", h(bytes(16)), h(bytes(16))) == "error -4", "key unwrap 16 bytes")
+
+
+def seipd_encrypt(key, prefix, plain, mdc_ok=True):
+    body = prefix + prefix[-2:] + plain + b"\xd3\x14"
+    digest = hashlib.sha1(body).digest()
+    if not mdc_ok:
+        digest = bytes([digest[0] ^ 1]) + digest[1:]
+    return Cipher(algorithms.AES(key), modes.CFB(bytes(16))).encryptor().update(body + digest)
+
+
+def check_seipd(native, rnd, cases):
+    for c_ in range(cases):
+        key = rnd.randbytes(rnd.choice((16, 24, 32)))
+        plain = rnd.randbytes(rnd.choice((0, 1, 15, 16, 17, rnd.randrange(3000))))
+        c = seipd_encrypt(key, rnd.randbytes(16), plain)
+        budget = rnd.choice((1, 7, 16, 100, 4096))
+        check(native("seipd", h(key), h(c), budget) == (plain.hex() or "-"), f"SEIPD {len(key)} {len(plain)}")
+        bad = bytearray(c)
+        bad[rnd.randrange(len(bad))] ^= 1 << rnd.randrange(8)
+        check(native("seipd", h(key), h(bad), budget) == "error -1", "SEIPD corrupted")
+        check(native("seipd", h(key), h(c[:-1]), budget) == ("error -1" if len(c) > 40 else "error -4"),
+              "SEIPD truncated")
+        check(native("seipd", h(key), h(c + b"\0"), budget) == "error -1", "SEIPD extended")
+        other = bytearray(key)
+        other[0] ^= 1
+        check(native("seipd", h(other), h(c), budget) == "error -1", "SEIPD another key")
+        check(native("seipd", h(key), h(seipd_encrypt(key, rnd.randbytes(16), plain, False)), budget) == "error -1",
+              "SEIPD wrong MDC")
+    check(native("seipd", h(bytes(16)), h(bytes(39)), 16) == "error -4", "SEIPD too short")
+    check(native("seipd", h(bytes(20)), h(bytes(40)), 16) == "error -2", "SEIPD 20-byte key")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=200)
@@ -313,6 +492,14 @@ def main():
     print("Ed25519 done")
     check_rsa(native, rnd, max(4, args.cases // 20), ["tests/native/wycheproof"] + args.wycheproof)
     print("RSA done")
+    check_rsa_decrypt(native, rnd, max(3, args.cases // 30), ["tests/native/wycheproof"] + args.wycheproof)
+    print("RSA decryption done")
+    check_x25519(native, rnd, args.cases, ["tests/native/wycheproof"] + args.wycheproof)
+    print("X25519 done")
+    check_wrap(native, rnd, args.cases, ["tests/native/wycheproof"] + args.wycheproof)
+    print("AES key wrap done")
+    check_seipd(native, rnd, args.cases)
+    print("SEIPD v1 done")
     print(f"check_pgp: {len(failures)} failures")
     sys.exit(1 if failures else 0)
 

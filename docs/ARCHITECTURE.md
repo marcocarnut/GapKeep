@@ -204,6 +204,17 @@ verifies (1024 to 4096 bits; signing keys from 2048) by encoding and
 comparing. Imported keys are checked for consistency (n = pq,
 de = 1 mod p-1 and q-1, OpenPGP's u) and their CRT values derived, in
 memory from Circle's heap (zeroed when freed), at most 64 at a time.
+Decryption: RSAES-PKCS1-v1_5 (`gk_rsa_decrypt*`) is the same private
+operation, then the padding is checked with implicit rejection
+(draft-irtf-cfrg-rsa-guidance-10, 7.2, as written: on bad padding a
+message derived from d and the ciphertext, every check made and both
+candidates read, so nothing tells them apart; checked against the draft's
+vectors). X25519 (`x25519.*`) is Monocypher's, refusing an all-zero
+shared secret. AES key wrap (RFC 3394) is written in `aes.c` over Mbed
+TLS's AES block. SEIPD v1 (`seipd.*`, RFC 9580, 5.13.1) decrypts a copy
+of the message in steps, hashing as it goes, and gives the plaintext only
+if the MDC matches, the prefix's quick-check bytes ignored; there is no
+code for the old unprotected packet.
 OpenPGP's S2K (`s2k.*`, RFC 9580) is written here, over `gk_hash_t`, and
 hashes the repeated salt and passphrase from a 1 KiB buffer, in steps (a
 job, below). Both
@@ -309,7 +320,8 @@ and the AES-CFB functions every 64 KiB, and throw the same uncatchable
 
 **Long native work** (`runtime/jobs.*`): what can take more than a quarter
 of a second on a Pi Zero (OpenPGP's S2K, RSA signatures; later Argon2id,
-decompression) is a *job*, and its call returns a promise. A job is native
+decompression) is a *job*, and its call returns a promise (S2K, PBKDF2,
+RSA signatures and decryption, SEIPD v1 decryption). A job is native
 state with a step function: the app host's `Update()` gives the first job
 of the running app one slice of about 20 ms per pass of the main loop,
 after LVGL has read input and drawn, so the screen and the keyboard stay

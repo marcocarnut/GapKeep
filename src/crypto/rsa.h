@@ -28,7 +28,8 @@ extern "C" {
 #define GK_RSA_NO_MEMORY	-3
 #define GK_RSA_BAD_HASH		-4	/* not a hash for this, or the digest's size is wrong */
 #define GK_RSA_RNG		-5	/* the random generator failed (blinding) */
-#define GK_RSA_FAULT		-6	/* the signature failed its check: none given */
+#define GK_RSA_FAULT		-6	/* the result failed its check: none given */
+#define GK_RSA_BAD_CIPHERTEXT	-7	/* not as long as n, or not below n */
 
 typedef struct gk_rsa_key gk_rsa_key_t;
 
@@ -68,15 +69,29 @@ int gk_rsa_sign (gk_rsa_key_t *key, const gk_hash_t *hash, const uint8_t *digest
    must stay alive until the end, and be signed with by one job at a time
    (its blinding values change at each signature). begin: GK_RSA_OK,
    GK_RSA_BAD_HASH or GK_RSA_NO_MEMORY (then *job is 0). step: 1, more to
-   do; GK_RSA_OK, done (gk_rsa_sign_result); GK_RSA_RNG or GK_RSA_FAULT,
+   do; GK_RSA_OK, done (gk_rsa_job_result); GK_RSA_RNG or GK_RSA_FAULT,
    failed (no signature). end: wipes and frees (0: nothing). */
-typedef struct gk_rsa_sign_job gk_rsa_sign_job_t;
-int gk_rsa_sign_begin (gk_rsa_sign_job_t **job, gk_rsa_key_t *key, const gk_hash_t *hash,
+typedef struct gk_rsa_job gk_rsa_job_t;
+/* (gk_rsa_job_step, _progress, _result and _end serve decryption too) */
+int gk_rsa_sign_begin (gk_rsa_job_t **job, gk_rsa_key_t *key, const gk_hash_t *hash,
 		       const uint8_t *digest, size_t dlen);
-int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rng, void *rng_arg);
-double gk_rsa_sign_progress (const gk_rsa_sign_job_t *job);
-const uint8_t *gk_rsa_sign_result (const gk_rsa_sign_job_t *job, size_t *len);
-void gk_rsa_sign_end (gk_rsa_sign_job_t *job);
+int gk_rsa_job_step (gk_rsa_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rng, void *rng_arg);
+double gk_rsa_job_progress (const gk_rsa_job_t *job);
+const uint8_t *gk_rsa_job_result (const gk_rsa_job_t *job, size_t *len);
+void gk_rsa_job_end (gk_rsa_job_t *job);
+
+/* RSAES-PKCS1-v1_5 decryption (RFC 8017, 7.2.2) with implicit rejection
+   (draft-irtf-cfrg-rsa-guidance-10, 7.2): c exactly as long as n, and
+   below n, else GK_RSA_BAD_CIPHERTEXT (public facts, said at once). Bad
+   padding is no error: the result is then a message derived from d and c,
+   deterministic and unpredictable without the key, of a length from 0 to
+   k - 11; the caller can't tell, and must check what it gets (OpenPGP's
+   session key checksum, then the message's integrity). The private
+   operation is the signature's (steps, blinding, checks). out: up to
+   k - 11 bytes. */
+int gk_rsa_decrypt (gk_rsa_key_t *key, const uint8_t *c, size_t clen, uint8_t *out, size_t *outlen,
+		    gk_rsa_rng_t rng, void *rng_arg);
+int gk_rsa_decrypt_begin (gk_rsa_job_t **job, gk_rsa_key_t *key, const uint8_t *c, size_t clen);
 
 /* 1: sig (exactly as long as n) is a valid signature of digest under
    (n, e), with SHA-1 too; 0: not, or the key is not a 1024- to 4096-bit
@@ -88,8 +103,9 @@ int gk_rsa_verify (const uint8_t *n, size_t nlen, const uint8_t *e, size_t elen,
 
 /* A fixed 2048-bit key: import, a SHA-256 signature compared with a known
    answer (PKCS #1 v1.5 is deterministic), verified, and failing when the
-   digest changes; a known SHA-1 signature verified; an inconsistent key
-   refused. 0: OK. */
+   digest changes; a known SHA-1 signature verified; a known ciphertext
+   decrypted, one with bad padding giving its known synthetic message; an
+   inconsistent key refused. 0: OK. */
 int gk_rsa_selftest (gk_rsa_rng_t rng, void *rng_arg);
 
 #ifdef __cplusplus

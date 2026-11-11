@@ -60,6 +60,7 @@ const cryptoObjects = {
   Hash: crypto.createHash("SHA-256"),
   Ed25519PrivateKey: crypto.ed25519PrivateKey(new Uint8Array(32)),
   RsaPrivateKey: crypto.rsaPrivateKey(rsaKey),
+  X25519PrivateKey: crypto.x25519PrivateKey(new Uint8Array(32)),
 };
 const cryptoMembers = {};
 for (const [name, o] of Object.entries(cryptoObjects)) {

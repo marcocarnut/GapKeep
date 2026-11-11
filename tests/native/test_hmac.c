@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "hmac.h"
 #include "ripemd160.h"
 #include "pbkdf2.h"
@@ -76,6 +77,12 @@ int main (int argc, char **argv)
 			size_t dl = 1 + (size_t) rand () % 150, pl = kl % 150, sl = ml % 80;
 			uint8_t dk[150];
 			gk_pbkdf2 (h, k, pl, m, sl, it, dk, dl);
+			/* the same in steps of 1 to 7 iterations */
+			gk_pbkdf2_job_t job;
+			if (gk_pbkdf2_begin (&job, h, k, pl, m, sl, it, dl) != 0) return 1;
+			while (gk_pbkdf2_step (&job, 1 + (uint32_t) (c % 7))) ;
+			if (memcmp (job.out, dk, dl) != 0) { printf ("PBKDF2 in steps differs\n"); return 1; }
+			gk_pbkdf2_end (&job);
 			printf ("PBKDF2 %s ", h->name);
 			hex (k, pl); printf (" "); hex (m, sl); printf (" %u ", (unsigned) it); hex (dk, dl);
 			printf ("\n");
