@@ -159,8 +159,10 @@ static boolean GetInt (JSContext *ctx, JSValueConst v, const char *pWhat, unsign
 		       unsigned *pValue, const char *pFunction)
 {
 	double f;
-	if (!JS_IsNumber (v) || JS_ToFloat64 (ctx, &f, v) || f != (double) (long long) f
-	    || f < 0 || f > nMax)
+	// in range before the cast: a double outside long long's (Infinity) is
+	// undefined behaviour; NaN fails every comparison
+	if (!JS_IsNumber (v) || JS_ToFloat64 (ctx, &f, v) || !(f >= 0 && f <= nMax)
+	    || f != (double) (long long) f)
 	{
 		JS_ThrowRangeError (ctx, "%s: %s must be a whole number from 0 to %u",
 				    pFunction, pWhat, nMax);
