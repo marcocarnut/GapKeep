@@ -31,11 +31,12 @@ never written: once the launcher is up it can be removed.
    (GapKeep) to 0x8000 on the ARM core.
 3. Circle's startup code sets up the stack (1 MB), MMU and caches, and calls
    `main()` → `CKernel` (`src/kernel.cpp`).
-4. The kernel brings up the screen, the serial log, interrupts, the timer and
-   USB (keyboard and mouse are found by plug-and-play), reads the apps,
-   `gapkeep.txt` and the data folders the apps list from the SD card
-   (`CAppStore`) and unmounts it, then brings up LVGL, the keyboard input
-   device and the app host.
+4. The kernel brings up the screen, the serial log, interrupts and the
+   timer, reads the apps, `gapkeep.txt` and the data folders the apps list
+   from the SD card (`CAppStore`) and unmounts it, brings up USB (keyboard
+   and mouse are found by plug-and-play; after the apps, so that devices
+   they list are claimed for them from the start), then LVGL, the keyboard
+   input device and the app host.
 5. The app host starts the launcher.
 
 ## Main loop
@@ -44,11 +45,12 @@ Everything runs in one loop on one core; there are no threads:
 
 ```
 loop:
-    USB plug-and-play     (new keyboard or mouse?)
+    USB plug-and-play     (new keyboard, mouse, or device claimed for apps?)
     keyboard LEDs
     LVGL                  (read input, run timers, redraw)
       └─ input events and JS timers call into the running app's JS
-    app host              (promise jobs, deferred widget deletion, app switch)
+    app host              (USB devices' events and one control transfer (gk:usb),
+                           promise jobs, deferred widget deletion, app switch)
 ```
 
 USB interrupts only queue key presses (`CKeyboardIndev`) and set the Home
@@ -134,6 +136,14 @@ itself is JavaScript, `src/runtime/i18n.js`, embedded by
 `gk:i18n-native`, can be imported by it alone. The launcher's catalogs are
 the system's: they translate the module's own messages.
 
+USB devices claimed for apps (`usb.cpp`, `gk:usb` in `js_usb.cpp`): a
+device whose ids an available app's manifest lists is taken whole by
+`src/usbclaim.cpp` (on the Pi) when it turns up; `usb.cpp` reads its
+descriptors (`usbdesc.c`), keeps the devices plugged in, and does an app's
+control transfers, one per pass of the main loop, each waiting for the
+device as Circle's control transfers do (they can't be asynchronous on the
+Zero's host controller) and settling a promise. See [API.md](API.md#gkusb).
+
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for
@@ -208,6 +218,7 @@ for them to leave, other than what a person reads off the screen.
 | Surface | Notes |
 | --- | --- |
 | USB host controller + HID parsing (Circle) | The only input from outside. Only the hub, keyboard (boot protocol; with Circle's variant for the 8BitDo Retro Keyboard, picked by its vendor and product ids) and mouse drivers are in the image; every other class driver is left out at build time (`EXCLUDE_USB_*` in `tools/build.sh`), including the generic-HID path and its report descriptor parser. The mouse driver keeps its own, smaller one: it uses the report protocol (for the wheel), so it parses the report descriptor the mouse sends. That parser is bounded, every length, index and offset checked, and a malformed descriptor gets the mouse refused (`patches/circle/0009`); it is fuzzed under AddressSanitizer and UBSan against random, mutated and crafted descriptors (`tools/fuzz_usbmouse.sh`). IN transfers receive whole packets into a bounce buffer, as Linux does, so that a device sending more than was asked for cannot have the controller write past the buffer (`0008`; on the rig, without it, a keyboard declaring 1024-byte packets had 1016 bytes written past its 8-byte report buffer, on every report); keyboards and mice declaring packets over 64 bytes are refused. Control transfers time out after 3 s (`0003`); a device whose control transfers time out twice gets no more until it is replugged, and long timeouts are budgeted across devices (3, then one a minute; beyond that 250 ms); keyboard LED requests get 100 ms, and none after a failure. So a device that never answers, or keeps reconnecting, cannot hang the system nor freeze it for long (`0010`). |
+| USB devices claimed for apps (`gk:usb`) | One more path, for the devices an app lists by vendor and product id in its manifest (`"usb"`), and only while an available app lists them: [APPS.md](APPS.md#usb-devices). Circle's device factory asks GapKeep first about each new device (`patches/circle/0014`); a listed one is **claimed whole** by `src/usbclaim.cpp`, and none of its interfaces gets another driver, so a keyboard or mouse in it is ignored and can't type into the system. What is reached: endpoint 0 only, by control transfers of at most 64 bytes, through Circle's (bounded by `0003`, `0008`, `0010`: what a device sends beyond what was asked for stays in the bounce buffer); no interrupt, bulk or isochronous endpoint is opened. Apps may send class and vendor requests, to the device or one of its interfaces, and standard requests that only read (GET_STATUS, GET_DESCRIPTOR, GET_CONFIGURATION, GET_INTERFACE); never SET_ADDRESS, SET_CONFIGURATION, SET_INTERFACE or SET_FEATURE. Each stage gets 1 s; after two timeouts a device gets no more transfers until replugged; at most 4 devices and 16 waiting transfers an app. What GapKeep parses of what the device sends is its device, configuration and string descriptors (`src/runtime/usbdesc.c`: every length checked, names turned to text that may be shown, without control, bidi or invisible characters), fuzzed under AddressSanitizer and UBSan (`tools/fuzz_usbdesc.sh`); everything else goes to the app as bytes, unparsed. The log has ids, names, lengths and request numbers, never the data. The simulator reaches devices over USB/IP instead (`sim/src/usbip.cpp`), with the same code above the port (`src/runtime/usb.cpp`). |
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |

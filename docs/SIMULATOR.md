@@ -43,6 +43,8 @@ on stdin, one per line:
 | `language <tag>` | The language of the apps started from now on (`pt-BR`, `qps`, `en`), as the Settings app sets it. |
 | `keyboard <layout>` | The keyboard layout (`us`, `br-abnt2`), as `keyboard` in `gapkeep.txt` or the Settings app sets it. |
 | `eject` | Take the SD card out: its folder is no longer read (GapKeep must not need it after boot; `tests/card_removal.txt`). |
+| `usbip attach <host>:<port> [<busid>]` | Plug in the USB device a USB/IP server offers: see [USB devices](#usb-devices). |
+| `usbip detach [<busid>]` | Unplug it, for good (none given: every one). |
 | `quit` | Exit. |
 
 Answers to commands start with `#`; everything else on stdout is the log,
@@ -52,7 +54,7 @@ formatted as on the device's serial port (`00:00:01.23 app:hello: ...`).
 `DIR/apps`, data folders in `DIR/data`), `--builtin DIR` (below), `--app ID`, `--size WxH`, `--lang TAG` (the
 language, over the card's `gapkeep.txt`; `qps` is the pseudo-language of
 [APPS.md](APPS.md#languages)),
-`--for SECONDS` and `--shot FILE`.
+`--usbip HOST:PORT[/BUSID]` (as `usbip attach`, from the start), `--for SECONDS` and `--shot FILE`.
 
 ## The camera
 
@@ -70,6 +72,46 @@ The simulator has a camera that films what you tell it, for apps with
 The log says what changed (`camera: a QR code of 14 bytes`), never what a
 code holds. Scenarios use the same commands; test kernels in QEMU and on the
 rig take them too.
+
+## USB devices
+
+Apps that use [`gk:usb`](API.md#gkusb) need a device. The simulator takes
+them over [USB/IP](https://docs.kernel.org/usb/usbip_protocol.html), the
+protocol Linux uses to share USB devices over a network: it is a USB/IP
+client (`sim/src/usbip.cpp`), and a device a server offers is a device
+plugged in. Any server will do: Linux's `usbipd` sharing a real device, or
+a program that simulates one.
+
+```sh
+tools/gksim --usbip 127.0.0.1:3240 apps/myapp           # the first device it offers
+tools/gksim --usbip 127.0.0.1:3240/1-1.4 apps/myapp     # that one (its bus id)
+```
+
+or, while it runs, `usbip attach 127.0.0.1:3240 1-1.4` and `usbip
+detach`. It is claimed as on the Pi, if an app lists it (otherwise it
+stays imported, unused: the simulator has no other driver), and gk:usb
+reads its descriptors and serves the app's control transfers, with the
+same checks, limits and timeouts. Only control transfers on endpoint 0 go
+over USB/IP; the server has already set the device's address.
+
+An attachment is a cable that stays plugged in. When the server drops the
+device (it was unplugged, or it reset and enumerates again), the device is
+detached, and the import is tried again every 300 ms until it is offered
+again, maybe as another device under the same bus id; `usbip detach`
+pulls the cable.
+
+For tests, `tests/usb/usbip_stub.py` is a small USB/IP server with a fake
+device (1209:0001: a HID keyboard with a feature report, a vendor
+interface, requests that stall, never answer, or answer too much).
+Scenarios start it with `usbip stub`, and `usbip unplug` makes it drop the
+device (`tests/usb.txt`). `tests/usb_usbip_device.txt` probes a real or
+simulated DigiMacro (16c0:27db) at `GK_TEST_USBIP` (default
+`127.0.0.1:3241`); `tools/run_sim_tests.sh` skips it when nothing answers
+there.
+
+The browser IDE has no USB devices: a web page can't open TCP
+connections, so its build has no USB/IP client, and `gk:usb.list()` is
+always empty there.
 
 ## Working on the launcher
 
@@ -125,7 +167,8 @@ before the first screen. The device logs the work too, without the estimate.
 - **Speed**, above.
 - **No serial port**: `send` in scenarios fails; test-build serial commands
   (`#shot`, `#crash`) are unavailable.
-- **No USB events**: the keyboard and mouse are always there.
+- **USB**: the keyboard and mouse are always there; other devices come
+  over USB/IP ([USB devices](#usb-devices)), with control transfers only.
 - **The clock** runs on the host's timer but otherwise as on the device:
   `Date` counts from 1970 until the Clock app sets it, and `gapkeep.txt` on
   the card is read at boot ([CLOCK.md](CLOCK.md)).
