@@ -1,0 +1,98 @@
+# Sneakernet (apps/sneakernet), from the keyboard only: the menu, how to
+# play, a mistyped level code refused, then level 1 of the code 0800-21YS
+# played to the end (all three shares, then the vault), the next level, a
+# pause, and the best score on the menu. Then the same level again, into
+# the radio with a share in hand (it leaks), and a level lost by waiting.
+#
+# The routes were found with lib/level.js under Node: a seed makes the same
+# level everywhere. The radio is over 50 s behind the first route even at
+# 0.6 s a move. Timing doesn't matter to the rest: the access point's own
+# tile is always in radio, and 0800-0QV2 is lost at 7.8 s without a move.
+expect Keyboard attached 60
+expect launcher ready 60
+tile sneakernet
+expect sneakernet: ready
+shot 01-menu
+# How to play, and back with Escape
+key down down
+key ret
+expect sneakernet: help
+shot 02-help
+mark
+key esc
+expect sneakernet: menu
+# a level code with a typo is refused
+key down
+key ret
+type 0800-21YT
+key ret
+expect sneakernet: bad level code
+shot 03-bad-code
+key backspace backspace backspace backspace backspace backspace backspace backspace backspace
+type 0800-21ys
+key ret
+expect sneakernet: level 1 start, code 0800-21YS, 2 of 3 shares, 1 access points
+shot 04-level
+key ret
+wait 0.5
+key right right right right up up right right down down right right right right up up left left up up up up right right right right right right up up
+expect sneakernet: share picked up, carrying 1, 2 needed
+key down down right right right right down down right right right right
+expect sneakernet: share picked up, carrying 2, 2 needed
+shot 05-unlocked
+key up up right right right right up up up up up up left left up up up up up up left left left left left left left left down down left left down down
+expect sneakernet: share picked up, carrying 3, 2 needed
+key left left up up up up right right
+expect sneakernet: level 1 cleared, 3 of 3 shares, \d+ s, \d+ points
+shot 06-cleared
+# on to level 2: 2 of 4 shares, two access points
+key ret
+expect sneakernet: level 2 start, code \w{4}-\w{4}, 2 of 4 shares, 2 access points
+key ret
+wait 4
+shot 07-level2
+key esc
+expect sneakernet: paused
+shot 08-paused
+# Main menu (Resume, Restart level, Main menu): the best score of this power-on
+key tab tab
+mark
+key ret
+expect sneakernet: menu
+shot 09-best
+# 0800-21YS again: the first share, then on to the access point. In its
+# radio, the courier leaks the share
+key down
+key ret
+type 0800-21YS
+key ret
+expect sneakernet: level 1 start, code 0800-21YS
+key ret
+wait 0.5
+key right right right right up up right right down down right right right right up up left left up up up up right right right right right right up up
+expect sneakernet: share picked up, carrying 1, 2 needed
+key down down left left left left left left down down down down right right down down left left left left up up left left down down left left left left up up right right up up up up left left up up right right right right up up left left up up left left up up up up up up right right down down down down right right right right up up up up right right right right down down
+expect sneakernet: share leaked from the courier, carrying 0 10
+shot 10-leaked
+key esc
+expect sneakernet: paused
+key tab tab
+mark
+key ret
+expect sneakernet: menu
+# 0800-0QV2: the access point is near two of the shares. Don't move: the
+# radio takes both, one share is left of the 2 needed, and the level is lost
+key down
+key ret
+type 0800-0QV2
+key ret
+expect sneakernet: level 1 start, code 0800-0QV2
+key ret
+expect sneakernet: share leaked on the floor, 2 left there 15
+expect sneakernet: share leaked on the floor, 1 left there 15
+expect sneakernet: level 1 lost, 0 carried, 1 on the floor, score 0 10
+shot 11-lost
+mark
+key ret
+expect sneakernet: level 1 start, code 0800-0QV2
+reject Exception|Error

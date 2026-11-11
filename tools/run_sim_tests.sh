@@ -184,6 +184,12 @@ if command -v node >/dev/null; then
 	else
 		echo "FAIL  sim:btc   (see $OUT/btc.log)"; FAILED=1
 	fi
+	# Sneakernet's levels and codes, and the levels tests/sneakernet.txt plays
+	if node --experimental-default-type=module tests/sneakernet/run_node.mjs > "$OUT/sneakernet_node.log" 2>&1; then
+		echo "PASS  sim:sneakernet_node"
+	else
+		echo "FAIL  sim:sneakernet_node   (see $OUT/sneakernet_node.log)"; FAILED=1
+	fi
 else
 	echo "SKIP  sim:bbqr   (needs Node)"
 fi

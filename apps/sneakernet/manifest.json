@@ -1,0 +1,7 @@
+{
+  "id": "sneakernet",
+  "name": "Sneakernet",
+  "version": "1.0.0",
+  "description": "A game: carry the shares of a secret past the radio.",
+  "icon": "wifi"
+}
