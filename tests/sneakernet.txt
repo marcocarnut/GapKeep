@@ -7,7 +7,7 @@
 # The routes were found with lib/level.js under Node: a seed makes the same
 # level everywhere. The radio is over 50 s behind the first route even at
 # 0.6 s a move. Timing doesn't matter to the rest: the access point's own
-# tile is always in radio, and 0800-0QV2 is lost at 7.8 s without a move.
+# tile is always in radio, and 0800-0QV2 is lost at 13 s without a move.
 expect Keyboard attached 60
 expect launcher ready 60
 tile sneakernet
@@ -88,8 +88,8 @@ type 0800-0QV2
 key ret
 expect sneakernet: level 1 start, code 0800-0QV2
 key ret
-expect sneakernet: share leaked on the floor, 2 left there 15
-expect sneakernet: share leaked on the floor, 1 left there 15
+expect sneakernet: share leaked on the floor, 2 left there 30
+expect sneakernet: share leaked on the floor, 1 left there 30
 expect sneakernet: level 1 lost, 0 carried, 1 on the floor, score 0 10
 shot 11-lost
 mark
