@@ -156,6 +156,36 @@ def main():
             tests.append([t["key"], t["msg"], t["ct"], t["result"][0], t["tcId"]])
     v["aesWrapWycheproof"] = tests
 
+    # AEAD packets (OCB): v2 SEIPD and GnuPG's OCB packet, made by
+    # check_pgp.py's independent encoder (Python's cryptography's OCB)
+    from check_pgp import aead_packet
+    rnd = random.Random(9)
+    tests = []
+    for packet, keylen, c, size in ((18, 16, 0, 0), (18, 24, 0, 200), (18, 32, 2, 1000), (20, 16, 0, 64),
+                                    (20, 24, 1, 129), (20, 32, 16, 3000), (18, 16, 4, 2500), (20, 16, 2, 1)):
+        sk, plain = rnd.randbytes(keylen), rnd.randbytes(size)
+        data, chunks = aead_packet(packet, sk, plain, c, rnd.randbytes(32 if packet == 18 else 15))
+        tests.append({"packet": packet, "key": sk.hex(), "data": data.hex(), "plain": plain.hex(), "chunks": chunks})
+    v["aeadPackets"] = tests
+    # for timing: 256 KiB of zeros, 16 KiB chunks, in base64
+    import base64
+    sk = rnd.randbytes(16)
+    data, chunks = aead_packet(20, sk, bytes(256 * 1024), 8, rnd.randbytes(15))
+    v["aeadBig"] = {"packet": 20, "key": sk.hex(), "data": base64.b64encode(data).decode(), "size": 256 * 1024}
+
+    # gk:zlib: small streams both ways, 1 MiB that compresses well, and 33
+    # MiB of zeros (a bomb: over the largest maxOutput)
+    import zlib as Z
+    def deflate(data, fmt, level=9):
+        c = Z.compressobj(level, Z.DEFLATED, -15 if fmt == "raw" else 15)
+        return (c.compress(data) + c.flush()).hex()
+    text = b"GapKeep inflate test, " * 50
+    v["zlibSmall"] = [{"format": f, "data": deflate(d, f, l), "plain": d.hex()}
+                      for f in ("raw", "zlib") for d, l in ((b"", 9), (b"x", 0), (text, 9), (rnd.randbytes(500), 6))]
+    mib = b"".join(bytes([i % 251]) * 64 for i in range(16384))
+    v["zlibMiB"] = {"format": "zlib", "data": deflate(mib, "zlib"), "sha256": hashlib.sha256(mib).hexdigest()}
+    v["zlibBomb"] = {"format": "zlib", "data": deflate(bytes(33 << 20), "zlib")}
+
     # AES-CFB128: CAVP's MMT files (both ways)
     tests = []
     for size in (128, 192, 256):
