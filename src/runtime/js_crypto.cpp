@@ -30,6 +30,12 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+// Before a deadline in clock ticks (wraps around)
+static boolean Before (unsigned nDeadline)
+{
+	return (int) (CTimer::Get ()->GetClockTicks () - nDeadline) < 0;
+}
+
 static const unsigned MaxRandomBytes = 65536;	// as WebCrypto's getRandomValues
 
 // pData 0: zeros
@@ -947,7 +953,13 @@ static int RsaRandom (void *pParam, unsigned char *pOut, size_t nLength)
 	return pRNG != 0 && pRNG->Get (pOut, nLength) ? 0 : -1;
 }
 
-static int RsaTest (void) { return gk_rsa_selftest (RsaRandom, 0); }
+// RSA's self-test is long (a signature and two decryptions with a 2048-bit
+// key: about 0.4 s on a Pi Zero): it runs in the slices of the first RSA
+// job (sign or decrypt), before that job's own work, never at import. -1:
+// not run (or under way); 0: passed; > 0: failed, RSA disabled until reboot.
+static int s_nRsaSelfTest = -1;
+static gk_rsa_selftest_t *s_pRsaSelfTest;	// under way
+static unsigned s_nRsaSelfTestStart, s_nRsaSelfTestWork;
 
 static boolean GroupOK (JSContext *ctx, int *pResult, const char *pName, int (*pTest) (void))
 {
@@ -981,15 +993,61 @@ static boolean S2kOK (JSContext *ctx)
 	return HashesOK (ctx) && GroupOK (ctx, &s_nResult, "S2K", S2kTest);
 }
 
+// Whether RSA may be used: not after its self-test failed (it may not have
+// run yet: the first job runs it)
 static boolean RsaOK (JSContext *ctx)
 {
-	static int s_nResult = -1;
-	if (s_nResult < 0 && (CGkRandom::Instance () == 0 || !CGkRandom::Instance ()->IsHealthy ()))
+	if (s_nRsaSelfTest > 0)
 	{
-		ThrowRNGFailure (ctx);		// blinding needs it: don't fail the test for that
+		JS_ThrowInternalError (ctx, "RSA is disabled: its self-test failed");
 		return FALSE;
 	}
-	return HashesOK (ctx) && GroupOK (ctx, &s_nResult, "RSA", RsaTest);
+	return HashesOK (ctx);
+}
+
+// Runs the self-test's steps until nDeadline, from a job's Step. TRUE:
+// more to do. Afterwards s_nRsaSelfTest says how it went.
+static boolean RsaSelfTestSteps (unsigned nDeadline)
+{
+	if (s_nRsaSelfTest >= 0)
+	{
+		return FALSE;
+	}
+	unsigned nStart = CTimer::Get ()->GetClockTicks ();
+	if (s_pRsaSelfTest == 0)
+	{
+		if (gk_rsa_selftest_begin (&s_pRsaSelfTest) != 0)
+		{
+			s_nRsaSelfTest = 100;
+			return FALSE;
+		}
+		s_nRsaSelfTestStart = nStart;
+		s_nRsaSelfTestWork = 0;
+	}
+	int nResult;
+	do
+	{
+		nResult = gk_rsa_selftest_step (s_pRsaSelfTest, RsaRandom, 0);
+	}
+	while (nResult > 0 && Before (nDeadline));
+	s_nRsaSelfTestWork += CTimer::Get ()->GetClockTicks () - nStart;
+	if (nResult > 0)
+	{
+		return TRUE;
+	}
+	gk_rsa_selftest_end (s_pRsaSelfTest);
+	s_pRsaSelfTest = 0;
+	s_nRsaSelfTest = -nResult;
+	if (s_nRsaSelfTest == 0)
+	{
+		CLogger::Get ()->Write ("crypto", LogNotice, "RSA self-test passed (%u us of work, in a job's slices)",
+					s_nRsaSelfTestWork);
+	}
+	else
+	{
+		CLogger::Get ()->Write ("crypto", LogError, "RSA self-test FAILED (%d)", s_nRsaSelfTest);
+	}
+	return FALSE;
 }
 
 static void DefineMethod (JSContext *ctx, JSValueConst Obj, const char *pName, JSCFunction *pFunc, int nArgs)
@@ -1538,12 +1596,6 @@ static const gk_hash_t *GetRsaHash (JSContext *ctx, JSValueConst v, boolean bSig
 	return pHash;
 }
 
-// Before a deadline in clock ticks (wraps around)
-static boolean Before (unsigned nDeadline)
-{
-	return (int) (CTimer::Get ()->GetClockTicks () - nDeadline) < 0;
-}
-
 // RsaPrivateKey.sign as a job (jobs.h): the steps of gk_rsa_job_step, as
 // many as fit in a slice (the CRT's exponentiations, each one, for big keys)
 struct TGkRsaSignJob
@@ -1559,6 +1611,29 @@ struct TGkRsaSignJob
 static boolean RsaSignStep (void *pParam, unsigned nDeadline)
 {
 	TGkRsaSignJob *pState = (TGkRsaSignJob *) pParam;
+	// the self-test first, the first time (its random bytes for blinding:
+	// a generator gone bad fails the job, not the test)
+	if (s_nRsaSelfTest < 0)
+	{
+		if (CGkRandom::Instance () == 0 || !CGkRandom::Instance ()->IsHealthy ())
+		{
+			pState->nResult = GK_RSA_RNG;
+			return FALSE;
+		}
+		if (RsaSelfTestSteps (nDeadline))
+		{
+			return TRUE;
+		}
+		if (!Before (nDeadline))
+		{
+			return TRUE;		// the job's own work in the next slice
+		}
+	}
+	if (s_nRsaSelfTest > 0)
+	{
+		pState->nResult = GK_RSA_SELFTEST;
+		return FALSE;
+	}
 	do
 	{
 		if (pState->pRsa->pKey == 0)
@@ -1574,7 +1649,7 @@ static boolean RsaSignStep (void *pParam, unsigned nDeadline)
 
 static double RsaSignProgress (void *pParam)
 {
-	return gk_rsa_job_progress (((TGkRsaSignJob *) pParam)->pJob);
+	return s_nRsaSelfTest < 0 ? 0 : gk_rsa_job_progress (((TGkRsaSignJob *) pParam)->pJob);
 }
 
 static JSValue RsaSignFinish (JSContext *ctx, void *pParam)
@@ -1596,6 +1671,8 @@ static JSValue RsaSignFinish (JSContext *ctx, void *pParam)
 	}
 	case GK_RSA_RNG:
 		return ThrowRNGFailure (ctx);
+	case GK_RSA_SELFTEST:
+		return JS_ThrowInternalError (ctx, "RSA is disabled: its self-test failed");
 	default:
 		CLogger::Get ()->Write ("crypto", LogError, "RSA private operation failed its check (%d)", pState->nResult);
 		return JS_ThrowInternalError (ctx, "RsaPrivateKey.%s: the result failed its check "
