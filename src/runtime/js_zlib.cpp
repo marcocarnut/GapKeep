@@ -79,18 +79,26 @@ static JSValue ThrowError (JSContext *ctx, const char *pMessage)
 	return JS_Throw (ctx, Error);
 }
 
+static void FreeOutput (JSRuntime *rt, void *pOpaque, void *pData)
+{
+	gk_inflate_free_output (pData);
+}
+
 static JSValue InflateFinish (JSContext *ctx, void *pParam)
 {
 	gk_inflate_job_t *pJob = &((TGkInflateJob *) pParam)->Job;
-	const uint8_t *pOut;
+	uint8_t *pOut;
 	size_t nLength;
 	switch (gk_inflate_result (pJob, &pOut, &nLength))
 	{
 	case 0:
 	{
-		JSValue Buffer = JS_NewArrayBufferCopy (ctx, pOut, nLength);
+		// the native buffer becomes the ArrayBuffer's (no copy of what
+		// may be megabytes, in one slice); wiped when it is freed
+		JSValue Buffer = JS_NewArrayBuffer (ctx, pOut, nLength, FreeOutput, 0, FALSE);
 		if (JS_IsException (Buffer))
 		{
+			gk_inflate_free_output (pOut);		// not taken
 			return Buffer;
 		}
 		JSValueConst Args[3] = { Buffer, JS_NewInt32 (ctx, 0), JS_UNDEFINED };

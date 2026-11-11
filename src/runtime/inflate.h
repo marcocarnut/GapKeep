@@ -30,9 +30,11 @@ typedef struct
 	void *z;			/* z_stream (heap) */
 	uint8_t *in;			/* a copy of the input (heap) */
 	size_t inlen;
-	uint8_t *out;			/* the output (heap), grown as needed */
-	size_t cap, outlen, max;
-	int done, result;
+	uint8_t **blocks;		/* the output as it grows (heap) */
+	size_t nblocks, maxblocks, next;
+	uint8_t *out;			/* the output in one piece, at the end */
+	size_t outlen, max;
+	int phase, result;
 }
 gk_inflate_job_t;
 
@@ -40,13 +42,19 @@ gk_inflate_job_t;
    GK_INFLATE_NO_MEMORY (nothing to end). */
 int gk_inflate_begin (gk_inflate_job_t *job, int format, const uint8_t *data, size_t len, size_t max);
 
-/* About budget more bytes out. 1: more to do; 0: done (result below). */
+/* About budget more bytes out (or, at the end, handled: a block of the
+   output copied into one piece, wiped and freed). 1: more to do; 0: done
+   (result below). */
 int gk_inflate_step (gk_inflate_job_t *job, size_t budget);
 
 double gk_inflate_progress (const gk_inflate_job_t *job);
 
-/* Once done: 0 and the output (inside the job), or one of the errors. */
-int gk_inflate_result (gk_inflate_job_t *job, const uint8_t **out, size_t *outlen);
+/* Once done: 0 and the output, which is the caller's from then on, to
+   free with gk_inflate_free_output; or one of the errors. */
+int gk_inflate_result (gk_inflate_job_t *job, uint8_t **out, size_t *outlen);
+
+/* Wipes and frees an output (0: nothing). */
+void gk_inflate_free_output (void *out);
 
 void gk_inflate_end (gk_inflate_job_t *job);	/* wipes and frees */
 

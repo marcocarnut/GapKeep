@@ -46,7 +46,7 @@ static int Run (int format, const std::vector<uint8_t> &in, size_t max, size_t b
 			abort ();
 		}
 	}
-	const uint8_t *p;
+	uint8_t *p;
 	size_t n;
 	int r = gk_inflate_result (&job, &p, &n);
 	if (r == 0)
@@ -57,6 +57,7 @@ static int Run (int format, const std::vector<uint8_t> &in, size_t max, size_t b
 			abort ();
 		}
 		if (out != 0) out->assign (p, p + n);
+		gk_inflate_free_output (p);
 	}
 	gk_inflate_end (&job);
 	return r;

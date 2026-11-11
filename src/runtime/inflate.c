@@ -1,6 +1,12 @@
 /*
  * inflate.c - DEFLATE decompression in steps, on zlib (see inflate.h).
  *
+ * The output goes into blocks of BLOCK bytes, allocated as it grows (never
+ * copied while growing: a copy of megabytes would be one long step); at
+ * the end the blocks are copied into one buffer, a block per step, each
+ * wiped and freed once copied (or, after a failure, just wiped and freed,
+ * a block per step).
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "inflate.h"
@@ -9,23 +15,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FIRST_CAP	(64 * 1024)
+#define BLOCK		(256 * 1024)
+#define HEAD		16		/* before the output buffer: its length */
 
-/* zlib's memory from the heap, zeroed when freed (Circle's heap zeroes
+enum { INFLATING, ASSEMBLING, WIPING, DONE };
+
+/* zlib's memory from the heap, wiped when freed (Circle's heap zeroes
    freed blocks too; the simulator's doesn't): the window holds output */
-struct alloc_head { size_t size; size_t pad; };
-
 static voidpf zalloc (voidpf opaque, uInt items, uInt size)
 {
 	(void) opaque;
 	size_t n = (size_t) items * size;
-	struct alloc_head *h = calloc (1, sizeof *h + n);
-	if (h == 0)
+	uint8_t *p = calloc (1, HEAD + n);
+	if (p == 0)
 	{
 		return Z_NULL;
 	}
-	h->size = n;
-	return h + 1;
+	memcpy (p, &n, sizeof n);
+	return p + HEAD;
 }
 
 static void zfree (voidpf opaque, voidpf p)
@@ -33,8 +40,18 @@ static void zfree (voidpf opaque, voidpf p)
 	(void) opaque;
 	if (p != Z_NULL)
 	{
-		struct alloc_head *h = (struct alloc_head *) p - 1;
-		gk_wipe (p, h->size);
+		gk_inflate_free_output (p);
+	}
+}
+
+void gk_inflate_free_output (void *p)
+{
+	if (p != 0)
+	{
+		uint8_t *h = (uint8_t *) p - HEAD;
+		size_t n;
+		memcpy (&n, h, sizeof n);
+		gk_wipe (p, n);
 		free (h);
 	}
 }
@@ -44,19 +61,20 @@ int gk_inflate_begin (gk_inflate_job_t *job, int format, const uint8_t *data, si
 	memset (job, 0, sizeof *job);
 	z_stream *z = calloc (1, sizeof *z);
 	job->in = malloc (len ? len : 1);
-	job->cap = max < FIRST_CAP ? max : FIRST_CAP;
-	job->out = malloc (job->cap ? job->cap : 1);
-	if (z == 0 || job->in == 0 || job->out == 0)
+	size_t nblocks = (max + 1 + BLOCK - 1) / BLOCK;
+	job->blocks = calloc (nblocks, sizeof *job->blocks);
+	if (z == 0 || job->in == 0 || job->blocks == 0)
 	{
 		free (z);
 		free (job->in);
-		free (job->out);
+		free (job->blocks);
 		memset (job, 0, sizeof *job);
 		return GK_INFLATE_NO_MEMORY;
 	}
 	memcpy (job->in, data, len);
 	job->inlen = len;
 	job->max = max;
+	job->maxblocks = nblocks;
 	z->zalloc = zalloc;
 	z->zfree = zfree;
 	z->next_in = job->in;
@@ -65,7 +83,7 @@ int gk_inflate_begin (gk_inflate_job_t *job, int format, const uint8_t *data, si
 	{
 		free (z);
 		free (job->in);
-		free (job->out);
+		free (job->blocks);
 		memset (job, 0, sizeof *job);
 		return GK_INFLATE_NO_MEMORY;
 	}
@@ -73,42 +91,61 @@ int gk_inflate_begin (gk_inflate_job_t *job, int format, const uint8_t *data, si
 	return 0;
 }
 
+/* the end of inflating: assemble the output, or wipe it */
 static void finish (gk_inflate_job_t *job, int result)
 {
-	job->done = 1;
 	job->result = result;
+	job->phase = WIPING;
+	if (result == 0)
+	{
+		uint8_t *h = malloc (HEAD + job->outlen);
+		if (h == 0)
+		{
+			job->result = GK_INFLATE_NO_MEMORY;
+		}
+		else
+		{
+			memcpy (h, &job->outlen, sizeof job->outlen);
+			job->out = h + HEAD;
+			job->phase = ASSEMBLING;
+		}
+	}
+	job->next = 0;
+	/* the input and zlib's state are not needed any more */
+	inflateEnd ((z_stream *) job->z);
+	free (job->z);
+	job->z = 0;
+	gk_wipe (job->in, job->inlen);
+	free (job->in);
+	job->in = 0;
 }
 
-int gk_inflate_step (gk_inflate_job_t *job, size_t budget)
+static void inflating (gk_inflate_job_t *job, size_t budget)
 {
 	z_stream *z = (z_stream *) job->z;
-	while (!job->done && budget > 0)
+	while (job->phase == INFLATING && budget > 0)
 	{
-		if (job->outlen == job->cap)
+		size_t at = job->outlen % BLOCK, b = job->outlen / BLOCK;
+		if (job->outlen > job->max)
 		{
-			/* more room, up to the limit (one byte past it, to tell
-			   a stream that ends exactly at it from a longer one) */
-			if (job->cap >= job->max + 1)
-			{
-				finish (job, GK_INFLATE_TOO_BIG);
-				break;
-			}
-			size_t cap = job->cap * 2 < job->max + 1 ? job->cap * 2 : job->max + 1;
-			uint8_t *out = malloc (cap);
-			if (out == 0)
+			finish (job, GK_INFLATE_TOO_BIG);	/* one byte past the limit */
+			break;
+		}
+		if (at == 0 && b == job->nblocks)
+		{
+			job->blocks[b] = malloc (BLOCK);
+			if (job->blocks[b] == 0)
 			{
 				finish (job, GK_INFLATE_NO_MEMORY);
 				break;
 			}
-			memcpy (out, job->out, job->outlen);
-			gk_wipe (job->out, job->cap);
-			free (job->out);
-			job->out = out;
-			job->cap = cap;
+			job->nblocks++;
 		}
-		size_t room = job->cap - job->outlen;
+		/* room in the block, the budget, and one byte past the limit */
+		size_t room = BLOCK - at;
 		if (room > budget) room = budget;
-		z->next_out = job->out + job->outlen;
+		if (room > job->max + 1 - job->outlen) room = job->max + 1 - job->outlen;
+		z->next_out = job->blocks[b] + at;
 		z->avail_out = (uInt) room;
 		int r = inflate (z, Z_NO_FLUSH);
 		size_t made = room - z->avail_out;
@@ -120,8 +157,7 @@ int gk_inflate_step (gk_inflate_job_t *job, size_t budget)
 		}
 		else if (r == Z_STREAM_END)
 		{
-			/* the stream must be all there is */
-			finish (job, z->avail_in == 0 ? 0 : GK_INFLATE_BAD);
+			finish (job, z->avail_in == 0 ? 0 : GK_INFLATE_BAD);	/* nothing after it */
 		}
 		else if (r == Z_MEM_ERROR)
 		{
@@ -129,34 +165,69 @@ int gk_inflate_step (gk_inflate_job_t *job, size_t budget)
 		}
 		else if (r != Z_OK && !(r == Z_BUF_ERROR && z->avail_out == 0))
 		{
-			finish (job, GK_INFLATE_BAD);	/* bad data, or the input ended first */
+			finish (job, GK_INFLATE_BAD);		/* bad data, or the input ended first */
 		}
 		else if (made == 0 && z->avail_out != 0)
 		{
-			finish (job, GK_INFLATE_BAD);	/* no progress: cut short */
+			finish (job, GK_INFLATE_BAD);		/* no progress: cut short */
 		}
 	}
-	return !job->done;
+}
+
+int gk_inflate_step (gk_inflate_job_t *job, size_t budget)
+{
+	if (job->phase == INFLATING)
+	{
+		inflating (job, budget);
+		return 1;
+	}
+	/* a block (copied, if assembling), wiped and freed, per BLOCK of budget */
+	do
+	{
+		if (job->next >= job->nblocks)
+		{
+			job->phase = DONE;
+			return 0;
+		}
+		size_t b = job->next++;
+		size_t n = b * (size_t) BLOCK + BLOCK <= job->outlen ? BLOCK
+			   : job->outlen > b * (size_t) BLOCK ? job->outlen - b * (size_t) BLOCK : 0;
+		if (job->phase == ASSEMBLING)
+		{
+			memcpy (job->out + b * (size_t) BLOCK, job->blocks[b], n);
+		}
+		gk_wipe (job->blocks[b], BLOCK);
+		free (job->blocks[b]);
+		job->blocks[b] = 0;
+		budget = budget > BLOCK ? budget - BLOCK : 0;
+	}
+	while (budget > 0);
+	return 1;
 }
 
 double gk_inflate_progress (const gk_inflate_job_t *job)
 {
 	const z_stream *z = (const z_stream *) job->z;
-	return job->inlen > 0 && z != 0 ? (double) (job->inlen - z->avail_in) / (double) job->inlen : 0;
+	if (job->phase != INFLATING)
+	{
+		return job->nblocks ? 0.9 + 0.1 * (double) job->next / (double) job->nblocks : 1;
+	}
+	return job->inlen > 0 && z != 0 ? 0.9 * (double) (job->inlen - z->avail_in) / (double) job->inlen : 0;
 }
 
-int gk_inflate_result (gk_inflate_job_t *job, const uint8_t **out, size_t *outlen)
+int gk_inflate_result (gk_inflate_job_t *job, uint8_t **out, size_t *outlen)
 {
 	*out = 0;
 	*outlen = 0;
-	if (!job->done)
+	if (job->phase != DONE)
 	{
 		return GK_INFLATE_BAD;
 	}
 	if (job->result == 0)
 	{
-		*out = job->out;
+		*out = job->out;		/* the caller's now: gk_inflate_free_output */
 		*outlen = job->outlen;
+		job->out = 0;
 	}
 	return job->result;
 }
@@ -173,11 +244,16 @@ void gk_inflate_end (gk_inflate_job_t *job)
 		gk_wipe (job->in, job->inlen);
 		free (job->in);
 	}
-	if (job->out != 0)
+	for (size_t b = 0; job->blocks != 0 && b < job->nblocks; b++)
 	{
-		gk_wipe (job->out, job->cap);
-		free (job->out);
+		if (job->blocks[b] != 0)
+		{
+			gk_wipe (job->blocks[b], BLOCK);
+			free (job->blocks[b]);
+		}
 	}
+	free (job->blocks);
+	gk_inflate_free_output (job->out);
 	memset (job, 0, sizeof *job);
 }
 
@@ -204,13 +280,14 @@ static int run (int format, const uint8_t *in, size_t len, size_t max, size_t bu
 	while (gk_inflate_step (&job, budget))
 	{
 	}
-	const uint8_t *out;
+	uint8_t *out;
 	int result = gk_inflate_result (&job, &out, outlen);
 	*ok = 1;
 	for (size_t i = 0; result == 0 && i < *outlen; i++)
 	{
 		*ok &= out[i] == (uint8_t) "GapKeep inflate test, "[i % 22];
 	}
+	gk_inflate_free_output (out);
 	gk_inflate_end (&job);
 	return result;
 }
