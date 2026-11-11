@@ -26,6 +26,8 @@
 #include "rsa.h"
 #include "x25519.h"
 #include "seipd.h"
+#include "ocb.h"
+#include "aead.h"
 
 static size_t unhex (const char *s, uint8_t *out)
 {
@@ -68,6 +70,8 @@ int main (void)
 	if (r == 0) r = gk_rsa_selftest (rng, 0) ? 7000 + gk_rsa_selftest (rng, 0) : 0;
 	if (r == 0) r = gk_x25519_selftest () ? 8000 + gk_x25519_selftest () : 0;
 	if (r == 0) r = gk_seipd1_selftest () ? 9000 + gk_seipd1_selftest () : 0;
+	if (r == 0) r = gk_ocb_selftest () ? 10000 + gk_ocb_selftest () : 0;
+	if (r == 0) r = gk_aead_selftest () ? 11000 + gk_aead_selftest () : 0;
 	printf ("pgp selftests: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	fflush (stdout);
 	if (r != 0)
@@ -210,6 +214,48 @@ int main (void)
 				rc = gk_seipd1_result (&job, &plain, &plainlen);
 				if (rc != 0) printf ("error %d", rc); else if (plainlen == 0) printf ("-"); else hex (plain, plainlen);
 				gk_seipd1_end (&job);
+			}
+		}
+		else if (strcmp (w[0], "ocb") == 0 && n == 6)
+		{
+			/* ocb enc|dec KEY NONCE AD DATA (dec: DATA is C || tag) */
+			size_t kl = unhex (w[2], a), nl = unhex (w[3], b), al = unhex (w[4], c), dl = unhex (w[5], d);
+			gk_ocb_key_t key;
+			if (gk_ocb_key_init (&key, a, kl) != 0) { printf ("error key"); }
+			else if (strcmp (w[1], "enc") == 0)
+			{
+				gk_ocb_encrypt (&key, b, nl, c, al, d, out, dl, out + dl);
+				hex (out, dl + 16);
+			}
+			else if (dl < 16 || gk_ocb_decrypt (&key, b, nl, c, al, d, out, dl - 16, d + dl - 16) != 0)
+			{
+				printf ("error -1");
+			}
+			else if (dl == 16) printf ("-"); else hex (out, dl - 16);
+			if (kl == 16 || kl == 24 || kl == 32) gk_ocb_key_free (&key);
+		}
+		else if (strcmp (w[0], "aead") == 0 && n == 5)
+		{
+			/* aead 18|20 KEY DATA BUDGET */
+			size_t kl = unhex (w[2], a), dl = unhex (w[3], b);
+			gk_aead_job_t job;
+			int rc = gk_aead_begin (&job, atoi (w[1]), a, kl, b, dl);
+			if (rc != 0) { printf ("error %d", rc); }
+			else
+			{
+				size_t budget = (size_t) atoi (w[4]);
+				double last = -1;
+				while (gk_aead_step (&job, budget))
+				{
+					double p = gk_aead_progress (&job);
+					if (p < last || p > 1) rc = -10;
+					last = p;
+				}
+				const uint8_t *plain;
+				size_t plainlen;
+				if (rc == 0) rc = gk_aead_result (&job, &plain, &plainlen);
+				if (rc != 0) printf ("error %d", rc); else if (plainlen == 0) printf ("-"); else hex (plain, plainlen);
+				gk_aead_end (&job);
 			}
 		}
 		else

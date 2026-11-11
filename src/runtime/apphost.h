@@ -156,6 +156,7 @@ void GkClockFree (TGkApp *pApp);		// js_clock.cpp: the app's alarms
 JSModuleDef *GkInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
 JSModuleDef *GkInitDataModule (JSContext *pContext, const char *pName);	// js_data.cpp
 JSModuleDef *GkInitUSBModule (JSContext *pContext, const char *pName);	// js_usb.cpp
+JSModuleDef *GkInitZlibModule (JSContext *pContext, const char *pName);	// js_zlib.cpp
 void GkUSBUpdate (TGkApp *pApp);	// js_usb.cpp: events and a transfer, from Update()
 void GkUSBFree (TGkApp *pApp);		// the app's devices, handlers and transfers
 

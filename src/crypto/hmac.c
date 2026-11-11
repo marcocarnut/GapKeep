@@ -103,6 +103,35 @@ void gk_hmac (const gk_hash_t *hash, const void *key, size_t keylen,
 	gk_hmac_final (&ctx, digest);
 }
 
+void gk_hkdf (const gk_hash_t *hash, const void *salt, size_t saltlen, const void *ikm, size_t ikmlen,
+	      const void *info, size_t infolen, uint8_t *out, size_t len)
+{
+	static const uint8_t zeros[GK_HASH_MAX_DIGEST] = { 0 };
+	uint8_t prk[GK_HASH_MAX_DIGEST], t[GK_HASH_MAX_DIGEST];
+	size_t hlen = hash->digest_size, tlen = 0;
+
+	/* PRK = HMAC (salt, IKM) */
+	gk_hmac (hash, saltlen ? salt : zeros, saltlen ? saltlen : hlen, ikm, ikmlen, prk);
+	/* T(i) = HMAC (PRK, T(i-1) || info || i) */
+	for (uint8_t i = 1; len > 0; i++)
+	{
+		gk_hmac_t mac;
+		uint8_t counter[1] = { i };
+		gk_hmac_init (&mac, hash, prk, hlen);
+		gk_hmac_update (&mac, t, tlen);
+		gk_hmac_update (&mac, info, infolen);
+		gk_hmac_update (&mac, counter, 1);
+		gk_hmac_final (&mac, t);
+		tlen = hlen;
+		size_t n = len < hlen ? len : hlen;
+		memcpy (out, t, n);
+		out += n;
+		len -= n;
+	}
+	gk_wipe (prk, sizeof prk);
+	gk_wipe (t, sizeof t);
+}
+
 static int fill (uint8_t *p, int byte, size_t n)
 {
 	memset (p, byte, n);
@@ -177,6 +206,17 @@ int gk_hmac_selftest (void)
 				  "3cd11f05033ac4c60c2ef6ab4030fe8296248df163f44952")) return 24;
 	gk_hmac (&gk_hash_sha224, key, n, Text6, sizeof Text6 - 1, d);
 	if (!gk_hex_equal (d, 28, "95e9a0db962095adaebe9b2d6f0dbce2d499f112f2d2b7273fa6870e")) return 25;
+
+	/* RFC 5869, A.1 */
+	{
+		uint8_t salt[13], info[10], okm[42];
+		n = fill (key, 0x0b, 22);
+		for (int i = 0; i < 13; i++) salt[i] = (uint8_t) i;
+		for (int i = 0; i < 10; i++) info[i] = (uint8_t) (0xf0 + i);
+		gk_hkdf (&gk_hash_sha256, salt, 13, key, n, info, 10, okm, 42);
+		if (!gk_hex_equal (okm, 42, "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf"
+					    "34007208d5b887185865")) return 26;
+	}
 
 	/* streaming in pieces matches one call */
 	gk_hmac_t ctx;

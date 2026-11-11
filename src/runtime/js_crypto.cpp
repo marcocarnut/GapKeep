@@ -22,6 +22,7 @@
 #include "../crypto/rsa.h"
 #include "../crypto/x25519.h"
 #include "../crypto/seipd.h"
+#include "../crypto/aead.h"
 #include "../crypto/hwrng.h"
 #include "../crypto/wipe.h"
 #include <circle/util.h>
@@ -2402,6 +2403,130 @@ static JSValue js_crypto_seipd_v1_decrypt (JSContext *ctx, JSValueConst this_val
 	return Promise;
 }
 
+// --- OpenPGP's AEAD packets: SEIPD v2, GnuPG's OCB packet --------------------
+
+static int OcbTest (void) { return gk_ocb_selftest (); }
+static int AeadTest (void) { return gk_aead_selftest (); }
+
+static boolean AeadOK (JSContext *ctx)
+{
+	static int s_nOcb = -1, s_nAead = -1;
+	return    AesOK (ctx) && HashesOK (ctx) && GroupOK (ctx, &s_nOcb, "OCB", OcbTest)
+	       && GroupOK (ctx, &s_nAead, "AEAD packets", AeadTest);
+}
+
+struct TGkAeadJob
+{
+	gk_aead_job_t Job;
+	const char *pFunction;
+};
+
+// 64 KiB decrypted and checked at a time
+static boolean AeadStep (void *pParam, unsigned nDeadline)
+{
+	gk_aead_job_t *pJob = &((TGkAeadJob *) pParam)->Job;
+	boolean bMore;
+	do
+	{
+		bMore = gk_aead_step (pJob, 64 * 1024);
+	}
+	while (bMore && Before (nDeadline));
+	return bMore;
+}
+
+static double AeadProgress (void *pParam)
+{
+	return gk_aead_progress (&((TGkAeadJob *) pParam)->Job);
+}
+
+static JSValue AeadFinish (JSContext *ctx, void *pParam)
+{
+	TGkAeadJob *pState = (TGkAeadJob *) pParam;
+	const u8 *pPlain;
+	size_t nLength;
+	if (gk_aead_result (&pState->Job, &pPlain, &nLength) != 0)
+	{
+		return ThrowPlainError (ctx, "%s: the integrity check failed (a wrong session key, or the message was "
+					"changed or cut)", pState->pFunction);
+	}
+	return NewUint8Array (ctx, pPlain, nLength);
+}
+
+static void AeadFree (JSContext *ctx, void *pParam)
+{
+	TGkAeadJob *pState = (TGkAeadJob *) pParam;
+	gk_aead_end (&pState->Job);
+	delete pState;
+}
+
+static const TGkJobOps s_AeadJob = { "AEAD", AeadStep, AeadProgress, AeadFinish, AeadFree };
+
+static JSValue AeadDecrypt (JSContext *ctx, int argc, JSValueConst *argv, int nPacket, const char *pFunction)
+{
+	if (!AeadOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	u8 Key[32];
+	size_t nKey;
+	CBytesOnly Data (ctx);
+	if (   !GetVariable (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, Key, sizeof Key, &nKey, pFunction, "sessionKey")
+	    || !Data.Get (argc > 1 ? argv[1] : JS_UNDEFINED, pFunction, "data"))
+	{
+		gk_wipe (Key, sizeof Key);
+		return JS_EXCEPTION;
+	}
+	if (Data.Length () > MaxSeipdBytes)
+	{
+		gk_wipe (Key, sizeof Key);
+		return JS_ThrowRangeError (ctx, "%s: at most %u MiB of data", pFunction, (unsigned) (MaxSeipdBytes >> 20));
+	}
+	JSValue OnProgress;
+	if (!GkJobOnProgress (ctx, argc > 2 ? argv[2] : JS_UNDEFINED, pFunction, &OnProgress))
+	{
+		gk_wipe (Key, sizeof Key);
+		return JS_EXCEPTION;
+	}
+	TGkAeadJob *pState = new TGkAeadJob;
+	pState->pFunction = pFunction;
+	int nResult = gk_aead_begin (&pState->Job, nPacket, Key, nKey > sizeof Key ? 0 : nKey, Data.Data (), Data.Length ());
+	gk_wipe (Key, sizeof Key);
+	Data.Release ();
+	if (nResult != 0)
+	{
+		delete pState;
+		JS_FreeValue (ctx, OnProgress);
+		switch (nResult)
+		{
+		case -2:
+			return JS_ThrowRangeError (ctx, "%s: sessionKey must be as long as the packet's cipher's key "
+						   "(AES-128, -192, -256: 16, 24, 32 bytes)", pFunction);
+		case -3:
+			return JS_ThrowOutOfMemory (ctx);
+		case -5:
+			return JS_ThrowRangeError (ctx, "%s: only OCB for now (the packet's AEAD mode is another)", pFunction);
+		default:
+			return JS_ThrowRangeError (ctx, "%s: not such a packet (too short, or a chunk size octet above 16)",
+						   pFunction);
+		}
+	}
+	JSValue Promise = GkJobStart (ctx, &s_AeadJob, pState, OnProgress);
+	JS_FreeValue (ctx, OnProgress);
+	return Promise;
+}
+
+// seipdV2Decrypt(sessionKey, data, { onProgress }?) -> Promise<Uint8Array>
+static JSValue js_crypto_seipd_v2_decrypt (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return AeadDecrypt (ctx, argc, argv, GK_AEAD_SEIPD2, "seipdV2Decrypt");
+}
+
+// ocbedDecrypt(sessionKey, data, { onProgress }?) -> Promise<Uint8Array>
+static JSValue js_crypto_ocbed_decrypt (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return AeadDecrypt (ctx, argc, argv, GK_AEAD_OCBED, "ocbedDecrypt");
+}
+
 // The classes, once per runtime; their prototypes, once per context.
 static void InitClasses (JSContext *ctx)
 {
@@ -2475,6 +2600,8 @@ static const JSCFunctionListEntry s_CryptoFunctions[] =
 	JS_CFUNC_DEF ("aesKeyWrap", 2, js_crypto_aes_key_wrap),
 	JS_CFUNC_DEF ("aesKeyUnwrap", 2, js_crypto_aes_key_unwrap),
 	JS_CFUNC_DEF ("seipdV1Decrypt", 3, js_crypto_seipd_v1_decrypt),
+	JS_CFUNC_DEF ("seipdV2Decrypt", 3, js_crypto_seipd_v2_decrypt),
+	JS_CFUNC_DEF ("ocbedDecrypt", 3, js_crypto_ocbed_decrypt),
 	JS_CFUNC_DEF ("ripemd160", 1, js_crypto_ripemd160),
 	JS_CFUNC_DEF ("hash160", 1, js_crypto_hash160),
 	JS_CFUNC_DEF ("pbkdf2", 5, js_crypto_pbkdf2),

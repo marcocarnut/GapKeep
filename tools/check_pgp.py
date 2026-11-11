@@ -114,7 +114,7 @@ def build():
                          open("lib/mbedtls/mbedtls.mk").read()).group(1).replace("\\", " ").split()
     src = ["tests/native/test_pgp.c"] + [f"src/crypto/{f}.c" for f in
                                           ("sha1", "sha256", "sha512", "hmac", "s2k", "aes", "ed25519", "rsa", "x25519",
-                                           "seipd", "wipe")]
+                                           "seipd", "ocb", "aead", "wipe")]
     src += [mbed + f for f in mbed_src]
     src += ["third_party/monocypher/src/monocypher.c", "third_party/monocypher/src/optional/monocypher-ed25519.c"]
     subprocess.run(["cc", "-O2", "-Wall", "-I", "src/crypto", "-I", "lib/mbedtls", "-I", "third_party/mbedtls/include",
@@ -476,6 +476,91 @@ def check_seipd(native, rnd, cases):
     check(native("seipd", h(bytes(20)), h(bytes(40)), 16) == "error -2", "SEIPD 20-byte key")
 
 
+# --- OCB and OpenPGP's AEAD packets ------------------------------------------
+
+def ocb_encrypt(key, nonce, ad, plain):
+    from cryptography.hazmat.primitives.ciphers.aead import AESOCB3
+    return AESOCB3(key).encrypt(nonce, plain, ad)
+
+
+def aead_packet(packet, session_key, plain, c, iv_or_salt):
+    """The body after the version octet of a v2 SEIPD (18) or GnuPG OCB
+    (20) packet: an independent encoder (RFC 9580, 5.13.2; LibrePGP, 5.16)."""
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    from cryptography.hazmat.primitives import hashes as H
+    cipher = {16: 7, 24: 8, 32: 9}[len(session_key)]
+    header = bytes([0xd2 if packet == 18 else 0xd4, 2 if packet == 18 else 1, cipher, 2, c])
+    if packet == 18:
+        okm = HKDF(H.SHA256(), len(session_key) + 7, iv_or_salt, header).derive(session_key)
+        key, iv = okm[:len(session_key)], okm[len(session_key):]
+        nonce = lambda i: iv + i.to_bytes(8, "big")
+        ad = lambda i: header
+    else:
+        key, iv = session_key, iv_or_salt
+        nonce = lambda i: (int.from_bytes(iv, "big") ^ i).to_bytes(15, "big")
+        ad = lambda i: header + i.to_bytes(8, "big")
+    size = 1 << (c + 6)
+    chunks = [plain[i:i + size] for i in range(0, len(plain), size)] or [b""]
+    out = b""
+    for i, ch in enumerate(chunks):
+        out += ocb_encrypt(key, nonce(i), ad(i), ch)
+    final = ocb_encrypt(key, nonce(len(chunks)), ad(len(chunks)) + len(plain).to_bytes(8, "big"), b"")
+    return bytes([cipher, 2, c]) + iv_or_salt + out + final, len(chunks)
+
+
+def check_ocb(native, rnd, cases):
+    for c_ in range(cases):
+        key = rnd.randbytes(rnd.choice((16, 24, 32)))
+        nonce = rnd.randbytes(rnd.choice((12, 13, 15)))
+        ad = rnd.randbytes(rnd.choice((0, 5, 13, 16, 21, rnd.randrange(100))))
+        p = rnd.randbytes(rnd.choice((0, 1, 15, 16, 17, 32, 33, rnd.randrange(600))))
+        want = ocb_encrypt(key, nonce, ad, p)
+        check(native("ocb", "enc", h(key), h(nonce), h(ad), h(p)) == want.hex(), f"OCB enc {len(p)} {len(ad)}")
+        check(native("ocb", "dec", h(key), h(nonce), h(ad), h(want)) == (p.hex() or "-"), "OCB dec")
+        bad = bytearray(want)
+        bad[rnd.randrange(len(bad))] ^= 1 << rnd.randrange(8)
+        check(native("ocb", "dec", h(key), h(nonce), h(ad), h(bad)) == "error -1", "OCB dec changed")
+
+
+def check_aead(native, rnd, cases):
+    # RFC 9580, A.10.3: in the native self-test too
+    kat = bytes.fromhex("07020620a661f731fc9a3032b5623326027e3a5d8db5748ebeff0b0c5910d09ecdd641ff9fd38562758035"
+                        "bc49754ce1bf3fffa7dad0a3b8104f5133cf42a4100a83eef4ca1b4801a8846bf42bcda7c8ce9d65e212f301"
+                        "cbcd98fdcade694a877ad4247323f6e857")
+    check(native("aead", 18, "28e79ab82397d3c63de24ac217d7b791", h(kat), 64) ==
+          "cb1362000000000048656c6c6f2c20776f726c6421d50eae6aa1649b56aa835b2613902bd2", "RFC 9580 A.10")
+    for c_ in range(cases):
+        packet = rnd.choice((18, 20))
+        sk = rnd.randbytes(rnd.choice((16, 24, 32)))
+        c = rnd.choice((0, 0, 1, 2, 4, 16))
+        plain = rnd.randbytes(rnd.choice((0, 1, 63, 64, 65, 128, rnd.randrange(3000))))
+        ivs = rnd.randbytes(32 if packet == 18 else 15)
+        data, nchunks = aead_packet(packet, sk, plain, c, ivs)
+        budget = rnd.choice((1, 16, 50, 4096))
+        what = f"AEAD {packet} c={c} {len(plain)} bytes"
+        check(native("aead", packet, h(sk), h(data), budget) == (plain.hex() or "-"), what)
+        bad = bytearray(data)
+        bad[rnd.randrange(3, len(bad))] ^= 1 << rnd.randrange(8)
+        check(native("aead", packet, h(sk), h(bad), budget).startswith("error"), what + " changed")
+        check(native("aead", packet, h(sk), h(data[:-16]), budget).startswith("error"), what + " no final tag")
+        check(native("aead", packet, h(sk), h(data[:-1]), budget).startswith("error"), what + " cut")
+        size = 1 << (c + 6)
+        if nchunks > 1:
+            # the last chunk gone, the final tag kept
+            head = 3 + len(ivs)
+            last = len(plain) - (nchunks - 1) * size + 16
+            cut = data[:len(data) - 16 - last] + data[-16:]
+            check(native("aead", packet, h(sk), h(cut), budget).startswith("error"), what + " last chunk gone")
+        other = bytearray(sk)
+        other[0] ^= 1
+        check(native("aead", packet, h(other), h(data), budget).startswith("error"), what + " another key")
+        # the other packet's format with the same bytes
+        check(native("aead", 38 - packet, h(sk), h(data), budget).startswith("error"), what + " the other format")
+    check(native("aead", 18, h(bytes(16)), "070106" + "00" * 48, 64) == "error -5", "AEAD EAX: not yet")
+    check(native("aead", 18, h(bytes(16)), "070211" + "00" * 48, 64) == "error -4", "AEAD chunk size 17")
+    check(native("aead", 18, h(bytes(24)), "070206" + "00" * 48, 64) == "error -2", "AEAD key for another cipher")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=200)
@@ -500,6 +585,10 @@ def main():
     print("AES key wrap done")
     check_seipd(native, rnd, args.cases)
     print("SEIPD v1 done")
+    check_ocb(native, rnd, args.cases)
+    print("OCB done")
+    check_aead(native, rnd, args.cases)
+    print("AEAD packets done")
     print(f"check_pgp: {len(failures)} failures")
     sys.exit(1 if failures else 0)
 

@@ -77,6 +77,7 @@ ZXFLAGS  := $(CFLAGS) -std=c++20 -fno-exceptions -fno-rtti $(ZXING_DEFINES) -I $
 	    -Wno-missing-braces -Wno-unused-template
 
 RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(ROOT)/src/runtime/jobs.cpp \
+	    $(ROOT)/src/runtime/inflate.c $(ROOT)/src/runtime/js_zlib.cpp \
 	    $(ROOT)/src/runtime/js_ui.cpp $(ROOT)/src/runtime/js_sys.cpp \
 	    $(ROOT)/src/runtime/js_crypto.cpp $(ROOT)/src/runtime/gk_bridge.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \
@@ -92,6 +93,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(R
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
 	    $(ROOT)/src/crypto/wipe.c $(ROOT)/src/crypto/s2k.c $(ROOT)/src/crypto/aes.c \
 	    $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/x25519.c $(ROOT)/src/crypto/seipd.c \
+	    $(ROOT)/src/crypto/ocb.c $(ROOT)/src/crypto/aead.c \
 	    $(ROOT)/src/kbdindev.cpp \
 	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
@@ -104,6 +106,9 @@ include $(ROOT)/lib/mbedtls/mbedtls.mk
 MBEDSRC  := $(addprefix $(MBEDTLS_DIR)/library/,$(MBEDTLS_SOURCES))
 include $(ROOT)/lib/monocypher/monocypher.mk
 MONOSRC  := $(addprefix $(MONO_DIR)/,$(MONO_SOURCES))
+# zlib's inflate (lib/zlib/zlib.mk)
+include $(ROOT)/lib/zlib/zlib.mk
+ZLIBSRC  := $(addprefix $(ZLIB_DIR)/,$(ZLIB_SOURCES))
 # colorqr, the experimental colour QR layer (lib/colorqr/colorqr.mk)
 include $(ROOT)/lib/colorqr/colorqr.mk
 CQSRC    := $(addprefix $(CQ_DIR)/,$(CQ_SOURCES))
@@ -119,16 +124,19 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC) $(MBEDSRC) $(MONOSRC)) \
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC) $(MBEDSRC) $(MONOSRC) $(ZLIBSRC)) \
 	    $(OBJDIR)/apps_bundle.c.o $(OBJDIR)/i18n_js.c.o
 ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
 $(SECPOBJS): CFLAGS += $(SECP_DEFINES) $(SECP_INCLUDE) -I $(SECP_DIR) -Wno-unused-function
-MBEDOBJS := $(call obj,$(MBEDSRC) $(ROOT)/src/crypto/aes.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/seipd.c)
+MBEDOBJS := $(call obj,$(MBEDSRC) $(ROOT)/src/crypto/aes.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/seipd.c \
+	    $(ROOT)/src/crypto/ocb.c)
 $(MBEDOBJS): CFLAGS += $(MBEDTLS_DEFINES) $(MBEDTLS_INCLUDE) -I $(MBEDTLS_DIR)/library
 MONOOBJS := $(call obj,$(MONOSRC) $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/x25519.c)
 $(MONOOBJS): CFLAGS += $(MONO_INCLUDE)
+ZLIBOBJS := $(call obj,$(ZLIBSRC) $(ROOT)/src/runtime/inflate.c)
+$(ZLIBOBJS): CFLAGS += $(ZLIB_DEFINES) $(ZLIB_INCLUDE)
 CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 

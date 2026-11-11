@@ -59,8 +59,14 @@ void gk_hmac_final (gk_hmac_t *ctx, uint8_t *digest);
 void gk_hmac (const gk_hash_t *hash, const void *key, size_t keylen,
 	      const void *data, size_t len, uint8_t *digest);
 
+/* HKDF (RFC 5869): extract, then expand to len bytes (at most 255
+   digests). salt may be 0 (zeros). */
+void gk_hkdf (const gk_hash_t *hash, const void *salt, size_t saltlen, const void *ikm, size_t ikmlen,
+	      const void *info, size_t infolen, uint8_t *out, size_t len);
+
 /* RFC 2202 (SHA-1) and RFC 4231 (SHA-224, SHA-256, SHA-384, SHA-512) test
-   cases: they hash one to three blocks with each hash. Quick (about 60 compressions); the
+   cases: they hash one to three blocks with each hash; RFC 5869's first
+   HKDF case. Quick (about 60 compressions); the
    hashes' own self-tests (gk_sha*_selftest) hash a million bytes each.
    0: OK. */
 int gk_hmac_selftest (void);
