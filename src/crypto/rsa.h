@@ -17,7 +17,8 @@
 extern "C" {
 #endif
 
-#define GK_RSA_MIN_BITS		2048
+#define GK_RSA_MIN_BITS		2048	/* keys to sign with */
+#define GK_RSA_MIN_VERIFY_BITS	1024	/* old keys' signatures (weak) */
 #define GK_RSA_MAX_BITS		4096
 #define GK_RSA_MAX_BYTES	(GK_RSA_MAX_BITS / 8)
 
@@ -56,15 +57,31 @@ const uint8_t *gk_rsa_e (const gk_rsa_key_t *key, size_t *len);
 /* Signs digest (hash->digest_size bytes; SHA-224, SHA-256, SHA-384 or
    SHA-512: never SHA-1) into sig, (bits + 7) / 8 bytes. The private
    operation is blinded (random bytes from rng) and its result is checked
-   against the public key, twice (Mbed TLS, then here): a fault that gave a
-   wrong signature, which could reveal the key, gives GK_RSA_FAULT and no
-   signature. */
+   against the public key, twice (Mbed TLS's check, then GapKeep's): a fault
+   that gave a wrong signature, which could reveal the key, gives
+   GK_RSA_FAULT and no signature. All at once: the steps below. */
 int gk_rsa_sign (gk_rsa_key_t *key, const gk_hash_t *hash, const uint8_t *digest, size_t dlen,
 		 uint8_t *sig, gk_rsa_rng_t rng, void *rng_arg);
 
+/* The same in four steps, the longest one modular exponentiation of the
+   CRT (half the work: about 200 ms for RSA-4096 on a Pi Zero). The key
+   must stay alive until the end, and be signed with by one job at a time
+   (its blinding values change at each signature). begin: GK_RSA_OK,
+   GK_RSA_BAD_HASH or GK_RSA_NO_MEMORY (then *job is 0). step: 1, more to
+   do; GK_RSA_OK, done (gk_rsa_sign_result); GK_RSA_RNG or GK_RSA_FAULT,
+   failed (no signature). end: wipes and frees (0: nothing). */
+typedef struct gk_rsa_sign_job gk_rsa_sign_job_t;
+int gk_rsa_sign_begin (gk_rsa_sign_job_t **job, gk_rsa_key_t *key, const gk_hash_t *hash,
+		       const uint8_t *digest, size_t dlen);
+int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rng, void *rng_arg);
+double gk_rsa_sign_progress (const gk_rsa_sign_job_t *job);
+const uint8_t *gk_rsa_sign_result (const gk_rsa_sign_job_t *job, size_t *len);
+void gk_rsa_sign_end (gk_rsa_sign_job_t *job);
+
 /* 1: sig (exactly as long as n) is a valid signature of digest under
-   (n, e), with SHA-1 too; 0: not, or the key is not a 2048- to 4096-bit
-   RSA public key, or the digest's size is wrong. */
+   (n, e), with SHA-1 too; 0: not, or the key is not a 1024- to 4096-bit
+   RSA public key, or the digest's size is wrong. (Below 2048 bits, keys
+   are weak: for old signatures only.) */
 int gk_rsa_verify (const uint8_t *n, size_t nlen, const uint8_t *e, size_t elen,
 		   const gk_hash_t *hash, const uint8_t *digest, size_t dlen,
 		   const uint8_t *sig, size_t siglen);

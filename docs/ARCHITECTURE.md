@@ -194,14 +194,19 @@ signature verified before it is returned. RSA PKCS #1 v1.5 signatures
 (`rsa.*`) and AES-CFB (`aes.*`) run on a crypto-only subset of Mbed TLS
 3.6 LTS (`third_party/mbedtls`: only the files `lib/mbedtls/mbedtls.mk`
 builds, configured by `lib/mbedtls/gk_mbedtls_config.h`; its wipes are
-`gk_wipe`): its constant-time bignum, the private operation blinded and
-checked by Mbed TLS, and checked again against the public key in `rsa.c`,
-which also does the PKCS #1 encoding (DigestInfo), and verifies by
-encoding and comparing. Imported keys are checked for consistency (n = pq,
+`gk_wipe`): its constant-time bignum, and its private operation's steps
+(base and exponent blinding, the CRT, its check against glitches),
+run one by one by `rsa.c` (`gk_rsa_sign_step`: Mbed TLS's
+`mbedtls_rsa_private` does them in one call, too long for the main loop)
+on the context's own numbers; then the signature is checked again against
+the public key. `rsa.c` also does the PKCS #1 encoding (DigestInfo), and
+verifies (1024 to 4096 bits; signing keys from 2048) by encoding and
+comparing. Imported keys are checked for consistency (n = pq,
 de = 1 mod p-1 and q-1, OpenPGP's u) and their CRT values derived, in
 memory from Circle's heap (zeroed when freed), at most 64 at a time.
 OpenPGP's S2K (`s2k.*`, RFC 9580) is written here, over `gk_hash_t`, and
-hashes the repeated salt and passphrase from a 1 KiB buffer. Both
+hashes the repeated salt and passphrase from a 1 KiB buffer, in steps (a
+job, below). Both
 libraries are vendored unchanged, pinned to a release (source and SHA-256
 in their `.mk`). `tools/check_pgp.py` builds these files for the host and
 compares them with Python's cryptography (OpenSSL) on random keys and
@@ -298,10 +303,26 @@ interrupted: a built-in like `Array.prototype.sort` on a large array,
 `JSON.parse` of a long text or BigInt arithmetic on huge numbers runs to
 its end (bounded by the 96 MB heap: seconds on a Pi Zero, not minutes),
 then the handler stops the app at its next check. GapKeep's own long
-native work asks too: `gk:crypto`'s `pbkdf2` checks every 256 iterations,
-`openpgpS2k` every MiB hashed and the AES-CFB functions every 64 KiB, and
-throw the same uncatchable "interrupted" error. An RSA signature (under
-half a second with 4096 bits) is one uninterrupted call.
+native work asks too: `gk:crypto`'s `pbkdf2` checks every 256 iterations
+and the AES-CFB functions every 64 KiB, and throw the same uncatchable
+"interrupted" error.
+
+**Long native work** (`runtime/jobs.*`): what can take more than a quarter
+of a second on a Pi Zero (OpenPGP's S2K, RSA signatures; later Argon2id,
+decompression) is a *job*, and its call returns a promise. A job is native
+state with a step function: the app host's `Update()` gives the first job
+of the running app one slice of about 20 ms per pass of the main loop,
+after LVGL has read input and drawn, so the screen and the keyboard stay
+alive. Jobs run one at a time, in order (16 may wait per app); the promise
+is settled from the main loop, as gk:usb's transfers are, and progress is
+reported between slices (`onProgress`). When the app stops, its jobs are
+dropped (wiped, never settled); when the watchdog stops one of its scripts,
+they are rejected. A slice ends at its deadline, overrunning it by at most
+one unit of the job's work: 64 KiB of hashing for S2K (a slice lasts 22 ms
+on a Pi Zero), one modular exponentiation of the CRT for RSA (220 ms with
+4096 bits: `crypto/rsa.c` runs the steps of Mbed TLS's private operation
+one by one, blinding and checks included). The same code runs in the
+simulator, natively and in WebAssembly.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs

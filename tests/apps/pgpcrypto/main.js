@@ -35,6 +35,37 @@ function time(what, fn) {
   console.log(`pgpcrypto: time ${what} ${(sys.uptime() - t0).toFixed(1)} ms`);
   return r;
 }
+async function rejects(promise, type, what) {
+  try { await promise; } catch (e) { ok(e instanceof type, `${what} (rejected with ${e && e.name}: ${e && e.message})`); return; }
+  ok(false, `${what} (resolved)`);
+}
+
+// A long job (a promise) timed, with what the person would see meanwhile:
+// a timer every 5 ms and the progress on screen; the longest gap between
+// the timer's ticks is how long the screen went without being drawn.
+async function timeJob(what, start) {
+  let last = sys.uptime(), gap = 0, ticks = 0, calls = 0, lastProgress = 0, monotonic = true;
+  const timer = setInterval(() => {
+    const now = sys.uptime();
+    gap = Math.max(gap, now - last);
+    last = now;
+    ticks++;
+  }, 5);
+  const t0 = sys.uptime();
+  const r = await start((f) => {
+    calls++;
+    if (!(f > lastProgress && f <= 1)) monotonic = false;
+    lastProgress = f;
+    status.text = `${what}: ${Math.round(f * 100)}%`;
+  });
+  const now = sys.uptime();
+  gap = Math.max(gap, now - last);
+  clearInterval(timer);
+  console.log(`pgpcrypto: time ${what} ${(now - t0).toFixed(1)} ms, longest gap ${gap.toFixed(1)} ms, ` +
+              `${ticks} timer ticks, ${calls} progress calls`);
+  ok(monotonic, `${what}: progress rises, at most 1`);
+  return r;
+}
 
 const groups = [];
 const group = (name, fn) => groups.push([name, fn]);
@@ -126,17 +157,17 @@ group("RSA Wycheproof verify", () => {
   console.log(`pgpcrypto: Wycheproof RSA verify: ${n} checked`);
 });
 
-group("RSA Wycheproof sign", () => {
+group("RSA Wycheproof sign", async () => {
   let last = null, key = null;
   for (const [k, digest, sig, id] of V.rsaSignWycheproof) {
     if (k !== last) { key?.destroy(); key = crypto.rsaPrivateKey(keyOf(k)); last = k; }
-    ok(hex(key.sign("SHA-256", unhex(digest))) === sig, `Wycheproof RSA sign ${id}`);
+    ok(hex(await key.sign("SHA-256", unhex(digest))) === sig, `Wycheproof RSA sign ${id}`);
   }
   key?.destroy();
 });
 
 for (const size of [2048, 3072, 4096]) {
-  group(`RSA-${size}`, () => {
+  group(`RSA-${size}`, async () => {
     const { key: k, sigs } = V.rsaKeys.find((x) => x.bits === size);
     const key = time(`RSA-${size} import`, () => crypto.rsaPrivateKey(keyOf(k)));
     ok(key.bits === size, `RSA-${size} bits`);
@@ -145,7 +176,9 @@ for (const size of [2048, 3072, 4096]) {
     for (const [name, one] of [["SHA-224", crypto.sha224], ["SHA-256", crypto.sha256],
                                ["SHA-384", crypto.sha384], ["SHA-512", crypto.sha512]]) {
       const digest = one("GapKeep");
-      const sig = name === "SHA-512" ? time(`RSA-${size} sign`, () => key.sign(name, digest)) : key.sign(name, digest);
+      const sig = name === "SHA-512"
+        ? await timeJob(`RSA-${size} sign`, (onProgress) => key.sign(name, digest, { onProgress }))
+        : await key.sign(name, digest);
       ok(hex(sig) === sigs[name], `RSA-${size} ${name} signature`);
       const v = name === "SHA-512" ? time(`RSA-${size} verify`, () => crypto.rsaVerify(sig, name, digest, pub))
         : crypto.rsaVerify(sig, name, digest, pub);
@@ -154,7 +187,7 @@ for (const size of [2048, 3072, 4096]) {
     ok(crypto.rsaVerify(unhex(sigs["SHA-1"]), "SHA-1", crypto.sha1("GapKeep"), pub), `RSA-${size} SHA-1 verifies`);
     // without u, and with the primes swapped (u then no longer fits)
     const k2 = crypto.rsaPrivateKey({ ...keyOf(k), u: undefined, p: unhex(k.q), q: unhex(k.p) });
-    ok(hex(k2.sign("SHA-256", crypto.sha256("GapKeep"))) === sigs["SHA-256"], `RSA-${size} q < p, no u`);
+    ok(hex(await k2.sign("SHA-256", crypto.sha256("GapKeep"))) === sigs["SHA-256"], `RSA-${size} q < p, no u`);
     k2.destroy();
     throws(() => crypto.rsaPrivateKey({ ...keyOf(k), p: unhex(k.q), q: unhex(k.p) }), RangeError, `RSA-${size} u for swapped primes`);
     key.destroy();
@@ -162,7 +195,7 @@ for (const size of [2048, 3072, 4096]) {
   });
 }
 
-group("RSA errors", () => {
+group("RSA errors", async () => {
   const { key: k, sigs } = V.rsaKeys[0];
   const key = crypto.rsaPrivateKey(keyOf(k)), pub = { n: unhex(k.n), e: unhex(k.e) };
   const digest = crypto.sha256("GapKeep"), sig = unhex(sigs["SHA-256"]);
@@ -184,11 +217,25 @@ group("RSA errors", () => {
   const flipped = sig.slice(); flipped[100] ^= 0x10;
   ok(!crypto.rsaVerify(flipped, "SHA-256", digest, pub), "RSA verify corrupted: false");
   ok(!crypto.rsaVerify(sig, "SHA-256", digest, { n: unhex(k.n).subarray(0, 64), e: pub.e }), "RSA verify 512-bit key: false");
+  ok(!crypto.rsaVerify(sig.subarray(0, 120), "SHA-256", digest, { n: unhex(k.n).subarray(0, 120), e: pub.e }),
+     "RSA verify 960-bit key: false");
   throws(() => crypto.rsaVerify(sig, "SHA-256", digest.subarray(1), pub), RangeError, "RSA verify short digest");
   throws(() => crypto.rsaVerify(sig, "SHA3-256", digest, pub), TypeError, "RSA verify unknown hash");
   throws(() => crypto.rsaVerify(sig, "SHA-256", digest, { n: pub.n }), TypeError, "RSA verify no e");
+  throws(() => key.sign("SHA-256", digest, 42), TypeError, "RSA sign options a number");
+  throws(() => key.sign("SHA-256", digest, { onProgress: 42 }), TypeError, "RSA sign onProgress a number");
+  // destroyed while it signs: the promise rejects; signing after: throws
+  const pending = key.sign("SHA-256", digest);
+  ok(pending instanceof Promise, "RSA sign returns a promise");
   key.destroy();
+  await rejects(pending, TypeError, "RSA key destroyed while signing");
   key.destroy();
+  throws(() => key.sign("SHA-256", digest), TypeError, "RSA sign after destroy");
+  // RSA-1024: verifies (weak, for old signatures), never imports
+  const { key: k1, sig: s1, digest: d1 } = V.rsa1024;
+  ok(crypto.rsaVerify(unhex(s1), "SHA-256", unhex(d1), { n: unhex(k1.n), e: unhex(k1.e) }), "RSA-1024 verifies");
+  ok(!crypto.rsaVerify(unhex(s1), "SHA-256", crypto.sha256("x"), { n: unhex(k1.n), e: unhex(k1.e) }), "RSA-1024 other digest");
+  throws(() => crypto.rsaPrivateKey(keyOf(k1)), RangeError, "RSA-1024 import refused");
 });
 
 group("RSA key limit", () => {
@@ -227,14 +274,14 @@ group("AES-CFB", () => {
   ok(crypto.aesCfbDecrypt(new Uint8Array(32), iv, e).every((x) => x === 0), "AES-CFB 1 MiB round trip");
 });
 
-group("S2K", () => {
+group("S2K", async () => {
   const salt = unhex("0102030405060708");
-  ok(hex(crypto.openpgpS2k(3, "SHA-1", "hello world", salt, 0x60, 32)) ===
+  ok(hex(await crypto.openpgpS2k(3, "SHA-1", "hello world", salt, 0x60, 32)) ===
      "3251cc71bbba6d556b738cd47f5070e3634833e818a6d2bafab4a582d1deba88", "S2K 3 SHA-1 two hashes");
-  ok(hex(crypto.openpgpS2k(1, "SHA-256", utf8("password"), salt, null, 32)) ===
+  ok(hex(await crypto.openpgpS2k(1, "SHA-256", utf8("password"), salt, null, 32)) ===
      "401cee42f1e78e4ce02e01102870bd121c252c9f617db439352f749ceecaadfc", "S2K 1");
-  ok(hex(crypto.openpgpS2k(0, "SHA-512", "", null, null, 16)) === "cf83e1357eefb8bdf1542850d66d8007", "S2K 0");
-  ok(hex(crypto.openpgpS2k(0, "SHA-224", "abc", undefined, undefined, 40)) ===
+  ok(hex(await crypto.openpgpS2k(0, "SHA-512", "", null, null, 16)) === "cf83e1357eefb8bdf1542850d66d8007", "S2K 0");
+  ok(hex(await crypto.openpgpS2k(0, "SHA-224", "abc", undefined, undefined, 40)) ===
      "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7a5b29b7d277ee5f8472f0c9f", "S2K 0 SHA-224 40 bytes");
   throws(() => crypto.openpgpS2k(2, "SHA-256", "p", salt, 0, 16), RangeError, "S2K type 2");
   throws(() => crypto.openpgpS2k(3, "SHA-256", "p", salt.subarray(1), 0, 16), RangeError, "S2K 7-byte salt");
@@ -246,6 +293,26 @@ group("S2K", () => {
   throws(() => crypto.openpgpS2k(3, "SHA-256", "p", salt, 0, 65), RangeError, "S2K length 65");
   throws(() => crypto.openpgpS2k(3, "SHA-256", "p", salt, 0, 0), RangeError, "S2K length 0");
   throws(() => crypto.openpgpS2k(3, "MD5", "p", salt, 0, 16), TypeError, "S2K MD5");
+  throws(() => crypto.openpgpS2k(3, "SHA-256", "p".repeat(65537), salt, 0, 16), RangeError, "S2K passphrase too long");
+  throws(() => crypto.openpgpS2k(3, "SHA-256", "p", salt, 0, 16, { onProgress: "x" }), TypeError, "S2K onProgress a string");
+  // the passphrase is copied: changing it afterwards changes nothing
+  const pw = utf8("hello world"), pending = crypto.openpgpS2k(3, "SHA-1", pw, salt, 0x60, 32);
+  pw.fill(0);
+  ok(hex(await pending) === "3251cc71bbba6d556b738cd47f5070e3634833e818a6d2bafab4a582d1deba88", "S2K passphrase copied");
+});
+
+group("jobs", async () => {
+  // they run one at a time, in order
+  const salt = new Uint8Array(8), order = [];
+  const all = [];
+  for (let i = 0; i < 16; i++) all.push(crypto.openpgpS2k(3, "SHA-256", `p${i}`, salt, 0x40, 16).then(() => order.push(i)));
+  throws(() => crypto.openpgpS2k(3, "SHA-256", "p", salt, 0x40, 16), RangeError, "a 17th job waiting");
+  await Promise.all(all);
+  ok(order.join() === Array.from({ length: 16 }, (_, i) => i).join(), "jobs end in order");
+  // a handler that throws doesn't stop the job
+  let n = 0;
+  const k = await crypto.openpgpS2k(3, "SHA-256", "p", salt, 0xd0, 16, { onProgress: () => { n++; throw new Error("test: an onProgress that throws"); } });
+  ok(k.length === 16 && n > 0, "a throwing onProgress");
 });
 
 // RFC 9580, A.9.1, A.10.1, A.11.1: SHA2-256, the largest count (65011712
@@ -253,15 +320,17 @@ group("S2K", () => {
 for (const [salt, key] of [["a5ae579d1fc5d82b", "154967e590aa1f923e1c0ac64c88f23d"],
                            ["56a298d2f5e36453", "e80de243a362d93b9dc607ede96a7356"],
                            ["e9d39785b2070008", "250281715bba7828ef71ef64c4784753"]]) {
-  group(`S2K RFC 9580 ${salt}`, () => {
-    const k = time("S2K SHA-256 65011712 bytes", () => crypto.openpgpS2k(3, "SHA-256", "password", unhex(salt), 255, 16));
+  group(`S2K RFC 9580 ${salt}`, async () => {
+    const k = await timeJob("S2K SHA-256 65011712 bytes",
+      (onProgress) => crypto.openpgpS2k(3, "SHA-256", "password", unhex(salt), 255, 16, { onProgress }));
     ok(hex(k) === key, `S2K RFC 9580 ${salt}`);
   });
 }
 
 // what GnuPG 2.4 exports secret keys with: SHA-1, the largest count, AES-128
-group("S2K SHA-1 timing", () => {
-  const k = time("S2K SHA-1 65011712 bytes", () => crypto.openpgpS2k(3, "SHA-1", "password", new Uint8Array(8), 255, 16));
+group("S2K SHA-1 timing", async () => {
+  const k = await timeJob("S2K SHA-1 65011712 bytes",
+    (onProgress) => crypto.openpgpS2k(3, "SHA-1", "password", new Uint8Array(8), 255, 16, { onProgress }));
   ok(k.length === 16, "S2K SHA-1 largest count");
 });
 
@@ -294,11 +363,29 @@ group("timings", () => {
     status.text = name;
     await tick();
     try {
-      fn();
+      await fn();
     } catch (e) {
       ok(false, `${name}: ${e && e.name}: ${e && e.message}`);
     }
   }
   status.text = `${passed} passed, ${failed} failed`;
   console.log(`pgpcrypto: ${passed} passed, ${failed} failed`);
+  // a script the watchdog stops (10 s): the app's jobs end, rejected
+  const cancelled = crypto.openpgpS2k(3, "SHA-1", "p", new Uint8Array(8), 255, 64);
+  cancelled.catch(() => {});
+  await new Promise((resolve) => setTimeout(() => { resolve(); while (true); }, 0));
+  try {
+    await cancelled;
+    console.log("pgpcrypto: FAIL the job outlived the watchdog");
+  } catch (e) {
+    console.log(`pgpcrypto: job after the watchdog: ${e instanceof InternalError ? "cancelled" : "FAIL " + e}`);
+  }
+  // jobs left waiting for the Windows key (tests/pgpcrypto.txt): dropped
+  // when the app stops, their promises never settled
+  for (let i = 0; i < 4; i++) {
+    crypto.openpgpS2k(3, "SHA-1", "p", new Uint8Array(8), 255, 64)
+      .then(() => console.log("pgpcrypto: a long job ended before the Windows key"),
+            () => console.log("pgpcrypto: FAIL a long job rejected"));
+  }
+  console.log("pgpcrypto: long jobs queued");
 })();

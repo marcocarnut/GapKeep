@@ -52,6 +52,8 @@ struct TGkApp
 	struct TGkI18nState *pI18n;	// its translations (i18n.h), from its start
 	struct TGkUSBState *pUSB;	// gk:usb: its handlers, devices and transfers,
 					// 0 until it imports it (js_usb.cpp)
+	struct TGkJobsState *pJobs;	// long native work, as promises (jobs.h),
+					// 0 until the first
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;
@@ -137,6 +139,7 @@ private:
 	const gk_app_t *m_pPendingLaunch;
 	volatile boolean m_bHomeRequested;	// set from IRQ context
 	boolean m_bInterrupted;			// the pending exception is our interrupt
+	boolean m_bCancelJobs;			// the watchdog stopped a script: end its jobs
 
 	static CAppHost *s_pThis;
 };

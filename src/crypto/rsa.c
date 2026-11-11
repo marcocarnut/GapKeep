@@ -5,7 +5,12 @@
  */
 #include "rsa.h"
 #include "wipe.h"
+/* the context's numbers (N, P, Q, DP, ..., the blinding values) and
+   Mbed TLS's own bignum internals, for signing in steps (below) */
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #include <mbedtls/rsa.h>
+#include "../../third_party/mbedtls/library/bignum_core.h"
+#include "../../third_party/mbedtls/library/bignum_internal.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -189,44 +194,301 @@ const uint8_t *gk_rsa_e (const gk_rsa_key_t *key, size_t *len)
 	return key->e;
 }
 
-int gk_rsa_sign (gk_rsa_key_t *key, const gk_hash_t *hash, const uint8_t *digest, size_t dlen,
-		 uint8_t *sig, gk_rsa_rng_t rng, void *rng_arg)
-{
-	size_t k = mbedtls_rsa_get_len (&key->rsa);
-	uint8_t em[GK_RSA_MAX_BYTES], check[GK_RSA_MAX_BYTES];
+/*
+ * Signing in steps (gk_rsa_sign_begin ... step ... end), so that an
+ * RSA-4096 signature can be spread over the main loop: each modular
+ * exponentiation of the CRT is a step of its own. The steps are those of
+ * Mbed TLS 3.6.7's mbedtls_rsa_private (library/rsa.c, CRT build), on the
+ * same context fields and with its own helpers' code below:
+ *
+ *   0. T = EM * Vi mod N, the blinding values made or squared
+ *      (rsa_prepare_blinding); DP and DQ blinded with random multiples of
+ *      P-1 and Q-1 (28 bytes, RSA_EXPONENT_BLINDING)
+ *   1. TP = T^DP_blind mod P
+ *   2. TQ = T^DQ_blind mod Q
+ *   3. T from TP and TQ (rsa_apply_crt); T^E mod N compared with the
+ *      blinded input (Mbed TLS's check against glitches); T * Vf mod N
+ *      (rsa_unblind, in Montgomery form, constant-time); and GapKeep's own
+ *      check, the signature raised to E against EM
+ *
+ * mbedtls_rsa_private is not used: it does all of that in one call
+ * (460 ms for RSA-4096 on a Pi Zero). If Mbed TLS is updated, compare
+ * this with its rsa_private, rsa_prepare_blinding, rsa_gen_rand_with_
+ * inverse, rsa_apply_crt and rsa_unblind.
+ */
 
+#define GK_RSA_EXPONENT_BLINDING	28	/* bytes, as Mbed TLS's */
+
+struct gk_rsa_sign_job
+{
+	int step;			/* the next */
+	size_t k;			/* bytes of N */
+	uint8_t em[GK_RSA_MAX_BYTES];
+	uint8_t sig[GK_RSA_MAX_BYTES];
+	mbedtls_mpi T, TP, TQ, DP_blind, DQ_blind, input_blinded;
+};
+
+/* Mbed TLS's rsa_apply_crt: T = ((TP - TQ) * QP mod P) * Q + TQ */
+static int apply_crt (mbedtls_mpi *T, const mbedtls_mpi *TP, const mbedtls_mpi *TQ,
+		      const mbedtls_rsa_context *ctx)
+{
+	int ret;
+	MBEDTLS_MPI_CHK (mbedtls_mpi_sub_mpi (T, TP, TQ));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_mul_mpi (T, T, &ctx->QP));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_mod_mpi (T, T, &ctx->P));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_mul_mpi (T, T, &ctx->Q));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_add_mpi (T, T, TQ));
+cleanup:
+	return ret;
+}
+
+/* Mbed TLS's rsa_gen_rand_with_inverse (CRT): A random, invertible mod N,
+   and B = A^-1 mod N, made mod P and mod Q */
+static int rand_with_inverse (const mbedtls_rsa_context *ctx, mbedtls_mpi *A, mbedtls_mpi *B,
+			      gk_rsa_rng_t rng, void *rng_arg)
+{
+	int ret;
+	mbedtls_mpi Ap, Aq, Bp, Bq, G;
+	mbedtls_mpi_init (&Ap); mbedtls_mpi_init (&Aq);
+	mbedtls_mpi_init (&Bp); mbedtls_mpi_init (&Bq);
+	mbedtls_mpi_init (&G);
+
+	MBEDTLS_MPI_CHK (mbedtls_mpi_random (&Ap, 1, &ctx->P, rng, rng_arg));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_gcd_modinv_odd (&G, &Bp, &Ap, &ctx->P));
+	if (mbedtls_mpi_cmp_int (&G, 1) != 0)
+	{
+		ret = MBEDTLS_ERR_RSA_RNG_FAILED;	/* P not prime */
+		goto cleanup;
+	}
+	MBEDTLS_MPI_CHK (mbedtls_mpi_random (&Aq, 1, &ctx->Q, rng, rng_arg));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_gcd_modinv_odd (&G, &Bq, &Aq, &ctx->Q));
+	if (mbedtls_mpi_cmp_int (&G, 1) != 0)
+	{
+		ret = MBEDTLS_ERR_RSA_RNG_FAILED;
+		goto cleanup;
+	}
+	MBEDTLS_MPI_CHK (apply_crt (A, &Ap, &Aq, ctx));
+	MBEDTLS_MPI_CHK (apply_crt (B, &Bp, &Bq, ctx));
+
+cleanup:
+	mbedtls_mpi_free (&Ap); mbedtls_mpi_free (&Aq);
+	mbedtls_mpi_free (&Bp); mbedtls_mpi_free (&Bq);
+	mbedtls_mpi_free (&G);
+	return ret;
+}
+
+/* Mbed TLS's rsa_prepare_blinding: Vf random, Vi = Vf^-e mod N, the first
+   time; afterwards both squared */
+static int prepare_blinding (mbedtls_rsa_context *ctx, gk_rsa_rng_t rng, void *rng_arg)
+{
+	int ret;
+	if (ctx->Vf.p != 0)
+	{
+		MBEDTLS_MPI_CHK (mbedtls_mpi_mul_mpi (&ctx->Vi, &ctx->Vi, &ctx->Vi));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_mod_mpi (&ctx->Vi, &ctx->Vi, &ctx->N));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_mul_mpi (&ctx->Vf, &ctx->Vf, &ctx->Vf));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_mod_mpi (&ctx->Vf, &ctx->Vf, &ctx->N));
+		goto cleanup;
+	}
+	MBEDTLS_MPI_CHK (rand_with_inverse (ctx, &ctx->Vf, &ctx->Vi, rng, rng_arg));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_exp_mod (&ctx->Vi, &ctx->Vi, &ctx->E, &ctx->N, &ctx->RN));
+cleanup:
+	return ret;
+}
+
+/* Mbed TLS's rsa_unblind: T = T * Vf mod N, in Montgomery form */
+static int unblind (mbedtls_mpi *T, mbedtls_mpi *Vf, const mbedtls_mpi *N)
+{
+	int ret;
+	const mbedtls_mpi_uint mm = mbedtls_mpi_core_montmul_init (N->p);
+	const size_t nlimbs = N->n;
+	const size_t tlimbs = mbedtls_mpi_core_montmul_working_limbs (nlimbs);
+	mbedtls_mpi RR, M_T;
+	mbedtls_mpi_init (&RR);
+	mbedtls_mpi_init (&M_T);
+
+	MBEDTLS_MPI_CHK (mbedtls_mpi_core_get_mont_r2_unsafe (&RR, N));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_grow (&M_T, tlimbs));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_grow (T, nlimbs));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_grow (Vf, nlimbs));
+	mbedtls_mpi_core_to_mont_rep (T->p, T->p, N->p, nlimbs, mm, RR.p, M_T.p);
+	mbedtls_mpi_core_montmul (T->p, T->p, Vf->p, nlimbs, N->p, nlimbs, mm, M_T.p);
+
+cleanup:
+	mbedtls_mpi_free (&RR);
+	mbedtls_mpi_free (&M_T);
+	return ret;
+}
+
+int gk_rsa_sign_begin (gk_rsa_sign_job_t **pjob, gk_rsa_key_t *key, const gk_hash_t *hash,
+		       const uint8_t *digest, size_t dlen)
+{
+	*pjob = 0;
 	if (hash == &gk_hash_sha1)
 	{
 		return GK_RSA_BAD_HASH;		/* verification only */
 	}
-	int result = encode (hash, digest, dlen, em, k);
+	gk_rsa_sign_job_t *job = calloc (1, sizeof *job);
+	if (job == 0)
+	{
+		return GK_RSA_NO_MEMORY;
+	}
+	job->k = mbedtls_rsa_get_len (&key->rsa);
+	int result = encode (hash, digest, dlen, job->em, job->k);
+	if (result != GK_RSA_OK)
+	{
+		free (job);
+		return result;
+	}
+	mbedtls_mpi_init (&job->T);
+	mbedtls_mpi_init (&job->TP);
+	mbedtls_mpi_init (&job->TQ);
+	mbedtls_mpi_init (&job->DP_blind);
+	mbedtls_mpi_init (&job->DQ_blind);
+	mbedtls_mpi_init (&job->input_blinded);
+	*pjob = job;
+	return GK_RSA_OK;
+}
+
+static int blind_exponent (mbedtls_mpi *X, const mbedtls_mpi *prime, const mbedtls_mpi *d,
+			   gk_rsa_rng_t rng, void *rng_arg)
+{
+	int ret;
+	mbedtls_mpi P1, R;
+	mbedtls_mpi_init (&P1);
+	mbedtls_mpi_init (&R);
+	MBEDTLS_MPI_CHK (mbedtls_mpi_sub_int (&P1, prime, 1));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_fill_random (&R, GK_RSA_EXPONENT_BLINDING, rng, rng_arg));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_mul_mpi (X, &P1, &R));
+	MBEDTLS_MPI_CHK (mbedtls_mpi_add_mpi (X, X, d));
+cleanup:
+	mbedtls_mpi_free (&P1);
+	mbedtls_mpi_free (&R);
+	return ret;
+}
+
+int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rng, void *rng_arg)
+{
+	mbedtls_rsa_context *ctx = &key->rsa;
+	int ret = 0;
+
+	switch (job->step)
+	{
+	case 0:
+		MBEDTLS_MPI_CHK (mbedtls_mpi_read_binary (&job->T, job->em, job->k));
+		if (mbedtls_mpi_cmp_mpi (&job->T, &ctx->N) >= 0)
+		{
+			ret = MBEDTLS_ERR_MPI_BAD_INPUT_DATA;
+			goto cleanup;
+		}
+		MBEDTLS_MPI_CHK (prepare_blinding (ctx, rng, rng_arg));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_mul_mpi (&job->T, &job->T, &ctx->Vi));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_mod_mpi (&job->T, &job->T, &ctx->N));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_copy (&job->input_blinded, &job->T));
+		MBEDTLS_MPI_CHK (blind_exponent (&job->DP_blind, &ctx->P, &ctx->DP, rng, rng_arg));
+		MBEDTLS_MPI_CHK (blind_exponent (&job->DQ_blind, &ctx->Q, &ctx->DQ, rng, rng_arg));
+		break;
+
+	case 1:
+		MBEDTLS_MPI_CHK (mbedtls_mpi_exp_mod (&job->TP, &job->T, &job->DP_blind, &ctx->P, &ctx->RP));
+		break;
+
+	case 2:
+		MBEDTLS_MPI_CHK (mbedtls_mpi_exp_mod (&job->TQ, &job->T, &job->DQ_blind, &ctx->Q, &ctx->RQ));
+		break;
+
+	case 3:
+	{
+		uint8_t check[GK_RSA_MAX_BYTES];
+		mbedtls_mpi C;
+		mbedtls_mpi_init (&C);
+		MBEDTLS_MPI_CHK (apply_crt (&job->T, &job->TP, &job->TQ, ctx));
+		/* Mbed TLS's check against glitches */
+		ret = mbedtls_mpi_exp_mod (&C, &job->T, &ctx->E, &ctx->N, &ctx->RN);
+		if (ret == 0 && mbedtls_mpi_cmp_mpi (&C, &job->input_blinded) != 0)
+		{
+			ret = MBEDTLS_ERR_RSA_VERIFY_FAILED;
+		}
+		mbedtls_mpi_free (&C);
+		if (ret != 0)
+		{
+			goto cleanup;
+		}
+		MBEDTLS_MPI_CHK (unblind (&job->T, &ctx->Vf, &ctx->N));
+		MBEDTLS_MPI_CHK (mbedtls_mpi_write_binary (&job->T, job->sig, job->k));
+		/* and GapKeep's: the signature, raised to e, must be what was
+		   signed */
+		if (mbedtls_rsa_public (ctx, job->sig, check) != 0 || !equal (check, job->em, job->k))
+		{
+			ret = MBEDTLS_ERR_RSA_VERIFY_FAILED;
+		}
+		gk_wipe (check, sizeof check);
+		if (ret != 0)
+		{
+			goto cleanup;
+		}
+		break;
+	}
+
+	default:
+		return GK_RSA_OK;
+	}
+
+	job->step++;
+	return job->step < 4 ? 1 : GK_RSA_OK;
+
+cleanup:
+	gk_wipe (job->sig, sizeof job->sig);
+	job->step = -1;
+	return ret == MBEDTLS_ERR_RSA_RNG_FAILED || ret == MBEDTLS_ERR_MPI_NOT_ACCEPTABLE ? GK_RSA_RNG
+	       : GK_RSA_FAULT;
+}
+
+double gk_rsa_sign_progress (const gk_rsa_sign_job_t *job)
+{
+	static const double done[] = { 0, 0.02, 0.5, 0.97, 1 };
+	return job->step >= 0 && job->step <= 4 ? done[job->step] : 0;
+}
+
+const uint8_t *gk_rsa_sign_result (const gk_rsa_sign_job_t *job, size_t *len)
+{
+	*len = job->k;
+	return job->sig;
+}
+
+void gk_rsa_sign_end (gk_rsa_sign_job_t *job)
+{
+	if (job == 0)
+	{
+		return;
+	}
+	mbedtls_mpi_free (&job->T);		/* each wiped */
+	mbedtls_mpi_free (&job->TP);
+	mbedtls_mpi_free (&job->TQ);
+	mbedtls_mpi_free (&job->DP_blind);
+	mbedtls_mpi_free (&job->DQ_blind);
+	mbedtls_mpi_free (&job->input_blinded);
+	gk_wipe (job, sizeof *job);
+	free (job);
+}
+
+int gk_rsa_sign (gk_rsa_key_t *key, const gk_hash_t *hash, const uint8_t *digest, size_t dlen,
+		 uint8_t *sig, gk_rsa_rng_t rng, void *rng_arg)
+{
+	gk_rsa_sign_job_t *job;
+	int result = gk_rsa_sign_begin (&job, key, hash, digest, dlen);
 	if (result != GK_RSA_OK)
 	{
 		return result;
 	}
-
-	/* blinded, and checked by Mbed TLS (MBEDTLS_ERR_RSA_VERIFY_FAILED) */
-	int ret = mbedtls_rsa_private (&key->rsa, rng, rng_arg, em, sig);
-	if (ret == MBEDTLS_ERR_RSA_RNG_FAILED)
+	while ((result = gk_rsa_sign_step (job, key, rng, rng_arg)) > 0)
 	{
-		result = GK_RSA_RNG;
 	}
-	else if (ret != 0)
+	if (result == GK_RSA_OK)
 	{
-		result = GK_RSA_FAULT;
+		memcpy (sig, job->sig, job->k);
 	}
-	/* and here: the signature, raised to e, must be what was signed */
-	else if (mbedtls_rsa_public (&key->rsa, sig, check) != 0 || !equal (check, em, k))
-	{
-		result = GK_RSA_FAULT;
-	}
-
-	if (result != GK_RSA_OK)
-	{
-		gk_wipe (sig, k);
-	}
-	gk_wipe (em, sizeof em);
-	gk_wipe (check, sizeof check);
+	gk_rsa_sign_end (job);
 	return result;
 }
 
@@ -249,7 +511,7 @@ int gk_rsa_verify (const uint8_t *n, size_t nlen, const uint8_t *e, size_t elen,
 	if (   mbedtls_rsa_import_raw (&rsa, n, nlen, 0, 0, 0, 0, 0, 0, e, elen) == 0
 	    && mbedtls_rsa_complete (&rsa) == 0
 	    && mbedtls_rsa_check_pubkey (&rsa) == 0		/* n odd, e odd, 3 <= e < n */
-	    && mbedtls_rsa_get_bitlen (&rsa) >= GK_RSA_MIN_BITS
+	    && mbedtls_rsa_get_bitlen (&rsa) >= GK_RSA_MIN_VERIFY_BITS
 	    && mbedtls_rsa_get_bitlen (&rsa) <= GK_RSA_MAX_BITS
 	    && encode (hash, digest, dlen, em, nlen) == GK_RSA_OK
 	    && mbedtls_rsa_public (&rsa, sig, m) == 0)		/* fails if sig >= n */

@@ -104,8 +104,8 @@ function parseSecretKey(body) {
 }
 
 // the secret numbers, or null if the SHA-1 check fails (wrong passphrase)
-function unlock(key, passphrase) {
-  const k = crypto.openpgpS2k(3, key.hash, passphrase, key.salt, key.count, AES_KEY[key.cipher]);
+async function unlock(key, passphrase) {
+  const k = await crypto.openpgpS2k(3, key.hash, passphrase, key.salt, key.count, AES_KEY[key.cipher]);
   const plain = crypto.aesCfbDecrypt(k, key.iv, key.encrypted);
   k.fill(0);
   const body = plain.subarray(0, plain.length - 20), check = plain.subarray(plain.length - 20);
@@ -116,7 +116,7 @@ function unlock(key, passphrase) {
   return out;
 }
 
-function signature(key, signer, hashName, message, time) {
+async function signature(key, signer, hashName, message, time) {
   const hashed = cat(
     new Uint8Array([22, 33, 4]), key.fpr,               // issuer fingerprint
     new Uint8Array([5, 2]), u32(time));                 // creation time
@@ -125,7 +125,7 @@ function signature(key, signer, hashName, message, time) {
   h.update(head).update(cat(new Uint8Array([4, 0xff]), u32(head.length)));
   const digest = h.digest();
   const mpis = key.algo === 1
-    ? mpi(signer.sign(hashName, digest))
+    ? mpi(await signer.sign(hashName, digest))
     : (() => { const s = signer.sign(digest); return cat(mpi(s.subarray(0, 32)), mpi(s.subarray(32))); })();
   const unhashed = cat(new Uint8Array([9, 16]), key.fpr.subarray(12));
   const body = cat(head, u16(unhashed.length), unhashed, digest.subarray(0, 2), mpis);
@@ -146,8 +146,8 @@ for (const name of ["ed", "rsa"]) {
   try {
     const key = parseSecretKey(packets(data.read(FOLDER, `${name}.key`)).find((p) => p.tag === 5).body);
     log(`${name}: fingerprint ${hex(key.fpr)}, S2K ${key.hash} count ${key.count}, cipher ${key.cipher}`);
-    log(`${name}: wrong passphrase ${unlock(key, passphrase + "x") === null ? "refused" : "ACCEPTED"}`);
-    const secret = unlock(key, passphrase);
+    log(`${name}: wrong passphrase ${(await unlock(key, passphrase + "x")) === null ? "refused" : "ACCEPTED"}`);
+    const secret = await unlock(key, passphrase);
     if (secret === null) { log(`${name}: FAIL the right passphrase did not unlock`); continue; }
     log(`${name}: secret key decrypted, SHA-1 check passed`);
     let signer;
@@ -163,7 +163,7 @@ for (const name of ["ed", "rsa"]) {
     }
     secret.plain.fill(0);
     for (const [hashName, h] of [["SHA-256", message], ["SHA-512", message512]]) {
-      log(`signature ${name}-${hashName} ${hex(signature(key, signer, hashName, h, time))}`);
+      log(`signature ${name}-${hashName} ${hex(await signature(key, signer, hashName, h, time))}`);
     }
     signer.destroy();
   } catch (e) {

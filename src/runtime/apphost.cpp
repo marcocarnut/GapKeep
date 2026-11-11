@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "jobs.h"
 #include "appstore.h"
 #include "i18n.h"
 #include "../crypto/wipe.h"
@@ -116,7 +117,8 @@ CAppHost::CAppHost (CKeyboardIndev *pKeyboard)
 	m_pErrorBanner (0),
 	m_pPendingLaunch (0),
 	m_bHomeRequested (FALSE),
-	m_bInterrupted (FALSE)
+	m_bInterrupted (FALSE),
+	m_bCancelJobs (FALSE)
 {
 	memset (&m_App, 0, sizeof m_App);
 
@@ -218,6 +220,16 @@ void CAppHost::Update (void)
 	// USB attaches and detaches (dropped without an app that takes them),
 	// and the app's next control transfer
 	GkUSBUpdate (&m_App);
+
+	// a slice of the app's long native work (jobs.h): about 20 ms, between
+	// LVGL's passes, so the screen keeps being drawn; none left if the
+	// watchdog stopped one of the app's scripts
+	if (m_bCancelJobs)
+	{
+		m_bCancelJobs = FALSE;
+		GkJobsCancel (&m_App);
+	}
+	GkJobsUpdate (&m_App);
 
 	if (m_App.pBundle != 0)
 	{
@@ -376,6 +388,8 @@ void CAppHost::StopApp (void)
 	GkTimersFree (&m_App);
 	GkClockFree (&m_App);
 	GkUSBFree (&m_App);
+	GkJobsFree (&m_App);
+	m_bCancelJobs = FALSE;
 
 	// Deleting the screen deletes every widget of the app; each widget
 	// releases its JS event handlers as it goes.
@@ -620,6 +634,7 @@ int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)
 		pThis->ShowError (LV_SYMBOL_WARNING "  Script interrupted",
 				  "A script ran for too long and was stopped.");
 		pThis->m_bInterrupted = TRUE;
+		pThis->m_bCancelJobs = TRUE;	// and its long native work (jobs.h)
 		return 1;
 	}
 

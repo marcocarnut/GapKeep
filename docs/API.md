@@ -467,11 +467,11 @@ import * as crypto from "gk:crypto";
 | `taprootTweakPrivateKey(privateKey, tweak)` | The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. |
 | `ed25519PrivateKey(seed)` | An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. |
 | `ed25519Verify(signature, message, publicKey)` | Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. |
-| `rsaPrivateKey({ n, e, d, p, q, u })` | An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest), destroy() }`; `sign` and `destroy` below. |
-| `rsaVerify(signature, hash, digest, publicKey)` | Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }` (2048 to 4096 bits, else `false`). `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. |
+| `rsaPrivateKey({ n, e, d, p, q, u })` | An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest, options?), destroy() }`. `sign` returns a promise of the RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-224 to SHA-512; SHA-1 throws a `TypeError`), as many bytes as `n`: a [long operation](#long-operations), about 90 ms with 2048 bits on a Pi Zero, 460 ms with 4096. Wrong arguments throw at once; a fault caught by the checks rejects with an `InternalError`, and `destroy()` before the signature is made rejects it with a `TypeError`. `destroy()` wipes the key; `sign` then throws a `TypeError`. |
+| `rsaVerify(signature, hash, digest, publicKey)` | Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }`: 1024 to 4096 bits, else `false`. **Keys under 2048 bits are weak** (1024-bit RSA is within reach of a well-funded attacker): they verify for old signatures only, and the app should say so (the size is that of `n`, which the app has); they can't be imported to sign. `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. |
 | `aesCfbEncrypt(key, iv, data)` | AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 16 MiB, no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. |
 | `aesCfbDecrypt(key, iv, data)` | The other way, as `aesCfbEncrypt`. |
-| `openpgpS2k(type, hash, passphrase, salt, count, length)` | OpenPGP's string-to-key (RFC 9580, 3.7.1): the `length`-byte key (1 to 64) a passphrase gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. Blocks: on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), and twice that when the key is longer than the hash (AES-256 from SHA-1). Stopped, like `pbkdf2`, by the watchdog (10 s) and the Windows key: so no more than two hashes at the largest count. |
+| `openpgpS2k(type, hash, passphrase, salt, count, length, options?)` | OpenPGP's string-to-key (RFC 9580, 3.7.1): a promise of the `length`-byte key (1 to 64) a passphrase (at most 64 KiB) gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. A [long operation](#long-operations), every type (one API): on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), twice that when the key is longer than the hash (AES-256 from SHA-1). The passphrase is copied when the call is made. Wrong arguments throw at once. |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
@@ -531,9 +531,29 @@ AES runs from lookup tables, which is not constant-time against code
 sharing the processor's cache; on GapKeep, one app runs at a time, and
 the key is the app's. On a Pi Zero: an Ed25519 signature takes about
 4 ms, its verification 3 ms; an RSA signature 90 ms with 2048 bits, 220
-ms with 3072 and 460 ms with 4096 (checks included), a verification
-under 20 ms; importing an RSA key 30 to 90 ms; AES-CFB about 10 MB/s,
+ms with 3072 and 460 ms with 4096 (checks included; the first with a
+key up to 170 ms more, as its blinding values are made), a
+verification under 20 ms; importing an RSA key 30 to 90 ms; AES-CFB about 10 MB/s,
 SHA-256 16 MB/s.
+
+<a id="long-operations"></a>**Long operations.** What can take more
+than a quarter of a second on a Pi Zero returns a promise:
+`openpgpS2k` and an RSA key's `sign`. The work is done natively in
+slices of about 20 ms, one each time round the main loop, between the
+screen being drawn and keys being read: the app stays responsive (it
+can show a progress bar, from `onProgress`; the longest wait between
+screen updates was 30 ms during the largest S2K and 220 ms
+during an RSA-4096 signature, whose two halves are one slice each).
+They run one at a time, in the order they were asked for; at most 16
+may wait (a 17th throws a `RangeError`). Arguments are checked when the
+call is made (errors are thrown, not rejected). When the app stops (it
+exits, or the Windows key takes the person home) its operations are
+dropped and wiped, their promises never settled; when the watchdog
+stops one of its scripts, they are rejected with an `InternalError`.
+The last argument may be `{ onProgress }`: a function called after each
+slice that moved the work on, with a fraction (more than 0, at most 1).
+`pbkdf2` stays synchronous (like the hashes, Ed25519, verification, AES
+and importing keys, which are fast at the sizes apps use).
 
 Each group (RIPEMD-160, PBKDF2, secp256k1, Ed25519, RSA, AES, S2K)
 checks itself against known answers before its first use; if that

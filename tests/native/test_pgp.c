@@ -3,7 +3,7 @@
  * them), built for the host. Runs the self-tests, then answers one line of
  * hex arguments per line of input:
  *
- *   s2k TYPE HASH PASS SALT COUNT LEN        -> key
+ *   s2k TYPE HASH PASS SALT COUNT LEN [BUDGET] -> key (in steps)
  *   aes enc|dec KEY IV DATA                  -> data
  *   ed25519 SEED MSG                         -> public signature
  *   ed25519v SIG PUB MSG                     -> 1 | 0
@@ -76,11 +76,35 @@ int main (void)
 		for (char *t = strtok (line, " \n"); t && n < 10; t = strtok (0, " \n")) w[n++] = t;
 		if (n == 0) continue;
 
-		if (strcmp (w[0], "s2k") == 0 && n == 7)
+		if (strcmp (w[0], "s2k") == 0 && (n == 7 || n == 8))
 		{
 			size_t pl = unhex (w[3], a), len = (size_t) atoi (w[6]);
 			unhex (w[4], b);
-			int rc = gk_s2k (gk_hash_find (w[2]), atoi (w[1]), a, pl, b, (uint8_t) atoi (w[5]), out, len, 0, 0);
+			int rc;
+			if (n == 7)
+			{
+				rc = gk_s2k (gk_hash_find (w[2]), atoi (w[1]), a, pl, b, (uint8_t) atoi (w[5]), out, len, 0, 0);
+			}
+			else
+			{
+				/* in steps of BUDGET bytes, the passphrase changed after begin */
+				gk_s2k_job_t job;
+				rc = gk_s2k_begin (&job, gk_hash_find (w[2]), atoi (w[1]), a, pl, b, (uint8_t) atoi (w[5]), len);
+				if (rc == 0)
+				{
+					memset (a, 0x55, pl);
+					size_t budget = (size_t) atoi (w[7]);
+					double last = -1;
+					while (gk_s2k_step (&job, budget))
+					{
+						double p = gk_s2k_progress (&job);
+						if (p < last || p > 1) rc = -10;
+						last = p;
+					}
+					memcpy (out, job.out, len);
+					gk_s2k_end (&job);
+				}
+			}
 			if (rc != 0) printf ("error %d", rc); else hex (out, len);
 		}
 		else if (strcmp (w[0], "aes") == 0 && n == 5)
