@@ -1,5 +1,5 @@
 /*
- * sha256.h - SHA-256 (FIPS 180-4).
+ * sha256.h - SHA-256 and SHA-224 (FIPS 180-4).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #define GK_SHA256_DIGEST_SIZE	32
+#define GK_SHA224_DIGEST_SIZE	28
 
 typedef struct
 {
@@ -30,7 +31,12 @@ void gk_sha256_final (gk_sha256_t *ctx, uint8_t digest[GK_SHA256_DIGEST_SIZE]);
 
 void gk_sha256 (const void *data, size_t len, uint8_t digest[GK_SHA256_DIGEST_SIZE]);
 
-/* Checks the implementation against FIPS 180-4 test vectors. 0: OK. */
+/* SHA-224: the same context and gk_sha256_update; its own start and end. */
+void gk_sha224_init (gk_sha256_t *ctx);
+void gk_sha224_final (gk_sha256_t *ctx, uint8_t digest[GK_SHA224_DIGEST_SIZE]);
+
+/* Checks the implementation against FIPS 180-4 test vectors (SHA-224's
+   too). 0: OK. */
 int gk_sha256_selftest (void);
 
 #ifdef __cplusplus

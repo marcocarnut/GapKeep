@@ -158,8 +158,10 @@ SHA-1, SHA-256 and SHA-512 written from FIPS 180-4, and HMAC from RFC 2104
 also builds on the development machine: `tests/native/test_sha256.c`, and
 `tools/check_hashes.py`, which runs every self-test and compares thousands
 of random inputs with Python's `hashlib`. SHA-256's self-test runs at boot;
-HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1 and
-SHA-512) run before their first use, and disable them if they fail. Every
+HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1, SHA-224,
+SHA-384 and SHA-512; SHA-224 and SHA-384 are SHA-256 and SHA-512 with
+other starting values) run before their first use, and disable them if
+they fail. Every
 context and buffer that held key material is overwritten after use. The
 hardware RNG wrapper (`hwrng.*`) applies NIST SP 800-90B health tests to
 every raw byte and conditions output through SHA-256; see `gk:crypto` in
@@ -184,6 +186,32 @@ built as for the Zero (32-bit arithmetic); that suite also passes compiled
 for ARMv6 under `qemu-arm`. RIPEMD-160, PBKDF2 and secp256k1 run their
 self-tests before their first use. BIP-32, addresses and transactions are
 left to apps, in JavaScript on these primitives.
+
+OpenPGP's primitives: Ed25519 (`ed25519.*`) is Monocypher's
+(`third_party/monocypher`, 4.0.3, its optional RFC 8032 code with
+SHA-512), with a stricter point decoding (RFC 8032, 5.1.3, step 4) and each
+signature verified before it is returned. RSA PKCS #1 v1.5 signatures
+(`rsa.*`) and AES-CFB (`aes.*`) run on a crypto-only subset of Mbed TLS
+3.6 LTS (`third_party/mbedtls`: only the files `lib/mbedtls/mbedtls.mk`
+builds, configured by `lib/mbedtls/gk_mbedtls_config.h`; its wipes are
+`gk_wipe`): its constant-time bignum, the private operation blinded and
+checked by Mbed TLS, and checked again against the public key in `rsa.c`,
+which also does the PKCS #1 encoding (DigestInfo), and verifies by
+encoding and comparing. Imported keys are checked for consistency (n = pq,
+de = 1 mod p-1 and q-1, OpenPGP's u) and their CRT values derived, in
+memory from Circle's heap (zeroed when freed), at most 64 at a time.
+OpenPGP's S2K (`s2k.*`, RFC 9580) is written here, over `gk_hash_t`, and
+hashes the repeated salt and passphrase from a 1 KiB buffer. Both
+libraries are vendored unchanged, pinned to a release (source and SHA-256
+in their `.mk`). `tools/check_pgp.py` builds these files for the host and
+compares them with Python's cryptography (OpenSSL) on random keys and
+inputs, runs Wycheproof's Ed25519 and RSA vectors, NIST CAVP's CFB128 files
+and RFC 9580's S2K examples (`tests/native`), and the negative cases;
+`tests/apps/pgpcrypto` runs known answers through the JavaScript API on
+every target, and `tests/pgp/run_gpg_interop.sh` has GnuPG verify
+signatures the simulator made with keys GnuPG exported. The libraries add
+about 150 KB to the kernel (no `--gc-sections`: Monocypher's X25519 and
+Argon2, for later, come along).
 
 ### C runtime
 
@@ -270,8 +298,10 @@ interrupted: a built-in like `Array.prototype.sort` on a large array,
 `JSON.parse` of a long text or BigInt arithmetic on huge numbers runs to
 its end (bounded by the 96 MB heap: seconds on a Pi Zero, not minutes),
 then the handler stops the app at its next check. GapKeep's own long
-native work asks too: `gk:crypto`'s `pbkdf2` checks every 256 iterations
-and throws the same uncatchable "interrupted" error.
+native work asks too: `gk:crypto`'s `pbkdf2` checks every 256 iterations,
+`openpgpS2k` every MiB hashed and the AES-CFB functions every 64 KiB, and
+throw the same uncatchable "interrupted" error. An RSA signature (under
+half a second with 4096 bits) is one uninterrupted call.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs
@@ -347,10 +377,11 @@ genuine kernel they say exactly what code an app runs.
 | `third_party/quickjs/` | QuickJS (submodule, unmodified). |
 | `third_party/zxing-cpp/` | zxing-cpp, the QR decoder (submodule), plus the fixes in `patches/zxing-cpp/`. |
 | `third_party/secp256k1/` | Bitcoin Core's libsecp256k1 (submodule, unmodified). |
+| `third_party/mbedtls/`, `third_party/monocypher/` | A crypto-only subset of Mbed TLS (bignum, RSA, AES) and Monocypher (Ed25519), vendored unmodified from their releases. |
 | `lib/lvgl/` | Builds LVGL with `gk_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
-| `lib/zxing/`, `lib/secp256k1/` | Build the QR decoder and libsecp256k1 for the kernel. |
+| `lib/zxing/`, `lib/secp256k1/`, `lib/mbedtls/`, `lib/monocypher/` | Build the QR decoder and the crypto libraries for the kernel. |
 | `lib/colorqr/` | The experimental colour QR decoder, vendored ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 | `lib/js/` | JavaScript libraries that apps carry copies of (`tools/share_libs.py`). |
 | `patches/` | GapKeep's changes to Circle and zxing-cpp, applied at build time by `tools/apply_patches.sh`. |

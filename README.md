@@ -242,6 +242,7 @@ card: on the website (coming soon).
 - [x] Clock with trim and UTC offset (`gk:clock`), the Clock and Authenticator (TOTP) apps
 - [x] Native SHA-1, SHA-512 and HMAC (`gk:crypto`); a per-app session store in RAM (`gk:session`)
 - [x] Bitcoin's primitives in `gk:crypto`: RIPEMD-160, HASH160, PBKDF2, and secp256k1 (libsecp256k1: ECDSA, BIP-340 Schnorr, the BIP-32 and Taproot key tweaks)
+- [x] OpenPGP's primitives in `gk:crypto`, first part: Ed25519 (Monocypher), RSA PKCS #1 v1.5 signatures and AES-CFB (Mbed TLS), S2K, SHA-224/384 and incremental hashes; signatures checked by GnuPG
 - [x] The Signer (`apps/signer`): BIP-174/370 PSBTs from Electrum's QR codes, explained; the transaction first, then the keys (codex32 shares, BIP-39 words, xprv, WIF); merges PSBTs; checks change
 - [x] QR codes from a camera (`ui.Scanner`): zxing-cpp's decoder, patched and fuzzed; a clean-room driver for the Pi Camera Module v2.1 ([docs/CAMERA.md](docs/CAMERA.md)); a synthetic camera for the simulator, the IDE and test builds
 - [x] Languages (`gk:i18n`): English and Brazilian Portuguese, a pseudo-language for testing, the Settings app

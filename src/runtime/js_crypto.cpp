@@ -1,9 +1,11 @@
 //
 // js_crypto.cpp
 //
-// The "gk:crypto" module: SHA-1, SHA-256, SHA-512, RIPEMD-160, HMAC,
-// PBKDF2, secp256k1 (ECDSA, BIP-340 Schnorr, BIP-32 and Taproot key
-// tweaks), and health-checked hardware random bytes.
+// The "gk:crypto" module: SHA-1, SHA-224, SHA-256, SHA-384, SHA-512 (one
+// shot or incremental), RIPEMD-160, HMAC, PBKDF2, secp256k1 (ECDSA, BIP-340
+// Schnorr, BIP-32 and Taproot key tweaks), OpenPGP's primitives (Ed25519,
+// RSA PKCS #1 v1.5 signatures, AES-CFB, S2K), and health-checked hardware
+// random bytes.
 // See docs/API.md.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -13,6 +15,10 @@
 #include "../crypto/ripemd160.h"
 #include "../crypto/pbkdf2.h"
 #include "../crypto/secp.h"
+#include "../crypto/s2k.h"
+#include "../crypto/aes.h"
+#include "../crypto/ed25519.h"
+#include "../crypto/rsa.h"
 #include "../crypto/hwrng.h"
 #include "../crypto/wipe.h"
 #include <circle/util.h>
@@ -132,7 +138,7 @@ static JSValue ThrowBytesExpected (JSContext *ctx, const char *pFunction, const 
 
 // The HMAC test vectors (hmac.c), which also check SHA-1 and SHA-512, run
 // once, before their first use. (SHA-256 is checked at boot, by the RNG.)
-// If they fail, sha1, sha512 and hmac throw, until reboot.
+// If they fail, every hash but SHA-256 throws, and hmac, until reboot.
 static boolean HashesOK (JSContext *ctx)
 {
 	static int s_nResult = -1;	// not run yet
@@ -152,7 +158,8 @@ static boolean HashesOK (JSContext *ctx)
 	}
 	if (s_nResult != 0)
 	{
-		JS_ThrowInternalError (ctx, "SHA-1, SHA-512 and HMAC are disabled: their self-test failed");
+		JS_ThrowInternalError (ctx, "SHA-1, SHA-224, SHA-384, SHA-512 and HMAC are disabled: "
+				       "their self-test failed");
 		return FALSE;
 	}
 	return TRUE;
@@ -203,7 +210,8 @@ static JSValue js_crypto_sha512 (JSContext *ctx, JSValueConst this_val, int argc
 	return Digest (ctx, argc, argv, &gk_hash_sha512, "sha512");
 }
 
-// hmac(hash, key, data) -> Uint8Array; hash: "SHA-1", "SHA-256", "SHA-512"
+// hmac(hash, key, data) -> Uint8Array; hash: "SHA-1", "SHA-224", "SHA-256",
+// "SHA-384", "SHA-512"
 static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	if (!HashesOK (ctx))
@@ -224,7 +232,8 @@ static JSValue js_crypto_hmac (JSContext *ctx, JSValueConst this_val, int argc, 
 	}
 	if (pHash == 0)
 	{
-		return JS_ThrowTypeError (ctx, "hmac: hash must be \"SHA-1\", \"SHA-256\" or \"SHA-512\"");
+		return JS_ThrowTypeError (ctx, "hmac: hash must be \"SHA-1\", \"SHA-224\", \"SHA-256\", "
+					  "\"SHA-384\" or \"SHA-512\"");
 	}
 
 	CBytesArg Key (ctx), Data (ctx);
@@ -467,7 +476,8 @@ static const gk_hash_t *GetHashName (JSContext *ctx, JSValueConst v, const char 
 	}
 	if (pHash == 0)
 	{
-		JS_ThrowTypeError (ctx, "%s: hash must be \"SHA-1\", \"SHA-256\" or \"SHA-512\"", pFunction);
+		JS_ThrowTypeError (ctx, "%s: hash must be \"SHA-1\", \"SHA-224\", \"SHA-256\", \"SHA-384\" "
+				   "or \"SHA-512\"", pFunction);
 	}
 	return pHash;
 }
@@ -912,8 +922,915 @@ static JSValue js_crypto_taproot_tweak_private_key (JSContext *ctx, JSValueConst
 	return NewUint8Array (ctx, *Out, 32);
 }
 
+// --- OpenPGP's primitives ---------------------------------------------------
+//
+// Ed25519 (Monocypher), RSA PKCS #1 v1.5 signatures and AES-CFB (Mbed TLS),
+// OpenPGP's S2K, incremental hashes. Private keys are objects holding the
+// key in native memory (Ed25519PrivateKey, RsaPrivateKey): created from the
+// key's bytes, which JavaScript had, used to sign, wiped by destroy(), or
+// when the object is collected, or at the latest when the app exits (its
+// runtime is freed, and every object's finalizer runs).
+
+static int Ed25519Test (void) { return gk_ed25519_selftest (); }
+static int AesTest (void) { return gk_aes_selftest (); }
+static int S2kTest (void) { return gk_s2k_selftest (); }
+
+// Mbed TLS's random bytes (RSA blinding): the hardware generator's
+static int RsaRandom (void *pParam, unsigned char *pOut, size_t nLength)
+{
+	CGkRandom *pRNG = CGkRandom::Instance ();
+	return pRNG != 0 && pRNG->Get (pOut, nLength) ? 0 : -1;
+}
+
+static int RsaTest (void) { return gk_rsa_selftest (RsaRandom, 0); }
+
+static boolean GroupOK (JSContext *ctx, int *pResult, const char *pName, int (*pTest) (void))
+{
+	if (*pResult < 0)
+	{
+		*pResult = RunSelfTest (pName, pTest);
+	}
+	if (*pResult != 0)
+	{
+		JS_ThrowInternalError (ctx, "%s is disabled: its self-test failed", pName);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static boolean Ed25519OK (JSContext *ctx)
+{
+	static int s_nResult = -1;
+	return GroupOK (ctx, &s_nResult, "Ed25519", Ed25519Test);
+}
+
+static boolean AesOK (JSContext *ctx)
+{
+	static int s_nResult = -1;
+	return GroupOK (ctx, &s_nResult, "AES", AesTest);
+}
+
+static boolean S2kOK (JSContext *ctx)
+{
+	static int s_nResult = -1;
+	return HashesOK (ctx) && GroupOK (ctx, &s_nResult, "S2K", S2kTest);
+}
+
+static boolean RsaOK (JSContext *ctx)
+{
+	static int s_nResult = -1;
+	if (s_nResult < 0 && (CGkRandom::Instance () == 0 || !CGkRandom::Instance ()->IsHealthy ()))
+	{
+		ThrowRNGFailure (ctx);		// blinding needs it: don't fail the test for that
+		return FALSE;
+	}
+	return HashesOK (ctx) && GroupOK (ctx, &s_nResult, "RSA", RsaTest);
+}
+
+static void DefineMethod (JSContext *ctx, JSValueConst Obj, const char *pName, JSCFunction *pFunc, int nArgs)
+{
+	JS_DefinePropertyValueStr (ctx, Obj, pName, JS_NewCFunction (ctx, pFunc, pName, nArgs),
+				   JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+}
+
+static void DefineGetter (JSContext *ctx, JSValueConst Obj, const char *pName, JSCFunction *pFunc)
+{
+	JSAtom Atom = JS_NewAtom (ctx, pName);
+	JS_DefinePropertyGetSet (ctx, Obj, Atom, JS_NewCFunction (ctx, pFunc, pName, 0), JS_UNDEFINED,
+				 JS_PROP_CONFIGURABLE);
+	JS_FreeAtom (ctx, Atom);
+}
+
+// The bytes of a typed array or ArrayBuffer (not a string), held until
+// Release() or the end of scope.
+class CBytesOnly
+{
+public:
+	CBytesOnly (JSContext *ctx) : m_ctx (ctx), m_pData (0), m_nLength (0), m_Hold (JS_UNDEFINED) {}
+	~CBytesOnly (void) { Release (); }
+
+	// FALSE: not bytes; a TypeError is thrown
+	boolean Get (JSValueConst v, const char *pFunction, const char *pWhat)
+	{
+		m_pData = GetBytes (m_ctx, v, &m_nLength, &m_Hold);
+		if (m_pData == 0)
+		{
+			JS_ThrowTypeError (m_ctx, "%s: %s must be a Uint8Array (or other typed array) or an ArrayBuffer",
+					   pFunction, pWhat);
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	void Release (void)
+	{
+		JS_FreeValue (m_ctx, m_Hold);
+		m_Hold = JS_UNDEFINED;
+		m_pData = 0;
+	}
+
+	const u8 *Data (void) const	{ return m_pData; }
+	size_t Length (void) const	{ return m_nLength; }
+
+private:
+	JSContext *m_ctx;
+	const u8 *m_pData;
+	size_t m_nLength;
+	JSValue m_Hold;
+};
+
+// A new Uint8Array(n) and a pointer to its bytes, to fill in place (the
+// result stays in the JS heap, which is wiped when freed). JS_EXCEPTION
+// if it could not be made.
+static JSValue NewOutput (JSContext *ctx, size_t nLength, u8 **ppOut)
+{
+	JSValue Result = NewUint8Array (ctx, 0, nLength);
+	if (JS_IsException (Result))
+	{
+		return Result;
+	}
+	JSValue Hold;
+	size_t nGot = 0;
+	*ppOut = GetBytes (ctx, Result, &nGot, &Hold);
+	JS_FreeValue (ctx, Hold);	// Result keeps the buffer
+	if (*ppOut == 0 || nGot != nLength)
+	{
+		JS_FreeValue (ctx, Result);
+		return JS_ThrowInternalError (ctx, "no buffer");
+	}
+	return Result;
+}
+
+// --- incremental hashes: createHash(name) -> Hash ---------------------------
+
+struct TGkHash
+{
+	const gk_hash_t *pHash;
+	gk_hash_ctx_t Ctx;
+	boolean bDone;			// digest() or destroy(): no more use
+};
+
+static JSClassID s_HashClass;
+
+static void HashFinalizer (JSRuntime *rt, JSValue Val)
+{
+	TGkHash *pHash = (TGkHash *) JS_GetOpaque (Val, s_HashClass);
+	if (pHash != 0)
+	{
+		gk_wipe (pHash, sizeof *pHash);
+		js_free_rt (rt, pHash);
+	}
+}
+
+static TGkHash *GetHash (JSContext *ctx, JSValueConst This, const char *pMethod)
+{
+	TGkHash *pHash = (TGkHash *) JS_GetOpaque2 (ctx, This, s_HashClass);
+	if (pHash != 0 && pHash->bDone)
+	{
+		JS_ThrowTypeError (ctx, "Hash.%s: this hash is finished (digest() or destroy() was called)", pMethod);
+		return 0;
+	}
+	return pHash;
+}
+
+static JSValue NewHashObject (JSContext *ctx, const gk_hash_t *pAlgorithm, const gk_hash_ctx_t *pFrom)
+{
+	JSValue Obj = JS_NewObjectClass (ctx, s_HashClass);
+	if (JS_IsException (Obj))
+	{
+		return Obj;
+	}
+	TGkHash *pHash = (TGkHash *) js_mallocz (ctx, sizeof (TGkHash));
+	if (pHash == 0)
+	{
+		JS_FreeValue (ctx, Obj);
+		return JS_EXCEPTION;
+	}
+	pHash->pHash = pAlgorithm;
+	if (pFrom != 0)
+	{
+		pHash->Ctx = *pFrom;
+	}
+	else
+	{
+		pAlgorithm->init (&pHash->Ctx);
+	}
+	JS_SetOpaque (Obj, pHash);
+	return Obj;
+}
+
+// createHash(hash) -> Hash
+static JSValue js_crypto_create_hash (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!HashesOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	const gk_hash_t *pAlgorithm = GetHashName (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "createHash");
+	return pAlgorithm != 0 ? NewHashObject (ctx, pAlgorithm, 0) : JS_EXCEPTION;
+}
+
+// Hash.update(data) -> this
+static JSValue js_hash_update (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkHash *pHash = GetHash (ctx, this_val, "update");
+	if (pHash == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	CBytesArg Data (ctx);
+	boolean bException;
+	if (!Data.Get (argc > 0 ? argv[0] : JS_UNDEFINED, &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "Hash.update", "data");
+	}
+	pHash->pHash->update (&pHash->Ctx, Data.Data (), Data.Length ());
+	return JS_DupValue (ctx, this_val);
+}
+
+// Hash.digest() -> Uint8Array; the hash is finished
+static JSValue js_hash_digest (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkHash *pHash = GetHash (ctx, this_val, "digest");
+	if (pHash == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	u8 Digest[GK_HASH_MAX_DIGEST];
+	pHash->pHash->final (&pHash->Ctx, Digest);	// wipes the context
+	pHash->bDone = TRUE;
+	JSValue Result = NewUint8Array (ctx, Digest, pHash->pHash->digest_size);
+	gk_wipe (Digest, sizeof Digest);
+	return Result;
+}
+
+// Hash.copy() -> a new Hash in the same state
+static JSValue js_hash_copy (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkHash *pHash = GetHash (ctx, this_val, "copy");
+	return pHash != 0 ? NewHashObject (ctx, pHash->pHash, &pHash->Ctx) : JS_EXCEPTION;
+}
+
+// Hash.destroy(): wipes the state; again: nothing
+static JSValue js_hash_destroy (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkHash *pHash = (TGkHash *) JS_GetOpaque2 (ctx, this_val, s_HashClass);
+	if (pHash == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	gk_wipe (&pHash->Ctx, sizeof pHash->Ctx);
+	pHash->bDone = TRUE;
+	return JS_UNDEFINED;
+}
+
+static JSValue js_hash_get_algorithm (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkHash *pHash = (TGkHash *) JS_GetOpaque2 (ctx, this_val, s_HashClass);
+	return pHash != 0 ? JS_NewString (ctx, pHash->pHash->name) : JS_EXCEPTION;
+}
+
+// sha224(data), sha384(data) -> Uint8Array
+static JSValue js_crypto_sha224 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return Digest (ctx, argc, argv, &gk_hash_sha224, "sha224");
+}
+
+static JSValue js_crypto_sha384 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return Digest (ctx, argc, argv, &gk_hash_sha384, "sha384");
+}
+
+// --- Ed25519 ----------------------------------------------------------------
+
+struct TGkEd25519
+{
+	u8 Secret[GK_ED25519_SECRET_SIZE];
+	u8 Public[GK_ED25519_PUBLIC_SIZE];
+	boolean bDestroyed;
+};
+
+static JSClassID s_Ed25519Class;
+
+static void Ed25519Finalizer (JSRuntime *rt, JSValue Val)
+{
+	TGkEd25519 *pKey = (TGkEd25519 *) JS_GetOpaque (Val, s_Ed25519Class);
+	if (pKey != 0)
+	{
+		gk_wipe (pKey, sizeof *pKey);
+		js_free_rt (rt, pKey);
+	}
+}
+
+// ed25519PrivateKey(seed) -> Ed25519PrivateKey
+static JSValue js_crypto_ed25519_private_key (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CSecret Seed;
+	if (   !Ed25519OK (ctx)
+	    || !GetFixed (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, *Seed, 32, "ed25519PrivateKey", "seed"))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValue Obj = JS_NewObjectClass (ctx, s_Ed25519Class);
+	if (JS_IsException (Obj))
+	{
+		return Obj;
+	}
+	TGkEd25519 *pKey = (TGkEd25519 *) js_mallocz (ctx, sizeof (TGkEd25519));
+	if (pKey == 0)
+	{
+		JS_FreeValue (ctx, Obj);
+		return JS_EXCEPTION;
+	}
+	gk_ed25519_keypair (*Seed, pKey->Secret, pKey->Public);
+	JS_SetOpaque (Obj, pKey);
+	return Obj;
+}
+
+static JSValue js_ed25519_get_public_key (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkEd25519 *pKey = (TGkEd25519 *) JS_GetOpaque2 (ctx, this_val, s_Ed25519Class);
+	return pKey != 0 ? NewUint8Array (ctx, pKey->Public, sizeof pKey->Public) : JS_EXCEPTION;
+}
+
+// Ed25519PrivateKey.sign(message) -> Uint8Array(64)
+static JSValue js_ed25519_sign (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkEd25519 *pKey = (TGkEd25519 *) JS_GetOpaque2 (ctx, this_val, s_Ed25519Class);
+	if (pKey == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	if (pKey->bDestroyed)
+	{
+		return JS_ThrowTypeError (ctx, "Ed25519PrivateKey.sign: the key was destroyed");
+	}
+	CBytesOnly Message (ctx);
+	if (!Message.Get (argc > 0 ? argv[0] : JS_UNDEFINED, "Ed25519PrivateKey.sign", "message"))
+	{
+		return JS_EXCEPTION;
+	}
+	u8 Sig[GK_ED25519_SIGNATURE_SIZE];
+	if (gk_ed25519_sign (pKey->Secret, Message.Data (), Message.Length (), Sig) != 0)
+	{
+		CLogger::Get ()->Write ("crypto", LogError, "Ed25519 signature failed its check");
+		return JS_ThrowInternalError (ctx, "Ed25519PrivateKey.sign: the signature failed its check "
+					      "(a hardware fault?): none returned");
+	}
+	return NewUint8Array (ctx, Sig, sizeof Sig);
+}
+
+static JSValue js_ed25519_destroy (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkEd25519 *pKey = (TGkEd25519 *) JS_GetOpaque2 (ctx, this_val, s_Ed25519Class);
+	if (pKey == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	gk_wipe (pKey->Secret, sizeof pKey->Secret);
+	pKey->bDestroyed = TRUE;
+	return JS_UNDEFINED;
+}
+
+// ed25519Verify(signature, message, publicKey) -> boolean
+static JSValue js_crypto_ed25519_verify (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	u8 Sig[GK_ED25519_SIGNATURE_SIZE], Pub[GK_ED25519_PUBLIC_SIZE];
+	size_t nSig, nPub;
+	CBytesOnly Message (ctx);
+	if (   !Ed25519OK (ctx)
+	    || !GetVariable (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, Sig, sizeof Sig, &nSig, "ed25519Verify", "signature")
+	    || !Message.Get (argc > 1 ? argv[1] : JS_UNDEFINED, "ed25519Verify", "message")
+	    || !GetVariable (ctx, argc > 2 ? argv[2] : JS_UNDEFINED, Pub, sizeof Pub, &nPub, "ed25519Verify", "publicKey"))
+	{
+		return JS_EXCEPTION;
+	}
+	return JS_NewBool (ctx, nSig == sizeof Sig && nPub == sizeof Pub
+				&& gk_ed25519_verify (Sig, Pub, Message.Data (), Message.Length ()));
+}
+
+// --- RSA --------------------------------------------------------------------
+
+static const unsigned MaxRsaKeys = 64;		// alive at once (native memory, ~7 KB each)
+static const size_t MaxRsaNumber = 1024;	// bytes per number given, leading zeros too
+static unsigned s_nRsaKeys;
+
+struct TGkRsa
+{
+	gk_rsa_key_t *pKey;			// 0: destroyed
+};
+
+static JSClassID s_RsaClass;
+
+static void RsaDestroy (TGkRsa *pRsa)
+{
+	if (pRsa->pKey != 0)
+	{
+		gk_rsa_free (pRsa->pKey);
+		pRsa->pKey = 0;
+		s_nRsaKeys--;
+	}
+}
+
+static void RsaFinalizer (JSRuntime *rt, JSValue Val)
+{
+	TGkRsa *pRsa = (TGkRsa *) JS_GetOpaque (Val, s_RsaClass);
+	if (pRsa != 0)
+	{
+		RsaDestroy (pRsa);
+		js_free_rt (rt, pRsa);
+	}
+}
+
+// The numbers of an RSA key, { n, e, ... }: each a typed array or
+// ArrayBuffer, unsigned big-endian. Holds them until the end of scope.
+class CRsaNumbers
+{
+public:
+	CRsaNumbers (JSContext *ctx) : m_ctx (ctx)
+	{
+		for (unsigned i = 0; i < Count; i++)
+		{
+			m_Value[i] = JS_UNDEFINED;
+			m_pNumber[i] = new CBytesOnly (ctx);
+		}
+	}
+	~CRsaNumbers (void)
+	{
+		for (unsigned i = 0; i < Count; i++)
+		{
+			delete m_pNumber[i];
+			JS_FreeValue (m_ctx, m_Value[i]);
+		}
+	}
+
+	// nWanted: a bit for each number read (1 << N, ...); those in
+	// nOptional may be absent (undefined or null). FALSE: exception set.
+	boolean Get (JSValueConst Obj, unsigned nWanted, unsigned nOptional, const char *pFunction)
+	{
+		if (!JS_IsObject (Obj))
+		{
+			JS_ThrowTypeError (m_ctx, "%s: an object { %s } expected", pFunction,
+					   nWanted == Public ? "n, e" : "n, e, d, p, q, u");
+			return FALSE;
+		}
+		// every property first (a getter could run code), then the bytes
+		for (unsigned i = 0; i < Count; i++)
+		{
+			if (nWanted & (1 << i))
+			{
+				m_Value[i] = JS_GetPropertyStr (m_ctx, Obj, Names[i]);
+				if (JS_IsException (m_Value[i]))
+				{
+					return FALSE;
+				}
+			}
+		}
+		for (unsigned i = 0; i < Count; i++)
+		{
+			if (!(nWanted & (1 << i)))
+			{
+				continue;
+			}
+			if ((nOptional & (1 << i)) && (JS_IsUndefined (m_Value[i]) || JS_IsNull (m_Value[i])))
+			{
+				continue;
+			}
+			if (!m_pNumber[i]->Get (m_Value[i], pFunction, Names[i]))
+			{
+				return FALSE;
+			}
+			if (m_pNumber[i]->Length () > MaxRsaNumber)
+			{
+				JS_ThrowRangeError (m_ctx, "%s: %s is too long (more than %u bytes)", pFunction,
+						    Names[i], (unsigned) MaxRsaNumber);
+				return FALSE;
+			}
+		}
+		return TRUE;
+	}
+
+	const u8 *Data (unsigned i) const	{ return m_pNumber[i]->Data (); }
+	size_t Length (unsigned i) const	{ return m_pNumber[i]->Length (); }
+
+	enum { N, E, D, P, Q, U, Count };
+	static const unsigned Public = 1 << N | 1 << E;
+	static const unsigned Private = Public | 1 << D | 1 << P | 1 << Q | 1 << U;
+	static const char *const Names[Count];
+
+private:
+	JSContext *m_ctx;
+	JSValue m_Value[Count];
+	CBytesOnly *m_pNumber[Count];
+};
+
+const char *const CRsaNumbers::Names[CRsaNumbers::Count] = { "n", "e", "d", "p", "q", "u" };
+
+// rsaPrivateKey({ n, e, d, p, q, u }) -> RsaPrivateKey
+static JSValue js_crypto_rsa_private_key (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!RsaOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	CRsaNumbers Numbers (ctx);
+	if (!Numbers.Get (argc > 0 ? argv[0] : JS_UNDEFINED, CRsaNumbers::Private, 1 << CRsaNumbers::U, "rsaPrivateKey"))
+	{
+		return JS_EXCEPTION;
+	}
+	if (s_nRsaKeys >= MaxRsaKeys)
+	{
+		return JS_ThrowRangeError (ctx, "rsaPrivateKey: at most %u RSA keys at a time: destroy() those not needed",
+					   MaxRsaKeys);
+	}
+
+	gk_rsa_key_t *pKey;
+	int nResult = gk_rsa_import (&pKey, Numbers.Data (CRsaNumbers::N), Numbers.Length (CRsaNumbers::N),
+				     Numbers.Data (CRsaNumbers::E), Numbers.Length (CRsaNumbers::E),
+				     Numbers.Data (CRsaNumbers::D), Numbers.Length (CRsaNumbers::D),
+				     Numbers.Data (CRsaNumbers::P), Numbers.Length (CRsaNumbers::P),
+				     Numbers.Data (CRsaNumbers::Q), Numbers.Length (CRsaNumbers::Q),
+				     Numbers.Data (CRsaNumbers::U), Numbers.Length (CRsaNumbers::U));
+	switch (nResult)
+	{
+	case GK_RSA_OK:
+		break;
+	case GK_RSA_BAD_SIZE:
+		return JS_ThrowRangeError (ctx, "rsaPrivateKey: the modulus must be %u to %u bits",
+					   GK_RSA_MIN_BITS, GK_RSA_MAX_BITS);
+	case GK_RSA_NO_MEMORY:
+		return JS_ThrowOutOfMemory (ctx);
+	default:
+		return JS_ThrowRangeError (ctx, "rsaPrivateKey: n, e, d, p, q (and u) are not one RSA key");
+	}
+
+	JSValue Obj = JS_NewObjectClass (ctx, s_RsaClass);
+	TGkRsa *pRsa = JS_IsException (Obj) ? 0 : (TGkRsa *) js_mallocz (ctx, sizeof (TGkRsa));
+	if (pRsa == 0)
+	{
+		gk_rsa_free (pKey);
+		JS_FreeValue (ctx, Obj);
+		return JS_EXCEPTION;
+	}
+	pRsa->pKey = pKey;
+	s_nRsaKeys++;
+	JS_SetOpaque (Obj, pRsa);
+	return Obj;
+}
+
+static TGkRsa *GetRsa (JSContext *ctx, JSValueConst This, const char *pMethod, boolean bAlive)
+{
+	TGkRsa *pRsa = (TGkRsa *) JS_GetOpaque2 (ctx, This, s_RsaClass);
+	if (pRsa != 0 && bAlive && pRsa->pKey == 0)
+	{
+		JS_ThrowTypeError (ctx, "RsaPrivateKey.%s: the key was destroyed", pMethod);
+		return 0;
+	}
+	return pRsa;
+}
+
+static JSValue js_rsa_get_bits (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkRsa *pRsa = GetRsa (ctx, this_val, "bits", TRUE);
+	return pRsa != 0 ? JS_NewInt32 (ctx, (int) gk_rsa_bits (pRsa->pKey)) : JS_EXCEPTION;
+}
+
+// RsaPrivateKey.publicKey -> { n, e }
+static JSValue js_rsa_get_public_key (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkRsa *pRsa = GetRsa (ctx, this_val, "publicKey", TRUE);
+	if (pRsa == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	size_t nN, nE;
+	const u8 *pN = gk_rsa_n (pRsa->pKey, &nN), *pE = gk_rsa_e (pRsa->pKey, &nE);
+	JSValue Obj = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Obj, "n", NewUint8Array (ctx, pN, nN));
+	JS_SetPropertyStr (ctx, Obj, "e", NewUint8Array (ctx, pE, nE));
+	return Obj;
+}
+
+static const gk_hash_t *GetRsaHash (JSContext *ctx, JSValueConst v, boolean bSign, const char *pFunction)
+{
+	const gk_hash_t *pHash = 0;
+	if (JS_IsString (v))
+	{
+		const char *pName = JS_ToCString (ctx, v);
+		if (pName == 0)
+		{
+			return 0;
+		}
+		pHash = gk_hash_find (pName);
+		JS_FreeCString (ctx, pName);
+	}
+	if (pHash == 0 || (bSign && pHash == &gk_hash_sha1))
+	{
+		JS_ThrowTypeError (ctx, "%s: hash must be %s\"SHA-224\", \"SHA-256\", \"SHA-384\" or \"SHA-512\"",
+				   pFunction, bSign ? "" : "\"SHA-1\", ");
+		return 0;
+	}
+	return pHash;
+}
+
+// RsaPrivateKey.sign(hash, digest) -> Uint8Array(modulus bytes)
+static JSValue js_rsa_sign (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkRsa *pRsa = GetRsa (ctx, this_val, "sign", TRUE);
+	if (pRsa == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	const gk_hash_t *pHash = GetRsaHash (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, TRUE, "RsaPrivateKey.sign");
+	if (pHash == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	u8 Digest[GK_HASH_MAX_DIGEST];
+	if (!GetFixed (ctx, argc > 1 ? argv[1] : JS_UNDEFINED, Digest, pHash->digest_size, "RsaPrivateKey.sign", "digest"))
+	{
+		return JS_EXCEPTION;
+	}
+
+	u8 *pSig;
+	JSValue Result = NewOutput (ctx, (gk_rsa_bits (pRsa->pKey) + 7) / 8, &pSig);
+	if (JS_IsException (Result))
+	{
+		return Result;
+	}
+	int nResult = gk_rsa_sign (pRsa->pKey, pHash, Digest, pHash->digest_size, pSig, RsaRandom, 0);
+	if (nResult == GK_RSA_OK)
+	{
+		return Result;
+	}
+	JS_FreeValue (ctx, Result);
+	if (nResult == GK_RSA_RNG)
+	{
+		return ThrowRNGFailure (ctx);
+	}
+	CLogger::Get ()->Write ("crypto", LogError, "RSA signature failed its check (%d)", nResult);
+	return JS_ThrowInternalError (ctx, "RsaPrivateKey.sign: the signature failed its check "
+				      "(a hardware fault?): none returned");
+}
+
+static JSValue js_rsa_destroy (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkRsa *pRsa = GetRsa (ctx, this_val, "destroy", FALSE);
+	if (pRsa == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	RsaDestroy (pRsa);
+	return JS_UNDEFINED;
+}
+
+// rsaVerify(signature, hash, digest, { n, e }) -> boolean
+static JSValue js_crypto_rsa_verify (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!HashesOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	CBytesOnly Sig (ctx);
+	if (!Sig.Get (argc > 0 ? argv[0] : JS_UNDEFINED, "rsaVerify", "signature"))
+	{
+		return JS_EXCEPTION;
+	}
+	const gk_hash_t *pHash = GetRsaHash (ctx, argc > 1 ? argv[1] : JS_UNDEFINED, FALSE, "rsaVerify");
+	u8 Digest[GK_HASH_MAX_DIGEST];
+	if (   pHash == 0
+	    || !GetFixed (ctx, argc > 2 ? argv[2] : JS_UNDEFINED, Digest, pHash->digest_size, "rsaVerify", "digest"))
+	{
+		return JS_EXCEPTION;
+	}
+	CRsaNumbers Key (ctx);
+	if (!Key.Get (argc > 3 ? argv[3] : JS_UNDEFINED, CRsaNumbers::Public, 0, "rsaVerify"))
+	{
+		return JS_EXCEPTION;
+	}
+	return JS_NewBool (ctx, gk_rsa_verify (Key.Data (CRsaNumbers::N), Key.Length (CRsaNumbers::N),
+					       Key.Data (CRsaNumbers::E), Key.Length (CRsaNumbers::E),
+					       pHash, Digest, pHash->digest_size, Sig.Data (), Sig.Length ()));
+}
+
+// --- AES-CFB ----------------------------------------------------------------
+
+static const size_t MaxAesBytes = 16 * 1024 * 1024;
+
+// aesCfbEncrypt / aesCfbDecrypt (key, iv, data) -> Uint8Array
+static JSValue AesCfb (JSContext *ctx, int argc, JSValueConst *argv, int bDecrypt, const char *pFunction)
+{
+	if (!AesOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	u8 Key[32], IV[GK_AES_BLOCK_SIZE];
+	size_t nKey;
+	CBytesOnly Data (ctx);
+	if (   !GetVariable (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, Key, sizeof Key, &nKey, pFunction, "key")
+	    || !GetFixed (ctx, argc > 1 ? argv[1] : JS_UNDEFINED, IV, sizeof IV, pFunction, "iv")
+	    || !Data.Get (argc > 2 ? argv[2] : JS_UNDEFINED, pFunction, "data"))
+	{
+		gk_wipe (Key, sizeof Key);
+		return JS_EXCEPTION;
+	}
+	if (nKey != 16 && nKey != 24 && nKey != 32)
+	{
+		gk_wipe (Key, sizeof Key);
+		return JS_ThrowRangeError (ctx, "%s: key must be 16, 24 or 32 bytes (AES-128, -192, -256)", pFunction);
+	}
+	if (Data.Length () > MaxAesBytes)
+	{
+		gk_wipe (Key, sizeof Key);
+		return JS_ThrowRangeError (ctx, "%s: at most %u bytes per call", pFunction, (unsigned) MaxAesBytes);
+	}
+
+	u8 *pOut;
+	JSValue Result = NewOutput (ctx, Data.Length (), &pOut);
+	if (!JS_IsException (Result))
+	{
+		int nResult = gk_aes_cfb (Key, nKey, IV, bDecrypt, Data.Data (), pOut, Data.Length (), StopNative, ctx);
+		if (nResult != 0)
+		{
+			JS_FreeValue (ctx, Result);
+			Result = ThrowInterrupted (ctx);
+		}
+	}
+	gk_wipe (Key, sizeof Key);
+	gk_wipe (IV, sizeof IV);
+	return Result;
+}
+
+static JSValue js_crypto_aes_cfb_encrypt (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return AesCfb (ctx, argc, argv, 0, "aesCfbEncrypt");
+}
+
+static JSValue js_crypto_aes_cfb_decrypt (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return AesCfb (ctx, argc, argv, 1, "aesCfbDecrypt");
+}
+
+// --- OpenPGP S2K ------------------------------------------------------------
+
+static const uint32_t MaxS2kLength = 64;
+
+static boolean IsAbsent (JSValueConst v)
+{
+	return JS_IsUndefined (v) || JS_IsNull (v);
+}
+
+// openpgpS2k(type, hash, passphrase, salt, count, length) -> Uint8Array(length)
+static JSValue js_crypto_openpgp_s2k (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!S2kOK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValueConst Args[6];
+	for (int i = 0; i < 6; i++)
+	{
+		Args[i] = i < argc ? argv[i] : JS_UNDEFINED;
+	}
+
+	double fType, fLength;
+	if (JS_ToFloat64 (ctx, &fType, Args[0]) || JS_ToFloat64 (ctx, &fLength, Args[5]))
+	{
+		return JS_EXCEPTION;
+	}
+	if (!(fType == 0 || fType == 1 || fType == 3))
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2k: type must be 0 (simple), 1 (salted) "
+					   "or 3 (iterated and salted)");
+	}
+	int nType = (int) fType;
+	if (!(fLength >= 1 && fLength <= MaxS2kLength && fLength == (uint32_t) fLength))
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2k: length must be a whole number from 1 to %u",
+					   (unsigned) MaxS2kLength);
+	}
+	const gk_hash_t *pHash = GetHashName (ctx, Args[1], "openpgpS2k");
+	if (pHash == 0)
+	{
+		return JS_EXCEPTION;
+	}
+
+	u8 Salt[GK_S2K_SALT_SIZE];
+	if (nType == GK_S2K_SIMPLE)
+	{
+		if (!IsAbsent (Args[3]))
+		{
+			return JS_ThrowTypeError (ctx, "openpgpS2k: type 0 has no salt (pass null)");
+		}
+	}
+	else if (!GetFixed (ctx, Args[3], Salt, sizeof Salt, "openpgpS2k", "salt"))
+	{
+		return JS_EXCEPTION;
+	}
+
+	uint32_t nCoded = 0;
+	if (nType == GK_S2K_ITERATED)
+	{
+		double fCount;
+		if (JS_ToFloat64 (ctx, &fCount, Args[4]))
+		{
+			return JS_EXCEPTION;
+		}
+		if (!(fCount >= 0 && fCount <= 255 && fCount == (uint32_t) fCount))
+		{
+			return JS_ThrowRangeError (ctx, "openpgpS2k: count must be the coded count octet, 0 to 255");
+		}
+		nCoded = (uint32_t) fCount;
+	}
+	else if (!IsAbsent (Args[4]))
+	{
+		return JS_ThrowTypeError (ctx, "openpgpS2k: only type 3 has a count (pass null)");
+	}
+
+	CBytesArg Passphrase (ctx);
+	boolean bException;
+	if (!Passphrase.Get (Args[2], &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "openpgpS2k", "passphrase");
+	}
+
+	u8 *pKey;
+	JSValue Result = NewOutput (ctx, (size_t) fLength, &pKey);
+	if (JS_IsException (Result))
+	{
+		return Result;
+	}
+	int nStopped = gk_s2k (pHash, nType, Passphrase.Data (), Passphrase.Length (), Salt, (uint8_t) nCoded,
+			       pKey, (size_t) fLength, StopNative, ctx);
+	Passphrase.Release ();
+	if (nStopped)
+	{
+		JS_FreeValue (ctx, Result);
+		return ThrowInterrupted (ctx);
+	}
+	return Result;
+}
+
+// The classes, once per runtime; their prototypes, once per context.
+static void InitClasses (JSContext *ctx)
+{
+	JSRuntime *rt = JS_GetRuntime (ctx);
+	static const struct { JSClassID *pID; const char *pName; JSClassFinalizer *pFinalizer; } Classes[] =
+	{
+		{ &s_HashClass, "Hash", HashFinalizer },
+		{ &s_Ed25519Class, "Ed25519PrivateKey", Ed25519Finalizer },
+		{ &s_RsaClass, "RsaPrivateKey", RsaFinalizer },
+	};
+	for (unsigned i = 0; i < sizeof Classes / sizeof Classes[0]; i++)
+	{
+		if (*Classes[i].pID == 0)
+		{
+			JS_NewClassID (Classes[i].pID);
+		}
+		if (!JS_IsRegisteredClass (rt, *Classes[i].pID))
+		{
+			JSClassDef Def;
+			memset (&Def, 0, sizeof Def);
+			Def.class_name = Classes[i].pName;
+			Def.finalizer = Classes[i].pFinalizer;
+			JS_NewClass (rt, *Classes[i].pID, &Def);
+		}
+	}
+
+	JSValue Proto = JS_NewObject (ctx);
+	DefineMethod (ctx, Proto, "update", js_hash_update, 1);
+	DefineMethod (ctx, Proto, "digest", js_hash_digest, 0);
+	DefineMethod (ctx, Proto, "copy", js_hash_copy, 0);
+	DefineMethod (ctx, Proto, "destroy", js_hash_destroy, 0);
+	DefineGetter (ctx, Proto, "algorithm", js_hash_get_algorithm);
+	JS_SetClassProto (ctx, s_HashClass, Proto);
+
+	Proto = JS_NewObject (ctx);
+	DefineMethod (ctx, Proto, "sign", js_ed25519_sign, 1);
+	DefineMethod (ctx, Proto, "destroy", js_ed25519_destroy, 0);
+	DefineGetter (ctx, Proto, "publicKey", js_ed25519_get_public_key);
+	JS_SetClassProto (ctx, s_Ed25519Class, Proto);
+
+	Proto = JS_NewObject (ctx);
+	DefineMethod (ctx, Proto, "sign", js_rsa_sign, 2);
+	DefineMethod (ctx, Proto, "destroy", js_rsa_destroy, 0);
+	DefineGetter (ctx, Proto, "bits", js_rsa_get_bits);
+	DefineGetter (ctx, Proto, "publicKey", js_rsa_get_public_key);
+	JS_SetClassProto (ctx, s_RsaClass, Proto);
+}
+
 static const JSCFunctionListEntry s_CryptoFunctions[] =
 {
+	JS_CFUNC_DEF ("sha224", 1, js_crypto_sha224),
+	JS_CFUNC_DEF ("sha384", 1, js_crypto_sha384),
+	JS_CFUNC_DEF ("createHash", 1, js_crypto_create_hash),
+	JS_CFUNC_DEF ("ed25519PrivateKey", 1, js_crypto_ed25519_private_key),
+	JS_CFUNC_DEF ("ed25519Verify", 3, js_crypto_ed25519_verify),
+	JS_CFUNC_DEF ("rsaPrivateKey", 1, js_crypto_rsa_private_key),
+	JS_CFUNC_DEF ("rsaVerify", 4, js_crypto_rsa_verify),
+	JS_CFUNC_DEF ("aesCfbEncrypt", 3, js_crypto_aes_cfb_encrypt),
+	JS_CFUNC_DEF ("aesCfbDecrypt", 3, js_crypto_aes_cfb_decrypt),
+	JS_CFUNC_DEF ("openpgpS2k", 6, js_crypto_openpgp_s2k),
 	JS_CFUNC_DEF ("ripemd160", 1, js_crypto_ripemd160),
 	JS_CFUNC_DEF ("hash160", 1, js_crypto_hash160),
 	JS_CFUNC_DEF ("pbkdf2", 5, js_crypto_pbkdf2),
@@ -934,6 +1851,7 @@ static const JSCFunctionListEntry s_CryptoFunctions[] =
 
 static int CryptoModuleInit (JSContext *ctx, JSModuleDef *m)
 {
+	InitClasses (ctx);
 	JS_SetModuleExportList (ctx, m, s_CryptoFunctions, sizeof s_CryptoFunctions / sizeof s_CryptoFunctions[0]);
 	JS_SetModuleExport (ctx, m, "sha1", JS_NewCFunction (ctx, js_crypto_sha1, "sha1", 1));
 	JS_SetModuleExport (ctx, m, "sha256", JS_NewCFunction (ctx, js_crypto_sha256, "sha256", 1));

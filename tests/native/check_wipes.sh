@@ -29,7 +29,8 @@ else
 fi
 CFLAGS="-O2 -fstack-protector-strong -std=gnu99"
 SECP=third_party/secp256k1
-INC="-I src/crypto -I $SECP/include"
+INC="-I src/crypto -I $SECP/include -I lib/mbedtls -I third_party/mbedtls/include -I third_party/monocypher/src"
+INC="$INC -I third_party/monocypher/src/optional -DMBEDTLS_CONFIG_FILE=\"gk_mbedtls_config.h\""
 CALL='^[[:space:]]*(bl|b|call|jmp)[[:space:]]+gk_wipe'
 FAILED=0
 

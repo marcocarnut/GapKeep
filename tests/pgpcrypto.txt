@@ -1,0 +1,7 @@
+# Needs a test build (make TEST=1): gk:crypto's OpenPGP primitives
+# (tests/apps/pgpcrypto): known answers, errors, and timings in the log.
+expect Keyboard attached 60
+expect launcher ready 60
+tile pgpcrypto
+expect pgpcrypto ready 30
+expect pgpcrypto: \d+ passed, 0 failed 600

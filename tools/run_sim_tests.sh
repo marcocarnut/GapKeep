@@ -155,6 +155,17 @@ else
 	echo "FAIL  sim:wipes   (see $OUT/wipes.log)"; FAILED=1
 fi
 
+# OpenPGP signatures made with gk:crypto, checked by GnuPG (if it is here)
+if command -v gpg >/dev/null; then
+	if tests/pgp/run_gpg_interop.sh "$OUT/gpg_interop" > "$OUT/gpg_interop.log" 2>&1; then
+		echo "PASS  sim:gpg_interop"
+	else
+		echo "FAIL  sim:gpg_interop   (see $OUT/gpg_interop.log)"; FAILED=1
+	fi
+else
+	echo "SKIP  sim:gpg_interop   (no gpg)"
+fi
+
 # apps that carry a copy of another app's library (tools/share_libs.py)
 if python3 tools/share_libs.py --check > "$OUT/share_libs.log" 2>&1; then
 	echo "PASS  sim:share_libs"

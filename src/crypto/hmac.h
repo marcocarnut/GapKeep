@@ -1,7 +1,7 @@
 /*
- * hmac.h - HMAC (RFC 2104, FIPS 198-1) over SHA-1, SHA-256 and SHA-512,
- * and the hashes behind one interface (gk_hash_t), for gk:crypto and for
- * what will be built on them (PBKDF2, BIP-32, ...).
+ * hmac.h - HMAC (RFC 2104, FIPS 198-1) over SHA-1, SHA-224, SHA-256,
+ * SHA-384 and SHA-512, and the hashes behind one interface (gk_hash_t),
+ * for gk:crypto and for what is built on them (PBKDF2, S2K, BIP-32, ...).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -29,7 +29,7 @@ gk_hash_ctx_t;
 
 typedef struct
 {
-	const char *name;		/* as WebCrypto's: "SHA-1", "SHA-256", "SHA-512" */
+	const char *name;		/* as WebCrypto's: "SHA-1", "SHA-256", "SHA-384", ... */
 	size_t digest_size;
 	size_t block_size;
 	void (*init) (gk_hash_ctx_t *ctx);
@@ -38,7 +38,7 @@ typedef struct
 }
 gk_hash_t;
 
-extern const gk_hash_t gk_hash_sha1, gk_hash_sha256, gk_hash_sha512;
+extern const gk_hash_t gk_hash_sha1, gk_hash_sha224, gk_hash_sha256, gk_hash_sha384, gk_hash_sha512;
 
 /* By name, as WebCrypto's ("SHA-256"); 0 if unknown. */
 const gk_hash_t *gk_hash_find (const char *name);
@@ -59,8 +59,8 @@ void gk_hmac_final (gk_hmac_t *ctx, uint8_t *digest);
 void gk_hmac (const gk_hash_t *hash, const void *key, size_t keylen,
 	      const void *data, size_t len, uint8_t *digest);
 
-/* RFC 2202 (SHA-1) and RFC 4231 (SHA-256, SHA-512) test cases: they hash
-   one to three blocks with each hash. Quick (about 60 compressions); the
+/* RFC 2202 (SHA-1) and RFC 4231 (SHA-224, SHA-256, SHA-384, SHA-512) test
+   cases: they hash one to three blocks with each hash. Quick (about 60 compressions); the
    hashes' own self-tests (gk_sha*_selftest) hash a million bytes each.
    0: OK. */
 int gk_hmac_selftest (void);

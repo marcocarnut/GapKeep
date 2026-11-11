@@ -6,6 +6,41 @@ type BytesLike = ArrayBufferView | ArrayBuffer | string;
 
 type Bytes = ArrayBufferView | ArrayBuffer;
 
+type HashName = "SHA-1" | "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512";
+
+type Hash = {
+  /** "SHA-256", ... */
+  readonly algorithm: HashName;
+  /** adds data (strings as UTF-8); returns this hash */
+  update(data: BytesLike): Hash;
+  /** the digest; the hash is finished (using it again throws) */
+  digest(): Uint8Array;
+  /** a new hash in the same state */
+  copy(): Hash;
+  /** wipes the state; the hash is finished */
+  destroy(): void;
+};
+
+type Ed25519PrivateKey = {
+  /** 32 bytes */
+  readonly publicKey: Uint8Array;
+  /** the 64-byte signature of message (pure Ed25519) */
+  sign(message: Bytes): Uint8Array;
+  /** wipes the private key; sign() then throws */
+  destroy(): void;
+};
+
+type RsaPrivateKey = {
+  /** the modulus's size, 2048 to 4096 */
+  readonly bits: number;
+  /** n and e, big-endian, without leading zeros */
+  readonly publicKey: { n: Uint8Array; e: Uint8Array };
+  /** RSASSA-PKCS1-v1_5 of a digest: as many bytes as n (not SHA-1) */
+  sign(hash: "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512", digest: Bytes): Uint8Array;
+  /** wipes the private key; the key can't be used again */
+  destroy(): void;
+};
+
 type SessionValue = string | number | boolean | null | bigint | Date | ArrayBuffer | ArrayBufferView
   | SessionValue[] | { [key: string]: SessionValue };
 
@@ -619,14 +654,20 @@ declare module "gk:crypto" {
   export function sha256(data: BytesLike): Uint8Array;
   /** SHA-512, a `Uint8Array(64)`. */
   export function sha512(data: BytesLike): Uint8Array;
-  /** HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). */
-  export function hmac(hash: "SHA-1" | "SHA-256" | "SHA-512", key: BytesLike, data: BytesLike): Uint8Array;
+  /** SHA-224, a `Uint8Array(28)`. */
+  export function sha224(data: BytesLike): Uint8Array;
+  /** SHA-384, a `Uint8Array(48)`. */
+  export function sha384(data: BytesLike): Uint8Array;
+  /** A hash to feed in pieces: `update(data)` (returns the hash, so calls chain), `digest()` (the result; the hash is then finished, and using it again throws a `TypeError`), `copy()` (a new hash in the same state: hash what is common once, then each copy's own end), `destroy()` (wipes the state now, rather than when the object is collected) and `algorithm` (its name). `hash` as for `hmac`. For data too big for one array, or that arrives in parts. */
+  export function createHash(hash: HashName): Hash;
+  /** HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto (`"SHA-1"`, `"SHA-224"`, `"SHA-256"`, `"SHA-384"` or `"SHA-512"`): a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). */
+  export function hmac(hash: HashName, key: BytesLike, data: BytesLike): Uint8Array;
   /** RIPEMD-160, a `Uint8Array(20)`. */
   export function ripemd160(data: BytesLike): Uint8Array;
   /** RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. */
   export function hash160(data: BytesLike): Uint8Array;
   /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. */
-  export function pbkdf2(hash: "SHA-1" | "SHA-256" | "SHA-512", password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
+  export function pbkdf2(hash: HashName, password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
   /** Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). */
   export function isPrivateKey(key: Bytes): boolean;
   /** Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). */
@@ -653,6 +694,20 @@ declare module "gk:crypto" {
   export function taprootTweakPublicKey(publicKey: Bytes, tweak: Bytes): { key: Uint8Array; parity: 0 | 1 };
   /** The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. */
   export function taprootTweakPrivateKey(privateKey: Bytes, tweak: Bytes): Uint8Array;
+  /** An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. */
+  export function ed25519PrivateKey(seed: Bytes): Ed25519PrivateKey;
+  /** Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. */
+  export function ed25519Verify(signature: Bytes, message: Bytes, publicKey: Bytes): boolean;
+  /** An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest), destroy() }`; `sign` and `destroy` below. */
+  export function rsaPrivateKey(key: { n: Bytes; e: Bytes; d: Bytes; p: Bytes; q: Bytes; u?: Bytes | null }): RsaPrivateKey;
+  /** Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }` (2048 to 4096 bits, else `false`). `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. */
+  export function rsaVerify(signature: Bytes, hash: HashName, digest: Bytes, publicKey: { n: Bytes; e: Bytes }): boolean;
+  /** AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 16 MiB, no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. */
+  export function aesCfbEncrypt(key: Bytes, iv: Bytes, data: Bytes): Uint8Array;
+  /** The other way, as `aesCfbEncrypt`. */
+  export function aesCfbDecrypt(key: Bytes, iv: Bytes, data: Bytes): Uint8Array;
+  /** OpenPGP's string-to-key (RFC 9580, 3.7.1): the `length`-byte key (1 to 64) a passphrase gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. Blocks: on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), and twice that when the key is longer than the hash (AES-256 from SHA-1). Stopped, like `pbkdf2`, by the watchdog (10 s) and the Windows key: so no more than two hashes at the largest count. */
+  export function openpgpS2k(type: 0 | 1 | 3, hash: HashName, passphrase: BytesLike, salt: Bytes | null, count: number | null, length: number): Uint8Array;
   /** `Uint8Array(n)` of random bytes, `n` ≤ 65536. */
   export function randomBytes(n: number): Uint8Array;
   /** Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. */
