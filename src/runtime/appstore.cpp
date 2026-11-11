@@ -866,6 +866,92 @@ static boolean ParseData (JSContext *ctx, JSValueConst Obj, gk_app_t *pApp, CStr
 	return TRUE;
 }
 
+// One "vvvv:pppp" of the manifest's "usb": four lowercase hex digits each
+static boolean ParseUSBID (const char *p, unsigned *pID)
+{
+	if (strlen (p) != 9 || p[4] != ':')
+	{
+		return FALSE;
+	}
+	unsigned nID = 0;
+	for (unsigned i = 0; i < 9; i++)
+	{
+		if (i == 4)
+		{
+			continue;
+		}
+		char c = p[i];
+		unsigned d;
+		if (c >= '0' && c <= '9')
+		{
+			d = c - '0';
+		}
+		else if (c >= 'a' && c <= 'f')
+		{
+			d = c - 'a' + 10;
+		}
+		else
+		{
+			return FALSE;
+		}
+		nID = nID << 4 | d;
+	}
+	*pID = nID;
+	return TRUE;
+}
+
+// The manifest's "usb": 1 to GK_MAX_APP_USB different device ids
+static boolean ParseUSB (JSContext *ctx, JSValueConst Obj, gk_app_t *pApp, CString *pError)
+{
+	JSValue USB = JS_GetPropertyStr (ctx, Obj, "usb");
+	if (JS_IsUndefined (USB))
+	{
+		return TRUE;
+	}
+
+	boolean bOK = JS_IsArray (ctx, USB);
+	uint32_t nLength = 0;
+	if (bOK)
+	{
+		JSValue Length = JS_GetPropertyStr (ctx, USB, "length");
+		bOK = JS_ToUint32 (ctx, &nLength, Length) == 0 && nLength <= GK_MAX_APP_USB;
+		JS_FreeValue (ctx, Length);
+	}
+	unsigned *pIDs = new unsigned[GK_MAX_APP_USB];
+	unsigned nIDs = 0;
+	for (uint32_t i = 0; bOK && i < nLength; i++)
+	{
+		JSValue ID = JS_GetPropertyUint32 (ctx, USB, i);
+		const char *p = JS_IsString (ID) ? JS_ToCString (ctx, ID) : 0;
+		unsigned nID = 0;
+		bOK = p != 0 && ParseUSBID (p, &nID) && nID != 0;
+		for (unsigned k = 0; bOK && k < nIDs; k++)
+		{
+			bOK = pIDs[k] != nID;
+		}
+		if (bOK)
+		{
+			pIDs[nIDs++] = nID;
+		}
+		JS_FreeCString (ctx, p);
+		JS_FreeValue (ctx, ID);
+	}
+	JS_FreeValue (ctx, USB);
+
+	if (!bOK || nIDs == 0)
+	{
+		delete [] pIDs;
+		pError->Format ("manifest.json: \"usb\" must be a list of 1 to %u different USB device"
+				" ids, \"vvvv:pppp\" in lowercase hex (\"16c0:27db\")", GK_MAX_APP_USB);
+		return FALSE;
+	}
+
+	pApp->usb = pIDs;
+	pApp->usb_count = nIDs;
+
+	return TRUE;
+}
+
 // What ParseManifest allocated (pApp itself is the caller's)
 static void FreeMetadata (gk_app_t *pApp)
 {
@@ -880,6 +966,9 @@ static void FreeMetadata (gk_app_t *pApp)
 		delete [] (char *) pApp->data[i];
 	}
 	delete [] pApp->data;
+	delete [] pApp->usb;
+	pApp->usb = 0;
+	pApp->usb_count = 0;
 	pApp->id = pApp->name = pApp->version = pApp->description = pApp->entry = 0;
 	pApp->icon_rgba = 0;
 	pApp->data = 0;
@@ -893,7 +982,7 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 			      gk_app_t *pApp, CString *pError, boolean bSuite = FALSE)
 {
 	static const char *AppKeys[] = {"id", "name", "version", "description", "icon", "entry",
-					"permissions", "hidden", "experimental", "data", 0};
+					"permissions", "hidden", "experimental", "data", "usb", 0};
 	static const char *SuiteKeys[] = {"id", "name", "description", "icon", 0};
 	const char **Known = bSuite ? SuiteKeys : AppKeys;
 
@@ -1060,6 +1149,11 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 		}
 
 		if (!ParseData (ctx, Obj, pApp, pError))
+		{
+			break;
+		}
+
+		if (!ParseUSB (ctx, Obj, pApp, pError))
 		{
 			break;
 		}

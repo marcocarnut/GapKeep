@@ -1,0 +1,39 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# gk:usb through Circle on QEMU: a device plugged in while the system runs
+# is claimed whole for the app that lists it (patches/circle/0014,
+# src/usbclaim.cpp), read through Circle's control transfers, and
+# unplugged. QEMU's USB tablet (056a:0000, a HID mouse) stands in for a
+# device: the USB probe (tests/apps/usbprobe) lists it. The keyboard and
+# mouse, which no app lists, stay the system's.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect launcher ready: .*usbprobe 60
+tile usbprobe
+expect usbprobe ready 20
+expect usbprobe: 0 device\(s\) 10
+mark
+monitor device_add usb-wacom-tablet,id=tablet
+expect 056a:0000 claimed for usbprobe: none of its interfaces gets another driver 20
+expect Claimed whole as ven56a-0: no interface gets another driver 10
+expect usb: device 1: 056a:0000 ".*" ".*", serial of \d+ bytes, full speed, 1 interface\(s\), for usbprobe; it is not a keyboard or mouse while claimed 20
+expect usbprobe: probing device 1, 056a:0000, 1 interface\(s\) 20
+expect usbprobe: device descriptor: 18 bytes 20
+expect usbprobe: interface 0: report descriptor, \d+ bytes \(64 asked\) 20
+expect usbprobe: device 1 probed 20
+# nothing else drives it (the mouse driver took it before 0014)
+reject Wacom PenPartner[\s\S]*Using device/interface
+shot 01-claimed
+# from the keyboard: Enter probes it again
+mark
+key ret
+expect usbprobe: device 1 probed 20
+mark
+monitor device_del tablet
+expect usb: device 1: detached 20
+expect usbprobe: device 1 detached 20
+expect usbprobe: 0 device\(s\) 10
+# the keyboard is still the system's
+mark
+key meta_l
+expect launcher ready 20

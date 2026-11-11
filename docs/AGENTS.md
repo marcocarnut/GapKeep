@@ -175,6 +175,10 @@ in through `tm()` or `ui.escapeMarkup`, never pasted into markup
 - **QR codes come in through `ui.Scanner`** (`detect: ["qr"]`, permission
   `"camera"`): you get the decoded bytes, never pixels. Test with `camera qr <text>` in
   scenarios ([CAMERA.md](CAMERA.md)), and don't log what a code holds.
+- **USB devices** other than keyboards and mice: only those the manifest
+  names, `"usb": ["vvvv:pppp"]`, through `gk:usb` (control transfers, 64
+  bytes at most); try them in the simulator over USB/IP
+  ([SIMULATOR.md](SIMULATOR.md#usb-devices)). Don't log what they send.
 - **Images are raw RGBA** (`{ width, height, data }`); there is no PNG or JPEG
   decoder.
 

@@ -174,3 +174,24 @@ region after the buffer, 2026-11-10). With 0008 such a keyboard is refused
 the bounce buffer and the guard stays intact. To repeat it, record the
 gadget's configuration first and bring it back afterwards (the rig's
 gadget service, `sudo systemctl restart ...-gadget`, rebuilds it).
+
+## A USB device for gk:usb
+
+`tests/apps/usbprobe` (test builds, on the launcher as "USB probe") lists
+the devices claimed for it (its manifest's `"usb"`: a DigiMacro,
+`16c0:27db`, the simulator's test device and QEMU's tablet) and probes the
+first one plugged in, and again on Enter: its device descriptor, the start
+of each HID interface's report descriptor, and, for a DigiMacro, its INFO
+feature report (report 2: command 0x40 sent, the answer must echo it). The
+screen shows the bytes; the log only lengths and whether INFO was echoed:
+
+```
+usb: 16c0:27db claimed for usbprobe: none of its interfaces gets another driver
+usb: device 1: 16c0:27db "digimacro.postcogito.org" "DigiMacro", serial of 23 bytes, low speed, 2 interface(s), for usbprobe; ...
+usbprobe: feature report 2: sent 37 bytes, got 36; the answer echoes INFO (0x40): true
+```
+
+With the rig the Zero's one USB port carries the gadget keyboard, so a
+device for gk:usb needs a hub between them: the gadget and the device on
+the hub, the hub in the Zero's "USB" port. A DigiMacro is low speed, so
+behind a full- or high-speed hub its transfers go as split transactions.

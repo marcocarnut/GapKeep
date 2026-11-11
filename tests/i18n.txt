@@ -62,7 +62,7 @@ expect Started i18ntest: modules \d+ ms, catalog \d+\.\d ms
 mark
 key meta_l
 expect launcher ready
-expect launcher lang/pt-BR.json: 30 translations, 0 ignored
+expect launcher lang/pt-BR.json: 31 translations, 0 ignored
 wait 1
 shot 01-launcher-pt-BR
 tile clock

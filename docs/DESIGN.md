@@ -45,11 +45,44 @@ is then something they can see and count.
   hardware; no app logs a secret, since a test build's log leaves the
   device.
 - **No network, no radio.** The plain Pi Zero has none, and GapKeep has no
-  network stack. The USB drivers are cut down to hubs, keyboards and mice.
+  network stack. The USB drivers are cut down to hubs, keyboards and mice,
+  and the devices apps name (below).
 
 **Why:** an air gap is only as good as its narrowest channel. Everything
 that leaves the device does so on the screen, as text a person reads or as
 QR codes another device's camera reads, where the person can see it go.
+
+## USB devices for apps
+
+Some apps must talk to a device: configuring a macro keyboard is the first.
+They get it through `gk:usb` ([APPS.md](APPS.md#usb-devices)), narrowly:
+
+- **The app names the device**, by vendor and product id in its manifest,
+  which its hash covers. Nothing else is reachable: no class of devices, no
+  "any device".
+- **A named device is claimed whole**, from the moment it is plugged in,
+  while an available app names it: none of its interfaces gets a system
+  driver. Such devices are often keyboards themselves; the alternatives,
+  letting its keyboard type while the app configures it, or binding its
+  keyboard and taking the rest, would let the device type into the system
+  that is setting it up. Ignoring it costs nothing: the person types on
+  their keyboard. The price is that an app naming a keyboard's ids takes
+  that keyboard away, so the launcher shows the ids an app takes.
+- **Control transfers on endpoint 0, at most 64 bytes, and nothing
+  else.** That covers HID feature reports and vendor requests, how such
+  devices are configured, with the least new code: no endpoint is opened,
+  and the system parses nothing a device sends but its descriptors, which
+  are fuzzed. Standard requests that would change how the system talks to
+  the device are the system's.
+- **Promises, done one at a time between frames.** On the Zero's host
+  controller a control transfer is waited for (Circle's can't be
+  asynchronous), so a transfer blocks the main loop, at most 1 s a stage
+  and only twice per device before it is given up on until replugged. An
+  asynchronous API costs nothing more now, keeps the screen drawn between
+  transfers, and lets apps be written as for WebUSB and WebHID, whose
+  pages they often port.
+- **USB/IP in the simulator.** Any device a USB/IP server offers, real or
+  simulated, can be tried with an app, without the hardware.
 
 ## Apps
 

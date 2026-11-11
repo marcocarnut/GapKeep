@@ -505,6 +505,9 @@ void gk_sim_step (void)
 		s_nLastLVGLUpdate = nTicks;
 	}
 
+#ifndef __EMSCRIPTEN__
+	GkSimUSBIPPoll ();		// USB devices come and go, as plug-and-play
+#endif
 	s_pAppHost->Update ();
 }
 

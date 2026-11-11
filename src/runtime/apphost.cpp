@@ -215,6 +215,10 @@ void CAppHost::Update (void)
 		}
 	}
 
+	// USB attaches and detaches (dropped without an app that takes them),
+	// and the app's next control transfer
+	GkUSBUpdate (&m_App);
+
 	if (m_App.pBundle != 0)
 	{
 		RunJobs ();
@@ -371,6 +375,7 @@ void CAppHost::StopApp (void)
 	GkUIAppStopping (&m_App);
 	GkTimersFree (&m_App);
 	GkClockFree (&m_App);
+	GkUSBFree (&m_App);
 
 	// Deleting the screen deletes every widget of the app; each widget
 	// releases its JS event handlers as it goes.
@@ -746,6 +751,17 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	if (strcmp (pName, "gk:i18n-native") == 0)	// only for gk:i18n (ModuleNormalize)
 	{
 		return GkInitI18nNativeModule (pContext, pName);
+	}
+	if (strcmp (pName, "gk:usb") == 0)
+	{
+		if (pApp->pBundle->usb_count == 0)
+		{
+			JS_ThrowReferenceError (pContext,
+				"'gk:usb' requires the devices it uses in manifest.json:"
+				" \"usb\": [\"vvvv:pppp\", ...]");
+			return 0;
+		}
+		return GkInitUSBModule (pContext, pName);
 	}
 	if (strcmp (pName, "gk:apps") == 0)
 	{

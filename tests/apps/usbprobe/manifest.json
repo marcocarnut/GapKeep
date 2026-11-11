@@ -1,0 +1,8 @@
+{
+  "id": "usbprobe",
+  "name": "USB probe",
+  "version": "1.0.0",
+  "description": "Test builds only: lists the USB devices claimed for it and reads a feature report.",
+  "icon": "usb",
+  "usb": ["16c0:27db", "1209:0001", "056a:0000"]
+}

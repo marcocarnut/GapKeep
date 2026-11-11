@@ -89,6 +89,7 @@ handlers and timers.
 | `hidden` | no | `true`: not listed in the launcher. |
 | `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `gapkeep.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 | `data` | no | The card's data folders the app reads with `gk:data`, e.g. `["pgp"]`: at most 8 names, each `[a-z0-9-]`, at most 32. See [Data files](#data-files). |
+| `usb` | no | The USB devices the app talks to with `gk:usb`, by vendor and product id: `["16c0:27db"]`, 1 to 8, four lowercase hex digits each. While the app is installed, such a device is the system's for apps alone: none of its interfaces is a keyboard or mouse. See [USB devices](#usb-devices). |
 
 `name`, `version` and `description` (an app's and a suite's, and their
 translations) are text on one line: no line break and no other control
@@ -369,6 +370,42 @@ for the published hash of the code, if you need it, and check each data
 folder's hash, which the launcher shows beside the apps that read it, on
 its own: the keyring is whatever you put in, and only you can say whether
 it is right.
+
+## USB devices
+
+GapKeep's one way in from outside is its USB port, and it takes only
+keyboards, mice and hubs there. An app that must talk to a device (to
+configure a macro keyboard, say) names it in its manifest, by vendor and
+product id:
+
+```json
+"usb": ["16c0:27db"]
+```
+
+and uses [`gk:usb`](API.md#gkusb): control transfers on endpoint 0, at most
+64 bytes each, with HID feature reports as helpers. Nothing else: no
+interrupt, bulk or isochronous endpoints, and no standard requests but
+those that read (descriptors, status). What the device sends is data like
+anything typed: check it before using it, and don't log it.
+
+**A listed device is claimed whole.** When it is plugged in (or is in at
+boot), and some available app's manifest lists it, the system gives it to
+apps and to nothing else: none of its interfaces gets a system driver.
+A keyboard among them (a macro keyboard is one) is ignored, so what it
+types never reaches the system or the app on screen; the person types on
+another keyboard. So the ids an app lists matter: an app listing a
+keyboard's ids takes that keyboard away. The launcher shows them in the
+app's details ("USB devices it takes"), and the log says when one is
+claimed. An app marked `experimental` claims its devices only when
+experimental features are on.
+
+The device is the app's while it runs, one app at a time; every app that
+lists it may use it. Transfers are promises, done one at a time between
+frames; a device that doesn't answer gets 1 s a stage, and after two
+timeouts none of its transfers are tried until it is plugged in again. Try
+it in the simulator with a device served over USB/IP
+([SIMULATOR.md](SIMULATOR.md#usb-devices)); `tests/apps/usbtest` and
+`tests/apps/usbprobe` are examples.
 
 ## Laying out a screen
 

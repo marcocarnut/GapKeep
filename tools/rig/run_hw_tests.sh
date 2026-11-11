@@ -50,8 +50,12 @@ for t in $SCENARIOS; do
 		echo "SKIP  hw:$name   (set GK_RIG_SDAPPS=1 once the rig's card has tests/sdcard/apps)"
 		continue
 	fi
-	if grep -q "^launch " "$t"; then
+	if grep -q "^launch \|^usbip " "$t"; then
 		echo "SKIP  hw:$name   (simulator only)"
+		continue
+	fi
+	if grep -q "^monitor " "$t"; then
+		echo "SKIP  hw:$name   (QEMU only)"
 		continue
 	fi
 	# the rig can't pull its card out, and runs test kernels only

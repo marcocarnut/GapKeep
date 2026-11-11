@@ -27,7 +27,7 @@ expect settings: redrawn in pt-BR
 mark
 key meta_l
 expect launcher ready
-expect i18n: launcher lang/pt-BR.json: 30 translations, 0 ignored
+expect i18n: launcher lang/pt-BR.json: 31 translations, 0 ignored
 # an app from the card, from memory
 tile sdhello
 expect sdhello ready: Hello from the SD card sdcard

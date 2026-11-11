@@ -1,0 +1,42 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: sysinit: the loaded data ends with .data when .tdata is empty
+
+0012 hands GapKeep the initialised data as loaded, from __data_start to
+__tdata_end, for the kernel's hash of its own image. But .tdata starts
+8-byte aligned: when it is empty (GapKeep has no thread-local data) and
+.data ends on a word that is not a multiple of 8, __tdata_end is 4 bytes
+past the end of kernel.img, and the hash covered 4 bytes the file doesn't
+have (tests/check_kernel_hash.sh caught it when .data grew by a word).
+
+- circle.ld: __data_end, the end of .data.
+- sysinit(): the data ends at __tdata_end if .tdata has anything in it,
+  otherwise at __data_end.
+
+--- a/circle.ld
++++ b/circle.ld
+@@ -63,6 +63,7 @@
+ 
+ 	.data : {
+ 		*(.data*)
++		__data_end = .;		/* gapkeep: where kernel.img ends without .tdata */
+ 	}
+ 
+ 	.tdata : ALIGN(8) {
+--- a/lib/sysinit.cpp
++++ b/lib/sysinit.cpp
+@@ -348,9 +348,14 @@
+ 	// anything changes them, for the kernel's hash of its own image
+ 	if (sysinit_data_loaded != 0)
+ 	{
++		// the image ends with .tdata if it has any, otherwise with .data:
++		// an empty .tdata starts 8-byte aligned, which may be past the end
+ 		extern unsigned char __data_start;
++		extern unsigned char __data_end;
++		extern unsigned char __tdata_start;
+ 		extern unsigned char __tdata_end;
+-		sysinit_data_loaded (&__data_start, &__tdata_end - &__data_start);
++		unsigned char *pEnd = &__tdata_end > &__tdata_start ? &__tdata_end : &__data_end;
++		sysinit_data_loaded (&__data_start, pEnd - &__data_start);
+ 	}
+ 
+ 	// halt, if KERNEL_MAX_SIZE is not properly set

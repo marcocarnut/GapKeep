@@ -20,12 +20,14 @@ expect apps/sdhello: sdhello 1.0.0, 3 files, \d+ bytes, sha256 08ab835023ad24a18
 expect apps/spoofbidi not loaded: manifest.json: "version" must be text on one line, without control, bidi or invisible characters
 expect apps/spoofname not loaded: manifest.json: "name" must be text on one line, without control, bidi or invisible characters
 expect apps/unknownkey not loaded: manifest.json: unknown key "network"
+# USB device ids are lowercase hex (gk:usb)
+expect apps/badusb not loaded: manifest.json: "usb" must be a list of 1 to 8 different USB device ids, "vvvv:pppp" in lowercase hex \("16c0:27db"\)
 expect apps/wrongid not loaded: manifest.json: id "other" must match the folder name
 # tests/suites.txt: an app id is unique across suites
 expect apps/zsuite/suite-peer not loaded: an app with this id was loaded from apps/testsuite/suite-peer
-expect 3 app\(s\) from the SD card, 13 not loaded, 2 suite\(s\)
+expect 3 app\(s\) from the SD card, 14 not loaded, 2 suite\(s\)
 expect launcher ready: .*sdhello 60
-expect sd card: ok 13 problem\(s\)
+expect sd card: ok 14 problem\(s\)
 # the card's apps come after the built-in ones
 tilefocus sdhello
 wait 1

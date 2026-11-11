@@ -42,6 +42,8 @@ MAX_FILE_SIZE = 4 << 20
 MAX_APP_SIZE = 16 << 20
 MAX_DEPTH = 8
 MAX_APP_DATA = 8        # GK_MAX_APP_DATA in src/runtime/bundle.h
+MAX_APP_USB = 8         # GK_MAX_APP_USB in src/runtime/bundle.h
+USB_ID_RE = re.compile(r'^[0-9a-f]{4}:[0-9a-f]{4}$')   # manifest "usb"
 # data folders (data/<name>, gk:data), read as src/runtime/appstore.cpp reads
 # them: names are printable ASCII without / and \
 DATA_NAME_RE = re.compile(r'^[\x20-\x2e\x30-\x5b\x5d-\x7e]{1,128}$')
@@ -228,7 +230,7 @@ def load_app(appdir, app_id):
         fail('%s: must be a JSON object' % where)
 
     known = {'id', 'name', 'version', 'description', 'icon', 'entry', 'permissions', 'hidden',
-             'experimental', 'data'}
+             'experimental', 'data', 'usb'}
     for k in m:
         if k not in known:
             fail('%s: unknown key %r' % (where, k))
@@ -262,6 +264,13 @@ def load_app(appdir, app_id):
             or len(set(data)) != len(data)):
         fail('%s: "data" must be a list of at most %d different folder names (a-z, 0-9 and -, at most 32)'
              % (where, MAX_APP_DATA))
+    usb = m.get('usb')
+    if usb is not None and (not isinstance(usb, list) or not 1 <= len(usb) <= MAX_APP_USB
+                            or any(not isinstance(u, str) or not USB_ID_RE.match(u)
+                                   or u == '0000:0000' for u in usb)
+                            or len(set(usb)) != len(usb)):
+        fail('%s: "usb" must be a list of 1 to %d different USB device ids, "vvvv:pppp" in'
+             ' lowercase hex ("16c0:27db")' % (where, MAX_APP_USB))
     entry = m.get('entry', 'main.js')
 
     files = read_files(appdir)
@@ -282,6 +291,7 @@ def load_app(appdir, app_id):
         'files': files,
         'hash': app_hash(files),
         'data': data,
+        'usb': [int(u.replace(':', ''), 16) for u in usb or []],
     }
 
 
@@ -390,17 +400,21 @@ def main():
         if a['data']:
             lines.append('static const char *const app%d_data[] = { %s };' % (
                 n, ', '.join(c_string(d.encode()) for d in a['data'])))
+        if a['usb']:
+            lines.append('static const unsigned app%d_usb[] = { %s };' % (
+                n, ', '.join('0x%08x' % u for u in a['usb'])))
         lines.append('')
     lines.append('const gk_app_t gk_builtin_apps[] = {')
     for n, a in enumerate(apps):
         w, h, _ = a['picture'] or (0, 0, None)
-        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", GK_APP_BUILTIN, %s, %d, %d, %s, %d, 0 },' % (
+        lines.append('\t{ %s, %s, %s, %s, %s, %s, %s, %d, %d, app%d_files, %d,\n\t  "%s", GK_APP_BUILTIN, %s, %d, %d, %s, %d, 0, %s, %d },' % (
             c_string(a['id'].encode()), c_string(a['name'].encode()),
             c_string(a['version'].encode()), c_string(a['description'].encode()),
             c_string(a['icon']), c_string(a['entry'].encode()),
             a['permissions'], a['hidden'], a['experimental'], n, len(a['files']), a['hash'],
             'app%d_icon' % n if a['picture'] else '0', w, h,
-            'app%d_data' % n if a['data'] else '0', len(a['data'])))
+            'app%d_data' % n if a['data'] else '0', len(a['data']),
+            'app%d_usb' % n if a['usb'] else '0', len(a['usb'])))
     lines.append('};')
     lines.append('const unsigned gk_builtin_app_count = %d;' % len(apps))
     lines += builtin_data(datadirs, apps)

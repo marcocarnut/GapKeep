@@ -17,6 +17,8 @@
 #include "runtime/appstore.h"
 #include "runtime/cursor.h"
 #include "runtime/wheel.h"
+#include "usbclaim.h"
+#include <circle/usb/usbdevicefactory.h>
 #include "crypto/wipe.h"
 
 // same rate as the serial bootloader (FLASHBAUD), so one terminal setting
@@ -158,11 +160,6 @@ boolean CKernel::Initialize (void)
 
 	if (bOK)
 	{
-		bOK = m_USBHCI.Initialize ();
-	}
-
-	if (bOK)
-	{
 		// a failing RNG is reported and disables gk:crypto's random
 		// functions, but does not stop the system
 		m_Random.Initialize ();
@@ -170,12 +167,21 @@ boolean CKernel::Initialize (void)
 
 	if (bOK)
 	{
-		// apps: built in, then from the SD card (no card: built-in only)
+		// apps: built in, then from the SD card (no card: built-in only).
+		// Before USB: the devices apps list ("usb" in their manifests)
+		// are claimed for them as they are found, those plugged in at
+		// boot too (src/usbclaim.h)
 #ifndef GK_SEALED
 		CAppStore::Initialize (m_EMMC.Initialize ());
 #else
 		CAppStore::Initialize (FALSE);
 #endif
+	}
+
+	if (bOK)
+	{
+		CUSBDeviceFactory::SetClaimHook (GkUSBClaimHook);
+		bOK = m_USBHCI.Initialize ();
 	}
 
 	if (bOK)

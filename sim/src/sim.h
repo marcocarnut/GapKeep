@@ -76,6 +76,16 @@ int gk_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height);
 int gk_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned height);
 int gk_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height);
 
+/* USB devices (gk:usb), native builds only: a device a USB/IP server at
+ * host:port offers under busid (0 or "": the first it lists) is plugged in,
+ * and stays so: when the server drops it (unplugged, reset), it is detached,
+ * and imported again when offered (sim/src/usbip.cpp). Detach pulls the
+ * cable of busid (0: every one). Return 0 on success. The browser has no
+ * TCP: its build has no USB devices. */
+int gk_sim_usbip_attach (const char *host, unsigned port, const char *busid);
+int gk_sim_usbip_detach (const char *busid);
+void GkSimUSBIPPoll (void);
+
 /* The mouse: absolute position in screen pixels, left button state. */
 void gk_sim_pointer (int x, int y, int pressed);
 

@@ -50,6 +50,8 @@ struct TGkApp
 	TGkUIState *pUI;		// gk:ui state, 0 until the app imports it
 	struct TGkClockState *pClock;	// gk:clock alarms, 0 until the first every()
 	struct TGkI18nState *pI18n;	// its translations (i18n.h), from its start
+	struct TGkUSBState *pUSB;	// gk:usb: its handlers, devices and transfers,
+					// 0 until it imports it (js_usb.cpp)
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;
@@ -150,6 +152,9 @@ JSModuleDef *GkInitClockModule (JSContext *pContext, const char *pName);
 void GkClockFree (TGkApp *pApp);		// js_clock.cpp: the app's alarms
 JSModuleDef *GkInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
 JSModuleDef *GkInitDataModule (JSContext *pContext, const char *pName);	// js_data.cpp
+JSModuleDef *GkInitUSBModule (JSContext *pContext, const char *pName);	// js_usb.cpp
+void GkUSBUpdate (TGkApp *pApp);	// js_usb.cpp: events and a transfer, from Update()
+void GkUSBFree (TGkApp *pApp);		// the app's devices, handlers and transfers
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void GkInitGlobals (JSContext *pContext);
