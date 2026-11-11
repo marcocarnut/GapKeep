@@ -9,6 +9,7 @@
 import * as ui from "gk:ui";
 import * as sys from "gk:sys";
 import * as crypto from "gk:crypto";
+import * as zlib from "gk:zlib";
 import * as V from "./vectors.js";
 
 const status = new ui.Label({ text: "Testing...", font: 20 });
@@ -490,6 +491,79 @@ group("SEIPD v1", async () => {
     const got = await timeJob(`SEIPD v1 ${size / 1024} KiB`, (onProgress) => crypto.seipdV1Decrypt(k, c, { onProgress }));
     ok(got.length === size && got.every((x) => x === 0x5a), `SEIPD ${size} bytes`);
   }
+});
+
+function base64(s) {
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const clean = s.replace(/=+$/, ""), out = new Uint8Array(Math.floor(clean.length * 3 / 4));
+  let bits = 0, acc = 0, n = 0;
+  for (const ch of clean) {
+    acc = (acc << 6) | abc.indexOf(ch);
+    bits += 6;
+    if (bits >= 8) { bits -= 8; out[n++] = (acc >> bits) & 255; }
+  }
+  return out;
+}
+
+group("SEIPD v2 and GnuPG's OCB packet", async () => {
+  // RFC 9580, A.10.3 and A.10.4
+  const rfc = unhex("07020620a661f731fc9a3032b5623326027e3a5d8db5748ebeff0b0c5910d09ecdd641ff9fd38562758035" +
+                    "bc49754ce1bf3fffa7dad0a3b8104f5133cf42a4100a83eef4ca1b4801a8846bf42bcda7c8ce9d65e212f301" +
+                    "cbcd98fdcade694a877ad4247323f6e857");
+  ok(hex(await crypto.seipdV2Decrypt(unhex("28e79ab82397d3c63de24ac217d7b791"), rfc)) ===
+     "cb1362000000000048656c6c6f2c20776f726c6421d50eae6aa1649b56aa835b2613902bd2", "SEIPD v2 RFC 9580 A.10");
+  for (const t of V.aeadPackets) {
+    const f = t.packet === 18 ? crypto.seipdV2Decrypt : crypto.ocbedDecrypt, what = `AEAD ${t.packet} ${t.plain.length / 2} bytes`;
+    const key = unhex(t.key), data = unhex(t.data);
+    ok(hex(await f(key, data)) === t.plain, what);
+    for (const at of [3, Math.floor(data.length / 2), data.length - 17, data.length - 1]) {
+      const bad = data.slice();
+      bad[at] ^= 4;
+      await rejects(f(key, bad), Error, `${what}, changed at ${at}`);
+    }
+    await rejects(f(key, data.subarray(0, data.length - 16)), Error, `${what}, no final tag`);
+    const other = key.slice();
+    other[1] ^= 1;
+    await rejects(f(other, data), Error, `${what}, another key`);
+    await rejects((t.packet === 18 ? crypto.ocbedDecrypt : crypto.seipdV2Decrypt)(key, data), Error, `${what}, the other packet`);
+  }
+  const k = new Uint8Array(16);
+  throws(() => crypto.seipdV2Decrypt(k, unhex("070106" + "00".repeat(48))), RangeError, "SEIPD v2 EAX: not yet");
+  throws(() => crypto.seipdV2Decrypt(k, unhex("070211" + "00".repeat(48))), RangeError, "SEIPD v2 chunk size 17");
+  throws(() => crypto.seipdV2Decrypt(new Uint8Array(32), unhex("070206" + "00".repeat(48))), RangeError, "SEIPD v2 key for another cipher");
+  throws(() => crypto.ocbedDecrypt(k, new Uint8Array(10)), RangeError, "OCB packet too short");
+  throws(() => crypto.ocbedDecrypt(k, "x"), TypeError, "OCB packet data as a string");
+  const big = V.aeadBig, data = base64(big.data);
+  const plain = await timeJob(`OCB packet ${big.size / 1024} KiB`,
+    (onProgress) => crypto.ocbedDecrypt(unhex(big.key), data, { onProgress }));
+  ok(plain.length === big.size && plain.every((x) => x === 0), "OCB packet 256 KiB");
+});
+
+group("gk:zlib", async () => {
+  for (const t of V.zlibSmall) {
+    const out = await zlib.inflate(unhex(t.data), { format: t.format, maxOutput: Math.max(1, t.plain.length / 2) });
+    ok(hex(out) === t.plain, `inflate ${t.format} ${t.plain.length / 2} bytes`);
+  }
+  const small = V.zlibSmall.find((t) => t.format === "zlib" && t.plain.length > 1000);
+  const d = unhex(small.data);
+  await rejects(zlib.inflate(d, { format: "zlib", maxOutput: small.plain.length / 2 - 1 }), RangeError, "inflate over maxOutput");
+  await rejects(zlib.inflate(d.subarray(0, d.length - 1), { format: "zlib", maxOutput: 1 << 20 }), Error, "inflate cut");
+  await rejects(zlib.inflate(d, { format: "raw", maxOutput: 1 << 20 }), Error, "inflate the other format");
+  const bad = d.slice();
+  bad[bad.length - 1] ^= 1;
+  await rejects(zlib.inflate(bad, { format: "zlib", maxOutput: 1 << 20 }), Error, "inflate a wrong Adler-32");
+  await rejects(zlib.inflate(new Uint8Array([...d, 0]), { format: "zlib", maxOutput: 1 << 20 }), Error, "inflate data after");
+  throws(() => zlib.inflate(d, { format: "zlib" }), TypeError, "inflate without maxOutput");
+  throws(() => zlib.inflate(d, { format: "gzip", maxOutput: 100 }), TypeError, "inflate gzip");
+  throws(() => zlib.inflate(d, { format: "zlib", maxOutput: (32 << 20) + 1 }), RangeError, "inflate maxOutput over 32 MiB");
+  throws(() => zlib.inflate(d, { format: "zlib", maxOutput: 0 }), RangeError, "inflate maxOutput 0");
+  throws(() => zlib.inflate("x", { format: "zlib", maxOutput: 10 }), TypeError, "inflate a string");
+  const mibData = unhex(V.zlibMiB.data), bomb = unhex(V.zlibBomb.data);	// not timed
+  const mib = await timeJob("inflate 1 MiB", (onProgress) => zlib.inflate(mibData,
+    { format: "zlib", maxOutput: 1 << 20, onProgress }));
+  ok(hex(crypto.sha256(mib)) === V.zlibMiB.sha256, "inflate 1 MiB");
+  await rejects(timeJob("inflate bomb, to the limit", (onProgress) => zlib.inflate(bomb,
+    { format: "zlib", maxOutput: 32 << 20, onProgress })), RangeError, "inflate a bomb (33 MiB of zeros): refused at 32 MiB");
 });
 
 group("AES-CFB limit", () => {

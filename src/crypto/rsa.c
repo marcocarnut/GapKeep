@@ -793,103 +793,181 @@ static const char TestSynthetic[] =
 	"4a3b73d8c2dc95d4c5fa58b927b4469086a80b55c076a503ba835bdb783c5f49"
 	"cb13a11fb274d5fac4e88a6a3454708c1e7ad369a0aa8d83";
 
-int gk_rsa_selftest (gk_rsa_rng_t rng, void *rng_arg)
+/* The self-test in steps (rsa.h): the private operations are jobs, one
+   step each, so the test can run in a job's slices */
+struct gk_rsa_selftest
 {
-	static const uint8_t e[3] = { 0x01, 0x00, 0x01 };
-	static const uint8_t sha256_abc[32] =
-	{
-		0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
-		0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
-	};
-	static const uint8_t sha1_abc[20] =
-	{
-		0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e, 0x25, 0x71, 0x78, 0x50, 0xc2, 0x6c,
-		0x9c, 0xd0, 0xd8, 0x9d,
-	};
-	static uint8_t n[256], d[256], p[128], q[128], u[128], sig[256], want[256];
-	size_t nlen = unhex (TestN, n), dlen = unhex (TestD, d), plen = unhex (TestP, p);
-	size_t qlen = unhex (TestQ, q), ulen = unhex (TestU, u);
+	int stage;
+	gk_rsa_key_t *key;
+	gk_rsa_job_t *job;
+	uint8_t n[256], d[256], p[128], q[128], u[128];
+	size_t nlen, dlen, plen, qlen, ulen;
+};
+
+static const uint8_t s_TestE[3] = { 0x01, 0x00, 0x01 };
+static const uint8_t s_Sha256Abc[32] =
+{
+	0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+	0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+};
+static const uint8_t s_Sha1Abc[20] =
+{
+	0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e, 0x25, 0x71, 0x78, 0x50, 0xc2, 0x6c,
+	0x9c, 0xd0, 0xd8, 0x9d,
+};
+
+int gk_rsa_selftest_begin (gk_rsa_selftest_t **pst)
+{
+	gk_rsa_selftest_t *st = calloc (1, sizeof *st);
+	*pst = st;
+	return st != 0 ? 0 : -1;
+}
+
+/* the checks without a private operation: fast */
+static int public_checks (gk_rsa_selftest_t *st)
+{
+	uint8_t sig[256];
 	gk_rsa_key_t *key;
 	int result = 0;
 
-	if (gk_rsa_import (&key, n, nlen, e, 3, d, dlen, p, plen, q, qlen, u, ulen) != GK_RSA_OK)
+	unhex (TestSig256, sig);
+	sig[255] ^= 1;
+	if (gk_rsa_verify (st->n, st->nlen, s_TestE, 3, &gk_hash_sha256, s_Sha256Abc, 32, sig, 256))
 	{
-		return 1;
+		result = 6;
 	}
-	if (gk_rsa_bits (key) != 2048)
-	{
-		result = 2;
-	}
-	else if (gk_rsa_sign (key, &gk_hash_sha256, sha256_abc, 32, sig, rng, rng_arg) != GK_RSA_OK
-		 || unhex (TestSig256, want) != 256 || memcmp (sig, want, 256) != 0)
-	{
-		result = 3;
-	}
-	else if (!gk_rsa_verify (n, nlen, e, 3, &gk_hash_sha256, sha256_abc, 32, sig, 256))
+	unhex (TestSig256, sig);
+	if (result == 0 && !gk_rsa_verify (st->n, st->nlen, s_TestE, 3, &gk_hash_sha256, s_Sha256Abc, 32, sig, 256))
 	{
 		result = 4;
 	}
-	else if (gk_rsa_sign (key, &gk_hash_sha1, sha1_abc, 20, sig, rng, rng_arg) != GK_RSA_BAD_HASH)
-	{
-		result = 5;
-	}
-	else
-	{
-		uint8_t c[256], m[256];
-		size_t mlen;
-		unhex (TestCipher, c);
-		if (gk_rsa_decrypt (key, c, 256, m, &mlen, rng, rng_arg) != GK_RSA_OK
-		    || mlen != 7 || memcmp (m, "GapKeep", 7) != 0)
-		{
-			result = 10;
-		}
-		unhex (TestBadCipher, c);
-		if (result == 0
-		    && (gk_rsa_decrypt (key, c, 256, m, &mlen, rng, rng_arg) != GK_RSA_OK
-			|| !gk_hex_equal (m, mlen, TestSynthetic)))
-		{
-			result = 11;
-		}
-		if (result == 0 && gk_rsa_decrypt (key, c, 255, m, &mlen, rng, rng_arg) != GK_RSA_BAD_CIPHERTEXT)
-		{
-			result = 12;
-		}
-		gk_wipe (m, sizeof m);
-	}
-	gk_rsa_free (key);
-	if (result != 0)
-	{
-		return result;
-	}
-
-	unhex (TestSig256, sig);
-	sig[255] ^= 1;
-	if (gk_rsa_verify (n, nlen, e, 3, &gk_hash_sha256, sha256_abc, 32, sig, 256))
-	{
-		return 6;
-	}
 	unhex (TestSig1, sig);
-	if (   !gk_rsa_verify (n, nlen, e, 3, &gk_hash_sha1, sha1_abc, 20, sig, 256)
-	    || gk_rsa_verify (n, nlen, e, 3, &gk_hash_sha256, sha256_abc, 32, sig, 256))
+	if (   result == 0
+	    && (   !gk_rsa_verify (st->n, st->nlen, s_TestE, 3, &gk_hash_sha1, s_Sha1Abc, 20, sig, 256)
+		|| gk_rsa_verify (st->n, st->nlen, s_TestE, 3, &gk_hash_sha256, s_Sha256Abc, 32, sig, 256)))
 	{
-		return 7;
+		result = 7;
 	}
-
 	/* d one off; u for the other prime (PKCS #1's q^-1 mod p) */
-	d[dlen - 1] ^= 2;
-	if (gk_rsa_import (&key, n, nlen, e, 3, d, dlen, p, plen, q, qlen, 0, 0) != GK_RSA_BAD_KEY)
+	st->d[st->dlen - 1] ^= 2;
+	if (result == 0 && gk_rsa_import (&key, st->n, st->nlen, s_TestE, 3, st->d, st->dlen, st->p, st->plen,
+					  st->q, st->qlen, 0, 0) != GK_RSA_BAD_KEY)
 	{
-		return 8;
+		result = 8;
 	}
-	d[dlen - 1] ^= 2;
-	if (gk_rsa_import (&key, n, nlen, e, 3, d, dlen, q, qlen, p, plen, u, ulen) != GK_RSA_BAD_KEY)
+	st->d[st->dlen - 1] ^= 2;
+	if (result == 0 && gk_rsa_import (&key, st->n, st->nlen, s_TestE, 3, st->d, st->dlen, st->q, st->qlen,
+					  st->p, st->plen, st->u, st->ulen) != GK_RSA_BAD_KEY)
 	{
-		return 9;
+		result = 9;
+	}
+	return result;
+}
+
+int gk_rsa_selftest_step (gk_rsa_selftest_t *st, gk_rsa_rng_t rng, void *rng_arg)
+{
+	int result = 0;
+	uint8_t c[256];
+
+	switch (st->stage)
+	{
+	case 0:		/* import, the public checks, then a signature */
+		st->nlen = unhex (TestN, st->n);
+		st->dlen = unhex (TestD, st->d);
+		st->plen = unhex (TestP, st->p);
+		st->qlen = unhex (TestQ, st->q);
+		st->ulen = unhex (TestU, st->u);
+		if (gk_rsa_import (&st->key, st->n, st->nlen, s_TestE, 3, st->d, st->dlen, st->p, st->plen,
+				   st->q, st->qlen, st->u, st->ulen) != GK_RSA_OK)
+		{
+			return -1;
+		}
+		if (gk_rsa_bits (st->key) != 2048)
+		{
+			return -2;
+		}
+		if ((result = public_checks (st)) != 0)
+		{
+			return -result;
+		}
+		if (gk_rsa_sign_begin (&st->job, st->key, &gk_hash_sha1, s_Sha1Abc, 20) != GK_RSA_BAD_HASH)
+		{
+			return -5;
+		}
+		if (gk_rsa_sign_begin (&st->job, st->key, &gk_hash_sha256, s_Sha256Abc, 32) != GK_RSA_OK)
+		{
+			return -3;
+		}
+		st->stage = 1;
+		return 1;
+
+	case 1:		/* the signature, a step at a time; then a decryption */
+	case 2:		/* "GapKeep"; then one with bad padding */
+	case 3:		/* the synthetic message */
+	{
+		int r = gk_rsa_job_step (st->job, st->key, rng, rng_arg);
+		if (r > 0)
+		{
+			return 1;
+		}
+		size_t len;
+		const uint8_t *out = r == GK_RSA_OK ? gk_rsa_job_result (st->job, &len) : 0;
+		uint8_t want[256];
+		if (   out == 0
+		    || (st->stage == 1 && (unhex (TestSig256, want) != len || memcmp (out, want, len) != 0))
+		    || (st->stage == 2 && (len != 7 || memcmp (out, "GapKeep", 7) != 0))
+		    || (st->stage == 3 && !gk_hex_equal (out, len, TestSynthetic)))
+		{
+			return st->stage == 1 ? -3 : st->stage == 2 ? -10 : -11;
+		}
+		gk_rsa_job_end (st->job);
+		st->job = 0;
+		if (st->stage == 3)
+		{
+			/* a ciphertext a byte short: refused */
+			unhex (TestBadCipher, c);
+			if (gk_rsa_decrypt_begin (&st->job, st->key, c, 255) != GK_RSA_BAD_CIPHERTEXT)
+			{
+				return -12;
+			}
+			return 0;
+		}
+		unhex (st->stage == 1 ? TestCipher : TestBadCipher, c);
+		if (gk_rsa_decrypt_begin (&st->job, st->key, c, 256) != GK_RSA_OK)
+		{
+			return -10;
+		}
+		st->stage++;
+		return 1;
 	}
 
-	gk_wipe (d, sizeof d);
-	gk_wipe (p, sizeof p);
-	gk_wipe (q, sizeof q);
-	gk_wipe (u, sizeof u);
-	return 0;
+	default:
+		return 0;
+	}
+}
+
+void gk_rsa_selftest_end (gk_rsa_selftest_t *st)
+{
+	if (st != 0)
+	{
+		gk_rsa_job_end (st->job);
+		gk_rsa_free (st->key);
+		gk_wipe (st, sizeof *st);
+		free (st);
+	}
+}
+
+int gk_rsa_selftest (gk_rsa_rng_t rng, void *rng_arg)
+{
+	gk_rsa_selftest_t *st;
+	if (gk_rsa_selftest_begin (&st) != 0)
+	{
+		return 100;
+	}
+	int r;
+	while ((r = gk_rsa_selftest_step (st, rng, rng_arg)) > 0)
+	{
+	}
+	gk_rsa_selftest_end (st);
+	return -r;
 }

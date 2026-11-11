@@ -94,6 +94,12 @@ void GkJobsUpdate (TGkApp *pApp)
 	{
 		pJob->nLongestTicks = nTicks;
 	}
+	if (nTicks > 250 * (CLOCKHZ / 1000))
+	{
+		// over a quarter of a second: the screen waited too long
+		CLogger::Get ()->Write (FromJobs, LogWarning, "%s: a slice of %u ms (slice %u)",
+					pJob->pOps->pName, nTicks / 1000, pJob->nSlices);
+	}
 
 	if (bMore)
 	{

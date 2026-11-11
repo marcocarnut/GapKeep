@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import * as data from "gk:data";
 import * as crypto from "gk:crypto";
+import * as zlib from "gk:zlib";
 
 const FOLDER = "pgp-interop";
 const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -236,17 +237,35 @@ async function decryptFile(file, sub, unlocker) {
   try {
     const all = packets(data.read(FOLDER, file));
     const pkesk = all.find((p) => p.tag === 1 && hex(p.body.subarray(1, 9)) === hex(sub.fpr.subarray(12)));
-    const seipd = all.find((p) => p.tag === 18);
-    if (!pkesk || !seipd || seipd.body[0] !== 1) throw new Error("not a PKESK and SEIPD v1 message");
+    const enc = all.find((p) => p.tag === 18 || p.tag === 20);
+    if (!pkesk || !enc) throw new Error("not a PKESK and encrypted data");
     const key = await sessionKey(pkesk, sub, unlocker);
-    const plain = await crypto.seipdV1Decrypt(key, seipd.body.subarray(1));
+    let plain, how;
+    if (enc.tag === 20 && enc.body[0] === 1) {
+      plain = await crypto.ocbedDecrypt(key, enc.body.subarray(1));
+      how = `GnuPG's OCB packet (chunk size octet ${enc.body[3]})`;
+    } else if (enc.tag === 18 && enc.body[0] === 2) {
+      plain = await crypto.seipdV2Decrypt(key, enc.body.subarray(1));
+      how = "SEIPD v2";
+    } else if (enc.tag === 18 && enc.body[0] === 1) {
+      plain = await crypto.seipdV1Decrypt(key, enc.body.subarray(1));
+      how = "SEIPD v1";
+    } else {
+      throw new Error(`packet ${enc.tag} version ${enc.body[0]}`);
+    }
     key.fill(0);
-    const inner = packets(plain)[0];
+    let inner = packets(plain)[0];
+    if (inner.tag === 8) {
+      // compressed: ZIP (1, raw DEFLATE) or ZLIB (2)
+      const format = { 1: "raw", 2: "zlib" }[inner.body[0]];
+      if (!format) throw new Error(`compression algorithm ${inner.body[0]}`);
+      const out = await zlib.inflate(inner.body.subarray(1), { format, maxOutput: 16 << 20 });
+      how += `, compressed (${format})`;
+      inner = packets(out)[0];
+    }
     if (inner.tag === 11) {
       const b = inner.body, at = 2 + b[1] + 4;		// format, name, date
-      log(`decrypted ${file}: literal data, sha256 ${hex(crypto.sha256(b.subarray(at)))}`);
-    } else if (inner.tag === 8) {
-      log(`decrypted ${file}: compressed data (algorithm ${inner.body[0]}), ${plain.length} bytes`);
+      log(`decrypted ${file}: ${how}, literal data, sha256 ${hex(crypto.sha256(b.subarray(at)))}`);
     } else {
       log(`decrypted ${file}: FAIL packet ${inner.tag}`);
     }
@@ -274,7 +293,8 @@ for (const name of ["ed", "rsa"]) {
       unlocker = crypto.rsaPrivateKey({ n: sub.pub.n, e: sub.pub.e, d: secret.d, p: secret.p, q: secret.q, u: secret.u });
     }
     secret.plain.fill(0);
-    for (const file of name === "rsa" ? ["rsa.msg", "rsa-bad.msg", "rsa-z.msg"] : ["ed.msg", "ed-bad.msg"]) {
+    for (const file of name === "rsa" ? ["rsa-ocb.msg", "rsa-ocb-bad.msg", "rsa.msg", "rsa-bad.msg"]
+         : ["ed-ocb.msg", "ed-ocb-small.msg", "ed-ocb-cut.msg", "ed-ocb-nolast.msg", "ed.msg", "ed-bad.msg"]) {
       await decryptFile(file, sub, unlocker);
     }
     unlocker.destroy();

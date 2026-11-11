@@ -30,6 +30,7 @@ extern "C" {
 #define GK_RSA_RNG		-5	/* the random generator failed (blinding) */
 #define GK_RSA_FAULT		-6	/* the result failed its check: none given */
 #define GK_RSA_BAD_CIPHERTEXT	-7	/* not as long as n, or not below n */
+#define GK_RSA_SELFTEST		-8	/* (the caller's: RSA is disabled) */
 
 typedef struct gk_rsa_key gk_rsa_key_t;
 
@@ -107,6 +108,16 @@ int gk_rsa_verify (const uint8_t *n, size_t nlen, const uint8_t *e, size_t elen,
    decrypted, one with bad padding giving its known synthetic message; an
    inconsistent key refused. 0: OK. */
 int gk_rsa_selftest (gk_rsa_rng_t rng, void *rng_arg);
+
+/* The same in steps, each at most one step of a private operation (a CRT
+   exponentiation with the 2048-bit test key: about 45 ms on a Pi Zero),
+   so that it can run in a job's slices. begin: 0, or -1 (no memory).
+   step: 1, more to do; 0, passed; negative, failed (the code above,
+   negated). end: frees (0: nothing). */
+typedef struct gk_rsa_selftest gk_rsa_selftest_t;
+int gk_rsa_selftest_begin (gk_rsa_selftest_t **st);
+int gk_rsa_selftest_step (gk_rsa_selftest_t *st, gk_rsa_rng_t rng, void *rng_arg);
+void gk_rsa_selftest_end (gk_rsa_selftest_t *st);
 
 #ifdef __cplusplus
 }

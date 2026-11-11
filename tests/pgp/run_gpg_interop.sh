@@ -9,15 +9,17 @@
 # - decryption: each key gets an encryption subkey (Cv25519, RSA-3072);
 #   gpg --encrypt to each; the app finds its PKESK, recovers the session
 #   key (RSA: RsaPrivateKey.decrypt; Cv25519: X25519, RFC 6637's KDF in
-#   JavaScript, aesKeyUnwrap) and decrypts the SEIPD v1 packet
-#   (seipdV1Decrypt): the literal data must be the file; a changed byte in
-#   the ciphertext or the MDC must be refused.
+#   JavaScript, aesKeyUnwrap), decrypts the message and decompresses it
+#   (gk:zlib): the literal data must be the file.
 #
-# GnuPG 2.4 encrypts with OCB (its "AEAD encrypted data", tag 20) to keys
-# that announce AEAD, as its own new keys do: the keys' preferences are set
-# without it, so it writes SEIPD v1 with an MDC (tag 18). One message is
-# uncompressed (-z 0); one is compressed (the default), which the app
-# decrypts and recognises (decompression is not there yet).
+# With GnuPG 2.4's defaults (its keys announce AEAD) it writes its OCB
+# Encrypted Data packet (tag 20, LibrePGP: ocbedDecrypt), compressed: the
+# *-ocb messages, one with small chunks (--chunk-size 12: many chunks).
+# Then the keys' preferences are set without AEAD, and it writes SEIPD v1
+# with an MDC (seipdV1Decrypt): the plain messages, uncompressed (-z 0).
+# Refused: a changed byte (OCB; v1: in the middle, in the MDC), an OCB
+# message without its final tag, or without its last chunk (the final tag
+# kept).
 #
 # No prompt can ever reach the desktop: the agent may only use loopback
 # (gpg-agent.conf: pinentry-program /bin/false), every call that needs a
@@ -52,8 +54,6 @@ for k in ed rsa; do
 	fpr=$(gpg --batch --with-colons --list-keys "$k@example.invalid" | awk -F: '/^fpr/ { print $10; exit }')
 	algo=cv25519; [ $k = rsa ] && algo=rsa3072
 	$G --quick-add-key "$fpr" $algo encr never 2>/dev/null
-	printf 'setpref AES256 AES192 AES SHA512 SHA384 SHA256 SHA224 ZLIB BZIP2 ZIP\ny\nsave\n' |
-		$G --command-fd 0 --edit-key "$fpr" >/dev/null 2>&1
 	$G --export-secret-keys "$k@example.invalid" > "$D/$k.key"
 done
 cp "$WORK/passphrase" "$D/passphrase.txt"
@@ -61,18 +61,66 @@ cp "$WORK/passphrase" "$D/passphrase.txt"
 echo $(( $(date +%s) + 1 )) > "$D/time.txt"
 head -c 100000 /dev/urandom > "$D/message.bin"
 head -c 70000 /dev/urandom > "$D/secret.bin"
-# encrypted: uncompressed to both keys, compressed to the RSA key
-$G -z 0 -r ed@example.invalid -o "$D/ed.msg" -e "$D/secret.bin"
-$G -z 0 -r rsa@example.invalid -o "$D/rsa.msg" -e "$D/secret.bin"
-$G -r rsa@example.invalid -o "$D/rsa-z.msg" -e "$D/secret.bin"
-# changed: a byte of the ciphertext's middle, the last (the MDC's)
+# GnuPG's defaults: OCB, compressed
+$G -r ed@example.invalid -o "$D/ed-ocb.msg" -e "$D/secret.bin"
+$G -r rsa@example.invalid -o "$D/rsa-ocb.msg" -e "$D/secret.bin"
+$G --chunk-size 12 -r ed@example.invalid -o "$D/ed-ocb-small.msg" -e "$D/secret.bin"
+# then without AEAD: SEIPD v1, uncompressed
+for k in ed rsa; do
+	fpr=$(gpg --batch --with-colons --list-keys "$k@example.invalid" | awk -F: '/^fpr/ { print $10; exit }')
+	printf 'setpref AES256 AES192 AES SHA512 SHA384 SHA256 SHA224 ZLIB BZIP2 ZIP\ny\nsave\n' |
+		$G --command-fd 0 --edit-key "$fpr" >/dev/null 2>&1
+	$G -z 0 -r $k@example.invalid -o "$D/$k.msg" -e "$D/secret.bin"
+done
+# changed and cut ones (no gpg here: it would try to decrypt them)
 python3 -I - "$D" <<'EOF'
 import sys
 d = sys.argv[1]
-for name, at in (("ed", None), ("rsa", -1)):
+
+def packets(b):
+    """[(tag, body)], new-format packets (partial lengths joined), old-format ones"""
+    out, i = [], 0
+    while i < len(b):
+        ctb = b[i]; i += 1
+        if ctb & 0x40:
+            tag, parts = ctb & 63, []
+            while True:
+                o = b[i]; i += 1
+                if 224 <= o < 255:
+                    n = 1 << (o & 31); parts.append(b[i:i + n]); i += n; continue
+                if o < 192: n = o
+                elif o < 224: n = ((o - 192) << 8) + b[i] + 192; i += 1
+                else: n = int.from_bytes(b[i:i + 4], "big"); i += 4
+                parts.append(b[i:i + n]); i += n
+                break
+            out.append((tag, b"".join(parts)))
+        else:
+            tag, lt = (ctb >> 2) & 15, ctb & 3
+            n = {0: 1, 1: 2, 2: 4}[lt]
+            ln = int.from_bytes(b[i:i + n], "big"); i += n
+            out.append((tag, b[i:i + ln])); i += ln
+    return out
+
+def packet(tag, body):
+    return bytes([0xc0 | tag, 0xff]) + len(body).to_bytes(4, "big") + body
+
+for name, at in (("ed", None), ("rsa", -1)):			# v1: the middle, the MDC
     m = bytearray(open(f"{d}/{name}.msg", "rb").read())
     m[len(m) // 2 if at is None else at] ^= 0x10
     open(f"{d}/{name}-bad.msg", "wb").write(m)
+m = bytearray(open(f"{d}/rsa-ocb.msg", "rb").read())		# OCB: a byte
+m[len(m) // 2] ^= 0x10
+open(f"{d}/rsa-ocb-bad.msg", "wb").write(m)
+ps = packets(open(f"{d}/ed-ocb-small.msg", "rb").read())
+pkesk = [packet(t, b) for t, b in ps if t == 1]
+body = [b for t, b in ps if t == 20][0]
+head, data, final = body[:19], body[19:-16], body[-16:]
+open(f"{d}/ed-ocb-cut.msg", "wb").write(b"".join(pkesk) + packet(20, head + data))	# no final tag
+step = (1 << (body[3] + 6)) + 16
+chunks = (len(data) + step - 1) // step
+assert chunks > 2, chunks
+open(f"{d}/ed-ocb-nolast.msg", "wb").write(b"".join(pkesk) + packet(20, head + data[:(chunks - 1) * step] + final))
+print(f"ed-ocb-small.msg: {chunks} chunks")
 EOF
 sleep 1
 
@@ -108,25 +156,22 @@ if gpg --batch --verify "$WORK/ed-SHA-256.sig" "$WORK/changed.bin" >/dev/null 2>
 	echo "FAIL: a changed file verified"; FAIL=1
 fi
 
-# decryption: the plaintext's hash, and the changed messages refused
+# decryption: the plaintext's hash, and the changed and cut messages refused
 want=$(sha256sum "$D/secret.bin" | cut -d' ' -f1)
 M=0
-for msg in ed rsa; do
-	if grep -q "pgpinterop: decrypted $msg.msg: literal data, sha256 $want" "$WORK/sim.log"; then
+for msg in ed-ocb rsa-ocb ed-ocb-small ed rsa; do
+	if grep -q "pgpinterop: decrypted $msg.msg: .*literal data, sha256 $want" "$WORK/sim.log"; then
 		echo "decrypted $msg.msg: the file, as gpg encrypted it"; M=$((M + 1))
 	else
 		echo "FAIL: $msg.msg not decrypted to the file"; FAIL=1
 	fi
-	if grep -q "pgpinterop: decrypted $msg-bad.msg: refused (Error:" "$WORK/sim.log"; then
-		echo "$msg-bad.msg: refused"; M=$((M + 1))
+done
+for msg in rsa-ocb-bad ed-ocb-cut ed-ocb-nolast ed-bad rsa-bad; do
+	if grep -q "pgpinterop: decrypted $msg.msg: refused (Error:" "$WORK/sim.log"; then
+		echo "$msg.msg: refused"; M=$((M + 1))
 	else
-		echo "FAIL: $msg-bad.msg not refused"; FAIL=1
+		echo "FAIL: $msg.msg not refused"; FAIL=1
 	fi
 done
-if grep -q "pgpinterop: decrypted rsa-z.msg: compressed data" "$WORK/sim.log"; then
-	echo "decrypted rsa-z.msg: compressed data (not decompressed yet)"; M=$((M + 1))
-else
-	echo "FAIL: rsa-z.msg not decrypted"; FAIL=1
-fi
-echo "run_gpg_interop: $N of 4 signatures verified, $M of 5 decryptions right, with $(gpg --version | head -1)"
+echo "run_gpg_interop: $N of 4 signatures verified, $M of 10 decryptions right, with $(gpg --version | head -1)"
 exit $FAIL

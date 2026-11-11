@@ -767,6 +767,10 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	{
 		return GkInitI18nNativeModule (pContext, pName);
 	}
+	if (strcmp (pName, "gk:zlib") == 0)
+	{
+		return GkInitZlibModule (pContext, pName);
+	}
 	if (strcmp (pName, "gk:usb") == 0)
 	{
 		if (pApp->pBundle->usb_count == 0)

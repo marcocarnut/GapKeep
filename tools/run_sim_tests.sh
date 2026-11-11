@@ -183,6 +183,14 @@ if [ -f circle/Rules.mk ]; then
 	fi
 fi
 
+# gk:zlib's decompression (zlib's inflate): seeds, then a short fuzz run
+# (tools/fuzz_inflate.sh for long ones)
+if tools/fuzz_inflate.sh 20000 > "$OUT/fuzz_inflate.log" 2>&1; then
+	echo "PASS  sim:fuzz_inflate"
+else
+	echo "FAIL  sim:fuzz_inflate   (see $OUT/fuzz_inflate.log)"; FAILED=1
+fi
+
 # gk:usb's descriptor parsers (src/runtime/usbdesc.c): fixed cases and a
 # short fuzz run (tools/fuzz_usbdesc.sh for long ones)
 if tools/fuzz_usbdesc.sh 20000 > "$OUT/fuzz_usbdesc.log" 2>&1; then
