@@ -1,5 +1,5 @@
 /*
- * sha512.h - SHA-512 (FIPS 180-4).
+ * sha512.h - SHA-512 and SHA-384 (FIPS 180-4).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #define GK_SHA512_DIGEST_SIZE	64
+#define GK_SHA384_DIGEST_SIZE	48
 #define GK_SHA512_BLOCK_SIZE	128
 
 typedef struct
@@ -32,7 +33,12 @@ void gk_sha512_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA512_DIGEST_SIZE]);
 
 void gk_sha512 (const void *data, size_t len, uint8_t digest[GK_SHA512_DIGEST_SIZE]);
 
-/* Checks the implementation against FIPS 180-4 test vectors. 0: OK. */
+/* SHA-384: the same context and gk_sha512_update; its own start and end. */
+void gk_sha384_init (gk_sha512_t *ctx);
+void gk_sha384_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA384_DIGEST_SIZE]);
+
+/* Checks the implementation against FIPS 180-4 test vectors (SHA-384's
+   too). 0: OK. */
 int gk_sha512_selftest (void);
 
 #ifdef __cplusplus

@@ -33,11 +33,12 @@ int main (int argc, char **argv)
 
 	/* "random N": N cases as lines "hash keyhex msghex digest hmac" */
 	int cases = atoi (argv[1]);
-	static const gk_hash_t *const hashes[] = { &gk_hash_sha1, &gk_hash_sha256, &gk_hash_sha512 };
+	static const gk_hash_t *const hashes[] =
+		{ &gk_hash_sha1, &gk_hash_sha256, &gk_hash_sha512, &gk_hash_sha224, &gk_hash_sha384 };
 	srand (1);
 	for (int c = 0; c < cases; c++)
 	{
-		const gk_hash_t *h = hashes[c % 3];
+		const gk_hash_t *h = hashes[c % 5];
 		size_t kl = (size_t) rand () % 300, ml = (size_t) rand () % 600;
 		static uint8_t k[300], m[600];
 		for (size_t i = 0; i < kl; i++) k[i] = (uint8_t) rand ();

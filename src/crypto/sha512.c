@@ -1,5 +1,6 @@
 /*
- * sha512.c - SHA-512 (FIPS 180-4, 6.4), written from the standard.
+ * sha512.c - SHA-512 and SHA-384 (FIPS 180-4, 6.4 and 6.5), written from the
+ * standard.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -144,6 +145,28 @@ void gk_sha512_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA512_DIGEST_SIZE])
 	gk_wipe (ctx, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
+/* SHA-384: SHA-512 with other initial values, cut to 48 bytes (FIPS 180-4,
+   5.3.4 and 6.5) */
+void gk_sha384_init (gk_sha512_t *ctx)
+{
+	static const uint64_t H0[8] =
+	{
+		0xcbbb9d5dc1059ed8ULL, 0x629a292a367cd507ULL, 0x9159015a3070dd17ULL, 0x152fecd8f70e5939ULL,
+		0x67332667ffc00b31ULL, 0x8eb44a8768581511ULL, 0xdb0c2e0d64f98fa7ULL, 0x47b5481dbefa4fa4ULL,
+	};
+	memcpy (ctx->state, H0, sizeof H0);
+	ctx->length = 0;
+	ctx->fill = 0;
+}
+
+void gk_sha384_final (gk_sha512_t *ctx, uint8_t digest[GK_SHA384_DIGEST_SIZE])
+{
+	uint8_t full[GK_SHA512_DIGEST_SIZE];
+	gk_sha512_final (ctx, full);
+	memcpy (digest, full, GK_SHA384_DIGEST_SIZE);
+	gk_wipe (full, sizeof full);
+}
+
 void gk_sha512 (const void *data, size_t len, uint8_t digest[GK_SHA512_DIGEST_SIZE])
 {
 	gk_sha512_t ctx;
@@ -194,6 +217,26 @@ int gk_sha512_selftest (void)
 			   "de0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b"))
 	{
 		return 100;
+	}
+
+	/* SHA-384, FIPS 180-4 examples ("SHA384.pdf") */
+	static const struct { const char *msg; const char *hex; } v384[] =
+	{
+		{"abc", "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed"
+			"8086072ba1e7cc2358baeca134c825a7"},
+		{"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
+		 "09330c33f71147e83d192fc782cd1b4753111b173b3b05d22fa08086e3b0f712"
+		 "fcc7c71a557e2db966c3e9fa91746039"},
+	};
+	for (unsigned i = 0; i < sizeof v384 / sizeof v384[0]; i++)
+	{
+		gk_sha384_init (&ctx);
+		gk_sha512_update (&ctx, v384[i].msg, strlen (v384[i].msg));
+		gk_sha384_final (&ctx, d);
+		if (!gk_hex_equal (d, GK_SHA384_DIGEST_SIZE, v384[i].hex))
+		{
+			return 200 + (int) i;
+		}
 	}
 
 	return 0;

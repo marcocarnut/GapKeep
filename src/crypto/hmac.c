@@ -14,6 +14,10 @@ static void sha1_final (gk_hash_ctx_t *c, uint8_t *d) { gk_sha1_final (&c->sha1,
 static void sha256_init (gk_hash_ctx_t *c) { gk_sha256_init (&c->sha256); }
 static void sha256_update (gk_hash_ctx_t *c, const void *p, size_t n) { gk_sha256_update (&c->sha256, p, n); }
 static void sha256_final (gk_hash_ctx_t *c, uint8_t *d) { gk_sha256_final (&c->sha256, d); }
+static void sha224_init (gk_hash_ctx_t *c) { gk_sha224_init (&c->sha256); }
+static void sha224_final (gk_hash_ctx_t *c, uint8_t *d) { gk_sha224_final (&c->sha256, d); }
+static void sha384_init (gk_hash_ctx_t *c) { gk_sha384_init (&c->sha512); }
+static void sha384_final (gk_hash_ctx_t *c, uint8_t *d) { gk_sha384_final (&c->sha512, d); }
 static void sha512_init (gk_hash_ctx_t *c) { gk_sha512_init (&c->sha512); }
 static void sha512_update (gk_hash_ctx_t *c, const void *p, size_t n) { gk_sha512_update (&c->sha512, p, n); }
 static void sha512_final (gk_hash_ctx_t *c, uint8_t *d) { gk_sha512_final (&c->sha512, d); }
@@ -22,12 +26,17 @@ const gk_hash_t gk_hash_sha1 =
 	{ "SHA-1", GK_SHA1_DIGEST_SIZE, GK_SHA1_BLOCK_SIZE, sha1_init, sha1_update, sha1_final };
 const gk_hash_t gk_hash_sha256 =
 	{ "SHA-256", GK_SHA256_DIGEST_SIZE, 64, sha256_init, sha256_update, sha256_final };
+const gk_hash_t gk_hash_sha224 =
+	{ "SHA-224", GK_SHA224_DIGEST_SIZE, 64, sha224_init, sha256_update, sha224_final };
+const gk_hash_t gk_hash_sha384 =
+	{ "SHA-384", GK_SHA384_DIGEST_SIZE, GK_SHA512_BLOCK_SIZE, sha384_init, sha512_update, sha384_final };
 const gk_hash_t gk_hash_sha512 =
 	{ "SHA-512", GK_SHA512_DIGEST_SIZE, GK_SHA512_BLOCK_SIZE, sha512_init, sha512_update, sha512_final };
 
 const gk_hash_t *gk_hash_find (const char *name)
 {
-	static const gk_hash_t *const all[] = { &gk_hash_sha1, &gk_hash_sha256, &gk_hash_sha512 };
+	static const gk_hash_t *const all[] =
+		{ &gk_hash_sha1, &gk_hash_sha224, &gk_hash_sha256, &gk_hash_sha384, &gk_hash_sha512 };
 	for (unsigned i = 0; i < sizeof all / sizeof all[0]; i++)
 	{
 		if (strcmp (name, all[i]->name) == 0)
@@ -151,6 +160,23 @@ int gk_hmac_selftest (void)
 	gk_hmac (&gk_hash_sha512, key, n, Text7, sizeof Text7 - 1, d);
 	if (!gk_hex_equal (d, 64, "e37b6a775dc87dbaa4dfa9f96e5e3ffddebd71f8867289865df5a32d20cdc944"
 				  "b6022cac3c4982b10d5eeb55c3e4de15134676fb6de0446065c97440fa8c6a58")) return 20;
+
+	/* RFC 4231, test cases 1, 2 and 6 with SHA-384, 1 and 6 with SHA-224 */
+	n = fill (key, 0x0b, 20);
+	gk_hmac (&gk_hash_sha384, key, n, "Hi There", 8, d);
+	if (!gk_hex_equal (d, 48, "afd03944d84895626b0825f4ab46907f15f9dadbe4101ec6"
+				  "82aa034c7cebc59cfaea9ea9076ede7f4af152e8b2fa9cb6")) return 21;
+	gk_hmac (&gk_hash_sha224, key, n, "Hi There", 8, d);
+	if (!gk_hex_equal (d, 28, "896fb1128abbdf196832107cd49df33f47b4b1169912ba4f53684b22")) return 22;
+	gk_hmac (&gk_hash_sha384, "Jefe", 4, "what do ya want for nothing?", 28, d);
+	if (!gk_hex_equal (d, 48, "af45d2e376484031617f78d2b58a6b1b9c7ef464f5a01b47"
+				  "e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649")) return 23;
+	n = fill (key, 0xaa, 131);
+	gk_hmac (&gk_hash_sha384, key, n, Text6, sizeof Text6 - 1, d);
+	if (!gk_hex_equal (d, 48, "4ece084485813e9088d2c63a041bc5b44f9ef1012a2b588f"
+				  "3cd11f05033ac4c60c2ef6ab4030fe8296248df163f44952")) return 24;
+	gk_hmac (&gk_hash_sha224, key, n, Text6, sizeof Text6 - 1, d);
+	if (!gk_hex_equal (d, 28, "95e9a0db962095adaebe9b2d6f0dbce2d499f112f2d2b7273fa6870e")) return 25;
 
 	/* streaming in pieces matches one call */
 	gk_hmac_t ctx;

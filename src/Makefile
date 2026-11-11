@@ -7,6 +7,8 @@
 #   ../lib/quickjs       QuickJS engine
 #   ../lib/fatfs         FatFs, read-only (not for SEALED=1)
 #   ../lib/secp256k1     libsecp256k1 (third_party/secp256k1)
+#   ../lib/mbedtls       Mbed TLS's bignum, RSA and AES (third_party/mbedtls)
+#   ../lib/monocypher    Monocypher, for Ed25519 (third_party/monocypher)
 #   ../lib/zxing         the QR decoder, if third_party/zxing-cpp is there
 #                        (without it, QR scanners report "no QR decoder")
 #   ../circle/addon/SDCard  SD card driver (not for SEALED=1)
@@ -42,6 +44,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o crypto/wipe.o \
+	  crypto/s2k.o crypto/aes.o crypto/ed25519.o crypto/rsa.o \
 	  runtime/gk_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
 	  usbclaim.o runtime/usb.o runtime/usbdesc.o runtime/js_usb.o \
@@ -115,6 +118,7 @@ OBJS	+= runtime/qrdecode.o
 endif
 
 LIBS	+= ../lib/secp256k1/libsecp256k1.a ../lib/colorqr/libcolorqr.a \
+	  ../lib/mbedtls/libmbedtls.a ../lib/monocypher/libmonocypher.a \
 	  ../lib/lvgl/liblvgl.a \
 	  ../lib/quickjs/libquickjs.a \
 	  $(CIRCLEHOME)/lib/usb/libusb.a \
@@ -126,7 +130,9 @@ LIBS	+= ../lib/secp256k1/libsecp256k1.a ../lib/colorqr/libcolorqr.a \
 DEFINE += -DLV_CONF_PATH="<gk_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
 EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src -I ../third_party/secp256k1/include \
-	       -I ../lib/colorqr/include
+	       -I ../lib/colorqr/include -I ../lib/mbedtls -I ../third_party/mbedtls/include \
+	       -I ../third_party/monocypher/src -I ../third_party/monocypher/src/optional
+DEFINE += -DMBEDTLS_CONFIG_FILE='"gk_mbedtls_config.h"'
 
 include $(CIRCLEHOME)/Rules.mk
 

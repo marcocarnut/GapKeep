@@ -90,13 +90,20 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
-	    $(ROOT)/src/crypto/wipe.c \
+	    $(ROOT)/src/crypto/wipe.c $(ROOT)/src/crypto/s2k.c $(ROOT)/src/crypto/aes.c \
+	    $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/rsa.c \
 	    $(ROOT)/src/kbdindev.cpp \
 	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
 # libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
 include $(ROOT)/lib/secp256k1/secp256k1.mk
 SECPSRC  := $(addprefix $(SECP_DIR)/,$(SECP_SOURCES))
+# Mbed TLS (bignum, RSA, AES) and Monocypher (Ed25519), as for the kernel
+# (lib/mbedtls/mbedtls.mk, lib/monocypher/monocypher.mk)
+include $(ROOT)/lib/mbedtls/mbedtls.mk
+MBEDSRC  := $(addprefix $(MBEDTLS_DIR)/library/,$(MBEDTLS_SOURCES))
+include $(ROOT)/lib/monocypher/monocypher.mk
+MONOSRC  := $(addprefix $(MONO_DIR)/,$(MONO_SOURCES))
 # colorqr, the experimental colour QR layer (lib/colorqr/colorqr.mk)
 include $(ROOT)/lib/colorqr/colorqr.mk
 CQSRC    := $(addprefix $(CQ_DIR)/,$(CQ_SOURCES))
@@ -112,11 +119,16 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC)) $(OBJDIR)/apps_bundle.c.o $(OBJDIR)/i18n_js.c.o
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC) $(MBEDSRC) $(MONOSRC)) \
+	    $(OBJDIR)/apps_bundle.c.o $(OBJDIR)/i18n_js.c.o
 ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
 $(SECPOBJS): CFLAGS += $(SECP_DEFINES) $(SECP_INCLUDE) -I $(SECP_DIR) -Wno-unused-function
+MBEDOBJS := $(call obj,$(MBEDSRC) $(ROOT)/src/crypto/aes.c $(ROOT)/src/crypto/rsa.c)
+$(MBEDOBJS): CFLAGS += $(MBEDTLS_DEFINES) $(MBEDTLS_INCLUDE) -I $(MBEDTLS_DIR)/library
+MONOOBJS := $(call obj,$(MONOSRC) $(ROOT)/src/crypto/ed25519.c)
+$(MONOOBJS): CFLAGS += $(MONO_INCLUDE)
 CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 
