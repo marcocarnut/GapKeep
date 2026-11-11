@@ -81,6 +81,10 @@ Scenario file: one command per line, '#' starts a comment.
                                 offers it again 0.5 s later
     usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]
                                 the simulator's own commands (docs/SIMULATOR.md)
+    pad <command>               simulator only: a line to the touch pad of a
+                                simulated DigiMacro (simavr-softusb's bridge:
+                                "pad hold", "pad tap", "pad .-"), through the
+                                FIFO named by $GK_TEST_PAD
     reject <regex>              fails if the whole log so far matches, e.g.
                                 "reject after boot: the card" at the end of
                                 a scenario
@@ -721,6 +725,13 @@ def run_scenario(m, path, outdir):
                     raise SystemExit('%s: usbip is for the simulator' % where)
                 m.usbip(rest.strip())
                 print('[%s] usbip %s' % (where, rest.strip()))
+            elif cmd == 'pad':
+                fifo = os.environ.get('GK_TEST_PAD')
+                if not fifo:
+                    raise SystemExit('%s: pad needs GK_TEST_PAD (the simulated board\'s pad FIFO)' % where)
+                with open(fifo, 'w') as f:
+                    f.write(rest.strip() + '\n')
+                print('[%s] pad %s' % (where, rest.strip()))
             elif cmd == 'reject':
                 pattern = rest.strip()
                 found = re.search(pattern, m.serial())

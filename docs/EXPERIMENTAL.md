@@ -158,3 +158,35 @@ tests: `tests/scan_digest.txt`).
   exposure, and `camcodes` logs whether the code on a screen in view was
   read (on 2026-11-05 a version 5 code on a monitor, at 7 and 4 pixels a
   module, was read at the first try every time).
+
+## The DigiMacro app
+
+`apps/digimacro` configures a DigiMacro board, a morse-tapped macro keyboard
+on a Digispark, over [gk:usb](API.md#gkusb): its macros (TOTP codes among
+them, with keys imported from QR codes), its password, lockout and clock
+(its README says how).
+
+### Why it is experimental
+
+- **It claims a keyboard's ids.** DigiMacro is `16c0:27db`, the id V-USB
+  shares among hobby keyboards, so other boards may have it too: with the
+  app installed and experimental features on, any such device is claimed
+  and types nothing here. Off, nothing is claimed.
+- **It puts secrets on a device that leaves.** A TOTP key written to the
+  board is on a USB keyboard that goes to other computers, where it types
+  codes: that is the point, and also the opposite of what GapKeep is for. The
+  keys pass through GapKeep only in RAM, never on screen, and are wiped once
+  written; how well the board keeps them is the board's (DigiMacro's
+  HARDENED_MODE.md; the app shows its checklist).
+- **Its protocol and encoder are DigiMacro's own code**, from a project not
+  yet published (`tools/extract_digimacro.py`), on a branch of its own until
+  it is.
+
+### Testing
+
+- `tests/digimacro/run_node.mjs`: the libraries under Node, the copied
+  encoder against DigiMacro's own.
+- `tests/digimacro.txt`, through `tests/digimacro/run_softusb.sh`: the app
+  against the real firmware on a simulated Digispark (simavr-softusb, over
+  USB/IP), from the keyboard alone; the board then types the macro written,
+  with the right TOTP code (`tests/digimacro/check_board.py`).

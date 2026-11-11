@@ -1,0 +1,10 @@
+{
+  "id": "digimacro",
+  "name": "DigiMacro",
+  "version": "0.1.0",
+  "description": "Configures a DigiMacro macro keyboard: macros, TOTP keys, password, lockout, clock.",
+  "icon": "keyboard",
+  "permissions": ["camera"],
+  "experimental": true,
+  "usb": ["16c0:27db"]
+}

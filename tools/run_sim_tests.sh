@@ -53,6 +53,10 @@ for t in $SCENARIOS; do
 		echo "SKIP  sim:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
 	fi
+	# a simulated DigiMacro: tests/digimacro/run_softusb.sh starts one, below
+	if grep -q "^# Needs a simulated DigiMacro" "$t"; then
+		continue
+	fi
 	# "# Needs USB/IP": a device served at GK_TEST_USBIP (default
 	# 127.0.0.1:3241), or the scenario is skipped
 	if grep -q "^# Needs USB/IP" "$t"; then
@@ -179,6 +183,34 @@ if tools/fuzz_usbdesc.sh 20000 > "$OUT/fuzz_usbdesc.log" 2>&1; then
 else
 	echo "FAIL  sim:fuzz_usbdesc   (see $OUT/fuzz_usbdesc.log)"; FAILED=1
 fi
+
+# the DigiMacro app (experimental, the digimacro branch): its libraries
+# under Node, its copy of DigiMacroAsm's code, and the app against the real
+# firmware on a simulated board, when simavr-softusb is there
+if command -v node >/dev/null; then
+	if node --experimental-default-type=module tests/digimacro/run_node.mjs > "$OUT/digimacro_node.log" 2>&1; then
+		echo "PASS  sim:digimacro_node"
+	else
+		echo "FAIL  sim:digimacro_node   (see $OUT/digimacro_node.log)"; FAILED=1
+	fi
+fi
+DIGIMACROASM=${DIGIMACROASM:-$HOME/claude/code/DigiMacroAsm}
+if [ -f "$DIGIMACROASM/web/table.js" ]; then
+	if python3 tools/extract_digimacro.py --check "$DIGIMACROASM" > "$OUT/digimacro_vendor.log" 2>&1; then
+		echo "PASS  sim:digimacro_vendor"
+	else
+		echo "FAIL  sim:digimacro_vendor   (see $OUT/digimacro_vendor.log: DigiMacroAsm changed? tools/extract_digimacro.py)"; FAILED=1
+	fi
+fi
+set +e
+tests/digimacro/run_softusb.sh "$OUT/digimacro" > "$OUT/digimacro.log" 2>&1
+rc=$?
+set -e
+case $rc in
+	0)  echo "PASS  sim:digimacro   (the real firmware, simulated: it types what was written)" ;;
+	77) echo "SKIP  sim:digimacro   (no simavr-softusb: SOFTUSB=.../harness)" ;;
+	*)  echo "FAIL  sim:digimacro   (see $OUT/digimacro.log)"; FAILED=1 ;;
+esac
 
 # libraries outside apps (lib/js), under Node
 if command -v node >/dev/null; then
