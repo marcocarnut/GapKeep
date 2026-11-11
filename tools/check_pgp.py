@@ -137,6 +137,9 @@ def check_s2k(native, rnd, cases):
         length = rnd.randrange(1, 65)
         want = s2k(name, kind, pw, salt, coded, length).hex()
         got = native("s2k", kind, name, h(pw), h(salt), coded, length)
+        if c % 2:
+            got2 = native("s2k", kind, name, h(pw), h(salt), coded, length, rnd.choice((1, 7, 63, 64, 1000, 4096)))
+            check(got2 == want, f"S2K in steps {kind} {name} pw {len(pw)} count {coded} len {length}")
         check(got == want, f"S2K {kind} {name} pw {len(pw)} count {coded} len {length}")
     check(native("s2k", 2, "SHA-256", "-", "0102030405060708", 0, 16) == "error -2", "S2K type 2 refused")
 
@@ -204,7 +207,7 @@ def rsa_numbers(n, e, d):
 
 def check_rsa(native, rnd, cases, wy_dirs):
     # Wycheproof verification: the digest of msg, then ours; sizes outside
-    # 2048-4096 are always refused
+    # 1024-4096 are always refused
     counts = {}
     for d in wy_dirs:
         for f in sorted(glob.glob(os.path.join(d, "rsa_signature_*_test.json"))):
@@ -216,7 +219,7 @@ def check_rsa(native, rnd, cases, wy_dirs):
                 for t in g["tests"]:
                     digest = hashlib.new(HASHES[g["sha"]], bytes.fromhex(t["msg"])).digest()
                     got = native("rsaverify", g["sha"], h(digest), h(bytes.fromhex(t["sig"])), n, e)
-                    want = "1" if t["result"] == "valid" and 2048 <= g["keySize"] <= 4096 else "0"
+                    want = "1" if t["result"] == "valid" and 1024 <= g["keySize"] <= 4096 else "0"
                     key = (os.path.basename(f)[14:-10], t["result"], got)
                     counts[key] = counts.get(key, 0) + 1
                     if t["result"] != "acceptable":
@@ -284,13 +287,14 @@ def check_rsa(native, rnd, cases, wy_dirs):
         check(native("rsasign", name, h(digest), nums[0], h(i2b(3)), nums[2], nums[3], nums[4]) == BAD_KEY,
               "RSA e off")
     # sizes
-    for bits in (1024, 2040, 4104):
+    for bits in (1016, 1024, 2040, 4104):
         key = rsa.generate_private_key(65537, bits)
         pn = key.private_numbers()
         nums = [h(i2b(x)) for x in (pn.public_numbers.n, 65537, pn.d, pn.p, pn.q)]
         check(native("rsasign", "SHA-256", h(bytes(32)), *nums) == BAD_SIZE, f"RSA-{bits} refused")
         sig = key.sign(bytes(32), padding.PKCS1v15(), Prehashed(hashes.SHA256())).hex()
-        check(native("rsaverify", "SHA-256", h(bytes(32)), sig, nums[0], nums[1]) == "0", f"RSA-{bits} verify refused")
+        want = "1" if 1024 <= bits <= 4096 else "0"     # verifying: 1024 bits and up (weak)
+        check(native("rsaverify", "SHA-256", h(bytes(32)), sig, nums[0], nums[1]) == want, f"RSA-{bits} verify")
 
 
 def main():
