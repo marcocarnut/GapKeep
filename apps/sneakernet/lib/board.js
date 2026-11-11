@@ -54,7 +54,7 @@ export class Board {
       if (lvl.grid[i] === DOOR) this.icon(i, ui.symbols.bars, COLORS.door, "#22323a");
     }
     if (lvl.gaps) for (const i of lvl.gaps) this.icon(i, ui.symbols.shuffle, COLORS.gap);
-    for (const i of lvl.shares) this.items.set(i, this.icon(i, ui.symbols.file, COLORS.share));
+    for (const i of lvl.shares) this.items.set(i, this.icon(i, ui.symbols.save, COLORS.share));
     this.vault = this.icon(lvl.exit, ui.symbols.drive, COLORS.muted);
     this.vault.set({ borderWidth: 2, borderColor: COLORS.teal, radius: 3 });
     for (const i of lvl.aps) this.icon(i, ui.symbols.wifi, COLORS.amber);
