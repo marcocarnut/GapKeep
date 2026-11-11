@@ -129,6 +129,7 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 }
 #camera-bar .label { font-weight: 600; padding-top: 3px; }
 #camera-bar select { font-size: 12px; }
+#camera-device { max-width: 16em; }
 #camera-qr { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 180px; }
 #camera-qr[hidden] { display: none; }
 #camera-text {

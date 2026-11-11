@@ -590,3 +590,8 @@ int gk_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height)
 {
 	return s_pCamera != 0 && s_pCamera->PushFrameRGB (rgb, width, height) ? 0 : -1;
 }
+
+int gk_sim_camera_in_use (void)
+{
+	return s_pCamera != 0 && s_pCamera->IsStreaming () ? 1 : 0;
+}
