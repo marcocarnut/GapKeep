@@ -426,7 +426,6 @@ function showMacros(focusRow = null) {
   newPage("macros");
   page.focusRow = focusRow;
   const m = S.macros;
-  const st = m.state();
   const top = new ui.Container({ layout: "row-wrap", width: "100%", gap: 10, alignItems: "center" });
   new ui.Label(top, { text: t("The computer's keyboard:") });
   const layouts = LAYOUTS;
@@ -438,10 +437,8 @@ function showMacros(focusRow = null) {
       showMacros();
     },
   });
-  new ui.Label(top, {
-    text: t("{n} of {max} bytes", { n: st.total, max: TABLE_TOP }), color: st.error ? RED : MUTED,
-  });
-  if (st.error) new ui.Label({ text: explain(st.error), color: RED, width: "100%" });
+  page.budget = new ui.Label(top, { text: "" });
+  page.tableError = new ui.Label({ text: "", color: RED, width: "100%", hidden: true });
 
   page.rows = [];
   m.rows.forEach((r, i) => {
@@ -450,14 +447,14 @@ function showMacros(focusRow = null) {
       oneLine: true, text: r.code, width: wide ? 140 : 90, maxLength: 8, accept: ".-irIR0123456789",
       onChange: ({ value }) => {
         r.code = value;
-        drawRowState();
+        soon();
       },
     });
     const text = new ui.TextArea(row, {
       oneLine: true, text: r.text, grow: 1, placeholder: t("what this code types"),
       onChange: ({ value }) => {
         r.text = value;
-        drawRowState();
+        soon();
       },
     });
     new ui.Button(row, {
@@ -518,8 +515,19 @@ function showMacros(focusRow = null) {
   f.focus();
 }
 
-// Errors under their rows, the budget, and what can be saved: cheap enough
-// to do on every keystroke
+// Errors under their rows, the budget, and what can be saved: the whole
+// table encoded, so once typing pauses (a full table takes a while on a
+// Pi Zero), not on every keystroke
+let pending = null;
+function soon() {
+  if (pending !== null) clearTimeout(pending);
+  if (page.write) page.write.disabled = true;     // until the table is checked
+  pending = setTimeout(() => {
+    pending = null;
+    drawRowState();
+  }, 250);
+}
+
 function drawRowState() {
   if (S.page !== "macros") return;
   const st = S.macros.state();
@@ -528,7 +536,9 @@ function drawRowState() {
     if (!w) return;
     w.err.set({ text: e.error ? explain(e.error) : "", hidden: !e.error });
   });
-  const changed = st.ok && S.macros.snapshot() !== S.saved;
+  page.budget.set({ text: t("{n} of {max} bytes", { n: st.total, max: TABLE_TOP }), color: st.error ? RED : MUTED });
+  page.tableError.set({ text: st.error ? explain(st.error) : "", hidden: !st.error });
+  const changed = st.ok && st.snapshot !== S.saved;
   page.write.disabled = S.busy || !changed;
   const autoPending = S.auto !== S.savedAuto;
   const tableFirst = autoPending && S.auto !== AUTO_NONE && changed;

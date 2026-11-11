@@ -116,14 +116,17 @@ export class Macros {
     });
     if (total > T.TABLE_TOP) error = new MacroError(N_("{n} bytes of table, and only {fits} fit"), { n: total, fits: T.TABLE_TOP });
     // the table as a whole (jumps to nowhere, loops), once every row encodes
+    let table = null;
     if (!error && each.every((e) => !e.error)) {
       try {
-        this.table();
+        table = this.table();
       } catch (e) {
         error = e;
       }
     }
-    return { each, total, error, ok: !error && each.every((e) => !e.error) };
+    // snapshot: as snapshot() says it, without encoding it all again
+    const snapshot = table ? Array.from(table).join(",") : null;
+    return { each, total, error, ok: !error && each.every((e) => !e.error), snapshot };
   }
 
   // The table's bytes, as written to the board (from address 0)
