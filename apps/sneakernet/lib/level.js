@@ -37,8 +37,8 @@ export function rules(level) {
     aps: Math.min(1 + Math.floor(level / 2), 5),        // Wi-Fi access points
     doors: level >= 2 ? Math.min(level, 4) : 0,         // Faraday doors
     gaps: level >= 3,                                   // an air-gap pair
-    period: Math.max(250, 600 - 40 * (level - 1)),      // ms between radio steps
-    grace: 3000,                                        // ms of silence at the start
+    period: Math.max(300, 1000 - 50 * (level - 1)),     // ms between radio steps
+    grace: 5000,                                        // ms of silence at the start
   };
 }
 
