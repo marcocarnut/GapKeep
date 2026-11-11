@@ -58,6 +58,7 @@ check secp256k1_suite python3 tools/check_secp.py --suite 2
 check dice39_node node tests/dice39/run_node.mjs
 check totp_node node --experimental-default-type=module tests/totp/run_node.mjs
 check codex32_node node --experimental-default-type=module tests/codex32/run_node.mjs
+check sneakernet_node node --experimental-default-type=module tests/sneakernet/run_node.mjs
 check psbt_node node --experimental-default-type=module tests/psbt/run_node.mjs
 check signer_node node --experimental-default-type=module tests/signer/run_node.mjs
 check btc_node node --experimental-default-type=module tests/btc/run_node.mjs
