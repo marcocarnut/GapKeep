@@ -74,12 +74,13 @@
     <div id="camera-bar" title="What GapKeep's camera sees (for apps with ui.Scanner)">
       <span class="label">Camera</span>
       <select id="camera-mode">
-        <option value="scene">Empty scene</option>
-        <option value="qr">QR code</option>
         <option value="webcam">Webcam</option>
+        <option value="qr">QR code</option>
         <option value="picture">Picture...</option>
+        <option value="scene">Empty scene</option>
         <option value="none">No camera</option>
       </select>
+      <select id="camera-device" title="Which of this computer's cameras" hidden></select>
       <span id="camera-qr" hidden>
         <textarea id="camera-text" rows="1" spellcheck="false" placeholder="Text of the QR code"></textarea>
         <label title="Each line is a code, shown in turn: an animated QR code"><input type="checkbox" id="camera-animate"> one per line</label>

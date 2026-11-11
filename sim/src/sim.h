@@ -75,6 +75,9 @@ int gk_sim_camera_push (const uint8_t *grey, unsigned width, unsigned height);
 // the same in colour: R, G, B interleaved (pictures up to 2048 a side)
 int gk_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned height);
 int gk_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height);
+/* 1 while an app has the camera open (a ui.Scanner): the browser IDE asks
+ * for the webcam only then */
+int gk_sim_camera_in_use (void);
 
 /* USB devices (gk:usb), native builds only: a device a USB/IP server at
  * host:port offers under busid (0 or "": the first it lists) is plugged in,

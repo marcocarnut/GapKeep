@@ -249,6 +249,13 @@ export class Gapkeep {
     return false;
   }
 
+  // Whether an app has the camera open (a ui.Scanner): the IDE asks for
+  // the webcam only then. null: an older simulator that can't tell.
+  cameraInUse () {
+    if (typeof this.m._gk_sim_camera_in_use !== "function") return null;
+    return this.m._gk_sim_camera_in_use () === 1;
+  }
+
   cameraPicture (pixels, width, height) {
     if (pixels.length === width * height * 4 && width <= 2048 && height <= 2048 && this.hasColour ()) {
       const rgb = toRGB (pixels);

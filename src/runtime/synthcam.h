@@ -56,6 +56,7 @@ public:
 
 	boolean Start (void);
 	void Stop (void);
+	boolean IsStreaming (void) const	{ return m_bStreaming; }	// an app has it open
 	const u8 *GetFrame (unsigned *pSerial, unsigned *pWidth, unsigned *pHeight);
 	const char *GetError (void);
 
