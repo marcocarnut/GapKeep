@@ -76,7 +76,7 @@ CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-exceptions -fno-rtti
 ZXFLAGS  := $(CFLAGS) -std=c++20 -fno-exceptions -fno-rtti $(ZXING_DEFINES) -I $(ROOT)/lib/zxing -I $(ZXING) \
 	    -Wno-missing-braces -Wno-unused-template
 
-RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
+RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(ROOT)/src/runtime/jobs.cpp \
 	    $(ROOT)/src/runtime/js_ui.cpp $(ROOT)/src/runtime/js_sys.cpp \
 	    $(ROOT)/src/runtime/js_crypto.cpp $(ROOT)/src/runtime/gk_bridge.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \

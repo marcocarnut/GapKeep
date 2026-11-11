@@ -1,0 +1,214 @@
+//
+// jobs.cpp
+//
+// Long native work as promises, in slices from the main loop. See jobs.h.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+#include "jobs.h"
+#include "../crypto/wipe.h"
+#include <circle/logger.h>
+#include <circle/timer.h>
+#include <circle/util.h>
+
+static const char FromJobs[] = "jobs";
+
+struct TGkJob
+{
+	const TGkJobOps *pOps;
+	void *pState;
+	JSValue Resolve, Reject, OnProgress;
+	double fLastProgress;
+	unsigned nSlices;
+	unsigned nWorkTicks;		// in slices
+	unsigned nLongestTicks;		// the longest slice
+	unsigned nQueuedTicks;
+};
+
+struct TGkJobsState
+{
+	TGkJob Queue[GkMaxJobs];	// a ring
+	unsigned nFirst, nCount;
+};
+
+static void FreeJob (JSContext *ctx, TGkJob *pJob)
+{
+	pJob->pOps->Free (ctx, pJob->pState);
+	JS_FreeValue (ctx, pJob->Resolve);
+	JS_FreeValue (ctx, pJob->Reject);
+	JS_FreeValue (ctx, pJob->OnProgress);
+	memset (pJob, 0, sizeof *pJob);
+}
+
+JSValue GkJobStart (JSContext *ctx, const TGkJobOps *pOps, void *pState, JSValueConst OnProgress)
+{
+	TGkApp *pApp = CAppHost::GetApp (ctx);
+	if (pApp->pJobs == 0)
+	{
+		pApp->pJobs = new TGkJobsState;
+		memset (pApp->pJobs, 0, sizeof *pApp->pJobs);
+	}
+	TGkJobsState *pJobs = pApp->pJobs;
+	if (pJobs->nCount >= GkMaxJobs)
+	{
+		pOps->Free (ctx, pState);
+		return JS_ThrowRangeError (ctx, "at most %u long operations (%s...) may wait at a time",
+					   GkMaxJobs, pOps->pName);
+	}
+
+	JSValue Funcs[2];
+	JSValue Promise = JS_NewPromiseCapability (ctx, Funcs);
+	if (JS_IsException (Promise))
+	{
+		pOps->Free (ctx, pState);
+		return Promise;
+	}
+	TGkJob *pJob = &pJobs->Queue[(pJobs->nFirst + pJobs->nCount) % GkMaxJobs];
+	pJob->pOps = pOps;
+	pJob->pState = pState;
+	pJob->Resolve = Funcs[0];
+	pJob->Reject = Funcs[1];
+	pJob->OnProgress = JS_IsFunction (ctx, OnProgress) ? JS_DupValue (ctx, OnProgress) : JS_UNDEFINED;
+	pJob->fLastProgress = 0;
+	pJob->nQueuedTicks = CTimer::Get ()->GetClockTicks ();
+	pJobs->nCount++;
+	return Promise;
+}
+
+void GkJobsUpdate (TGkApp *pApp)
+{
+	TGkJobsState *pJobs = pApp != 0 && pApp->pBundle != 0 ? pApp->pJobs : 0;
+	if (pJobs == 0 || pJobs->nCount == 0)
+	{
+		return;
+	}
+	JSContext *ctx = pApp->pContext;
+	TGkJob *pJob = &pJobs->Queue[pJobs->nFirst];
+
+	unsigned nStart = CTimer::Get ()->GetClockTicks ();
+	boolean bMore = pJob->pOps->Step (pJob->pState, nStart + GkJobSliceMs * (CLOCKHZ / 1000));
+	unsigned nTicks = CTimer::Get ()->GetClockTicks () - nStart;
+	pJob->nSlices++;
+	pJob->nWorkTicks += nTicks;
+	if (nTicks > pJob->nLongestTicks)
+	{
+		pJob->nLongestTicks = nTicks;
+	}
+
+	if (bMore)
+	{
+		if (!JS_IsUndefined (pJob->OnProgress) && pJob->pOps->Progress != 0)
+		{
+			double fProgress = pJob->pOps->Progress (pJob->pState);
+			if (fProgress > pJob->fLastProgress)
+			{
+				pJob->fLastProgress = fProgress;
+				JSValue Arg = JS_NewFloat64 (ctx, fProgress);
+				JSValue Func = JS_DupValue (ctx, pJob->OnProgress);
+				JSValue Result = CAppHost::Get ()->Call (Func, JS_UNDEFINED, 1, &Arg);
+				JS_FreeValue (ctx, Result);
+				JS_FreeValue (ctx, Func);
+			}
+		}
+		return;
+	}
+
+	// done: off the queue first (the handlers may queue more)
+	TGkJob Job = *pJob;
+	memset (pJob, 0, sizeof *pJob);
+	pJobs->nFirst = (pJobs->nFirst + 1) % GkMaxJobs;
+	pJobs->nCount--;
+
+	// the long ones: how the main loop fared (how long the screen waited)
+	if (Job.nWorkTicks >= 100 * (CLOCKHZ / 1000))
+	{
+		CLogger::Get ()->Write (FromJobs, LogNotice, "%s: %u ms of work in %u slices (the longest %u ms), "
+					"%u ms in all", Job.pOps->pName, Job.nWorkTicks / 1000, Job.nSlices,
+					Job.nLongestTicks / 1000, (CTimer::Get ()->GetClockTicks () - Job.nQueuedTicks) / 1000);
+	}
+
+	JSValue Value = Job.pOps->Finish (ctx, Job.pState);
+	boolean bOK = !JS_IsException (Value);
+	if (!bOK)
+	{
+		Value = JS_GetException (ctx);
+	}
+	JSValue Result = CAppHost::Get ()->Call (bOK ? Job.Resolve : Job.Reject, JS_UNDEFINED, 1, &Value);
+	JS_FreeValue (ctx, Result);
+	JS_FreeValue (ctx, Value);
+	FreeJob (ctx, &Job);
+}
+
+void GkJobsFree (TGkApp *pApp)
+{
+	TGkJobsState *pJobs = pApp->pJobs;
+	if (pJobs == 0)
+	{
+		return;
+	}
+	if (pJobs->nCount > 0)
+	{
+		CLogger::Get ()->Write (FromJobs, LogNotice, "%u dropped (the app stopped)", pJobs->nCount);
+	}
+	while (pJobs->nCount > 0)
+	{
+		FreeJob (pApp->pContext, &pJobs->Queue[pJobs->nFirst]);
+		pJobs->nFirst = (pJobs->nFirst + 1) % GkMaxJobs;
+		pJobs->nCount--;
+	}
+	gk_wipe (pJobs, sizeof *pJobs);
+	delete pJobs;
+	pApp->pJobs = 0;
+}
+
+void GkJobsCancel (TGkApp *pApp)
+{
+	TGkJobsState *pJobs = pApp->pJobs;
+	if (pJobs == 0 || pJobs->nCount == 0)
+	{
+		return;
+	}
+	JSContext *ctx = pApp->pContext;
+	CLogger::Get ()->Write (FromJobs, LogNotice, "%u cancelled (a script was interrupted)", pJobs->nCount);
+	while (pJobs->nCount > 0)
+	{
+		TGkJob Job = pJobs->Queue[pJobs->nFirst];
+		memset (&pJobs->Queue[pJobs->nFirst], 0, sizeof Job);
+		pJobs->nFirst = (pJobs->nFirst + 1) % GkMaxJobs;
+		pJobs->nCount--;
+
+		JS_ThrowInternalError (ctx, "%s: interrupted (a script ran for too long)", Job.pOps->pName);
+		JSValue Value = JS_GetException (ctx);
+		JSValue Result = CAppHost::Get ()->Call (Job.Reject, JS_UNDEFINED, 1, &Value);
+		JS_FreeValue (ctx, Result);
+		JS_FreeValue (ctx, Value);
+		FreeJob (ctx, &Job);
+	}
+}
+
+boolean GkJobOnProgress (JSContext *ctx, JSValueConst Options, const char *pFunction, JSValue *pFunc)
+{
+	*pFunc = JS_UNDEFINED;
+	if (JS_IsUndefined (Options) || JS_IsNull (Options))
+	{
+		return TRUE;
+	}
+	if (!JS_IsObject (Options))
+	{
+		JS_ThrowTypeError (ctx, "%s: options must be an object ({ onProgress })", pFunction);
+		return FALSE;
+	}
+	JSValue Func = JS_GetPropertyStr (ctx, Options, "onProgress");
+	if (JS_IsException (Func))
+	{
+		return FALSE;
+	}
+	if (!JS_IsUndefined (Func) && !JS_IsFunction (ctx, Func))
+	{
+		JS_FreeValue (ctx, Func);
+		JS_ThrowTypeError (ctx, "%s: onProgress must be a function", pFunction);
+		return FALSE;
+	}
+	*pFunc = Func;
+	return TRUE;
+}

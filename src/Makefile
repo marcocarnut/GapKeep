@@ -40,7 +40,7 @@ CIRCLEHOME = ../circle
 QJSDIR     = ../third_party/quickjs
 
 OBJS	= main.o kernel.o kbdindev.o \
-	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o \
+	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o runtime/jobs.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o crypto/wipe.o \
