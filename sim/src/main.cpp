@@ -24,9 +24,16 @@
 //   language <tag>          the language of the apps started from now on
 //                           (pt-BR, qps...), as a settings app sets it
 //   eject                   remove the SD card (its folder is no longer read)
+//   usbip attach <host>:<port> [<busid>]
+//                           plug in the USB device a USB/IP server offers
+//                           (busid: the first it lists), for gk:usb; it
+//                           stays plugged in, through unplugs and replugs
+//                           by the server, until
+//   usbip detach [<busid>]  pulls its cable (none given: every one)
 //   quit                    exit
 //
-// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]
+// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--usbip HOST:PORT[/BUSID]]
+//              [--for SECONDS] [--shot FILE.png]
 //   --card DIR      DIR plays the SD card: apps load from DIR/apps, data
 //                   folders (gk:data) from DIR/data
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
@@ -34,6 +41,7 @@
 //   --app ID        start that app right after boot
 //   --lang TAG      the language (over the card's gapkeep.txt): en, pt-BR,
 //                   qps (the pseudo-language: shows untranslated text)...
+//   --usbip HOST:PORT[/BUSID]  as "usbip attach", from the start (more than once: more devices)
 //   --for SECONDS   run that long, then exit (default: until "quit" or EOF)
 //   --shot FILE     with --for: take a screenshot before exiting
 //
@@ -156,6 +164,34 @@ static void CameraCommand (char *pArgs)
 	}
 }
 
+// "<host>:<port>" (the last colon: an IPv6 host has others) and a bus id
+// after a space or a slash; 0 if it isn't that
+static int USBIPCommand (char *pArgs, char cBusSeparator)
+{
+	char *pBusID = strchr (pArgs, cBusSeparator);
+	if (pBusID != 0)
+	{
+		*pBusID++ = '\0';
+		while (*pBusID == ' ')
+		{
+			pBusID++;
+		}
+	}
+	char *pColon = strrchr (pArgs, ':');
+	unsigned nPort = 0;
+	if (pColon == 0 || sscanf (pColon + 1, "%u", &nPort) != 1 || nPort == 0 || nPort > 65535)
+	{
+		return -1;
+	}
+	*pColon = '\0';
+	if (pArgs[0] == '[' && pColon[-1] == ']')		// [::1]:3240
+	{
+		pArgs++;
+		pColon[-1] = '\0';
+	}
+	return gk_sim_usbip_attach (pArgs, nPort, pBusID);
+}
+
 static int Command (char *pLine)
 {
 	char *pArgs = strchr (pLine, ' ');
@@ -247,6 +283,27 @@ static int Command (char *pLine)
 		GkSimSetCardRoot (0);	// the card is gone: nothing may need it now
 		printf ("#eject\n");
 	}
+	else if (strcmp (pLine, "usbip") == 0)
+	{
+		if (strncmp (pArgs, "attach ", 7) == 0)
+		{
+			if (USBIPCommand (pArgs + 7, ' ') != 0)
+			{
+				printf ("#error usbip attach <host>:<port> [<busid>] (at most %d)\n", 4);
+			}
+		}
+		else if (strcmp (pArgs, "detach") == 0 || strncmp (pArgs, "detach ", 7) == 0)
+		{
+			if (gk_sim_usbip_detach (pArgs[6] ? pArgs + 7 : 0) != 0)
+			{
+				printf ("#error usbip detach: no such device\n");
+			}
+		}
+		else
+		{
+			printf ("#error usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]\n");
+		}
+	}
 	else if (strcmp (pLine, "quit") == 0)
 	{
 		return 0;
@@ -263,6 +320,8 @@ int main (int argc, char **argv)
 {
 	int nWidth = 640, nHeight = 480;
 	const char *pCard = 0, *pBuiltin = 0, *pShot = 0, *pApp = 0;
+	const char *USBIP[4];
+	unsigned nUSBIP = 0;
 	double fFor = -1;
 	for (int i = 1; i < argc; i++)
 	{
@@ -277,9 +336,11 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--for") == 0 && i + 1 < argc)	fFor = atof (argv[++i]);
 		else if (strcmp (argv[i], "--shot") == 0 && i + 1 < argc)	pShot = argv[++i];
 		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	gk_sim_set_language (argv[++i]);
+		else if (strcmp (argv[i], "--usbip") == 0 && i + 1 < argc && nUSBIP < 4) USBIP[nUSBIP++] = argv[++i];
 		else
 		{
-			fprintf (stderr, "usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--for SECONDS] [--shot FILE.png]\n");
+			fprintf (stderr, "usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG]"
+				 " [--usbip HOST:PORT[/BUSID]] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}
 	}
@@ -293,6 +354,16 @@ int main (int argc, char **argv)
 	if (gk_sim_boot (nWidth, nHeight, pCard) != 0)
 	{
 		return 1;
+	}
+	for (unsigned i = 0; i < nUSBIP; i++)
+	{
+		char Arg[300];
+		snprintf (Arg, sizeof Arg, "%s", USBIP[i]);
+		if (USBIPCommand (Arg, '/') != 0)
+		{
+			fprintf (stderr, "gksim: --usbip HOST:PORT[/BUSID]\n");
+			return 2;
+		}
 	}
 	if (pApp != 0 && gk_sim_launch (pApp) != 0)
 	{

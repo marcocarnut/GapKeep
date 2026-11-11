@@ -241,7 +241,9 @@ function showDetails(app) {
   const path = app.suite ? app.suite + "/" + app.id : app.id;
   const where = app.source === "sdcard" ? t("SD card, apps/{id}", { id: path }) : t("built in");
   hashLine.set({ text: "SHA-256 " + app.hash, hidden: false });
-  details.text = [app.name + " " + app.version + "  |  " + where, ...app.data.map(dataLine)].join("\n");
+  // the USB devices it takes: while it is installed they are not keyboards (gk:usb)
+  const usbLine = app.usb.length ? [t("USB devices it takes: {ids}", { ids: app.usb.join(", ") })] : [];
+  details.text = [app.name + " " + app.version + "  |  " + where, ...app.data.map(dataLine), ...usbLine].join("\n");
 }
 function showSuiteDetails(suite) {
   hashLine.set({ text: "", hidden: true });   // a suite has no hash: its apps have

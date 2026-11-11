@@ -1,0 +1,8 @@
+{
+  "id": "usbtest",
+  "name": "USB test",
+  "version": "1.0.0",
+  "description": "Test builds only: checks gk:usb against the device of tests/usb/usbip_stub.py (tests/usb.txt).",
+  "hidden": true,
+  "usb": ["1209:0001"]
+}

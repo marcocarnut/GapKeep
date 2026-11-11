@@ -429,6 +429,16 @@ static JSValue AppInfo (JSContext *ctx, const gk_app_t *pApp)
 	}
 	JS_SetPropertyStr (ctx, Obj, "data", Data);
 
+	// the USB devices it may use (gk:usb), as the manifest writes them
+	JSValue USB = JS_NewArray (ctx);
+	for (unsigned i = 0; i < pApp->usb_count; i++)
+	{
+		CString ID;
+		ID.Format ("%04x:%04x", pApp->usb[i] >> 16, pApp->usb[i] & 0xFFFF);
+		JS_SetPropertyUint32 (ctx, USB, i, JS_NewString (ctx, ID));
+	}
+	JS_SetPropertyStr (ctx, Obj, "usb", USB);
+
 	return Obj;
 }
 

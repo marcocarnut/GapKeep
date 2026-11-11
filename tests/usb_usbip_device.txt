@@ -1,0 +1,25 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# Needs USB/IP: a DigiMacro (16c0:27db) offered at 127.0.0.1:3241, or the
+# server named by GK_TEST_USBIP (host:port); skipped if none answers
+# (tools/run_sim_tests.sh). A real one through Linux's usbipd, or a
+# simulated one: simavr-softusb's bridge runs the real firmware.
+# The USB probe (tests/apps/usbprobe) as on the hardware (docs/RIG.md):
+# the device claimed, its descriptors read, and its INFO feature report.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect launcher ready 30
+launch usbprobe
+expect usbprobe ready 10
+usbip attach ${GK_TEST_USBIP:-127.0.0.1:3241}
+expect usb: device 1: 16c0:27db ".*" "DigiMacro", serial of \d+ bytes, low speed, \d interface\(s\), for usbprobe; it is not a keyboard or mouse while claimed 15
+expect usbprobe: device descriptor: 18 bytes 10
+expect usbprobe: interface 0: report descriptor, 64 bytes \(64 asked\) 10
+expect usbprobe: feature report 2: sent 37 bytes, got \d+; the answer echoes INFO \(0x40\): true 10
+expect usbprobe: device 1 probed 10
+wait 1
+shot 01-probe
+mark
+key ret
+expect usbprobe: device 1 probed 10
+usbip detach
+expect usb: device 1: detached 10

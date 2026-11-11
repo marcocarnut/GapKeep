@@ -86,6 +86,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
 	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/js_data.cpp $(ROOT)/src/runtime/i18n.cpp $(ROOT)/src/runtime/markup.cpp $(ROOT)/src/runtime/ttfstyles.cpp $(ROOT)/src/runtime/wheel.cpp \
 	    $(ROOT)/src/runtime/keylayout.cpp \
+	    $(ROOT)/src/runtime/usb.cpp $(ROOT)/src/runtime/usbdesc.c $(ROOT)/src/runtime/js_usb.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
@@ -106,7 +107,7 @@ LVGLSRC  := $(shell find $(LVGL)/src -name '*.c')
 ifeq ($(TARGET),web)
 FRONT    := src/web.cpp
 else
-FRONT    := src/main.cpp
+FRONT    := src/main.cpp src/usbip.cpp	# USB/IP: TCP, which the browser hasn't
 endif
 
 # every source to an object under OBJDIR, by its path

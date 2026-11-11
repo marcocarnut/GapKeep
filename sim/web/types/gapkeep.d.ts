@@ -17,6 +17,39 @@ type ClockStatus = {
   drift: { correction: number; over: number; trimPpm: number; uncertaintyPpm: number } | null;
 };
 
+type UsbDevice = {
+  /** new each time the device is plugged in */
+  readonly id: number;
+  readonly vid: number;
+  readonly pid: number;
+  readonly manufacturer: string;
+  readonly product: string;
+  readonly serial: string | null;
+  readonly speed: "low" | "full" | "high" | "super";
+  readonly interfaces: { number: number; class: number; subclass: number; protocol: number }[];
+};
+
+type UsbSetup = {
+  type: "standard" | "class" | "vendor";
+  recipient: "device" | "interface";
+  request: number;
+  value?: number;
+  index?: number;
+};
+
+type UsbHandle = {
+  readonly device: UsbDevice;
+  /** reads 1 to 64 bytes; rejects with an Error whose code is "stall", "timeout", "detached", "closed" or "error" */
+  controlIn(setup: UsbSetup, length: number): Promise<Uint8Array>;
+  /** writes 0 to 64 bytes; resolves to the number sent */
+  controlOut(setup: UsbSetup, data?: Uint8Array | ArrayBuffer | number[]): Promise<number>;
+  /** HID GET_REPORT (feature) on iface, by default the first HID interface */
+  getFeatureReport(id: number, length: number, iface?: number): Promise<Uint8Array>;
+  /** HID SET_REPORT (feature): the id (unless 0), then data; 64 bytes in all at most */
+  setFeatureReport(id: number, data: Uint8Array | ArrayBuffer | number[], iface?: number): Promise<void>;
+  close(): void;
+};
+
 type AppInfo = {
   readonly id: string;
   readonly name: string;
@@ -36,6 +69,8 @@ type AppInfo = {
   readonly suite: string | null;
   /** the manifest's "data": the data folders it may read with gk:data */
   readonly data: string[];
+  /** the manifest's "usb": the USB devices it may use with gk:usb, "vvvv:pppp" */
+  readonly usb: string[];
 };
 
 declare module "gk:ui" {
@@ -561,7 +596,7 @@ declare module "gk:ui" {
 declare module "gk:sys" {
   /** The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of `kernel.img`, whole (`hashedBytes` long): its code and constants as they are in memory, and its data as it was loaded, before the kernel changed it. A genuine kernel shows the true hash; a tampered one could show any (docs/ARCHITECTURE.md, "Security model"); `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros). */
   export const kernel: { readonly hash: string; readonly hashedBytes: number; readonly build: "production" | "sealed" | "test" | "simulator" };
-  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest's `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none). */
+  /** This app's manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data, usb }`. `name` and `description` are in the language (the app's catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest's picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app's SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest's `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none); `usb` the manifest's `"usb"`: the USB devices it may use with [`gk:usb`], as `"vvvv:pppp"` (`[]` if none). */
   export const app: AppInfo;
   /** `{ gapkeep, quickjs, lvgl, circle }` version strings. */
   export const version: { readonly gapkeep: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string };
@@ -712,8 +747,19 @@ declare module "gk:data" {
   export function hash(folder: string): string | null;
 }
 
+declare module "gk:usb" {
+  /** The devices plugged in that the manifest lists: `{ id, vid, pid, manufacturer, product, serial, speed, interfaces }`. `id` is new each time a device is plugged in; `manufacturer` and `product` are what the device says (`""` if nothing), with characters that could change how text reads (control, bidi, invisible) as `?`; `serial` likewise, or `null`; `speed` `"low"`, `"full"`, `"high"` or `"super"`; `interfaces` `[{ number, class, subclass, protocol }]` (alternate setting 0 of each). */
+  export function list(): UsbDevice[];
+  /** A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first). */
+  export function open(device: UsbDevice | number): UsbHandle;
+  /** Calls `fn` with each listed device plugged in while the app runs. Returns a function that removes it. */
+  export function onAttach(fn: (device: UsbDevice) => void): () => void;
+  /** Calls `fn` with each listed device unplugged. Its handle's transfers fail from then on (`"detached"`); plugged in again it is a new device, with a new `id`. */
+  export function onDetach(fn: (device: UsbDevice) => void): () => void;
+}
+
 declare module "gk:apps" {
-  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)'s apps, in `apps/<suite>/<id>`, where the suite's folder sorts, each with `suite` set to the suite's id). */
+  /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data, usb }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)'s apps, in `apps/<suite>/<id>`, where the suite's folder sorts, each with `suite` set to the suite's id). */
   export function list(): AppInfo[];
   /** The [suites](APPS.md#suites) on the card (`apps/<id>/suite.json`), sorted by id: `{ id, name, description, icon, image }`, as for apps (`name` and `description` in the language, from the suite's own `lang/` catalogs). A suite whose apps were all refused is listed too; the launcher shows only suites with apps. */
   export function suites(): { id: string; name: string; description: string; icon: string; image: { width: number; height: number; data: Uint8Array } | null }[];

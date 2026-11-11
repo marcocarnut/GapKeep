@@ -25,6 +25,7 @@
     "System": "Sistema",
     "Back": "Voltar",
     "data/{folder}: no such data folder": "data/{folder}: essa pasta de dados não existe",
+    "USB devices it takes: {ids}": "Dispositivos USB que ele toma: {ids}",
     "Arrows or Tab: move    Enter: open    i: system info    Windows key: back to this screen": "Setas ou Tab: mover    Enter: abrir    i: informações do sistema    tecla Windows: voltar a esta tela",
     "Write {d} for decimals and {g} between thousands, or leave the thousands separator out.": "Use {d} para os decimais e {g} entre os milhares, ou deixe de fora o separador de milhares.",
     "Write {d} for decimals, without a thousands separator.": "Use {d} para os decimais, sem separador de milhares.",

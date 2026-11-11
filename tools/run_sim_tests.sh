@@ -45,9 +45,22 @@ for t in $SCENARIOS; do
 		echo "SKIP  sim:$name   (needs the serial port)"
 		continue
 	fi
+	if grep -q "^monitor " "$t"; then
+		echo "SKIP  sim:$name   (QEMU only: tools/run_tests.sh)"
+		continue
+	fi
 	if grep -q "^camera " "$t" && [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ]; then
 		echo "SKIP  sim:$name   (needs the QR decoder, third_party/zxing-cpp)"
 		continue
+	fi
+	# "# Needs USB/IP": a device served at GK_TEST_USBIP (default
+	# 127.0.0.1:3241), or the scenario is skipped
+	if grep -q "^# Needs USB/IP" "$t"; then
+		server=${GK_TEST_USBIP:-127.0.0.1:3241}
+		if ! python3 -I -c 'import socket, sys; h, p = sys.argv[1].rsplit(":", 1); socket.create_connection((h.strip("[]"), int(p)), 1).close()' "$server" 2>/dev/null; then
+			echo "SKIP  sim:$name   (no USB/IP server at $server: GK_TEST_USBIP=host:port)"
+			continue
+		fi
 	fi
 	if head -1 "$t" | grep -q "Needs a test build"; then
 		sim=sim/build/gksim-test; card=tests/sdcard
@@ -157,6 +170,14 @@ if [ -f circle/Rules.mk ]; then
 	else
 		echo "FAIL  sim:fuzz_usbmouse   (see $OUT/fuzz_usbmouse.log)"; FAILED=1
 	fi
+fi
+
+# gk:usb's descriptor parsers (src/runtime/usbdesc.c): fixed cases and a
+# short fuzz run (tools/fuzz_usbdesc.sh for long ones)
+if tools/fuzz_usbdesc.sh 20000 > "$OUT/fuzz_usbdesc.log" 2>&1; then
+	echo "PASS  sim:fuzz_usbdesc"
+else
+	echo "FAIL  sim:fuzz_usbdesc   (see $OUT/fuzz_usbdesc.log)"; FAILED=1
 fi
 
 # libraries outside apps (lib/js), under Node

@@ -1,0 +1,22 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# Rig only: a DigiMacro (16c0:27db) on a USB hub with the rig's gadget
+# keyboard, the hub in the Zero's "USB" port (docs/RIG.md, "A USB device for
+# gk:usb"). The USB probe (tests/apps/usbprobe) as in the simulator
+# (tests/usb_usbip_device.txt), through Circle and a real hub: the board is
+# claimed whole (its keyboard ignored), its descriptors read, and its INFO
+# feature report answered.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect 16c0:27db claimed for usbprobe: none of its interfaces gets another driver 60
+expect usb: device \d+: 16c0:27db ".*" "DigiMacro", serial of \d+ bytes, low speed, \d interface\(s\), for usbprobe 60
+expect launcher ready: .*usbprobe 60
+tile usbprobe
+expect usbprobe ready 20
+expect usbprobe: device descriptor: 18 bytes 20
+expect usbprobe: feature report 2: sent 37 bytes, got \d+; the answer echoes INFO \(0x40\): true 20
+expect usbprobe: device \d+ probed 20
+serialshot 01-probe
+mark
+key ret
+expect usbprobe: device \d+ probed 20

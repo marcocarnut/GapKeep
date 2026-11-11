@@ -18,6 +18,9 @@ extern "C" {
 /* at most this many data folders per app (manifest "data") */
 #define GK_MAX_APP_DATA	8
 
+/* at most this many USB devices per app (manifest "usb": "vvvv:pppp" ids) */
+#define GK_MAX_APP_USB	8
+
 /* permission bits, granted by "permissions" in manifest.json */
 #define GK_PERM_APPS	(1u << 0)	/* gk:apps - list and launch other apps */
 #define GK_PERM_RTC	(1u << 2)	/* gk:clock's set, setTrim, setUtcOffset */
@@ -55,6 +58,9 @@ typedef struct
 					   app may read with gk:data; data_count names */
 	unsigned data_count;
 	const char *suite;		/* the suite's id (apps/<suite>/<id>), or 0 */
+	const unsigned *usb;		/* manifest "usb": the USB devices it may use with
+					   gk:usb, vid << 16 | pid; usb_count of them */
+	unsigned usb_count;
 }
 gk_app_t;
 

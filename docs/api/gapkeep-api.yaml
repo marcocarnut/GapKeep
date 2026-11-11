@@ -28,6 +28,7 @@ intro: |
   | [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
   | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
   | [`gk:data`](#gkdata) | every app (only the folders its manifest lists in `"data"`) | Read-only files from the card's data folders, shared by name |
+  | [`gk:usb`](#gkusb) | apps that list devices in `"usb"` (only those) | Control transfers to USB devices claimed for them |
   | [`gk:apps`](#gkapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
   Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -534,7 +535,7 @@ modules:
         md: 'The running system: `{ hash, hashedBytes, build }`. `hash` is the SHA-256 of `kernel.img`, whole (`hashedBytes` long): its code and constants as they are in memory, and its data as it was loaded, before the kernel changed it. A genuine kernel shows the true hash; a tampered one could show any (docs/ARCHITECTURE.md, "Security model"); `build` is `"production"`, `"sealed"` or `"test"` (`"simulator"` in the [simulator](IDE.md), where `hash` is all zeros).'
       - name: app
         ts: AppInfo
-        md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }`. `name` and `description` are in the language (the app''s catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest''s `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none).'
+        md: 'This app''s manifest data and origin: `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data, usb }`. `name` and `description` are in the language (the app''s catalog, [Languages](APPS.md#languages)) as it was when the app started. `icon` is a `ui.symbols` glyph; `image` is the manifest''s picture icon as a `ui.Image` `src`, or `null`. `source` is `"builtin"` or `"sdcard"`; `hash` is the app''s SHA-256 ([App hashes](APPS.md#app-hashes)); `experimental` whether its manifest says so ([EXPERIMENTAL.md](EXPERIMENTAL.md)); `suite` the id of the [suite](APPS.md#suites) it belongs to, or `null`; `data` the manifest''s `"data"`: the [data folders](APPS.md#data-files) it may read (`[]` if none); `usb` the manifest''s `"usb"`: the USB devices it may use with [`gk:usb`](#gkusb), as `"vvvv:pppp"` (`[]` if none).'
       - name: version
         ts: '{ readonly gapkeep: string; readonly quickjs: string; readonly lvgl: string; readonly circle: string }'
         md: '`{ gapkeep, quickjs, lvgl, circle }` version strings.'
@@ -784,13 +785,81 @@ modules:
       - {name: readText, signature: 'readText(folder, name)', ts: '(folder: string, name: string) => string', md: 'The file as UTF-8 text. A `TypeError` if it isn''t valid UTF-8 (or holds a NUL byte); `read()` gives its bytes.'}
       - {name: hash, signature: hash(folder), ts: '(folder: string) => string | null', md: 'The SHA-256 of the folder''s files, 64 hex digits, as the launcher shows it: the [app hash](APPS.md#app-hashes)''s scheme, so `tools/bundle_apps.py --data-hash <folder>` computes it on a computer. `null` if there is no such folder.'}
 
+  - name: gk:usb
+    var: usb
+    intro_md: |
+      ```js
+      import * as usb from "gk:usb";
+      ```
+
+      Control transfers to USB devices the app lists by vendor and product id
+      in its manifest: `"usb": ["16c0:27db"]` (lowercase hex, at most 8).
+      Importing it without them throws a `ReferenceError`. A device some
+      available app lists is **claimed whole** by the system when it is
+      plugged in (those plugged in at boot too): none of its interfaces gets
+      a system driver, so a keyboard or mouse in it is ignored, and what it
+      types never reaches the system. Every app that lists it can use it, as
+      apps run one at a time. Only endpoint 0 is reached: control transfers
+      of at most 64 bytes, each stage given 1 s ([ARCHITECTURE.md](ARCHITECTURE.md),
+      "Security model"). After two timeouts a device's transfers fail at once,
+      until it is plugged in again.
+
+      ```js
+      usb.onAttach(async (device) => {
+        const board = usb.open(device);
+        await board.setFeatureReport(2, request);           // HID SET_REPORT
+        const answer = await board.getFeatureReport(2, 37);  // HID GET_REPORT
+        board.close();
+      });
+      for (const device of usb.list()) { /* plugged in already */ }
+      ```
+
+      Transfers are promises: each is queued, and the system does one at a
+      time, between frames, so the screen stays drawn. Arguments are checked
+      at the call (a `TypeError` or `RangeError`, thrown); what the device
+      does settles the promise. A rejection is an `Error` with a `code`:
+      `"stall"` (the device refused the request), `"timeout"`, `"detached"`,
+      `"closed"` (the handle was closed while it waited) or `"error"` (the
+      bus, or a device that sent more than was asked for). At most 16 wait at
+      once.
+
+      The setup of a transfer is `{ type, recipient, request, value, index }`:
+      `type` `"standard"`, `"class"` or `"vendor"`; `recipient` `"device"` or
+      `"interface"` (then `index`'s low byte must be one of the device's
+      interfaces); `request` 0 to 255; `value` and `index` 0 to 65535
+      (default 0). Of the standard requests only those that read are an
+      app's (GET_STATUS, GET_DESCRIPTOR, GET_CONFIGURATION, GET_INTERFACE,
+      with `controlIn`): the others change how the system talks to the
+      device.
+
+      A handle (`open()`) has `device` (as `list()` gives it) and these
+      methods:
+
+      | Method | Does |
+      | --- | --- |
+      | `controlIn(setup, length)` | A control transfer reading 1 to 64 bytes. Resolves to a `Uint8Array` of what came (it may be shorter). |
+      | `controlOut(setup, data?)` | A control transfer writing `data` (a `Uint8Array`, `ArrayBuffer` or array of bytes; 0 to 64). Resolves to the number of bytes sent. |
+      | `getFeatureReport(id, length, iface?)` | HID GET_REPORT of feature report `id` on interface `iface` (default: the first HID interface). Resolves to the data stage as the device sent it: with report ids, most devices put the id first. |
+      | `setFeatureReport(id, data, iface?)` | HID SET_REPORT: the data stage is the id (unless it is 0) followed by `data`, at most 64 bytes in all, as Linux and WebHID send it. Resolves to `undefined`. |
+      | `close()` | Closes the handle; its transfers still waiting reject with `"closed"`. |
+
+      Nothing a transfer carries is logged: the log has the request's numbers
+      and length when one fails or is refused. In the simulator, devices come
+      over USB/IP ([SIMULATOR.md](SIMULATOR.md#usb-devices)); the browser IDE
+      has none.
+    exports:
+      - {name: list, signature: list(), ts: '() => UsbDevice[]', md: 'The devices plugged in that the manifest lists: `{ id, vid, pid, manufacturer, product, serial, speed, interfaces }`. `id` is new each time a device is plugged in; `manufacturer` and `product` are what the device says (`""` if nothing), with characters that could change how text reads (control, bidi, invisible) as `?`; `serial` likewise, or `null`; `speed` `"low"`, `"full"`, `"high"` or `"super"`; `interfaces` `[{ number, class, subclass, protocol }]` (alternate setting 0 of each).'}
+      - {name: open, signature: open(device), ts: '(device: UsbDevice | number) => UsbHandle', md: 'A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first).'}
+      - {name: onAttach, signature: onAttach(fn), ts: '(fn: (device: UsbDevice) => void) => () => void', md: 'Calls `fn` with each listed device plugged in while the app runs. Returns a function that removes it.'}
+      - {name: onDetach, signature: onDetach(fn), ts: '(fn: (device: UsbDevice) => void) => () => void', md: 'Calls `fn` with each listed device unplugged. Its handle''s transfers fail from then on (`"detached"`); plugged in again it is a new device, with a new `id`.'}
+
   - name: gk:apps
     var: apps
     intro_md: |
       Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
       throws a `ReferenceError`. Used by the launcher.
     exports:
-      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data }` (as `sys.app`) (`name` and `description` in the language: each app''s own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card''s `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)''s apps, in `apps/<suite>/<id>`, where the suite''s folder sorts, each with `suite` set to the suite''s id).'}
+      - {name: list, signature: list(), ts: '() => AppInfo[]', md: 'Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data, usb }` (as `sys.app`) (`name` and `description` in the language: each app''s own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card''s `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)''s apps, in `apps/<suite>/<id>`, where the suite''s folder sorts, each with `suite` set to the suite''s id).'}
       - {name: suites, signature: suites(), ts: '() => { id: string; name: string; description: string; icon: string; image: { width: number; height: number; data: Uint8Array } | null }[]', md: 'The [suites](APPS.md#suites) on the card (`apps/<id>/suite.json`), sorted by id: `{ id, name, description, icon, image }`, as for apps (`name` and `description` in the language, from the suite''s own `lang/` catalogs). A suite whose apps were all refused is listed too; the launcher shows only suites with apps.'}
       - {name: dataHash, signature: dataHash(folder), ts: '(folder: string) => string | null', md: 'The hash of the [data folder](APPS.md#data-files) `data/<folder>`, as `gk:data`''s `hash()` gives it: the launcher shows those an app lists (only those are read, at boot). `null` if there is no such folder, or no app lists it; a `TypeError` if it was refused (too big, a bad name).'}
       - {name: launch, signature: launch(id), ts: '(id: string) => void', md: 'Stop the current app and start `id` (after the current handler returns). Throws if there is no such app, or if it is experimental and experimental features are off.'}
@@ -816,6 +885,39 @@ shared_ts:
       utcOffset: number;
       drift: { correction: number; over: number; trimPpm: number; uncertaintyPpm: number } | null;
     }
+  UsbDevice: |
+    {
+      /** new each time the device is plugged in */
+      readonly id: number;
+      readonly vid: number;
+      readonly pid: number;
+      readonly manufacturer: string;
+      readonly product: string;
+      readonly serial: string | null;
+      readonly speed: "low" | "full" | "high" | "super";
+      readonly interfaces: { number: number; class: number; subclass: number; protocol: number }[];
+    }
+  UsbSetup: |
+    {
+      type: "standard" | "class" | "vendor";
+      recipient: "device" | "interface";
+      request: number;
+      value?: number;
+      index?: number;
+    }
+  UsbHandle: |
+    {
+      readonly device: UsbDevice;
+      /** reads 1 to 64 bytes; rejects with an Error whose code is "stall", "timeout", "detached", "closed" or "error" */
+      controlIn(setup: UsbSetup, length: number): Promise<Uint8Array>;
+      /** writes 0 to 64 bytes; resolves to the number sent */
+      controlOut(setup: UsbSetup, data?: Uint8Array | ArrayBuffer | number[]): Promise<number>;
+      /** HID GET_REPORT (feature) on iface, by default the first HID interface */
+      getFeatureReport(id: number, length: number, iface?: number): Promise<Uint8Array>;
+      /** HID SET_REPORT (feature): the id (unless 0), then data; 64 bytes in all at most */
+      setFeatureReport(id: number, data: Uint8Array | ArrayBuffer | number[], iface?: number): Promise<void>;
+      close(): void;
+    }
   AppInfo: |
     {
       readonly id: string;
@@ -836,6 +938,8 @@ shared_ts:
       readonly suite: string | null;
       /** the manifest's "data": the data folders it may read with gk:data */
       readonly data: string[];
+      /** the manifest's "usb": the USB devices it may use with gk:usb, "vvvv:pppp" */
+      readonly usb: string[];
     }
 
 globals:

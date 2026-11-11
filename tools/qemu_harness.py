@@ -70,6 +70,17 @@ Scenario file: one command per line, '#' starts a comment.
     eject                       take the SD card out (QEMU: the monitor's
                                 "eject -f sd0"; the simulator stops reading
                                 its card folder)
+    monitor <command>           QEMU only: a QEMU monitor command, e.g.
+                                "monitor device_add usb-wacom-tablet,id=t"
+                                plugs in a USB device, "monitor device_del t"
+                                unplugs it
+    usbip stub [<args>]         simulator only: starts tests/usb/usbip_stub.py
+                                (a USB/IP server with a fake device; <args>
+                                are its own) and plugs its device in
+    usbip unplug                the stub drops the device (as unplugged); it
+                                offers it again 0.5 s later
+    usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]
+                                the simulator's own commands (docs/SIMULATOR.md)
     reject <regex>              fails if the whole log so far matches, e.g.
                                 "reject after boot: the card" at the end of
                                 a scenario
@@ -360,6 +371,7 @@ class SimMachine:
             os.remove(self.serial_path)
         self.x = self.y = None          # pointer, once the screen size is known
         self.buttons = 0
+        self.stub = None                # tests/usb/usbip_stub.py, once "usbip stub"
         self._start()
 
     def _start(self):
@@ -516,6 +528,33 @@ class SimMachine:
         self._cmd('keyboard %s' % layout)
         time.sleep(0.05)
 
+    def usbip(self, rest):
+        # ${NAME:-default}: from the environment (a test's server address)
+        rest = re.sub(r'\$\{(\w+):-([^}]*)\}', lambda m: os.environ.get(m.group(1)) or m.group(2), rest)
+        words = rest.split()
+        if words[:1] == ['stub']:
+            if self.stub is None:
+                stub = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests', 'usb',
+                                    'usbip_stub.py')
+                self.stub_log = open(os.path.join(self.workdir, 'usbip_stub.log'), 'w')
+                self.stub = subprocess.Popen([sys.executable, '-I', stub] + words[1:],
+                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                             stderr=self.stub_log, text=True)
+                found = re.match(r'usbip_stub: listening on (\d+)', self.stub.stdout.readline())
+                if not found:
+                    raise SystemExit('usbip stub: it did not start (see usbip_stub.log)')
+                self.stub_port = int(found.group(1))
+            busid = words[words.index('--busid') + 1] if '--busid' in words else 'stub-1'
+            self._cmd('usbip attach 127.0.0.1:%d %s' % (self.stub_port, busid))
+        elif words == ['unplug']:
+            if self.stub is None:
+                raise SystemExit('usbip unplug: no stub (usbip stub first)')
+            self.stub.stdin.write('unplug\n')
+            self.stub.stdin.flush()
+        else:
+            self._cmd('usbip %s' % rest)
+        time.sleep(0.1)
+
     def reset(self):
         self.mark = len(self.serial())
         self.stop()
@@ -528,6 +567,11 @@ class SimMachine:
                 self.proc.wait(timeout=5)
             except (OSError, subprocess.TimeoutExpired):
                 self.proc.kill()
+        if self.stub is not None:
+            self.stub.terminate()
+            self.stub.wait(timeout=5)
+            self.stub_log.close()
+            self.stub = None
         # the log is the reader's until the simulator's output ends: a write
         # to a closed file would be a traceback during Python's shutdown,
         # which aborts it and turns a pass into a failure
@@ -667,6 +711,16 @@ def run_scenario(m, path, outdir):
                     raise SystemExit('%s: eject works on QEMU and the simulator' % where)
                 m.eject()
                 print('[%s] eject: the SD card is out' % where)
+            elif cmd == 'monitor':
+                if not isinstance(m, Machine):
+                    raise SystemExit('%s: monitor is for QEMU' % where)
+                m.monitor(rest.strip(), delay=0.2)
+                print('[%s] monitor %s' % (where, rest.strip()))
+            elif cmd == 'usbip':
+                if not hasattr(m, 'usbip'):
+                    raise SystemExit('%s: usbip is for the simulator' % where)
+                m.usbip(rest.strip())
+                print('[%s] usbip %s' % (where, rest.strip()))
             elif cmd == 'reject':
                 pattern = rest.strip()
                 found = re.search(pattern, m.serial())
@@ -689,6 +743,9 @@ def main():
     ap.add_argument('--interactive', action='store_true')
     ap.add_argument('--keep', action='store_true', help='leave QEMU running at the end')
     ap.add_argument('--sd', help='SD card image (tools/make_sd_image.sh); default: no card')
+    ap.add_argument('--qemu-device', action='append', default=[], metavar='SPEC',
+                    help='QEMU only: one more -device, e.g. usb-host,vendorid=0x16c0,productid=0x27db'
+                         ' (a host USB device passed through to the emulated Pi)')
     ap.add_argument('--sim', help='run on the simulator binary (sim/build/gksim) instead of QEMU')
     ap.add_argument('--card', help='with --sim: folder that plays the SD card (apps in DIR/apps)')
     ap.add_argument('--size', help='with --sim: screen size, e.g. 1824x984 (default 640x480)')
@@ -702,6 +759,8 @@ def main():
         img = os.path.join(outdir, 'sd.img')
         shutil.copyfile(args.sd, img)
         extra = ['-drive', 'file=%s,if=sd,format=raw' % os.path.abspath(img)]
+    for spec in args.qemu_device:
+        extra += ['-device', spec]
     if args.sim:
         m = SimMachine(args.sim, outdir, args.card, args.size)
     else:

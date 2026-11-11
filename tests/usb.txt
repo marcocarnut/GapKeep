@@ -1,0 +1,73 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# gk:usb (docs/API.md) on the simulator, against the fake device of
+# tests/usb/usbip_stub.py, plugged in over USB/IP (sim/src/usbip.cpp):
+# claiming it for the app that lists it, its descriptors, transfers that
+# work and those refused, timeouts, unplugging and plugging back in.
+# usbtest checks the API (tests/apps/usbtest); usbprobe is the app for
+# real hardware (docs/RIG.md).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect launcher ready 30
+launch usbtest
+expect usbtest ready 10
+usbip stub
+expect usbip: 127.0.0.1:\d+ stub-1: imported 1209:0001 10
+# usbtest and usbprobe list it: the first available app claims it
+expect usb: device 1: 1209:0001 "GapKeep tests" "USB test device", serial of 9 bytes, full speed, 2 interface\(s\), for usbprobe; it is not a keyboard or mouse while claimed 10
+expect usbtest: attached 1209:1 as device 1 10
+expect usbtest: ok what the device says 10
+expect usbtest: ok the device descriptor 10
+expect usbtest: ok the HID report descriptor 10
+expect usbtest: ok a feature report, set and got 10
+expect usbtest: ok vendor OUT, then IN 10
+expect usbtest: ok a stall 10
+expect usb: device 1: usbtest: control IN type 0xc0 request 0x02 of 4 bytes: stall 10
+expect usbtest: ok more data than asked for 10
+expect usbip: stub-1: 16 bytes for 8 asked 10
+expect usbtest: ok standard OUT is the system's 10
+expect usbtest: ok 16 waiting, no more 10
+expect usb: usbtest: controlIn refused: 16 transfers waiting 10
+expect usbtest: ok a transfer waiting when closed 10
+expect usbtest: ok a timeout 10
+expect usbtest: ok it works after one timeout 10
+expect usb: device 1: timed out 2 times: no more transfers until it is plugged in again 10
+expect usbtest: ok given up on until replugged 10
+expect usbtest done: 0 failed 10
+shot 01-usbtest
+# unplugged, and back
+mark
+usbip unplug
+expect usbip: stub-1: disconnected by the server \(unplugged\) 10
+expect usb: device 1: detached 10
+expect usbtest: detached device 1 10
+expect usb: device 2: 1209:0001 10
+expect usbtest: attached 1209:1 as device 2 10
+expect usbtest: replugged as device 2: transfers work again 10
+# the cable pulled: gone for good
+mark
+usbip detach stub-1
+expect usbip: stub-1: detached \(the cable pulled\) 10
+expect usbtest: detached device 2 10
+# the probe, as on the hardware
+mark
+usbip attach 127.0.0.1:1 nothing
+expect usbip: 127.0.0.1:1 nothing: no USB/IP server, trying again every 300 ms 10
+usbip detach nothing
+key meta_l
+expect launcher ready 10
+launch usbprobe
+expect usbprobe ready 10
+expect usbprobe: 0 device\(s\) 10
+usbip stub
+expect usbprobe: probing device 3, 1209:0001, 2 interface\(s\) 10
+expect usbprobe: device descriptor: 18 bytes 10
+expect usbprobe: interface 0: report descriptor, 25 bytes \(64 asked\) 10
+expect usbprobe: feature report 1: sent 33 bytes, got 33; the answer is what was set: true 10
+expect usbprobe: device 3 probed 10
+wait 1
+shot 02-usbprobe
+# keyboard alone: Enter probes the focused device again
+mark
+key ret
+expect usbprobe: device 3 probed 10
+reject usbtest: FAIL
