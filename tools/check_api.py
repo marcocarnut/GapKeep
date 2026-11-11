@@ -129,6 +129,18 @@ def main():
     compare('sys.kernel', ts_keys(sys_exports['kernel']['ts']), real['kernel'])
     compare('sys.version', ts_keys(sys_exports['version']['ts']), real['version'])
 
+    # gk:crypto's objects: the members of their shared_ts types
+    for name, actual in real['cryptoObjects'].items():
+        documented = {}
+        for line in spec['shared_ts'][name].splitlines():
+            m = re.match(r'\s*(readonly\s+)?(\w+)\??\s*([(:])', line)
+            if m:
+                documented[m.group(2)] = 'method' if m.group(3) == '(' else 'readonly' if m.group(1) else 'readable'
+        compare(name, documented, actual)
+        for member, kind in documented.items():
+            if actual.get(member) not in (None, kind):
+                problems.append('%s.%s: documented as %s, but it is %s' % (name, member, kind, actual[member]))
+
     compare('globals', ['console', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'],
             real['globals'])
 

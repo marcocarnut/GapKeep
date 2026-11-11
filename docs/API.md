@@ -9,7 +9,7 @@ modules below, imported by name:
 | --- | --- | --- |
 | [`gk:ui`](#gkui) | every app | Widgets, layout, input, alerts |
 | [`gk:sys`](#gksys) | every app | App info, versions, uptime, memory, exit |
-| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
+| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), OpenPGP's Ed25519, RSA signatures, AES-CFB and S2K, hardware random bytes |
 | [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
 | [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
 | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
@@ -445,7 +445,10 @@ import * as crypto from "gk:crypto";
 | `sha1(data)` | SHA-1, a `Uint8Array(20)`. Broken for collisions: for HMAC-SHA1 (TOTP) and protocols that require it, not to identify data. |
 | `sha256(data)` | SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous. |
 | `sha512(data)` | SHA-512, a `Uint8Array(64)`. |
-| `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
+| `sha224(data)` | SHA-224, a `Uint8Array(28)`. |
+| `sha384(data)` | SHA-384, a `Uint8Array(48)`. |
+| `createHash(hash)` | A hash to feed in pieces: `update(data)` (returns the hash, so calls chain), `digest()` (the result; the hash is then finished, and using it again throws a `TypeError`), `copy()` (a new hash in the same state: hash what is common once, then each copy's own end), `destroy()` (wipes the state now, rather than when the object is collected) and `algorithm` (its name). `hash` as for `hmac`. For data too big for one array, or that arrives in parts. |
+| `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto (`"SHA-1"`, `"SHA-224"`, `"SHA-256"`, `"SHA-384"` or `"SHA-512"`): a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
 | `ripemd160(data)` | RIPEMD-160, a `Uint8Array(20)`. |
 | `hash160(data)` | RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. |
 | `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. |
@@ -462,14 +465,22 @@ import * as crypto from "gk:crypto";
 | `schnorrVerify(signature, message, publicKey)` | Checks a BIP-340 signature against an x-only public key; the message may have any length. |
 | `taprootTweakPublicKey(publicKey, tweak)` | Taproot's output key Q = P + tweak·G for the x-only internal key P (BIP-341): `key` is Q's X, `parity` its Y's (a script path's control block needs it). The tweak is the app's: the `TapTweak` tagged hash of P (and the script tree's root, if any). |
 | `taprootTweakPrivateKey(privateKey, tweak)` | The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. |
+| `ed25519PrivateKey(seed)` | An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. |
+| `ed25519Verify(signature, message, publicKey)` | Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. |
+| `rsaPrivateKey({ n, e, d, p, q, u })` | An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest), destroy() }`; `sign` and `destroy` below. |
+| `rsaVerify(signature, hash, digest, publicKey)` | Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }` (2048 to 4096 bits, else `false`). `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. |
+| `aesCfbEncrypt(key, iv, data)` | AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 16 MiB, no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. |
+| `aesCfbDecrypt(key, iv, data)` | The other way, as `aesCfbEncrypt`. |
+| `openpgpS2k(type, hash, passphrase, salt, count, length)` | OpenPGP's string-to-key (RFC 9580, 3.7.1): the `length`-byte key (1 to 64) a passphrase gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. Blocks: on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), and twice that when the key is longer than the hash (AES-256 from SHA-1). Stopped, like `pbkdf2`, by the watchdog (10 s) and the Windows key: so no more than two hashes at the largest count. |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
 
-`data`, `key`, `password` and `salt` are typed arrays (their bytes: a
-`subarray` hashes just its part), `ArrayBuffer`s, or strings, taken as
-UTF-8. Hashes, HMAC and PBKDF2 run in the kernel (src/crypto, written from
-FIPS 180-4, the RIPEMD-160 paper, RFC 2104 and RFC 8018, checked against
+The hashes' `data`, and `hmac`'s and `pbkdf2`'s `key`, `password` and
+`salt`, are typed arrays (their bytes: a `subarray` hashes just its
+part), `ArrayBuffer`s, or strings, taken as UTF-8. Hashes, HMAC, PBKDF2
+and OpenPGP's S2K run in the kernel (src/crypto, written from FIPS 180-4,
+the RIPEMD-160 paper, RFC 2104, RFC 8018 and RFC 9580, checked against
 their test vectors): microseconds per block on a Pi Zero, where the same
 in JavaScript takes about a millisecond. The copies made of keys and data
 are overwritten after use.
@@ -487,9 +498,46 @@ on these: e.g. a child key is `privateKeyTweakAdd(k, I.slice(0, 32))` with
 `I = hmac("SHA-512", chainCode, data)`. On a Pi Zero, an ECDSA signature
 takes about 9 ms, a BIP-32 derivation step under 2 ms, a BIP-39 seed 93 ms.
 
-Each group (RIPEMD-160, PBKDF2, secp256k1) checks itself against known
-answers before its first use; if that fails, it throws an `InternalError`
-until reboot.
+**OpenPGP's primitives**: what an OpenPGP app needs natively to make
+signatures with imported Ed25519 and RSA keys and to unlock protected
+secret keys; packets, armor, keyrings and the signed data's digest are
+the app's, in JavaScript. Ed25519 is
+[Monocypher](https://monocypher.org)'s (4.0.3, CC0 or BSD-2-Clause,
+constant-time); RSA and AES are [Mbed TLS](https://www.trustedfirmware.org/projects/mbed-tls/)'s
+(3.6 LTS, Apache-2.0: its constant-time bignum, with the private
+operation blinded and its result checked). Keys, digests, signatures,
+salts and IVs are typed arrays or `ArrayBuffer`s, never strings (a
+passphrase may be one, as UTF-8). Wrong types throw a `TypeError`,
+wrong sizes and numbers that aren't keys a `RangeError`, unknown hash
+names a `TypeError`; the `verify` functions return `false` for
+signatures and public keys that don't check out.
+
+Private keys are objects (`Ed25519PrivateKey`, `RsaPrivateKey`) that
+keep the key in native memory, out of reach of JavaScript, until
+`destroy()` wipes it; else it is wiped when the object is collected,
+and at the latest when the app exits. **The key's bytes do pass through
+JavaScript once**, to make the object (the app decrypts and parses its
+secret-key packet itself): overwrite those arrays (`.fill(0)`) once the
+key is made. Copies JavaScript made on the way (a `slice`, a string)
+stay in memory until the collector frees them (the heap is wiped as it
+frees), so handle key material in as few arrays as you can.
+
+Signing checks its own result: an RSA signature against the public key
+(twice: Mbed TLS, then GapKeep), an Ed25519 one by verifying it. A
+wrong result, which a hardware fault could cause and which could reveal
+the key, is never returned: `sign` throws an `InternalError`.
+
+AES runs from lookup tables, which is not constant-time against code
+sharing the processor's cache; on GapKeep, one app runs at a time, and
+the key is the app's. On a Pi Zero: an Ed25519 signature takes about
+4 ms, its verification 3 ms; an RSA signature 90 ms with 2048 bits, 220
+ms with 3072 and 460 ms with 4096 (checks included), a verification
+under 20 ms; importing an RSA key 30 to 90 ms; AES-CFB about 10 MB/s,
+SHA-256 16 MB/s.
+
+Each group (RIPEMD-160, PBKDF2, secp256k1, Ed25519, RSA, AES, S2K)
+checks itself against known answers before its first use; if that
+fails, it throws an `InternalError` until reboot.
 
 **Where the randomness comes from.** The BCM2835's hardware random number
 generator, treated as a noise source of unknown quality. Every raw byte
@@ -511,6 +559,7 @@ import * as gkcrypto from "gk:crypto";
 globalThis.crypto = {
   getRandomValues: gkcrypto.getRandomValues,
   subtle: { digest: async (alg, data) => ({ "SHA-1": gkcrypto.sha1, "SHA-256": gkcrypto.sha256,
+                                             "SHA-384": gkcrypto.sha384,
                                              "SHA-512": gkcrypto.sha512 })[alg](data).buffer },
 };
 ```
