@@ -1,0 +1,119 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: dwhci: no transfer waits forever on a port that went down
+
+A DigiMacro (V-USB, low speed) froze the whole system when plugged in, or
+when it was plugged in at power-on: its firmware disconnects and connects
+again about 70 ms after power comes, while the root port is being reset.
+The port was then disabled after the reset, but enumeration went on. Its
+first GET_DESCRIPTOR was queued for the next frame (USE_USB_SOF_INTR), and
+a disabled port sends no frames: the request never reached a channel, so
+the control timeout's AbortRequest() never found it, and TransferStage()
+tried again forever (seen on the rig, 2026-11-11).
+
+- EnableRootPort(): after the reset the device must still be connected
+  and the port enabled, otherwise FALSE; the next connect interrupt (or
+  the retry) tries again. With this the DigiMacro is found on the second
+  try, each time it is plugged in.
+- TransferStage(): a timed-out control request still queued for a frame
+  after twice its timeout is taken off the queue and fails with a
+  timeout (CDWHCITransactionQueue::RemoveRequest(), which leaves the
+  request to its owner), so no such wait can hang the system again.
+
+--- a/include/circle/usb/dwhcixactqueue.h
++++ b/include/circle/usb/dwhcixactqueue.h
+@@ -43,6 +43,10 @@
+ 	// remove entries for device
+ 	void FlushDevice (CUSBDevice *pUSBDevice);
+ 
++	// gapkeep: remove the entry of a request, if queued, without deleting
++	// the request (its owner waits for it); TRUE if it was queued
++	boolean RemoveRequest (CUSBRequest *pURB);
++
+ 	// enqueue transaction to be processed at usFrameNumber
+ 	void Enqueue (CDWHCITransferStageData *pStageData, u16 usFrameNumber);
+ 
+--- a/lib/usb/dwhcidevice.cpp
++++ b/lib/usb/dwhcidevice.cpp
+@@ -704,6 +704,19 @@
+ 	// normally 10ms, seems to be too short for some devices
+ 	m_pTimer->MsDelay (20);		// see USB 2.0 spec (tRSTRCY)
+ 
++	// gapkeep: a device whose contacts bounce as it is plugged in can leave
++	// the port disabled after the reset. No frames go out on a disabled
++	// port, so a transfer to the device would wait for one forever: give
++	// up here, and the next connect interrupt (or the retry) tries again.
++	HostPort.Read ();
++	if (   !(HostPort.Get () & DWHCI_HOST_PORT_CONNECT)
++	    || !(HostPort.Get () & DWHCI_HOST_PORT_ENABLE))
++	{
++		LOGWARN ("Port not enabled after reset (0x%X)", HostPort.Get ());
++
++		return FALSE;
++	}
++
+ 	if (CKernelOptions::Get ()->GetUSBFullSpeed ())
+ 	{
+ 		// ensure frame interval is 1 ms
+@@ -906,6 +919,21 @@
+ 		{
+ 			// not on a channel yet (queued for the next frame): try again
+ 			bAborted = AbortRequest (pURB);
++#ifdef USE_USB_SOF_INTR
++			// gapkeep: a request queued for a frame that never comes
++			// (the port went down) is taken off the queue; otherwise this
++			// waits forever, and the whole system with it
++			if (   !bAborted
++			    && CTimer::Get ()->GetClockTicks () - nStartTicks
++			       >= 2 * nControlTimeoutMs * (CLOCKHZ / 1000)
++			    && m_TransactionQueue.RemoveRequest (pURB))
++			{
++				pURB->SetStatus (0);
++				pURB->SetUSBError (USBErrorTimeout);
++				m_bWaiting[nWaitBlock] = FALSE;
++				bAborted = TRUE;
++			}
++#endif
+ 		}
+ 	}
+ 
+--- a/lib/usb/dwhcixactqueue.cpp
++++ b/lib/usb/dwhcixactqueue.cpp
+@@ -68,6 +68,38 @@
+ 	Flush ();
+ }
+ 
++boolean CDWHCITransactionQueue::RemoveRequest (CUSBRequest *pURB)
++{
++	assert (pURB != 0);
++	boolean bResult = FALSE;
++
++	m_SpinLock.Acquire ();
++
++	for (TPtrListElement *pElement = m_List.GetFirst (); pElement != 0;
++	     pElement = m_List.GetNext (pElement))
++	{
++		TQueueEntry *pEntry = (TQueueEntry *) m_List.GetPtr (pElement);
++		assert (pEntry != 0);
++		assert (pEntry->nMagic == XACT_QUEUE_MAGIC);
++		assert (pEntry->pStageData != 0);
++		if (pEntry->pStageData->GetURB () == pURB)
++		{
++			m_List.Remove (pElement);
++			delete pEntry->pStageData;
++#ifndef NDEBUG
++			pEntry->nMagic = 0;
++#endif
++			delete pEntry;
++			bResult = TRUE;
++			break;
++		}
++	}
++
++	m_SpinLock.Release ();
++
++	return bResult;
++}
++
+ void CDWHCITransactionQueue::Flush (void)
+ {
+ 	m_SpinLock.Acquire ();
