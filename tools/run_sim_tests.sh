@@ -205,6 +205,12 @@ if command -v node >/dev/null; then
 	else
 		echo "FAIL  sim:web_textinput   (see $OUT/web_textinput.log)"; FAILED=1
 	fi
+	# gk:crypto's long operations in the WebAssembly build (if it was built)
+	if node --experimental-default-type=module tests/web/pgpcrypto.mjs > "$OUT/web_pgpcrypto.log" 2>&1; then
+		echo "PASS  sim:web_pgpcrypto"
+	else
+		echo "FAIL  sim:web_pgpcrypto   (see $OUT/web_pgpcrypto.log)"; FAILED=1
+	fi
 	if node --experimental-default-type=module tests/bbqr/run_node.mjs > "$OUT/bbqr.log" 2>&1 \
 		&& python3 tests/bbqr/check_capacity.py >> "$OUT/bbqr.log" 2>&1; then
 		echo "PASS  sim:bbqr"

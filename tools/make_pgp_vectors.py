@@ -93,6 +93,16 @@ def main():
         keys.append({"bits": bits, "key": key, "sigs": sigs})
     v["rsaKeys"] = keys
 
+    # RSA-1024: verified (old signatures), never imported
+    k = rsa.generate_private_key(65537, 1024)
+    pn = k.private_numbers()
+    p, q = sorted((pn.p, pn.q))
+    digest = hashlib.sha256(b"GapKeep").digest()
+    v["rsa1024"] = {"key": {"n": hx(pn.public_numbers.n), "e": hx(65537), "d": hx(pn.d), "p": hx(p), "q": hx(q),
+                            "u": hx(pow(p, -1, q))},
+                    "digest": digest.hex(),
+                    "sig": k.sign(digest, padding.PKCS1v15(), Prehashed(hashes.SHA256())).hex()}
+
     # AES-CFB128: CAVP's MMT files (both ways)
     tests = []
     for size in (128, 192, 256):

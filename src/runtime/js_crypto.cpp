@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "jobs.h"
 #include "../crypto/hmac.h"
 #include "../crypto/ripemd160.h"
 #include "../crypto/pbkdf2.h"
@@ -1533,7 +1534,79 @@ static const gk_hash_t *GetRsaHash (JSContext *ctx, JSValueConst v, boolean bSig
 	return pHash;
 }
 
-// RsaPrivateKey.sign(hash, digest) -> Uint8Array(modulus bytes)
+// Before a deadline in clock ticks (wraps around)
+static boolean Before (unsigned nDeadline)
+{
+	return (int) (CTimer::Get ()->GetClockTicks () - nDeadline) < 0;
+}
+
+// RsaPrivateKey.sign as a job (jobs.h): the steps of gk_rsa_sign_step, as
+// many as fit in a slice (the CRT's exponentiations, each one, for big keys)
+struct TGkRsaSignJob
+{
+	JSValue KeyObject;		// held: the key stays alive (destroy() still wipes it)
+	TGkRsa *pRsa;
+	gk_rsa_sign_job_t *pJob;
+	int nResult;			// 1: under way
+	boolean bDestroyed;		// the key was, before the end
+};
+
+static boolean RsaSignStep (void *pParam, unsigned nDeadline)
+{
+	TGkRsaSignJob *pState = (TGkRsaSignJob *) pParam;
+	do
+	{
+		if (pState->pRsa->pKey == 0)
+		{
+			pState->bDestroyed = TRUE;
+			return FALSE;
+		}
+		pState->nResult = gk_rsa_sign_step (pState->pJob, pState->pRsa->pKey, RsaRandom, 0);
+	}
+	while (pState->nResult > 0 && Before (nDeadline));
+	return pState->nResult > 0;
+}
+
+static double RsaSignProgress (void *pParam)
+{
+	return gk_rsa_sign_progress (((TGkRsaSignJob *) pParam)->pJob);
+}
+
+static JSValue RsaSignFinish (JSContext *ctx, void *pParam)
+{
+	TGkRsaSignJob *pState = (TGkRsaSignJob *) pParam;
+	if (pState->bDestroyed)
+	{
+		return JS_ThrowTypeError (ctx, "RsaPrivateKey.sign: the key was destroyed before the signature was made");
+	}
+	switch (pState->nResult)
+	{
+	case GK_RSA_OK:
+	{
+		size_t nLength;
+		const u8 *pSig = gk_rsa_sign_result (pState->pJob, &nLength);
+		return NewUint8Array (ctx, pSig, nLength);
+	}
+	case GK_RSA_RNG:
+		return ThrowRNGFailure (ctx);
+	default:
+		CLogger::Get ()->Write ("crypto", LogError, "RSA signature failed its check (%d)", pState->nResult);
+		return JS_ThrowInternalError (ctx, "RsaPrivateKey.sign: the signature failed its check "
+					      "(a hardware fault?): none returned");
+	}
+}
+
+static void RsaSignFree (JSContext *ctx, void *pParam)
+{
+	TGkRsaSignJob *pState = (TGkRsaSignJob *) pParam;
+	gk_rsa_sign_end (pState->pJob);
+	JS_FreeValue (ctx, pState->KeyObject);
+	delete pState;
+}
+
+static const TGkJobOps s_RsaSignJob = { "RSA signature", RsaSignStep, RsaSignProgress, RsaSignFinish, RsaSignFree };
+
+// RsaPrivateKey.sign(hash, digest, { onProgress }?) -> Promise<Uint8Array(modulus bytes)>
 static JSValue js_rsa_sign (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	TGkRsa *pRsa = GetRsa (ctx, this_val, "sign", TRUE);
@@ -1551,26 +1624,30 @@ static JSValue js_rsa_sign (JSContext *ctx, JSValueConst this_val, int argc, JSV
 	{
 		return JS_EXCEPTION;
 	}
+	JSValue OnProgress;
+	if (!GkJobOnProgress (ctx, argc > 2 ? argv[2] : JS_UNDEFINED, "RsaPrivateKey.sign", &OnProgress))
+	{
+		return JS_EXCEPTION;
+	}
 
-	u8 *pSig;
-	JSValue Result = NewOutput (ctx, (gk_rsa_bits (pRsa->pKey) + 7) / 8, &pSig);
-	if (JS_IsException (Result))
+	gk_rsa_sign_job_t *pJob;
+	int nResult = gk_rsa_sign_begin (&pJob, pRsa->pKey, pHash, Digest, pHash->digest_size);
+	gk_wipe (Digest, sizeof Digest);
+	if (nResult != GK_RSA_OK)
 	{
-		return Result;
+		JS_FreeValue (ctx, OnProgress);
+		return nResult == GK_RSA_NO_MEMORY ? JS_ThrowOutOfMemory (ctx)
+			: JS_ThrowRangeError (ctx, "RsaPrivateKey.sign: the digest can't be signed with this key");
 	}
-	int nResult = gk_rsa_sign (pRsa->pKey, pHash, Digest, pHash->digest_size, pSig, RsaRandom, 0);
-	if (nResult == GK_RSA_OK)
-	{
-		return Result;
-	}
-	JS_FreeValue (ctx, Result);
-	if (nResult == GK_RSA_RNG)
-	{
-		return ThrowRNGFailure (ctx);
-	}
-	CLogger::Get ()->Write ("crypto", LogError, "RSA signature failed its check (%d)", nResult);
-	return JS_ThrowInternalError (ctx, "RsaPrivateKey.sign: the signature failed its check "
-				      "(a hardware fault?): none returned");
+	TGkRsaSignJob *pState = new TGkRsaSignJob;
+	pState->KeyObject = JS_DupValue (ctx, this_val);
+	pState->pRsa = pRsa;
+	pState->pJob = pJob;
+	pState->nResult = 1;
+	pState->bDestroyed = FALSE;
+	JSValue Promise = GkJobStart (ctx, &s_RsaSignJob, pState, OnProgress);
+	JS_FreeValue (ctx, OnProgress);
+	return Promise;
 }
 
 static JSValue js_rsa_destroy (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -1673,22 +1750,63 @@ static JSValue js_crypto_aes_cfb_decrypt (JSContext *ctx, JSValueConst this_val,
 
 // --- OpenPGP S2K ------------------------------------------------------------
 
-static const uint32_t MaxS2kLength = 64;
+static const uint32_t MaxS2kLength = GK_S2K_MAX_OUTPUT;
+static const size_t MaxS2kPassphrase = 65536;
+
+// openpgpS2k as a job: hashing, 64 KiB at a time (about 4 ms with
+// SHA-256 on a Pi Zero), until the slice's deadline
+struct TGkS2kJob
+{
+	gk_s2k_job_t Job;
+};
+
+static boolean S2kStep (void *pParam, unsigned nDeadline)
+{
+	gk_s2k_job_t *pJob = &((TGkS2kJob *) pParam)->Job;
+	boolean bMore;
+	do
+	{
+		bMore = gk_s2k_step (pJob, 64 * 1024);
+	}
+	while (bMore && Before (nDeadline));
+	return bMore;
+}
+
+static double S2kProgress (void *pParam)
+{
+	return gk_s2k_progress (&((TGkS2kJob *) pParam)->Job);
+}
+
+static JSValue S2kFinish (JSContext *ctx, void *pParam)
+{
+	gk_s2k_job_t *pJob = &((TGkS2kJob *) pParam)->Job;
+	return NewUint8Array (ctx, pJob->out, pJob->outlen);	// the JS heap: wiped when freed
+}
+
+static void S2kFree (JSContext *ctx, void *pParam)
+{
+	TGkS2kJob *pState = (TGkS2kJob *) pParam;
+	gk_s2k_end (&pState->Job);
+	delete pState;
+}
+
+static const TGkJobOps s_S2kJob = { "S2K", S2kStep, S2kProgress, S2kFinish, S2kFree };
 
 static boolean IsAbsent (JSValueConst v)
 {
 	return JS_IsUndefined (v) || JS_IsNull (v);
 }
 
-// openpgpS2k(type, hash, passphrase, salt, count, length) -> Uint8Array(length)
+// openpgpS2k(type, hash, passphrase, salt, count, length, { onProgress }?)
+//   -> Promise<Uint8Array(length)>
 static JSValue js_crypto_openpgp_s2k (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	if (!S2kOK (ctx))
 	{
 		return JS_EXCEPTION;
 	}
-	JSValueConst Args[6];
-	for (int i = 0; i < 6; i++)
+	JSValueConst Args[7];
+	for (int i = 0; i < 7; i++)
 	{
 		Args[i] = i < argc ? argv[i] : JS_UNDEFINED;
 	}
@@ -1753,22 +1871,31 @@ static JSValue js_crypto_openpgp_s2k (JSContext *ctx, JSValueConst this_val, int
 	{
 		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "openpgpS2k", "passphrase");
 	}
+	if (Passphrase.Length () > MaxS2kPassphrase)
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2k: the passphrase may be at most %u bytes",
+					   (unsigned) MaxS2kPassphrase);
+	}
+	JSValue OnProgress;
+	if (!GkJobOnProgress (ctx, Args[6], "openpgpS2k", &OnProgress))
+	{
+		return JS_EXCEPTION;
+	}
 
-	u8 *pKey;
-	JSValue Result = NewOutput (ctx, (size_t) fLength, &pKey);
-	if (JS_IsException (Result))
-	{
-		return Result;
-	}
-	int nStopped = gk_s2k (pHash, nType, Passphrase.Data (), Passphrase.Length (), Salt, (uint8_t) nCoded,
-			       pKey, (size_t) fLength, StopNative, ctx);
+	TGkS2kJob *pState = new TGkS2kJob;
+	int nResult = gk_s2k_begin (&pState->Job, pHash, nType, Passphrase.Data (), Passphrase.Length (), Salt,
+				    (uint8_t) nCoded, (size_t) fLength);
 	Passphrase.Release ();
-	if (nStopped)
+	gk_wipe (Salt, sizeof Salt);
+	if (nResult != 0)
 	{
-		JS_FreeValue (ctx, Result);
-		return ThrowInterrupted (ctx);
+		delete pState;
+		JS_FreeValue (ctx, OnProgress);
+		return JS_ThrowOutOfMemory (ctx);
 	}
-	return Result;
+	JSValue Promise = GkJobStart (ctx, &s_S2kJob, pState, OnProgress);
+	JS_FreeValue (ctx, OnProgress);
+	return Promise;
 }
 
 // The classes, once per runtime; their prototypes, once per context.
@@ -1812,7 +1939,7 @@ static void InitClasses (JSContext *ctx)
 	JS_SetClassProto (ctx, s_Ed25519Class, Proto);
 
 	Proto = JS_NewObject (ctx);
-	DefineMethod (ctx, Proto, "sign", js_rsa_sign, 2);
+	DefineMethod (ctx, Proto, "sign", js_rsa_sign, 3);
 	DefineMethod (ctx, Proto, "destroy", js_rsa_destroy, 0);
 	DefineGetter (ctx, Proto, "bits", js_rsa_get_bits);
 	DefineGetter (ctx, Proto, "publicKey", js_rsa_get_public_key);
@@ -1830,7 +1957,7 @@ static const JSCFunctionListEntry s_CryptoFunctions[] =
 	JS_CFUNC_DEF ("rsaVerify", 4, js_crypto_rsa_verify),
 	JS_CFUNC_DEF ("aesCfbEncrypt", 3, js_crypto_aes_cfb_encrypt),
 	JS_CFUNC_DEF ("aesCfbDecrypt", 3, js_crypto_aes_cfb_decrypt),
-	JS_CFUNC_DEF ("openpgpS2k", 6, js_crypto_openpgp_s2k),
+	JS_CFUNC_DEF ("openpgpS2k", 7, js_crypto_openpgp_s2k),
 	JS_CFUNC_DEF ("ripemd160", 1, js_crypto_ripemd160),
 	JS_CFUNC_DEF ("hash160", 1, js_crypto_hash160),
 	JS_CFUNC_DEF ("pbkdf2", 5, js_crypto_pbkdf2),
