@@ -1,4 +1,4 @@
-# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# Needs a test build (make TEST=1): the USB probe is built in.
 # Rig only: a DigiMacro (16c0:27db) on a USB hub with the rig's gadget
 # keyboard, the hub in the Zero's "USB" port (docs/RIG.md, "A USB device for
 # gk:usb"). The USB probe (tests/apps/usbprobe) as in the simulator
