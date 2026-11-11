@@ -334,6 +334,170 @@ group("S2K SHA-1 timing", async () => {
   ok(k.length === 16, "S2K SHA-1 largest count");
 });
 
+group("pbkdf2Async", async () => {
+  const words = "abandon ".repeat(11) + "about";
+  const want = hex(crypto.pbkdf2("SHA-512", words, "mnemonicTREZOR", 2048, 64));
+  ok(want.startsWith("c55257c360c07c72029aebc1b53c05ed"), "pbkdf2 BIP-39");
+  let calls = 0;
+  const got = await crypto.pbkdf2Async("SHA-512", words, "mnemonicTREZOR", 2048, 64, { onProgress: () => calls++ });
+  ok(hex(got) === want, "pbkdf2Async = pbkdf2");
+  ok(hex(await crypto.pbkdf2Async("SHA-1", "password", "salt", 2, 20)) === "ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957",
+     "pbkdf2Async RFC 6070");
+  throws(() => crypto.pbkdf2Async("SHA-512", "p", "s", 0, 64), RangeError, "pbkdf2Async 0 iterations");
+  throws(() => crypto.pbkdf2Async("SHA-512", "p", "s", 1, 1025), RangeError, "pbkdf2Async length 1025");
+  throws(() => crypto.pbkdf2Async("MD5", "p", "s", 1, 16), TypeError, "pbkdf2Async MD5");
+  await timeJob("pbkdf2Async SHA-512 100000 iterations",
+    (onProgress) => crypto.pbkdf2Async("SHA-512", "p", "s", 100000, 64, { onProgress }));
+});
+
+group("RSA decryption, implicit rejection (draft)", async () => {
+  for (const { name, key, cases } of V.rsaDecryptDraft) {
+    const k = crypto.rsaPrivateKey(keyOf(key));
+    for (const { name: what, c, m } of cases) {
+      ok(hex(await k.decrypt(unhex(c))) === m, `RSA decrypt draft ${name}: ${what}`);
+    }
+    k.destroy();
+  }
+});
+
+group("RSA decryption, Wycheproof", async () => {
+  let n = 0;
+  for (const { key, tests } of V.rsaDecryptWycheproof) {
+    const k = crypto.rsaPrivateKey(keyOf(key));
+    for (const [c, want, id] of tests) {
+      if (want === null) throws(() => k.decrypt(unhex(c)), RangeError, `Wycheproof RSA decrypt ${id} refused`);
+      else ok(hex(await k.decrypt(unhex(c))) === want, `Wycheproof RSA decrypt ${id}`);
+      n++;
+    }
+    k.destroy();
+  }
+  console.log(`pgpcrypto: Wycheproof RSA decryption: ${n} checked`);
+});
+
+group("RSA decryption errors and timing", async () => {
+  const { key: kk } = V.rsaKeys.find((x) => x.bits === 4096);
+  const k = crypto.rsaPrivateKey(keyOf(kk));
+  const n = unhex(kk.n);
+  throws(() => k.decrypt(n), RangeError, "RSA decrypt c = n");
+  throws(() => k.decrypt(n.subarray(1)), RangeError, "RSA decrypt short");
+  throws(() => k.decrypt("x"), TypeError, "RSA decrypt a string");
+  const c = new Uint8Array(512);
+  c[511] = 5;
+  const m1 = await timeJob("RSA-4096 decrypt", (onProgress) => k.decrypt(c, { onProgress }));
+  const m2 = await k.decrypt(c);
+  ok(hex(m1) === hex(m2) && m1.length <= 512 - 11, "RSA decrypt bad padding: the same message each time");
+  const pending = k.decrypt(c);
+  k.destroy();
+  await rejects(pending, TypeError, "RSA key destroyed while decrypting");
+});
+
+group("X25519", () => {
+  const a = unhex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
+  const b = unhex("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb");
+  const ka = crypto.x25519PrivateKey(a), kb = crypto.x25519PrivateKey(b);
+  ok(hex(ka.publicKey) === "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a", "X25519 RFC 7748 public");
+  const s = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742";
+  ok(hex(ka.sharedSecret(kb.publicKey)) === s && hex(kb.sharedSecret(ka.publicKey)) === s, "X25519 RFC 7748 shared");
+  throws(() => ka.sharedSecret(new Uint8Array(32)), RangeError, "X25519 zero shared secret");
+  throws(() => ka.sharedSecret(new Uint8Array(31)), RangeError, "X25519 short peer key");
+  throws(() => crypto.x25519PrivateKey(new Uint8Array(33)), RangeError, "X25519 long secret");
+  throws(() => crypto.x25519PrivateKey("x".repeat(32)), TypeError, "X25519 secret as a string");
+  ka.destroy();
+  throws(() => ka.sharedSecret(kb.publicKey), TypeError, "X25519 after destroy");
+  ok(ka.publicKey.length === 32, "X25519 public key after destroy");
+  kb.destroy();
+  let n = 0;
+  for (const [priv, pub, shared, id] of V.x25519Wycheproof) {
+    const k = crypto.x25519PrivateKey(unhex(priv));
+    if (shared === null) throws(() => k.sharedSecret(unhex(pub)), RangeError, `Wycheproof X25519 ${id} zero refused`);
+    else ok(hex(k.sharedSecret(unhex(pub))) === shared, `Wycheproof X25519 ${id}`);
+    k.destroy();
+    n++;
+  }
+  console.log(`pgpcrypto: Wycheproof X25519: ${n} checked`);
+  const k = crypto.x25519PrivateKey(new Uint8Array(32).fill(3));
+  time("X25519 shared secret x20", () => { for (let i = 0; i < 20; i++) k.sharedSecret(ka.publicKey); });
+});
+
+group("AES key wrap", () => {
+  const kek = unhex("000102030405060708090a0b0c0d0e0f"), key = unhex("00112233445566778899aabbccddeeff");
+  const w = crypto.aesKeyWrap(kek, key);
+  ok(hex(w) === "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5", "RFC 3394 4.1 wrap");
+  ok(hex(crypto.aesKeyUnwrap(kek, w)) === hex(key), "RFC 3394 4.1 unwrap");
+  w[3] ^= 1;
+  throws(() => crypto.aesKeyUnwrap(kek, w), Error, "key unwrap of a changed byte");
+  try { crypto.aesKeyUnwrap(kek, w); } catch (e) { ok(!(e instanceof TypeError) && !(e instanceof RangeError), "key unwrap: an Error, not a TypeError or RangeError"); }
+  throws(() => crypto.aesKeyUnwrap(kek, w.subarray(0, 20)), RangeError, "key unwrap 20 bytes");
+  throws(() => crypto.aesKeyWrap(kek, key.subarray(0, 8)), RangeError, "key wrap 8 bytes");
+  throws(() => crypto.aesKeyWrap(kek.subarray(1), key), RangeError, "key wrap 15-byte kek");
+  let n = 0;
+  for (const [k, msg, ct, result, id] of V.aesWrapWycheproof) {
+    let got = null;
+    try { got = hex(crypto.aesKeyUnwrap(unhex(k), unhex(ct))); } catch (e) { got = null; }
+    if (result === "v") ok(got === msg && hex(crypto.aesKeyWrap(unhex(k), unhex(msg))) === ct, `Wycheproof key wrap ${id}`);
+    else if (result === "i") ok(got === null, `Wycheproof key wrap ${id} refused`);
+    n++;
+  }
+  console.log(`pgpcrypto: Wycheproof AES key wrap: ${n} checked`);
+});
+
+// an SEIPD v1 body as OpenPGP makes it (the prefix's last two bytes again,
+// the MDC packet), encrypted with aesCfbEncrypt and a zero IV
+function seipd(key, plain, { quickCheck = true, mdcOk = true } = {}) {
+  const prefix = crypto.randomBytes(16);
+  const body = cat(prefix, quickCheck ? prefix.subarray(14) : new Uint8Array(2), plain, new Uint8Array([0xd3, 0x14]));
+  const mdc = crypto.sha1(body);
+  if (!mdcOk) mdc[0] ^= 1;
+  return crypto.aesCfbEncrypt(key, new Uint8Array(16), cat(body, mdc));
+}
+function cat(...parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let i = 0;
+  for (const p of parts) { out.set(p, i); i += p.length; }
+  return out;
+}
+
+group("SEIPD v1", async () => {
+  // made with Python's cryptography (src/crypto/seipd.c's self-test)
+  const key = new Uint8Array(16).map((_, i) => i);
+  const kat = unhex("a2c45d50efe631e90322ef0dd1b9aa0a04429abc84839f390526c3b005306eef" +
+                    "8bd0d47e38e105f8f146aee5f8b6106d02cc7c4814bdabaf6445e18210e8f223");
+  ok(hex(await crypto.seipdV1Decrypt(key, kat)) === "cb186200000000004761704b656570205345495044207631", "SEIPD known answer");
+  for (const size of [16, 24, 32]) {
+    const k = crypto.randomBytes(size), plain = crypto.randomBytes(1000);
+    const c = seipd(k, plain);
+    ok(hex(await crypto.seipdV1Decrypt(k, c)) === hex(plain), `SEIPD AES-${size * 8}`);
+    ok(hex(await crypto.seipdV1Decrypt(k, seipd(k, plain, { quickCheck: false }))) === hex(plain), `SEIPD quick check ignored`);
+    for (const at of [0, 17, 500, c.length - 21, c.length - 1]) {
+      const bad = c.slice();
+      bad[at] ^= 1;
+      await rejects(crypto.seipdV1Decrypt(k, bad), Error, `SEIPD AES-${size * 8} changed at ${at}`);
+    }
+    await rejects(crypto.seipdV1Decrypt(k, c.subarray(0, c.length - 1)), Error, "SEIPD truncated");
+    await rejects(crypto.seipdV1Decrypt(k, seipd(k, plain, { mdcOk: false })), Error, "SEIPD wrong MDC");
+    const other = k.slice();
+    other[0] ^= 1;
+    await rejects(crypto.seipdV1Decrypt(other, c), Error, "SEIPD another key");
+  }
+  const k = crypto.randomBytes(16);
+  ok((await crypto.seipdV1Decrypt(k, seipd(k, new Uint8Array(0)))).length === 0, "SEIPD empty plaintext");
+  throws(() => crypto.seipdV1Decrypt(k, new Uint8Array(39)), RangeError, "SEIPD 39 bytes");
+  throws(() => crypto.seipdV1Decrypt(k.subarray(1), new Uint8Array(40)), RangeError, "SEIPD 15-byte key");
+  throws(() => crypto.seipdV1Decrypt(k, "x".repeat(40)), TypeError, "SEIPD data as a string");
+  throws(() => crypto.seipdV1Decrypt(k, new Uint8Array(8 * 1024 * 1024 + 1)), RangeError, "SEIPD over 8 MiB");
+  for (const size of [65536, 1 << 20]) {
+    const plain = new Uint8Array(size).fill(0x5a), c = seipd(k, plain);
+    const got = await timeJob(`SEIPD v1 ${size / 1024} KiB`, (onProgress) => crypto.seipdV1Decrypt(k, c, { onProgress }));
+    ok(got.length === size && got.every((x) => x === 0x5a), `SEIPD ${size} bytes`);
+  }
+});
+
+group("AES-CFB limit", () => {
+  const k = new Uint8Array(16), iv = new Uint8Array(16);
+  ok(crypto.aesCfbEncrypt(k, iv, new Uint8Array(2 << 20)).length === 2 << 20, "AES-CFB 2 MiB");
+  throws(() => crypto.aesCfbEncrypt(k, iv, new Uint8Array((2 << 20) + 1)), RangeError, "AES-CFB over 2 MiB");
+});
+
 group("timings", () => {
   const k = crypto.ed25519PrivateKey(new Uint8Array(32).fill(7)), m = crypto.sha256("m");
   let sig;
@@ -352,7 +516,7 @@ group("timings", () => {
   time("SHA-256 4 MiB", () => crypto.createHash("SHA-256").update(mib).digest());
   time("SHA-1 4 MiB", () => crypto.createHash("SHA-1").update(mib).digest());
   time("SHA-512 4 MiB", () => crypto.createHash("SHA-512").update(mib).digest());
-  time("AES-128-CFB decrypt 4 MiB", () => crypto.aesCfbDecrypt(new Uint8Array(16), new Uint8Array(16), mib));
+  time("AES-128-CFB decrypt 2 MiB", () => crypto.aesCfbDecrypt(new Uint8Array(16), new Uint8Array(16), mib.subarray(0, 2 << 20)));
   const mem = sys.memory();
   console.log(`pgpcrypto: memory: JS heap ${mem.used} bytes`);
 });

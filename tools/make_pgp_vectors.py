@@ -12,7 +12,7 @@ Run from the top of the tree. The keys are new each run: commit the result.
 
 SPDX-License-Identifier: GPL-3.0-or-later
 """
-import hashlib, json, math, os, random, re
+import hashlib, json, math, os, random, re, sys
 
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
@@ -102,6 +102,59 @@ def main():
                             "u": hx(pow(p, -1, q))},
                     "digest": digest.hex(),
                     "sig": k.sign(digest, padding.PKCS1v15(), Prehashed(hashes.SHA256())).hex()}
+
+    # RSA decryption with implicit rejection: the draft's 2048- and 4096-bit
+    # keys and cases (draft-irtf-cfrg-rsa-guidance-10, Appendix B)
+    v["rsaDecryptDraft"] = [k for k in json.load(open("tests/native/rsa_implicit_rejection.json"))
+                            if k["name"] in ("2048-bit key", "4096-bit key")]
+
+    # Wycheproof RSA decryption (2048): valid ones decrypt to msg, invalid
+    # ones to implicit rejection's message (check_pgp.py's reference);
+    # those not as long as n or not below it are refused (null)
+    sys.path.insert(0, "tools")
+    from check_pgp import rsa_decrypt_ref
+    j = json.load(open("tests/native/wycheproof/rsa_pkcs1_2048_test.json"))
+    groups = []
+    for g in j["testGroups"]:
+        k = g["privateKey"]
+        n, e, d, p, q = (int(k[x], 16) for x in ("modulus", "publicExponent", "privateExponent", "prime1", "prime2"))
+        tests = []
+        for t in g["tests"]:
+            c = bytes.fromhex(t["ct"])
+            if len(c) != (n.bit_length() + 7) // 8 or int.from_bytes(c, "big") >= n:
+                want = None
+            elif t["result"] == "valid":
+                want = t["msg"]
+            else:
+                want = rsa_decrypt_ref(n, d, c).hex()
+            tests.append([t["ct"], want, t["tcId"]])
+        groups.append({"key": {"n": hx(n), "e": hx(e), "d": hx(d), "p": hx(p), "q": hx(q)}, "tests": tests})
+    v["rsaDecryptWycheproof"] = groups
+
+    # X25519: Wycheproof, up to 6 of each kind, every zero shared secret
+    j = json.load(open("tests/native/wycheproof/x25519_test.json"))
+    seen, tests = {}, []
+    for g in j["testGroups"]:
+        for t in g["tests"]:
+            kind = tuple(t["flags"])
+            zero = t["shared"] == "00" * 32
+            if not zero and seen.get(kind, 0) >= 6:
+                continue
+            seen[kind] = seen.get(kind, 0) + 1
+            tests.append([t["private"], t["public"], None if zero else t["shared"], t["tcId"]])
+    v["x25519Wycheproof"] = tests
+
+    # AES key wrap: Wycheproof, up to 6 of each kind
+    j = json.load(open("tests/native/wycheproof/aes_wrap_test.json"))
+    seen, tests = {}, []
+    for g in j["testGroups"]:
+        for t in g["tests"]:
+            kind = (t["result"], tuple(t["flags"]))
+            if seen.get(kind, 0) >= 6:
+                continue
+            seen[kind] = seen.get(kind, 0) + 1
+            tests.append([t["key"], t["msg"], t["ct"], t["result"][0], t["tcId"]])
+    v["aesWrapWycheproof"] = tests
 
     # AES-CFB128: CAVP's MMT files (both ways)
     tests = []

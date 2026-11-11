@@ -91,7 +91,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(R
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
 	    $(ROOT)/src/crypto/wipe.c $(ROOT)/src/crypto/s2k.c $(ROOT)/src/crypto/aes.c \
-	    $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/rsa.c \
+	    $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/x25519.c $(ROOT)/src/crypto/seipd.c \
 	    $(ROOT)/src/kbdindev.cpp \
 	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
 SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
@@ -125,9 +125,9 @@ ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
 $(SECPOBJS): CFLAGS += $(SECP_DEFINES) $(SECP_INCLUDE) -I $(SECP_DIR) -Wno-unused-function
-MBEDOBJS := $(call obj,$(MBEDSRC) $(ROOT)/src/crypto/aes.c $(ROOT)/src/crypto/rsa.c)
+MBEDOBJS := $(call obj,$(MBEDSRC) $(ROOT)/src/crypto/aes.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/seipd.c)
 $(MBEDOBJS): CFLAGS += $(MBEDTLS_DEFINES) $(MBEDTLS_INCLUDE) -I $(MBEDTLS_DIR)/library
-MONOOBJS := $(call obj,$(MONOSRC) $(ROOT)/src/crypto/ed25519.c)
+MONOOBJS := $(call obj,$(MONOSRC) $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/x25519.c)
 $(MONOOBJS): CFLAGS += $(MONO_INCLUDE)
 CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)

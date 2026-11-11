@@ -10,6 +10,7 @@
 #include "pbkdf2.h"
 #include "wipe.h"
 #include "hexcheck.h"
+#include <stdlib.h>
 #include <string.h>
 
 void gk_pbkdf2 (const gk_hash_t *hash, const void *password, size_t passlen,
@@ -81,6 +82,97 @@ int gk_pbkdf2_stoppable (const gk_hash_t *hash, const void *password, size_t pas
 		return -1;
 	}
 	return 0;
+}
+
+int gk_pbkdf2_begin (gk_pbkdf2_job_t *job, const gk_hash_t *hash, const void *password, size_t passlen,
+		     const void *salt, size_t saltlen, uint32_t iterations, size_t outlen)
+{
+	memset (job, 0, sizeof *job);
+	job->out = malloc (outlen);
+	job->salt = malloc (saltlen ? saltlen : 1);
+	if (job->out == 0 || job->salt == 0)
+	{
+		free (job->out);
+		free (job->salt);
+		memset (job, 0, sizeof *job);
+		return -3;
+	}
+	memcpy (job->salt, salt, saltlen);
+	job->saltlen = saltlen;
+	job->hash = hash;
+	job->iterations = iterations;
+	job->outlen = outlen;
+	job->block = 1;
+	gk_hmac_init (&job->keyed, hash, password, passlen);
+	return 0;
+}
+
+int gk_pbkdf2_step (gk_pbkdf2_job_t *job, uint32_t budget)
+{
+	size_t hlen = job->hash->digest_size;
+
+	while (job->done < job->outlen)
+	{
+		if (job->j == 0)
+		{
+			/* U_1 = PRF (P, S || INT (i)) */
+			uint8_t index[4] = { (uint8_t) (job->block >> 24), (uint8_t) (job->block >> 16),
+					     (uint8_t) (job->block >> 8), (uint8_t) job->block };
+			job->mac = job->keyed;
+			gk_hmac_update (&job->mac, job->salt, job->saltlen);
+			gk_hmac_update (&job->mac, index, sizeof index);
+			gk_hmac_final (&job->mac, job->u);
+			memcpy (job->t, job->u, hlen);
+			job->j = 1;
+		}
+		/* U_j = PRF (P, U_{j-1}); T = U_1 ^ ... ^ U_c */
+		for (; job->j < job->iterations && budget > 0; job->j++, budget--)
+		{
+			job->mac = job->keyed;
+			gk_hmac_update (&job->mac, job->u, hlen);
+			gk_hmac_final (&job->mac, job->u);
+			for (size_t k = 0; k < hlen; k++)
+			{
+				job->t[k] ^= job->u[k];
+			}
+		}
+		if (job->j < job->iterations)
+		{
+			return 1;
+		}
+		size_t n = job->outlen - job->done < hlen ? job->outlen - job->done : hlen;
+		memcpy (job->out + job->done, job->t, n);
+		job->done += n;
+		job->block++;
+		job->j = 0;
+		if (budget == 0 && job->done < job->outlen)
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+double gk_pbkdf2_progress (const gk_pbkdf2_job_t *job)
+{
+	size_t hlen = job->hash->digest_size;
+	double blocks = (double) ((job->outlen + hlen - 1) / hlen);
+	return ((double) (job->block - 1) * job->iterations + job->j) / (blocks * job->iterations);
+}
+
+void gk_pbkdf2_end (gk_pbkdf2_job_t *job)
+{
+	if (job->out != 0)
+	{
+		gk_wipe (job->out, job->outlen);
+		free (job->out);
+	}
+	if (job->salt != 0)
+	{
+		gk_wipe (job->salt, job->saltlen);
+		free (job->salt);
+	}
+	gk_wipe (job, sizeof *job);
 }
 
 int gk_pbkdf2_selftest (int full)

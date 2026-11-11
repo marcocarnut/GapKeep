@@ -9,6 +9,10 @@
  *   ed25519v SIG PUB MSG                     -> 1 | 0
  *   rsasign HASH DIGEST N E D P Q [U]        -> signature | error code
  *   rsaverify HASH DIGEST SIG N E            -> 1 | 0
+ *   rsadecrypt C N E D P Q                   -> message | error code
+ *   x25519 SECRET PUBLIC                     -> own public, shared | error -1
+ *   wrap KEK KEY, unwrap KEK WRAPPED         -> result | error code
+ *   seipd KEY DATA BUDGET                    -> plaintext | error code
  *
  * ("-" is an empty hex string; HASH as gk_hash_find names it.)
  *
@@ -20,6 +24,8 @@
 #include "aes.h"
 #include "ed25519.h"
 #include "rsa.h"
+#include "x25519.h"
+#include "seipd.h"
 
 static size_t unhex (const char *s, uint8_t *out)
 {
@@ -60,6 +66,8 @@ int main (void)
 	if (r == 0) r = gk_aes_selftest () ? 5000 + gk_aes_selftest () : 0;
 	if (r == 0) r = gk_ed25519_selftest () ? 6000 + gk_ed25519_selftest () : 0;
 	if (r == 0) r = gk_rsa_selftest (rng, 0) ? 7000 + gk_rsa_selftest (rng, 0) : 0;
+	if (r == 0) r = gk_x25519_selftest () ? 8000 + gk_x25519_selftest () : 0;
+	if (r == 0) r = gk_seipd1_selftest () ? 9000 + gk_seipd1_selftest () : 0;
 	printf ("pgp selftests: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	fflush (stdout);
 	if (r != 0)
@@ -150,6 +158,59 @@ int main (void)
 			size_t dl = unhex (w[2], a), sl = unhex (w[3], b), nl = unhex (w[4], c), el = unhex (w[5], d);
 			const gk_hash_t *h = gk_hash_find (w[1]);
 			printf ("%d", h != 0 && gk_rsa_verify (c, nl, d, el, h, a, dl, b, sl));
+		}
+		else if (strcmp (w[0], "rsadecrypt") == 0 && n == 7)
+		{
+			size_t cl = unhex (w[1], a), nl = unhex (w[2], b), el = unhex (w[3], c), xl = unhex (w[4], d);
+			size_t pl = unhex (w[5], e), ql = unhex (w[6], f), ml;
+			gk_rsa_key_t *key;
+			int rc = gk_rsa_import (&key, b, nl, c, el, d, xl, e, pl, f, ql, 0, 0);
+			if (rc != GK_RSA_OK)
+			{
+				printf ("error %d", rc);
+			}
+			else
+			{
+				rc = gk_rsa_decrypt (key, a, cl, out, &ml, rng, 0);
+				if (rc != GK_RSA_OK) printf ("error %d", rc); else if (ml == 0) printf ("-"); else hex (out, ml);
+				gk_rsa_free (key);
+			}
+		}
+		else if (strcmp (w[0], "x25519") == 0 && n == 3)
+		{
+			uint8_t pub[32], shared[32];
+			size_t sl = unhex (w[1], a), pl = unhex (w[2], b);
+			if (sl != 32 || pl != 32) { printf ("bad size"); }
+			else
+			{
+				gk_x25519_public (a, pub);
+				hex (pub, 32);
+				if (gk_x25519_shared (a, b, shared) != 0) printf (" error -1"); else { printf (" "); hex (shared, 32); }
+			}
+		}
+		else if ((strcmp (w[0], "wrap") == 0 || strcmp (w[0], "unwrap") == 0) && n == 3)
+		{
+			size_t kl = unhex (w[1], a), dl = unhex (w[2], b);
+			int wrap = strcmp (w[0], "wrap") == 0;
+			int rc = wrap ? gk_aes_wrap (a, kl, b, dl, out) : gk_aes_unwrap (a, kl, b, dl, out);
+			if (rc != 0) printf ("error %d", rc); else hex (out, wrap ? dl + 8 : dl - 8);
+		}
+		else if (strcmp (w[0], "seipd") == 0 && n == 4)
+		{
+			size_t kl = unhex (w[1], a), dl = unhex (w[2], b);
+			gk_seipd1_job_t job;
+			int rc = gk_seipd1_begin (&job, a, kl, b, dl);
+			if (rc != 0) { printf ("error %d", rc); }
+			else
+			{
+				size_t budget = (size_t) atoi (w[3]);
+				while (gk_seipd1_step (&job, budget)) ;
+				const uint8_t *plain;
+				size_t plainlen;
+				rc = gk_seipd1_result (&job, &plain, &plainlen);
+				if (rc != 0) printf ("error %d", rc); else if (plainlen == 0) printf ("-"); else hex (plain, plainlen);
+				gk_seipd1_end (&job);
+			}
 		}
 		else
 		{

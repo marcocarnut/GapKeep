@@ -1,9 +1,12 @@
-// A small OpenPGP signer on gk:crypto, for tests/pgp/run_gpg_interop.sh:
-// reads GnuPG-exported secret keys (data/pgp-interop/*.key), unlocks them
-// with the passphrase (S2K, AES-CFB, the SHA-1 check of RFC 9580, 5.5.3),
-// and makes v4 detached signatures of message.bin, logged as hex for the
-// script to check with gpg --verify. Also: a wrong passphrase must fail
-// the check. Logs no key material.
+// A small OpenPGP signer and decrypter on gk:crypto, for
+// tests/pgp/run_gpg_interop.sh: reads GnuPG-exported secret keys
+// (data/pgp-interop/*.key), unlocks them with the passphrase (S2K,
+// AES-CFB, the SHA-1 check of RFC 9580, 5.5.3), makes v4 detached
+// signatures of message.bin, logged as hex for the script to check with
+// gpg --verify, and decrypts the messages gpg encrypted to the keys'
+// encryption subkeys (*.msg: PKESK, then SEIPD v1), logging the plaintext's
+// SHA-256. Also: a wrong passphrase must fail the check, a changed message
+// must be refused. Logs no key material and no plaintext.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 import * as data from "gk:data";
@@ -36,7 +39,8 @@ function mpi(b) {
   return cat(u16(bits), v);
 }
 
-// packets: [{ tag, body }], old and new formats (no partial lengths)
+// packets: [{ tag, body }], old and new formats, partial body lengths
+// joined
 function packets(bytes) {
   const out = [];
   let i = 0;
@@ -45,18 +49,33 @@ function packets(bytes) {
     let tag, len;
     if (ctb & 0x40) {
       tag = ctb & 63;
-      const o = bytes[i++];
-      if (o < 192) len = o;
-      else if (o < 224) len = ((o - 192) << 8) + bytes[i++] + 192;
-      else if (o === 255) { len = (bytes[i] << 24 | bytes[i + 1] << 16 | bytes[i + 2] << 8 | bytes[i + 3]) >>> 0; i += 4; }
-      else throw new Error("partial lengths");
+      const parts = [];
+      for (;;) {
+        const o = bytes[i++];
+        if (o >= 224 && o < 255) {			// partial: 2^(o & 31), more follow
+          const n = 1 << (o & 31);
+          parts.push(bytes.subarray(i, i + n));
+          i += n;
+          continue;
+        }
+        if (o < 192) len = o;
+        else if (o < 224) len = ((o - 192) << 8) + bytes[i++] + 192;
+        else { len = (bytes[i] << 24 | bytes[i + 1] << 16 | bytes[i + 2] << 8 | bytes[i + 3]) >>> 0; i += 4; }
+        break;
+      }
+      if (parts.length > 0) {
+        parts.push(bytes.subarray(i, i + len));
+        out.push({ tag, body: cat(...parts) });
+        i += len;
+        continue;
+      }
     } else {
       tag = (ctb >> 2) & 15;
       const lt = ctb & 3;
       if (lt === 0) len = bytes[i++];
       else if (lt === 1) { len = bytes[i] << 8 | bytes[i + 1]; i += 2; }
       else if (lt === 2) { len = (bytes[i] << 24 | bytes[i + 1] << 16 | bytes[i + 2] << 8 | bytes[i + 3]) >>> 0; i += 4; }
-      else throw new Error("indeterminate length");
+      else len = bytes.length - i;			// indeterminate: to the end
     }
     out.push({ tag, body: bytes.subarray(i, i + len) });
     i += len;
@@ -70,7 +89,8 @@ function readMpi(b, at) {
   return [b.subarray(at + 2, at + 2 + n), at + 2 + n];
 }
 
-// A v4 secret key packet (RFC 9580, 5.5.3), RSA (1) or EdDSALegacy (22)
+// A v4 secret key or subkey packet (RFC 9580, 5.5.3): RSA (1),
+// EdDSALegacy (22) or ECDH (18, with its KDF parameters)
 function parseSecretKey(body) {
   if (body[0] !== 4) throw new Error("not a v4 key");
   const algo = body[5];
@@ -79,11 +99,15 @@ function parseSecretKey(body) {
   if (algo === 1) {
     [pub.n, at] = readMpi(body, at);
     [pub.e, at] = readMpi(body, at);
-  } else if (algo === 22) {
+  } else if (algo === 22 || algo === 18) {
     const oidLen = body[at];
     pub.oid = body.subarray(at + 1, at + 1 + oidLen);
     at += 1 + oidLen;
     [pub.q, at] = readMpi(body, at);
+    if (algo === 18) {
+      pub.kdf = body.subarray(at, at + 1 + body[at]);	// 03 01 hash cipher
+      at += pub.kdf.length;
+    }
   } else {
     throw new Error(`algorithm ${algo}`);
   }
@@ -166,6 +190,94 @@ for (const name of ["ed", "rsa"]) {
       log(`signature ${name}-${hashName} ${hex(await signature(key, signer, hashName, h, time))}`);
     }
     signer.destroy();
+  } catch (e) {
+    log(`${name}: FAIL ${e && e.name}: ${e && e.message}`);
+  }
+}
+// --- decryption ---------------------------------------------------------------
+
+const AES_IDS = { 7: 16, 8: 24, 9: 32 };
+
+// the session key from the PKESK for this subkey: [algorithm, key bytes]
+async function sessionKey(pkesk, sub, unlocker) {
+  const body = pkesk.body;
+  if (body[0] !== 3 || body[9] !== sub.algo) throw new Error("not a v3 PKESK for this key");
+  let m;
+  if (sub.algo === 1) {
+    const [c] = readMpi(body, 10);
+    const k = (unlocker.bits + 7) >> 3, padded = new Uint8Array(k);
+    padded.set(c, k - c.length);
+    m = await unlocker.decrypt(padded);		// implicit rejection: always bytes
+  } else {
+    // ECDH (RFC 9580, 11.5, legacy Curve25519): X25519, the KDF, key unwrap
+    const [eph, at] = readMpi(body, 10);
+    const wrapped = body.subarray(at + 1, at + 1 + body[at]);
+    const z = unlocker.sharedSecret(eph.subarray(1));	// without its 0x40
+    const hash = HASHES[sub.pub.kdf[2]], kekLen = AES_IDS[sub.pub.kdf[3]];
+    const param = cat(new Uint8Array([sub.pub.oid.length]), sub.pub.oid, new Uint8Array([18]), sub.pub.kdf,
+                      new Uint8Array([...("Anonymous Sender    ")].map((c) => c.charCodeAt(0))), sub.fpr);
+    const h = crypto.createHash(hash).update(new Uint8Array([0, 0, 0, 1])).update(z).update(param).digest();
+    const kek = h.subarray(0, kekLen);
+    const padded = crypto.aesKeyUnwrap(kek, wrapped);
+    kek.fill(0);
+    z.fill(0);
+    m = padded.subarray(0, padded.length - padded[padded.length - 1]);	// PKCS #5
+  }
+  const algo = m[0], key = m.subarray(1, m.length - 2);
+  let sum = 0;
+  for (const b of key) sum = (sum + b) & 0xffff;
+  if (AES_IDS[algo] !== key.length || sum !== (m[m.length - 2] << 8 | m[m.length - 1])) {
+    throw new Error("the session key's checksum failed");
+  }
+  return key;
+}
+
+async function decryptFile(file, sub, unlocker) {
+  try {
+    const all = packets(data.read(FOLDER, file));
+    const pkesk = all.find((p) => p.tag === 1 && hex(p.body.subarray(1, 9)) === hex(sub.fpr.subarray(12)));
+    const seipd = all.find((p) => p.tag === 18);
+    if (!pkesk || !seipd || seipd.body[0] !== 1) throw new Error("not a PKESK and SEIPD v1 message");
+    const key = await sessionKey(pkesk, sub, unlocker);
+    const plain = await crypto.seipdV1Decrypt(key, seipd.body.subarray(1));
+    key.fill(0);
+    const inner = packets(plain)[0];
+    if (inner.tag === 11) {
+      const b = inner.body, at = 2 + b[1] + 4;		// format, name, date
+      log(`decrypted ${file}: literal data, sha256 ${hex(crypto.sha256(b.subarray(at)))}`);
+    } else if (inner.tag === 8) {
+      log(`decrypted ${file}: compressed data (algorithm ${inner.body[0]}), ${plain.length} bytes`);
+    } else {
+      log(`decrypted ${file}: FAIL packet ${inner.tag}`);
+    }
+  } catch (e) {
+    log(`decrypted ${file}: refused (${e && e.name}: ${e && e.message})`);
+  }
+}
+
+for (const name of ["ed", "rsa"]) {
+  try {
+    const sub = parseSecretKey(packets(data.read(FOLDER, `${name}.key`)).find((p) => p.tag === 7).body);
+    const secret = await unlock(sub, passphrase);
+    if (secret === null) { log(`${name}: FAIL the encryption subkey did not unlock`); continue; }
+    log(`${name}: encryption subkey decrypted, algorithm ${sub.algo}`);
+    let unlocker;
+    if (sub.algo === 18) {
+      // the legacy secret: a big-endian MPI of X25519's little-endian scalar
+      const s = new Uint8Array(32);
+      s.set(secret.seed, 32 - secret.seed.length);
+      s.reverse();
+      unlocker = crypto.x25519PrivateKey(s);
+      s.fill(0);
+      log(`${name}: X25519 public key ${hex(unlocker.publicKey) === hex(sub.pub.q.subarray(1)) ? "matches" : "DIFFERS"}`);
+    } else {
+      unlocker = crypto.rsaPrivateKey({ n: sub.pub.n, e: sub.pub.e, d: secret.d, p: secret.p, q: secret.q, u: secret.u });
+    }
+    secret.plain.fill(0);
+    for (const file of name === "rsa" ? ["rsa.msg", "rsa-bad.msg", "rsa-z.msg"] : ["ed.msg", "ed-bad.msg"]) {
+      await decryptFile(file, sub, unlocker);
+    }
+    unlocker.destroy();
   } catch (e) {
     log(`${name}: FAIL ${e && e.name}: ${e && e.message}`);
   }

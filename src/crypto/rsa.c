@@ -5,6 +5,7 @@
  */
 #include "rsa.h"
 #include "wipe.h"
+#include "hexcheck.h"
 /* the context's numbers (N, P, Q, DP, ..., the blinding values) and
    Mbed TLS's own bignum internals, for signing in steps (below) */
 #define MBEDTLS_ALLOW_PRIVATE_ACCESS
@@ -219,12 +220,15 @@ const uint8_t *gk_rsa_e (const gk_rsa_key_t *key, size_t *len)
 
 #define GK_RSA_EXPONENT_BLINDING	28	/* bytes, as Mbed TLS's */
 
-struct gk_rsa_sign_job
+struct gk_rsa_job
 {
 	int step;			/* the next */
+	int decrypt;			/* else sign */
 	size_t k;			/* bytes of N */
-	uint8_t em[GK_RSA_MAX_BYTES];
-	uint8_t sig[GK_RSA_MAX_BYTES];
+	uint8_t em[GK_RSA_MAX_BYTES];	/* the input: EM to sign, or the ciphertext */
+	uint8_t sig[GK_RSA_MAX_BYTES];	/* the output: the signature, or EM decrypted */
+	uint8_t msg[GK_RSA_MAX_BYTES];	/* decryption: the message, at its end */
+	size_t msglen;
 	mbedtls_mpi T, TP, TQ, DP_blind, DQ_blind, input_blinded;
 };
 
@@ -320,7 +324,7 @@ cleanup:
 	return ret;
 }
 
-int gk_rsa_sign_begin (gk_rsa_sign_job_t **pjob, gk_rsa_key_t *key, const gk_hash_t *hash,
+int gk_rsa_sign_begin (gk_rsa_job_t **pjob, gk_rsa_key_t *key, const gk_hash_t *hash,
 		       const uint8_t *digest, size_t dlen)
 {
 	*pjob = 0;
@@ -328,7 +332,7 @@ int gk_rsa_sign_begin (gk_rsa_sign_job_t **pjob, gk_rsa_key_t *key, const gk_has
 	{
 		return GK_RSA_BAD_HASH;		/* verification only */
 	}
-	gk_rsa_sign_job_t *job = calloc (1, sizeof *job);
+	gk_rsa_job_t *job = calloc (1, sizeof *job);
 	if (job == 0)
 	{
 		return GK_RSA_NO_MEMORY;
@@ -367,7 +371,113 @@ cleanup:
 	return ret;
 }
 
-int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rng, void *rng_arg)
+/* --- RSAES-PKCS1-v1_5 decryption, with implicit rejection ---------------
+ *
+ * draft-irtf-cfrg-rsa-guidance-10, 7.1 and 7.2, as written: on bad
+ * padding, the result is not an error but a message derived from the
+ * private exponent and the ciphertext (deterministic, unpredictable
+ * without the key), so the caller can't tell, and an attacker learns
+ * nothing from how it goes on (OpenPGP: the session key's checksum fails,
+ * or the decryption). Every check runs whatever the others found, and the
+ * result is chosen byte by byte from both candidates.
+ */
+
+/* IRPRF (KDK, label, length): HMAC-SHA256 (KDK, I || label || bitLength),
+   I = 0, 1, ..., two bytes each, bitLength the whole output's */
+static void irprf_full (const uint8_t kdk[32], const char *label, size_t length, uint8_t *out)
+{
+	size_t labellen = strlen (label);
+	uint8_t bits[2] = { (uint8_t) ((length * 8) >> 8), (uint8_t) (length * 8) };
+	uint8_t block[GK_SHA256_DIGEST_SIZE];
+	for (uint16_t i = 0; length > 0; i++)
+	{
+		uint8_t head[2] = { (uint8_t) (i >> 8), (uint8_t) i };
+		gk_hmac_t mac;
+		gk_hmac_init (&mac, &gk_hash_sha256, kdk, 32);
+		gk_hmac_update (&mac, head, 2);
+		gk_hmac_update (&mac, label, labellen);
+		gk_hmac_update (&mac, bits, 2);
+		gk_hmac_final (&mac, block);
+		size_t n = length < sizeof block ? length : sizeof block;
+		memcpy (out, block, n);
+		out += n;
+		length -= n;
+	}
+	gk_wipe (block, sizeof block);
+}
+
+/* all ones if a == b, else 0; a, b < 2^31 */
+static uint32_t ct_eq (uint32_t a, uint32_t b)
+{
+	uint32_t x = a ^ b;
+	return ((x | (0u - x)) >> 31) - 1u;
+}
+
+/* all ones if a < b, else 0; a, b < 2^31 */
+static uint32_t ct_lt (uint32_t a, uint32_t b)
+{
+	return 0u - ((a - b) >> 31);
+}
+
+static int unpad_implicit (gk_rsa_job_t *job, const mbedtls_rsa_context *ctx)
+{
+	const size_t k = job->k;
+	const uint8_t *em = job->sig;		/* decrypted, k bytes */
+	uint8_t d[GK_RSA_MAX_BYTES], dh[GK_SHA256_DIGEST_SIZE], kdk[32];
+	uint8_t cl[256], am[GK_RSA_MAX_BYTES];
+
+	/* KDK = HMAC-SHA256 (SHA-256 (I2OSP (d, k)), C) */
+	if (mbedtls_mpi_write_binary (&ctx->D, d, k) != 0)
+	{
+		return GK_RSA_FAULT;
+	}
+	gk_sha256 (d, k, dh);
+	gk_wipe (d, sizeof d);
+	gk_hmac (&gk_hash_sha256, dh, sizeof dh, job->em, k, kdk);
+	gk_wipe (dh, sizeof dh);
+
+	/* the candidate lengths and the alternative message */
+	irprf_full (kdk, "length", sizeof cl, cl);
+	irprf_full (kdk, "message", k, am);
+	gk_wipe (kdk, sizeof kdk);
+
+	/* AL: the last candidate, masked to the bits of k - 11, not above it */
+	uint32_t max = (uint32_t) (k - 11), mask = 1;
+	while (mask < max) mask = mask << 1 | 1;
+	uint32_t al = 0;
+	for (unsigned i = 0; i < sizeof cl; i += 2)
+	{
+		uint32_t len = ((uint32_t) cl[i] << 8 | cl[i + 1]) & mask;
+		uint32_t take = ~ct_lt (max, len);	/* len <= max */
+		al = (al & ~take) | (len & take);
+	}
+
+	/* EM = 00 02 PS 00 M, PS at least 8 bytes: every check, always */
+	uint32_t bad = ~ct_eq (em[0], 0) | ~ct_eq (em[1], 2);
+	uint32_t found = 0, sep = 0;
+	for (uint32_t i = 2; i < k; i++)
+	{
+		uint32_t zero = ct_eq (em[i], 0) & ~found;
+		sep |= i & zero;
+		found |= zero;
+	}
+	bad |= ~found;
+	bad |= ct_lt (sep, 2 + 8);			/* PS shorter than 8 */
+	uint32_t l = (((uint32_t) k - sep - 1) & found);	/* 0 without a separator */
+
+	/* both read whole, the bytes chosen */
+	uint32_t msglen = (l & ~bad) | (al & bad);
+	for (size_t i = 0; i < k; i++)
+	{
+		job->msg[i] = (uint8_t) ((em[i] & ~bad) | (am[i] & bad));
+	}
+	job->msglen = msglen;
+	gk_wipe (am, sizeof am);
+	gk_wipe (cl, sizeof cl);
+	return GK_RSA_OK;
+}
+
+int gk_rsa_job_step (gk_rsa_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rng, void *rng_arg)
 {
 	mbedtls_rsa_context *ctx = &key->rsa;
 	int ret = 0;
@@ -416,8 +526,7 @@ int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rn
 		}
 		MBEDTLS_MPI_CHK (unblind (&job->T, &ctx->Vf, &ctx->N));
 		MBEDTLS_MPI_CHK (mbedtls_mpi_write_binary (&job->T, job->sig, job->k));
-		/* and GapKeep's: the signature, raised to e, must be what was
-		   signed */
+		/* and GapKeep's: the result, raised to e, must be the input */
 		if (mbedtls_rsa_public (ctx, job->sig, check) != 0 || !equal (check, job->em, job->k))
 		{
 			ret = MBEDTLS_ERR_RSA_VERIFY_FAILED;
@@ -425,6 +534,11 @@ int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rn
 		gk_wipe (check, sizeof check);
 		if (ret != 0)
 		{
+			goto cleanup;
+		}
+		if (job->decrypt && unpad_implicit (job, ctx) != GK_RSA_OK)
+		{
+			ret = MBEDTLS_ERR_RSA_VERIFY_FAILED;
 			goto cleanup;
 		}
 		break;
@@ -439,24 +553,78 @@ int gk_rsa_sign_step (gk_rsa_sign_job_t *job, gk_rsa_key_t *key, gk_rsa_rng_t rn
 
 cleanup:
 	gk_wipe (job->sig, sizeof job->sig);
+	gk_wipe (job->msg, sizeof job->msg);
 	job->step = -1;
 	return ret == MBEDTLS_ERR_RSA_RNG_FAILED || ret == MBEDTLS_ERR_MPI_NOT_ACCEPTABLE ? GK_RSA_RNG
 	       : GK_RSA_FAULT;
 }
 
-double gk_rsa_sign_progress (const gk_rsa_sign_job_t *job)
+double gk_rsa_job_progress (const gk_rsa_job_t *job)
 {
 	static const double done[] = { 0, 0.02, 0.5, 0.97, 1 };
 	return job->step >= 0 && job->step <= 4 ? done[job->step] : 0;
 }
 
-const uint8_t *gk_rsa_sign_result (const gk_rsa_sign_job_t *job, size_t *len)
+const uint8_t *gk_rsa_job_result (const gk_rsa_job_t *job, size_t *len)
 {
+	if (job->decrypt)
+	{
+		*len = job->msglen;
+		return job->msg + job->k - job->msglen;
+	}
 	*len = job->k;
 	return job->sig;
 }
 
-void gk_rsa_sign_end (gk_rsa_sign_job_t *job)
+int gk_rsa_decrypt_begin (gk_rsa_job_t **pjob, gk_rsa_key_t *key, const uint8_t *c, size_t clen)
+{
+	*pjob = 0;
+	size_t k = mbedtls_rsa_get_len (&key->rsa);
+	/* public checks: exactly k bytes (RFC 8017, 7.2.2, step 1), below n */
+	if (clen != k || k < 11 || memcmp (c, key->n + (key->nlen - k), k) >= 0)
+	{
+		return GK_RSA_BAD_CIPHERTEXT;
+	}
+	gk_rsa_job_t *job = calloc (1, sizeof *job);
+	if (job == 0)
+	{
+		return GK_RSA_NO_MEMORY;
+	}
+	job->decrypt = 1;
+	job->k = k;
+	memcpy (job->em, c, k);
+	mbedtls_mpi_init (&job->T);
+	mbedtls_mpi_init (&job->TP);
+	mbedtls_mpi_init (&job->TQ);
+	mbedtls_mpi_init (&job->DP_blind);
+	mbedtls_mpi_init (&job->DQ_blind);
+	mbedtls_mpi_init (&job->input_blinded);
+	*pjob = job;
+	return GK_RSA_OK;
+}
+
+int gk_rsa_decrypt (gk_rsa_key_t *key, const uint8_t *c, size_t clen, uint8_t *out, size_t *outlen,
+		    gk_rsa_rng_t rng, void *rng_arg)
+{
+	gk_rsa_job_t *job;
+	int result = gk_rsa_decrypt_begin (&job, key, c, clen);
+	if (result != GK_RSA_OK)
+	{
+		return result;
+	}
+	while ((result = gk_rsa_job_step (job, key, rng, rng_arg)) > 0)
+	{
+	}
+	if (result == GK_RSA_OK)
+	{
+		const uint8_t *m = gk_rsa_job_result (job, outlen);
+		memcpy (out, m, *outlen);
+	}
+	gk_rsa_job_end (job);
+	return result;
+}
+
+void gk_rsa_job_end (gk_rsa_job_t *job)
 {
 	if (job == 0)
 	{
@@ -475,20 +643,20 @@ void gk_rsa_sign_end (gk_rsa_sign_job_t *job)
 int gk_rsa_sign (gk_rsa_key_t *key, const gk_hash_t *hash, const uint8_t *digest, size_t dlen,
 		 uint8_t *sig, gk_rsa_rng_t rng, void *rng_arg)
 {
-	gk_rsa_sign_job_t *job;
+	gk_rsa_job_t *job;
 	int result = gk_rsa_sign_begin (&job, key, hash, digest, dlen);
 	if (result != GK_RSA_OK)
 	{
 		return result;
 	}
-	while ((result = gk_rsa_sign_step (job, key, rng, rng_arg)) > 0)
+	while ((result = gk_rsa_job_step (job, key, rng, rng_arg)) > 0)
 	{
 	}
 	if (result == GK_RSA_OK)
 	{
 		memcpy (sig, job->sig, job->k);
 	}
-	gk_rsa_sign_end (job);
+	gk_rsa_job_end (job);
 	return result;
 }
 
@@ -596,6 +764,35 @@ static const char TestSig1[] =
 	"06448305997083546a09ab38eaf798108f85362cdff2ad1fbcc25676236dc6fe"
 	"02a0d9914cd60336ab7f1db986e8ac03177b3d22d107acee00c26cb778aac2b5";
 
+/* "GapKeep" encrypted (Python's cryptography); an encoded message with bad
+   padding (00 01 FF..FF 00 "GapKeep") encrypted, and the message implicit
+   rejection gives for it (tools/check_pgp.py's reference, itself checked
+   against the draft's vectors) */
+static const char TestCipher[] =
+	"9dbb2813365601ea03841925f5afc50ba995f4a93f33173937ddec6b94990758"
+	"fffa1feaf6211c75933e1dd8e136b9d07bd7b996600fe8e55f845b1e43a695f4"
+	"fb6b487648087ff51554d69f3a0c28a0b1ea9d69b6a81066134c68201a56c081"
+	"e0a4de5ac6556680d51ea960e14512b11e055094bd5569c3fcbb095072c51f3b"
+	"4486c533e13fd921419e297410289ece09f96d1b4acb9014838df6041df9868e"
+	"fbc5f57bb738883ceaede1a890802fb165830b948ad88e4d5c63123e37e7d269"
+	"991e29732a0bea0364ec0afe161c59554c6dc505d6bb98caf5ee70a4c340bf84"
+	"3aea7d78c4a1ce413e136af1895d009f539643f3548e3ffbe9c2b829657fe841";
+static const char TestBadCipher[] =
+	"65cd5b3dd5e1061f8c0c791ae049ca753f111935ae174b13e2c2fd677806fef7"
+	"797f50d32e725ef2d2d92cbb66f6618b8e06c5678111f430f7b7d7e4c907247d"
+	"eeced26c1fb2fa96351e67df9d3cba692607b9597941c94c90a31c2dbf0d1a94"
+	"1838d97c54c33c0daa8d4810b65d902f991af3f413cc68bafc555aebe4a00435"
+	"a94760f143abc1f048171680163b169f6c79f73b6db62dd23432001061ded7e1"
+	"1cebe8f9ca5eb8fe63cba2fb3ca33e541e10fb9cc88c0ca052e360e511090928"
+	"1120070b98bf5e182b2ce412b21393bce6f2e824605a7456c89f1d707997aeb7"
+	"f614dad6bec4cc5c97261880489508c64b230d6200dd7872ade769a336941834";
+static const char TestSynthetic[] =
+	"89c59f97028cc6711e4622e2a321a83d750801c9df0dc626464051e02db741ac"
+	"c98461c397b82a1e1819cc104cc84f953d35cb763133c79ad7df921c2ed7b16d"
+	"878e87b9b1a8b719c34494be86a4f8f9aedc4f2058fe93ff3ae2c42cc98d6757"
+	"4a3b73d8c2dc95d4c5fa58b927b4469086a80b55c076a503ba835bdb783c5f49"
+	"cb13a11fb274d5fac4e88a6a3454708c1e7ad369a0aa8d83";
+
 int gk_rsa_selftest (gk_rsa_rng_t rng, void *rng_arg)
 {
 	static const uint8_t e[3] = { 0x01, 0x00, 0x01 };
@@ -635,6 +832,29 @@ int gk_rsa_selftest (gk_rsa_rng_t rng, void *rng_arg)
 	else if (gk_rsa_sign (key, &gk_hash_sha1, sha1_abc, 20, sig, rng, rng_arg) != GK_RSA_BAD_HASH)
 	{
 		result = 5;
+	}
+	else
+	{
+		uint8_t c[256], m[256];
+		size_t mlen;
+		unhex (TestCipher, c);
+		if (gk_rsa_decrypt (key, c, 256, m, &mlen, rng, rng_arg) != GK_RSA_OK
+		    || mlen != 7 || memcmp (m, "GapKeep", 7) != 0)
+		{
+			result = 10;
+		}
+		unhex (TestBadCipher, c);
+		if (result == 0
+		    && (gk_rsa_decrypt (key, c, 256, m, &mlen, rng, rng_arg) != GK_RSA_OK
+			|| !gk_hex_equal (m, mlen, TestSynthetic)))
+		{
+			result = 11;
+		}
+		if (result == 0 && gk_rsa_decrypt (key, c, 255, m, &mlen, rng, rng_arg) != GK_RSA_BAD_CIPHERTEXT)
+		{
+			result = 12;
+		}
+		gk_wipe (m, sizeof m);
 	}
 	gk_rsa_free (key);
 	if (result != 0)
