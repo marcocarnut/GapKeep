@@ -2,8 +2,9 @@
   "$language": "pt-BR",
   "$app": "sneakernet",
   "messages": {
+    "Sneakernet": "DPLDPC",
     "A game: carry the shares of a secret past the radio.": "Um jogo: leve as partições de um segredo sem passar pelo sinal de rádio.",
-    "Carry the shares of a secret across an air-gapped office.": "Leve as partições de um segredo por um escritório isolado por air gap.",
+    "Carry the shares of a secret across an air-gapped office.": "Disquete pra lá, disquete pra cá: leve as partições de um segredo por um escritório isolado por air gap.",
     "New game": "Novo jogo",
     "Play a level code": "Jogar um código de fase",
     "How to play": "Como jogar",
@@ -52,6 +53,7 @@
     "Air gap. Only empty hands cross it, to its twin.": "\"air gap\" stays in English, as in the other apps: the isolation GapKeep is named after.",
     "Radio. Caught in it, you leak a share; a share it reaches on the floor is lost.": "The game's \"radio\" is the signal the Wi-Fi access points leak: \"sinal\" in pt-BR.",
     "{score} pts  {time}": "Top right of the game: the score and the time played (m:ss).",
-    "Level {n}  <tt>{code}</tt>": "Top left of the game: the level and its code, in monospace."
+    "Level {n}  <tt>{code}</tt>": "Top left of the game: the level and its code, in monospace.",
+    "Sneakernet": "The game's name in pt-BR: \"DPLDPC\", \"Disquete pra Lá, Disquete pra Cá\", the Brazilian IT joke for carrying data by hand (the subtitle spells it out)."
   }
 }
