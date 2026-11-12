@@ -3,15 +3,17 @@
 //
 // Pango-style markup for ui.Label (markup: true), parsed into runs of text
 // with a style each, for an LVGL spangroup (js_ui.cpp). Also checks the
-// tags of translations (i18n.cpp). No LVGL here: sizes come from ui.fonts.
+// tags of translations (i18n.cpp). No LVGL here: the sizes <big> and
+// <small> step through come from ui.fonts.
 //
 //   <b> <i>              bold, italic (and both): Montserrat Bold, Medium
-//                        Italic, Bold Italic, drawn by TinyTTF (ttfstyles.h)
-//   <tt>                 the monospaced font, at the size or the next smaller
-//   <big> <small>        one step up or down in ui.fonts
+//                        Italic, Bold Italic, drawn by TinyTTF (fontcache.h)
+//   <tt>                 the monospaced font, at the same size
+//   <big> <small>        the next size of ui.fonts up or down (none: the same)
 //   <u> <s>              underline, strikethrough
 //   <span ...>           color (or foreground, fgcolor) = "#RGB" | "#RRGGBB",
-//                        size = one of ui.fonts, font_family = "monospace",
+//                        size = GK_FONT_MIN_SIZE to GK_FONT_MAX_SIZE (px),
+//                        font_family = "monospace",
 //                        weight = "bold" | "normal",
 //                        style = "italic" | "normal",
 //                        underline = "single" | "none",
@@ -33,6 +35,10 @@
 
 #include <circle/types.h>
 
+// The sizes text can have, in pixels: ui.fontRange (fontcache.h)
+#define GK_FONT_MIN_SIZE	8
+#define GK_FONT_MAX_SIZE	120
+
 #define GK_MARKUP_MAX_RUNS	64	// LVGL draws at most 64 spans on a line
 #define GK_MARKUP_MAX_DEPTH	16
 #define GK_MARKUP_MAX_TAGS	64
@@ -42,7 +48,7 @@
 
 struct TGkMarkupStyle
 {
-	int nSize;		// one of the sizes given
+	int nSize;		// GK_FONT_MIN_SIZE to GK_FONT_MAX_SIZE
 	boolean bMono;
 	boolean bBold;
 	boolean bItalic;
@@ -70,8 +76,9 @@ struct TGkMarkup
 	char *pTags[GK_MARKUP_MAX_TAGS];
 };
 
-// Parses pSource (UTF-8). pSizes: ui.fonts, ascending; nSize, bMono: the
-// label's own. FALSE: pError holds why, and where ("at character 12").
+// Parses pSource (UTF-8). pSizes: ui.fonts, ascending (for <big> and
+// <small>); nSize, bMono: the label's own. FALSE: pError holds why, and
+// where ("at character 12").
 // Free a parsed one with GkMarkupFree, even after an error.
 boolean GkMarkupParse (const char *pSource, unsigned nSourceLength,
 		       const int *pSizes, unsigned nSizes, int nSize, boolean bMono,

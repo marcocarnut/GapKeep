@@ -426,6 +426,60 @@ parent (`"50%"`) or `"content"`.
 Use **Container** for invisible layout boxes and **Panel** for the "card"
 look (background, border, padding).
 
+## Font sizes
+
+`font` takes any whole number of pixels from 8 to 120 (`ui.fontRange`),
+for the normal font and the monospaced one (`mono: true`) alike; so does
+markup's `<span size>`. Anything else is a `RangeError` (a fraction, 7,
+121), or a `TypeError` if it isn't a number.
+
+- **`ui.fonts` and `ui.monoFonts` are the fastest sizes**: 12 to 40 and 12
+  to 28, built into the system as bitmaps, drawn as they are. Prefer them
+  when any size near would do.
+- **Every other size is drawn from the fonts' outlines** (LVGL's TinyTTF),
+  as bold and italic always are: the first label to use a size makes its
+  font (logged as `fonts: regular 50 px: made`), and each glyph is
+  rasterized the first time it is drawn, then kept. The same characters
+  as the bitmap fonts: Latin-1 and Latin Extended-A, the dashes and quotes,
+  € and ₿, and the `ui.symbols` icons (drawn from Font Awesome's own
+  outlines, as the bitmaps were made from); monospaced text takes what
+  JetBrains Mono lacks from the normal font of its size, and every size
+  has the line height and baseline the bitmap fonts' rule gives, so sizes
+  and styles mix on a line.
+- **What a glyph costs the first time, on a Pi Zero**: about 0.1 ms at 12
+  px, 0.13 ms at 24, 0.23 ms at 48, 0.5 ms at 96 and 0.7 ms at 120. A
+  screenful of text at 50 px first drew in 23 ms against 15 ms once its
+  glyphs were kept; at 120 px, 29 ms against 12 ms (640x480). Glyphs are
+  rasterized one by one as they are drawn, never a whole font at once, so
+  the worst first draw is bounded by the glyphs a font keeps (96): about
+  65 ms for a font at 120 px, a third of a second for a large screen
+  showing 96 different characters in each of five styles at 120 px.
+- **Under about 12 px, text from outlines is soft**: the rasterizer has no
+  hinting, so stems spread over two pixels. The bitmap sizes are sharper
+  there, and so is a pixel font, which also suits e-paper panels (whose
+  pixels have no greys to smooth edges with): see `family` in
+  [API.md](API.md) and [EPAPER.md](EPAPER.md#text-on-a-panel). At the
+  bitmap fonts' own sizes the two differ little (a pixel here and there,
+  stems slightly lighter from outlines), but the bitmaps are always used
+  there.
+- **Memory is bounded.** The glyphs kept by all the fonts made from
+  outlines are capped together at 4 MB: past it, those of the fonts drawn
+  longest ago are dropped, and rasterized again if they are drawn again.
+  A font itself, without glyphs, takes about 400 bytes. All of them are
+  freed when the app exits, and none counts against the app's screen
+  (`sys.memory().ui` includes them). The cap was set from glyph memory
+  measured on the Zero: kept glyphs take about 270 bytes each at 12 px,
+  450 at 24, 1.1 KB at 48 and 2.5 to 3.3 KB at 96 to 120 px, so a font
+  with its 96 glyphs takes 25 KB at 12 px and about 300 KB at 120 px; 4 MB
+  keeps a dozen fonts at the largest size, or a hundred at common ones,
+  while an app that cycles through all 113 sizes in all five styles
+  (tests/fontsizes.txt) stays under 4.4 MB, instead of 15 MB without the
+  cap.
+- `family: "epdmono"` is a bitmap font with its own sizes only
+  (`ui.epdmonoFonts`): it is never drawn from outlines.
+- Apps can't bring fonts of their own: text is drawn only from GapKeep's
+  built-in fonts.
+
 ## Markup
 
 A Label made with `markup: true` takes Pango-style markup, for a few
@@ -443,24 +497,28 @@ new ui.Label({
 ```
 
 Tags: `<b>` (bold), `<i>` (italic), both for bold italic, `<tt>`
-(monospaced), `<big>`, `<small>`, `<u>`, `<s>`, and `<span>` with `color`,
-`size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`,
-`style="italic"`, `underline="single"`, `strikethrough="true"`. Entities:
-`&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Bold and italic come at every
-size of `ui.fonts`, on the same line and baseline as the normal text; there
-is no bold or italic monospaced font, so `<b>` inside `<tt>` (or in a
-`mono` label, or `<tt>` inside `<b>`) is an error. Anything the parser
+(monospaced, at the same size), `<big>` and `<small>` (the next size of
+`ui.fonts` up or down, or the same if there is none), `<u>`, `<s>`, and
+`<span>` with `color`, `size` (whole pixels, 8 to 120: any of
+`ui.fontRange`, see [Font sizes](#font-sizes)), `font_family="monospace"`,
+`weight="bold"`, `style="italic"`, `underline="single"`,
+`strikethrough="true"`. Entities: `&lt; &gt; &amp; &quot; &apos; &#N;
+&#xN;`. Bold and italic come at every size, on the same line and baseline
+as the normal text; there is no bold or italic monospaced font, so `<b>`
+inside `<tt>` (or in a `mono` label, or `<tt>` inside `<b>`) is an
+error. Anything the parser
 doesn't know throws a `TypeError` naming the problem and the character
 where it is: markup is never shown half-parsed.
 
 Bold and italic are drawn from TrueType outlines (LVGL's TinyTTF), not
-from bitmaps: the first label to use a style at a size makes its font
-(logged as `fonts: bold 16 px: made`), and each glyph is rasterized the
-first time it is drawn and then kept (up to 96 per style and size, about
-25 KB at 16 px). So a style costs nothing until it is used, and its first
-screen is slower than the next: on QEMU, about 10 ms more for a paragraph
-in bold. They lack the bitmap fonts' hinting: at 12
-and 14 px they look a little softer.
+from bitmaps, as sizes outside `ui.fonts` are ([Font sizes](#font-sizes)):
+the first label to use a style at a size makes its font (logged as
+`fonts: bold 16 px: made`), and each glyph is rasterized the first time it
+is drawn and then kept (up to 96 a font, about 25 KB at 16 px, under the
+cap for all fonts). So a style costs nothing until it is used, and its
+first screen is slower than the next: on a Pi Zero, about 8 ms more for a
+paragraph in bold at 16 px. They lack the bitmap fonts' hinting: at 12 and
+14 px they look a little softer.
 
 **Data is never markup.** A name, an address or a scanned text could hold
 `<` or `&`: put it in with `ui.escapeMarkup(s)`, or through `tm()` (as `t()`,

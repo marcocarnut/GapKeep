@@ -212,11 +212,11 @@ declare module "gk:ui" {
     bg?: Color;
     /** Text color. */
     color?: Color;
-    /** Font size, one of `ui.fonts`. */
+    /** Font size in pixels, a whole number of `ui.fontRange` (8 to 120; `ui.fonts` are the fastest); else a `RangeError`. With `family: "epdmono"`, one of `ui.epdmonoFonts`. */
     font?: number;
-    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
+    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. */
     mono?: boolean;
-    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. */
+    /** *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
     family?: "default" | "epdmono";
     textAlign?: "left" | "center" | "right";
     /** Corner radius, px. */
@@ -266,7 +266,7 @@ declare module "gk:ui" {
     text?: string;
     /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow?: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
-    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the same size), `<big>` and `<small>` (the next size of `ui.fonts` up or down), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (whole pixels, 8 to 120: `ui.fontRange`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
     markup?: boolean;
   }
   export interface ButtonProps extends CommonProps {
@@ -413,11 +413,11 @@ declare module "gk:ui" {
     bg: Color;
     /** Text color. */
     color: Color;
-    /** Font size, one of `ui.fonts`. */
+    /** Font size in pixels, a whole number of `ui.fontRange` (8 to 120; `ui.fonts` are the fastest); else a `RangeError`. With `family: "epdmono"`, one of `ui.epdmonoFonts`. */
     font: number;
-    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
+    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. */
     mono: boolean;
-    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. */
+    /** *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
     family: "default" | "epdmono";
     textAlign: "left" | "center" | "right";
     /** Corner radius, px. */
@@ -482,7 +482,7 @@ declare module "gk:ui" {
     text: string;
     /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
-    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the same size), `<big>` and `<small>` (the next size of `ui.fonts` up or down), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (whole pixels, 8 to 120: `ui.fontRange`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
     markup: boolean;
   }
   /** A button: clicked with the mouse, or Enter or Space while focused. */
@@ -649,10 +649,12 @@ declare module "gk:ui" {
   export const width: number;
   /** Display size in pixels. */
   export const height: number;
-  /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
+  /** The fastest font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40, built in as bitmaps. Any other size of `ui.fontRange` works too, drawn from the font's outlines when first used ([Font sizes](APPS.md#font-sizes)). Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
   export const fonts: number[];
-  /** Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. */
+  /** The fastest sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28, built in as bitmaps; any other size of `ui.fontRange` is drawn from outlines. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. */
   export const monoFonts: number[];
+  /** `{ min: 8, max: 120 }`: the sizes `font` and markup's `<span size>` take, in whole pixels, for the normal and the monospaced font (not for `family: "epdmono"`, a pixel font with its own sizes). Sizes not in `ui.fonts` (or `ui.monoFonts`) are drawn from outlines, each glyph when first drawn: a little slower the first time, and soft under about 12 px. [Font sizes](APPS.md#font-sizes). */
+  export const fontRange: { min: number; max: number };
   /** Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 14, 16, 20, 24 and 32 (Terminus Font's bold, 8x14 to 16x32). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). */
   export const epdmonoFonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */

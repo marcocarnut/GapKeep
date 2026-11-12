@@ -25,7 +25,7 @@
 //
 #include "apphost.h"
 #include "markup.h"
-#include "ttfstyles.h"
+#include "fontcache.h"
 #include "scanner.h"
 #include "epaper.h"
 #include "jobs.h"
@@ -669,28 +669,8 @@ static int ToEnum (JSContext *ctx, JSValueConst v, const char *pProp,
 	return -1;
 }
 
-static const int FontSizes[] = {12, 14, 16, 18, 20, 22, 24, 28, 32, 40};
-static const lv_font_t *Fonts[] =
-{
-	&gk_montserrat_12, &gk_montserrat_14, &gk_montserrat_16,
-	&gk_montserrat_18, &gk_montserrat_20, &gk_montserrat_22,
-	&gk_montserrat_24, &gk_montserrat_28, &gk_montserrat_32,
-	&gk_montserrat_40
-};
-static const unsigned FontCount = sizeof FontSizes / sizeof FontSizes[0];
-
-// "mono": JetBrains Mono, with Montserrat's line at the same size
-// (tools/make_fonts.py), falling back to it for icons and the rest
-static const int MonoSizes[] = {12, 14, 16, 18, 20, 24, 28};
-static const lv_font_t *MonoFonts[] =
-{
-	&gk_mono_12, &gk_mono_14, &gk_mono_16, &gk_mono_18, &gk_mono_20,
-	&gk_mono_24, &gk_mono_28
-};
-static const unsigned MonoCount = sizeof MonoSizes / sizeof MonoSizes[0];
-
-// "family": "epdmono", X11's misc-fixed 6x10 in 1 bit, at 1x, 2x and 3x
-// (tools/make_epdmono.py): for e-paper panels, where anti-aliased text
+// "family": "epdmono", 1-bit bitmap fonts at their own sizes: X11 misc-fixed
+// 6x10 at 10, Terminus Font's bold above (tools/make_epdmono.py): for e-paper panels, where anti-aliased text
 // loses its grey edges.
 enum { FamilyDefault, FamilyEPDMono, FamilyCount };
 static const char *const FamilyNames[FamilyCount] = {"default", "epdmono"};
@@ -701,54 +681,6 @@ static const lv_font_t *EPDMonoFonts[] = {&gk_epdmono_10, &gk_epdmono_14, &gk_ep
 					   &gk_epdmono_24, &gk_epdmono_32};
 static const int EPDMonoDefault = 20;
 static const unsigned EPDMonoCount = sizeof EPDMonoSizes / sizeof EPDMonoSizes[0];
-
-// The monospaced font of a size, or the next smaller one there is
-static const lv_font_t *MonoFont (int nSize)
-{
-	unsigned nChosen = 0;
-	for (unsigned i = 0; i < MonoCount; i++)
-	{
-		if (MonoSizes[i] <= nSize)
-		{
-			nChosen = i;
-		}
-	}
-	return MonoFonts[nChosen];
-}
-
-static const lv_font_t *NormalFont (int nSize)
-{
-	for (unsigned i = 0; i < FontCount; i++)
-	{
-		if (FontSizes[i] == nSize)
-		{
-			return Fonts[i];
-		}
-	}
-	return Fonts[2];
-}
-
-// The size and kind of a font of ours (16, not mono, if it isn't one)
-static void FontInfo (const lv_font_t *pFont, int *pSize, boolean *pMono)
-{
-	*pSize = 16;
-	*pMono = FALSE;
-	for (unsigned i = 0; i < FontCount; i++)
-	{
-		if (Fonts[i] == pFont)
-		{
-			*pSize = FontSizes[i];
-		}
-	}
-	for (unsigned i = 0; i < MonoCount; i++)
-	{
-		if (MonoFonts[i] == pFont)
-		{
-			*pSize = MonoSizes[i];
-			*pMono = TRUE;
-		}
-	}
-}
 
 // --- properties -------------------------------------------------------------
 
@@ -928,11 +860,12 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 {
 	int nSize;
 	boolean bMono;
-	FontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
+	GkFontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
 
 	static TGkMarkup Markup;	// big for the stack (one at a time)
 	char Error[200];
-	if (!GkMarkupParse (pSource, nLength, FontSizes, FontCount, nSize, bMono, &Markup, Error, sizeof Error))
+	if (!GkMarkupParse (pSource, nLength, GkFontSizes, GkFontSizeCount, nSize, bMono, &Markup, Error,
+			    sizeof Error))
 	{
 		GkMarkupFree (&Markup);
 		JS_ThrowTypeError (ctx, "%s: %s", pProp, Error);
@@ -954,15 +887,11 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 		*pEnd = cSaved;
 
 		lv_style_t *pStyle = lv_span_get_style (pSpan);
-		if (Run.Style.bBold || Run.Style.bItalic)	// never mono (markup.h)
+		if (   Run.Style.bBold || Run.Style.bItalic	// never mono (markup.h)
+		    || Run.Style.nSize != nSize || Run.Style.bMono != bMono)
 		{
-			lv_style_set_text_font (pStyle, GkStyledFont (NormalFont (Run.Style.nSize), Run.Style.nSize,
-								      Run.Style.bBold, Run.Style.bItalic));
-		}
-		else if (Run.Style.nSize != nSize || Run.Style.bMono != bMono)
-		{
-			lv_style_set_text_font (pStyle, Run.Style.bMono ? MonoFont (Run.Style.nSize)
-									: NormalFont (Run.Style.nSize));
+			lv_style_set_text_font (pStyle, GkFont (Run.Style.nSize, Run.Style.bMono,
+								Run.Style.bBold, Run.Style.bItalic));
 		}
 		if (Run.Style.bColor)
 		{
@@ -990,8 +919,8 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 }
 
 // The font from "font" and "mono", whichever came first: the size is
-// "font", else the one the widget has (inherited); mono takes the mono
-// font of that size, or, for an inherited size it lacks, the next smaller.
+// "font", else the one the widget has (inherited, the theme's 16 if not
+// one of ours); mono or not is "mono", else the inherited one's.
 static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 {
 	if (pNode->nFamily != FamilyDefault)
@@ -1010,71 +939,19 @@ static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 				    pProp, nSize);
 		return -1;
 	}
-	if (!pNode->bMono)
-	{
-		for (unsigned i = 0; i < FontCount; i++)
-		{
-			if (FontSizes[i] == pNode->nFontSize)
-			{
-				lv_obj_set_style_text_font (OBJ, Fonts[i], 0);
-				return 0;
-			}
-		}
-		// mono: false: the inherited font, or the normal one of its size if
-		// that is mono (inside a mono container)
-		lv_obj_remove_local_style_prop (OBJ, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
-		const lv_font_t *pFont = lv_obj_get_style_text_font (OBJ, LV_PART_MAIN);
-		for (unsigned i = 0; i < MonoCount; i++)
-		{
-			if (MonoFonts[i] == pFont)
-			{
-				lv_obj_set_style_text_font (OBJ, pFont->fallback, 0);
-			}
-		}
-		return 0;
-	}
-
 	int nSize = pNode->nFontSize;
 	if (nSize == 0)
 	{
 		lv_obj_remove_local_style_prop (OBJ, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
-		const lv_font_t *pFont = lv_obj_get_style_text_font (OBJ, LV_PART_MAIN);
-		nSize = 16;			// the theme's
-		for (unsigned i = 0; i < FontCount; i++)
+		boolean bMono;
+		GkFontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
+		if (!pNode->bMono && !bMono)
 		{
-			if (Fonts[i] == pFont)
-			{
-				nSize = FontSizes[i];
-			}
+			return 0;		// the inherited font as it is
 		}
-		for (unsigned i = 0; i < MonoCount; i++)	// inside a mono container
-		{
-			if (MonoFonts[i] == pFont)
-			{
-				nSize = MonoSizes[i];
-			}
-		}
+		// mono: false inside a mono container: the normal font of its size
 	}
-	int nChosen = -1;
-	for (unsigned i = 0; i < MonoCount; i++)
-	{
-		if (   MonoSizes[i] == nSize
-		    || (pNode->nFontSize == 0 && MonoSizes[i] < nSize))
-		{
-			nChosen = (int) i;
-		}
-	}
-	if (nChosen < 0 && pNode->nFontSize == 0)
-	{
-		nChosen = 0;
-	}
-	if (nChosen < 0)
-	{
-		JS_ThrowRangeError (ctx, "%s: no monospaced font of size %d: one of ui.monoFonts (12 14 16 18 20 24 28)",
-				    pProp, nSize);
-		return -1;
-	}
-	lv_obj_set_style_text_font (OBJ, MonoFonts[nChosen], 0);
+	lv_obj_set_style_text_font (OBJ, GkFont (nSize, pNode->bMono), 0);
 	return 0;
 }
 
@@ -1090,25 +967,28 @@ static int ApplyFont (JSContext *ctx, TGkNode *pNode, const char *pProp)
 
 SETTER (SetFont)
 {
-	int32_t n;
-	if (JS_IsNumber (v) && ToInt (ctx, v, pProp, &n) == 0)
+	if (!JS_IsNumber (v))
 	{
-		for (unsigned i = 0; i < FontCount; i++)
-		{
-			if (FontSizes[i] == n)
-			{
-				pNode->nFontSize = n;
-				return ApplyFont (ctx, pNode, pProp);
-			}
-		}
+		JS_ThrowTypeError (ctx, "%s: a size in pixels expected (a number, %d to %d)", pProp,
+				   GK_FONT_MIN_SIZE, GK_FONT_MAX_SIZE);
+		return -1;
 	}
-	if (JS_IsNumber (v) && pNode->nFamily != FamilyDefault)
+	double d;
+	JS_ToFloat64 (ctx, &d, v);
+	boolean bWhole = d >= 0 && d <= 1000 && d == (double) (int) d;
+	if (pNode->nFamily != FamilyDefault)
 	{
-		pNode->nFontSize = n;		// (its family's sizes: ApplyFont checks)
+		pNode->nFontSize = bWhole ? (int) d : -1;	// (its family's sizes: ApplyFont checks)
 		return ApplyFont (ctx, pNode, pProp);
 	}
-	JS_ThrowTypeError (ctx, "%s: one of the sizes in ui.fonts expected (12 14 16 18 20 22 24 28 32 40)", pProp);
-	return -1;
+	if (!bWhole || d < GK_FONT_MIN_SIZE || d > GK_FONT_MAX_SIZE)
+	{
+		JS_ThrowRangeError (ctx, "%s: a whole number of pixels from %d to %d expected (ui.fontRange)",
+				    pProp, GK_FONT_MIN_SIZE, GK_FONT_MAX_SIZE);
+		return -1;
+	}
+	pNode->nFontSize = (int) d;
+	return ApplyFont (ctx, pNode, pProp);
 }
 
 SETTER (SetFamily)
@@ -2129,7 +2009,8 @@ static JSValue GetValueProp (JSContext *ctx, TGkNode *pNode)
 // allocation inside LVGL.
 static int CheckUIMemory (JSContext *ctx, size_t nMore)
 {
-	size_t nUsed = gk_lv_mem_used () + s_nImageBytes;
+	// the fonts' glyphs are capped on their own (fontcache.h)
+	size_t nUsed = gk_lv_mem_used () - GkFontMemory () + s_nImageBytes;
 	if (nUsed > GK_LV_MEM_SOFT_LIMIT || nMore > GK_LV_MEM_SOFT_LIMIT - nUsed)
 	{
 		JS_ThrowRangeError (ctx, "the app's widgets would use more than "
@@ -3615,7 +3496,7 @@ static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
 	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
-	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme",
+	"screen", "width", "height", "fonts", "monoFonts", "fontRange", "symbols", "alert", "onKey", "theme",
 	"escapeMarkup", "epaper", "epdmonoFonts"
 };
 
@@ -3727,17 +3608,21 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 	JS_SetModuleExport (ctx, m, "height", JS_NewInt32 (ctx, lv_display_get_vertical_resolution (pDisplay)));
 
 	JSValue FontList = JS_NewArray (ctx);
-	for (unsigned i = 0; i < FontCount; i++)
+	for (unsigned i = 0; i < GkFontSizeCount; i++)
 	{
-		JS_SetPropertyUint32 (ctx, FontList, i, JS_NewInt32 (ctx, FontSizes[i]));
+		JS_SetPropertyUint32 (ctx, FontList, i, JS_NewInt32 (ctx, GkFontSizes[i]));
 	}
 	JS_SetModuleExport (ctx, m, "fonts", FontList);
 	JSValue MonoList = JS_NewArray (ctx);
-	for (unsigned i = 0; i < MonoCount; i++)
+	for (unsigned i = 0; i < GkMonoSizeCount; i++)
 	{
-		JS_SetPropertyUint32 (ctx, MonoList, i, JS_NewInt32 (ctx, MonoSizes[i]));
+		JS_SetPropertyUint32 (ctx, MonoList, i, JS_NewInt32 (ctx, GkMonoSizes[i]));
 	}
 	JS_SetModuleExport (ctx, m, "monoFonts", MonoList);
+	JSValue Range = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Range, "min", JS_NewInt32 (ctx, GK_FONT_MIN_SIZE));
+	JS_SetPropertyStr (ctx, Range, "max", JS_NewInt32 (ctx, GK_FONT_MAX_SIZE));
+	JS_SetModuleExport (ctx, m, "fontRange", Range);
 	JSValue EPDList = JS_NewArray (ctx);
 	for (unsigned i = 0; i < EPDMonoCount; i++)
 	{
@@ -3900,4 +3785,6 @@ void GkUIFree (TGkApp *pApp)
 {
 	delete pApp->pUI;
 	pApp->pUI = 0;
+
+	GkFontsFree ();			// no widget is left to use them
 }

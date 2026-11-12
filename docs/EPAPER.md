@@ -95,7 +95,9 @@ the rig's panel, photographed: Terminus bold, two-pixel strokes from 20
 up, reads clearly at every size; Terminus regular (one-pixel strokes)
 came out faint, misc-fixed's 9x18 too; the 6x10 doubled and tripled (the
 first epdmono 20 and 30) read, but blocky. The anti-aliased fonts work
-too, from 14 up (`mono: true` at 16 reads well). `tools/make_epdmono.py`
+too, from 14 up (`mono: true` at 16 reads well), at any size of
+`ui.fontRange`; epdmono, a bitmap font, has only its own sizes, never
+drawn from outlines. `tools/make_epdmono.py`
 makes the fonts from the PCF and PSF files, whose SHA-256s it checks: the
 six sizes add about 40 KB to the kernel.
 

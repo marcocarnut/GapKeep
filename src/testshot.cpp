@@ -11,7 +11,7 @@
 #include "runtime/epd.h"
 #include "runtime/apphost.h"
 #include "kbdindev.h"
-#include "runtime/ttfstyles.h"
+#include "runtime/fontcache.h"
 #include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
@@ -60,7 +60,18 @@ void CTestShot::Update (void)
 				}
 				else if (strcmp (m_Line, "#fonts") == 0)
 				{
-					GkStyledFontStats ();
+					GkFontStats ();
+				}
+				else if (strcmp (m_Line, "#fonts drop") == 0)
+				{
+					GkFontsDropGlyphs ();
+					CLogger::Get ()->Write ("testshot", LogNotice, "fonts: glyphs dropped");
+				}
+				else if (strncmp (m_Line, "#fonts outlines ", 16) == 0)
+				{
+					GkFontsPreferOutlines (strcmp (m_Line + 16, "on") == 0);
+					CLogger::Get ()->Write ("testshot", LogNotice, "fonts: outlines %s",
+								m_Line + 16);
 				}
 				else if (strcmp (m_Line, "#redraw") == 0)
 				{
