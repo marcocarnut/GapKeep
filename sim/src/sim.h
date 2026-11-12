@@ -103,6 +103,37 @@ unsigned gk_sim_frame_serial (void);
 
 /* Writes the screen as a PNG file. Returns 0 on success. */
 int gk_sim_screenshot (const char *path);
+/* ...and any RGB picture (w x h, 3 bytes a pixel). */
+int gk_sim_write_png (const char *path, const uint8_t *rgb, int w, int h);
+
+/* The e-paper panel (sim/src/epaper_sim.cpp, docs/EPAPER.md): what is
+ * configured is the card's gapkeep.txt's ("epaper = weact-2.9-bwr"), or,
+ * over it, gk_sim_set_epaper's (before gk_sim_boot: a model name, or
+ * "none"). A panel of that model, named "1", is plugged in at boot. Panels
+ * have names: plugging one in again (by its name) brings back what it
+ * showed, as e-paper keeps it; a new name is a new panel, white, of the
+ * model given or the configured one. Return 0 on success (-1: no such
+ * model, or that name is another model). */
+void gk_sim_set_epaper (const char *model);
+int gk_sim_epaper_plug (const char *name, const char *model);
+void gk_sim_epaper_unplug (void);
+/* How long a refresh holds BUSY up, ms; < 0 (the default): as long as its
+ * waveform (the 2.9" B/W/R's: 18 s). Tests make it short. */
+void gk_sim_epaper_refresh_ms (double ms);
+/* The plugged-in panel, landscape: its size (-1: none plugged in); what it
+ * shows, w * h RGB, as its RAM had it at the last refresh in the module's
+ * colours, or (physics) as its pigments look now, mid-refresh included
+ * (the 2.9" B/W/R only; the others as without); a counter that changes
+ * when that may have changed; the refresh's progress (0..1, -1 none); its
+ * name (0: none). The shot: as with or without physics, with an 8 px
+ * white margin, as a PNG file. */
+int gk_sim_epaper_size (int *width, int *height);
+void gk_sim_epaper_rgb (uint8_t *rgb, int physics);
+unsigned gk_sim_epaper_serial (void);
+double gk_sim_epaper_progress (void);
+const char *gk_sim_epaper_plugged (void);
+int gk_sim_epaper_shot (const char *path, int physics);
+void GkSimEPaperBoot (void);
 
 /* Front-end hooks: a log line (no newline), and the system halted. */
 void GkSimLogLine (const char *line);

@@ -23,6 +23,17 @@
 //   camera none             there is no camera
 //   language <tag>          the language of the apps started from now on
 //                           (pt-BR, qps...), as a settings app sets it
+//   epaper plug <name> [<model>]
+//                           plug in the e-paper panel of that name (a new
+//                           name: a new panel, white, of the model given or
+//                           the configured one; an old one: as it was left)
+//   epaper unplug           pull the panel out (BUSY then reads as pulled)
+//   epaper shot <file.png>  what the plugged-in panel shows, landscape;
+//                           answers "#epaper shot <file.png>"
+//   epaper look <file.png>  ...as its pigments look now (the 2.9" B/W/R's
+//                           physics: mid-refresh too)
+//   epaper refresh-ms <ms>  how long a refresh holds BUSY (< 0: its
+//                           waveform's, 18 s on the 2.9" B/W/R)
 //   eject                   remove the SD card (its folder is no longer read)
 //   usbip attach <host>:<port> [<busid>]
 //                           plug in the USB device a USB/IP server offers
@@ -32,13 +43,18 @@
 //   usbip detach [<busid>]  pulls its cable (none given: every one)
 //   quit                    exit
 //
-// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--usbip HOST:PORT[/BUSID]]
+// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--epaper MODEL]
+//              [--epaper-ms MS] [--usbip HOST:PORT[/BUSID]]
 //              [--for SECONDS] [--shot FILE.png]
 //   --card DIR      DIR plays the SD card: apps load from DIR/apps, data
 //                   folders (gk:data) from DIR/data
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
 //                   a launcher to try out; see docs/SIMULATOR.md)
 //   --app ID        start that app right after boot
+//   --epaper MODEL  the e-paper panel (over the card's gapkeep.txt):
+//                   weact-2.9-bwr, weact-2.13-bw, weact-4.2-bw, or none;
+//                   a panel of it is plugged in (docs/EPAPER.md)
+//   --epaper-ms MS  as "epaper refresh-ms"
 //   --lang TAG      the language (over the card's gapkeep.txt): en, pt-BR,
 //                   qps (the pseudo-language: shows untranslated text)...
 //   --usbip HOST:PORT[/BUSID]  as "usbip attach", from the start (more than once: more devices)
@@ -104,6 +120,57 @@ static uint8_t *ReadPicture (const char *pPath, unsigned *pWidth, unsigned *pHei
 	*pWidth = w;
 	*pHeight = h;
 	return pPixels;
+}
+
+// epaper plug <name> [<model>] | unplug | shot <file.png> | refresh-ms <ms>
+static void EPaperCommand (char *pArgs)
+{
+	char *pRest = strchr (pArgs, ' ');
+	if (pRest != 0)
+	{
+		*pRest++ = '\0';
+	}
+	else
+	{
+		pRest = pArgs + strlen (pArgs);
+	}
+
+	if (strcmp (pArgs, "plug") == 0 && *pRest != '\0')
+	{
+		char *pModel = strchr (pRest, ' ');
+		if (pModel != 0)
+		{
+			*pModel++ = '\0';
+		}
+		if (gk_sim_epaper_plug (pRest, pModel) == 0)
+		{
+			printf ("#epaper plug %s\n", pRest);
+		}
+		else
+		{
+			printf ("#error epaper plug %s: no such model, or that panel is another\n", pRest);
+		}
+	}
+	else if (strcmp (pArgs, "unplug") == 0)
+	{
+		gk_sim_epaper_unplug ();
+		printf ("#epaper unplug\n");
+	}
+	else if ((strcmp (pArgs, "shot") == 0 || strcmp (pArgs, "look") == 0) && *pRest != '\0')
+	{
+		int bLook = pArgs[0] == 'l';
+		printf (gk_sim_epaper_shot (pRest, bLook) == 0 ? "#epaper %s %s\n" : "#error epaper %s %s: no panel plugged in\n",
+			pArgs, pRest);
+	}
+	else if (strcmp (pArgs, "refresh-ms") == 0 && *pRest != '\0')
+	{
+		gk_sim_epaper_refresh_ms (atof (pRest));
+		printf ("#epaper refresh-ms %s\n", pRest);
+	}
+	else
+	{
+		printf ("#error epaper plug <name> [<model>] | unplug | shot <file.png> | look <file.png> | refresh-ms <ms>\n");
+	}
 }
 
 static void CameraCommand (char *pArgs)
@@ -278,6 +345,10 @@ static int Command (char *pLine)
 			printf ("#error no keyboard layout %s\n", pArgs);
 		}
 	}
+	else if (strcmp (pLine, "epaper") == 0)
+	{
+		EPaperCommand (pArgs);
+	}
 	else if (strcmp (pLine, "eject") == 0)
 	{
 		GkSimSetCardRoot (0);	// the card is gone: nothing may need it now
@@ -336,10 +407,13 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--for") == 0 && i + 1 < argc)	fFor = atof (argv[++i]);
 		else if (strcmp (argv[i], "--shot") == 0 && i + 1 < argc)	pShot = argv[++i];
 		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	gk_sim_set_language (argv[++i]);
+		else if (strcmp (argv[i], "--epaper") == 0 && i + 1 < argc)	gk_sim_set_epaper (argv[++i]);
+		else if (strcmp (argv[i], "--epaper-ms") == 0 && i + 1 < argc)	gk_sim_epaper_refresh_ms (atof (argv[++i]));
 		else if (strcmp (argv[i], "--usbip") == 0 && i + 1 < argc && nUSBIP < 4) USBIP[nUSBIP++] = argv[++i];
 		else
 		{
 			fprintf (stderr, "usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG]"
+				 " [--epaper MODEL|none] [--epaper-ms MS]"
 				 " [--usbip HOST:PORT[/BUSID]] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}

@@ -24,7 +24,7 @@ run() {	# scenario, SD card image
 		echo "SKIP  $name   (rig only: tools/rig/run_hw_tests.sh)"
 		return
 	fi
-	if grep -q "^launch \|^usbip " "$1"; then
+	if grep -q "^launch \|^usbip \|^epaper " "$1"; then
 		echo "SKIP  $name   (simulator only: tools/run_sim_tests.sh)"
 		return
 	fi

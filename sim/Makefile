@@ -86,7 +86,7 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(R
 	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp $(ROOT)/src/runtime/settings.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
 	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/js_data.cpp $(ROOT)/src/runtime/i18n.cpp $(ROOT)/src/runtime/markup.cpp $(ROOT)/src/runtime/ttfstyles.cpp $(ROOT)/src/runtime/wheel.cpp \
-	    $(ROOT)/src/runtime/keylayout.cpp \
+	    $(ROOT)/src/runtime/keylayout.cpp $(ROOT)/src/runtime/epd.cpp $(ROOT)/src/runtime/epaper.cpp \
 	    $(ROOT)/src/runtime/usb.cpp $(ROOT)/src/runtime/usbdesc.c $(ROOT)/src/runtime/js_usb.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
@@ -96,7 +96,8 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(R
 	    $(ROOT)/src/crypto/ocb.c $(ROOT)/src/crypto/aead.c \
 	    $(ROOT)/src/kbdindev.cpp \
 	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
-SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
+SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c src/epaper_sim.cpp \
+	    src/epd/panels.c src/epd/panel_ssd1680.c src/epd/epbwr.c src/epd/epaper.c
 # libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
 include $(ROOT)/lib/secp256k1/secp256k1.mk
 SECPSRC  := $(addprefix $(SECP_DIR)/,$(SECP_SOURCES))
@@ -152,7 +153,7 @@ web: build/web/gksim$(if $(filter test,$(MODE)),-test).js
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
 	    -sMODULARIZE=1 -sEXPORT_NAME=createGapkeep -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
 	    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAPU16,UTF8ToString,stringToNewUTF8 \
-	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_sim_camera_in_use,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height \
+	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_sim_camera_in_use,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height,_gk_sim_set_epaper,_gk_sim_epaper_plug,_gk_sim_epaper_unplug,_gk_sim_epaper_serial,_gk_sim_epaper_progress,_gk_sim_epaper_plugged,_gk_sim_epaper_refresh_ms,_gk_web_epaper_width,_gk_web_epaper_height,_gk_web_epaper_frame \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
 build/web/gksim.js build/web/gksim-test.js: $(OBJS)

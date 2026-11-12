@@ -1,5 +1,6 @@
 /*
- * png.c - screenshots: the RGB565 frame as an RGB PNG. Uncompressed
+ * png.c - screenshots: the RGB565 frame (and the e-paper panel, epaper_sim.cpp)
+ * as an RGB PNG. Uncompressed
  * ("stored" deflate blocks), so no zlib is needed; a 640x480 shot is 900 KB.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -59,23 +60,30 @@ int gk_sim_screenshot (const char *path)
 	{
 		return -1;
 	}
+	uint8_t *rgb = malloc ((size_t) w * h * 3), *p = rgb;
+	for (int i = 0; i < w * h; i++)
+	{
+		uint16_t c = frame[i];
+		uint8_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
+		*p++ = (r << 3) | (r >> 2);
+		*p++ = (g << 2) | (g >> 4);
+		*p++ = (b << 3) | (b >> 2);
+	}
+	int result = gk_sim_write_png (path, rgb, w, h);
+	free (rgb);
+	return result;
+}
 
+int gk_sim_write_png (const char *path, const uint8_t *rgb, int w, int h)
+{
 	/* raw scanlines: filter byte 0, then RGB */
 	size_t row = 1 + (size_t) w * 3;
 	size_t raw_size = row * h;
 	uint8_t *raw = malloc (raw_size);
 	for (int y = 0; y < h; y++)
 	{
-		uint8_t *p = raw + y * row;
-		*p++ = 0;
-		for (int x = 0; x < w; x++)
-		{
-			uint16_t c = frame[y * w + x];
-			uint8_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
-			*p++ = (r << 3) | (r >> 2);
-			*p++ = (g << 2) | (g >> 4);
-			*p++ = (b << 3) | (b >> 2);
-		}
+		raw[y * row] = 0;
+		memcpy (raw + y * row + 1, rgb + (size_t) y * w * 3, (size_t) w * 3);
 	}
 
 	/* zlib stream of stored blocks (at most 65535 bytes each) */
