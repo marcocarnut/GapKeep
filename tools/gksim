@@ -6,7 +6,8 @@
 # sim/src/main.cpp: key <name>, pointer <x> <y> <0|1>, shot <file.png>,
 # launch <id>, quit).
 #
-# Usage: tools/gksim [--size WxH] [--lang TAG] [--usbip HOST:PORT[/BUSID]] [--for SECONDS] [--shot FILE.png]
+# Usage: tools/gksim [--size WxH] [--lang TAG] [--epaper MODEL] [--epaper-ms MS] [--usbip HOST:PORT[/BUSID]]
+#                    [--for SECONDS] [--shot FILE.png]
 #                    [--data DIR ...] APP_DIR [APP_DIR ...]
 #
 #   tools/gksim apps/hello                         # run it, Ctrl-D or "quit" to stop
@@ -15,6 +16,9 @@
 #   tools/gksim --lang qps apps/clock              # the pseudo-language: text
 #                                                  # not translated stands out
 #   tools/gksim --data ~/keys/pgp myapp            # with data/pgp on the card
+#   tools/gksim --epaper weact-2.9-bwr myapp       # with an e-paper panel
+#                                                  # (docs/EPAPER.md); "epaper
+#                                                  # shot x.png" on stdin saves it
 #
 # The card is a copy: edit the app, run again. Each APP_DIR is a folder
 # with manifest.json; its name must be the app's id. A folder with a
@@ -37,7 +41,7 @@ APPS=
 DATA=
 while [ $# -gt 0 ]; do
 	case $1 in
-	--size|--for|--shot|--lang|--usbip) ARGS="$ARGS $1 $2"; shift 2 ;;
+	--size|--for|--shot|--lang|--usbip|--epaper|--epaper-ms) ARGS="$ARGS $1 $2"; shift 2 ;;
 	--data) DATA="$DATA ${2%/}"; shift 2 ;;
 	-*) echo "gksim: unknown option $1" >&2; exit 2 ;;
 	*) APPS="$APPS $1"; shift ;;

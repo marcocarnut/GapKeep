@@ -49,6 +49,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/gk_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
 	  usbclaim.o runtime/usb.o runtime/usbdesc.o runtime/js_usb.o \
+	  runtime/epd.o runtime/epaper.o spiprobe.o \
 	  runtime/session.o runtime/js_session.o runtime/js_data.o runtime/i18n.o runtime/markup.o generated/i18n_js.o runtime/keylayout.o runtime/wheel.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o

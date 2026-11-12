@@ -140,6 +140,21 @@ declare module "gk:ui" {
    * as canvas `ImageData`.
    */
   export type ImageSource = { width: number; height: number; data: Uint8Array | ArrayBuffer };
+  /** A colour an e-paper panel shows. */
+  export type EPaperColor = "black" | "white" | "red";
+  /** The configured e-paper panel, as `ui.epaper.open()` (landscape) would give it. */
+  export type EPaperInfo = { model: string; width: number; height: number; colors: EPaperColor[] };
+  /** An open e-paper panel: a Container (the root of what the panel shows) with more. */
+  export type EPaperPanel = Container & {
+  /** the module, for people: "WeAct 2.9\" B/W/R" */
+  readonly model: string;
+  /** what it shows: ["black", "white"], or with "red" */
+  readonly colors: EPaperColor[];
+  /** writes what the panel's widgets show onto the panel: a full refresh, then deep sleep; resolves once it may be unplugged, rejects with an Error (no panel, ...) */
+  refresh(options?: JobOptions): Promise<void>;
+  /** deletes the panel's widgets and gives the panel back (what it shows stays) */
+  close(): void;
+};
   export type SymbolName = "audio" | "video" | "list" | "ok" | "close" | "power" | "settings" | "home" | "download" | "drive" | "refresh" | "mute" | "volume-mid" | "volume-max" | "image" | "tint" | "prev" | "play" | "pause" | "stop" | "next" | "eject" | "left" | "right" | "plus" | "minus" | "eye-open" | "eye-close" | "warning" | "shuffle" | "up" | "down" | "loop" | "directory" | "upload" | "call" | "cut" | "copy" | "save" | "bars" | "envelope" | "charge" | "paste" | "bell" | "keyboard" | "gps" | "file" | "wifi" | "battery-full" | "battery-3" | "battery-2" | "battery-1" | "battery-empty" | "usb" | "bluetooth" | "trash" | "edit" | "backspace" | "sd-card" | "new-line";
   export type SymbolTable = { readonly [name in SymbolName]: string };
   export type EventName = "click" | "change" | "submit" | "focus" | "blur" | "longpress" | "key" | "press" | "drag" | "release" | "detect" | "error";
@@ -642,6 +657,8 @@ declare module "gk:ui" {
   export function theme(options: { dark?: boolean; primary?: Color; secondary?: Color }): void;
   /** The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`'s `tm()`. */
   export function escapeMarkup(text: string): string;
+  /** An e-paper panel on the GPIO header, as a second, off-screen display: `open()`, `info()`. Needs `"permissions": ["epaper"]`. [Details]. */
+  export const epaper: { open: (options?: { orientation?: "landscape" | "portrait"; flip?: boolean }) => EPaperPanel; info: () => EPaperInfo | null };
 }
 
 declare module "gk:sys" {

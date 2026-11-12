@@ -306,6 +306,72 @@ export class Gapkeep {
     return out;
   }
 
+  // --- the e-paper panel (sim.h, docs/EPAPER.md) ---
+  // An older simulator has none: hasEPaper() false.
+
+  hasEPaper () {
+    return typeof this.m._gk_web_epaper_frame === "function";
+  }
+
+  // Before boot(): the panel the card's gapkeep.txt doesn't say (a model
+  // name, or "none"). A panel of it, "1", is plugged in at boot.
+  setEPaper (model) {
+    if (this.hasEPaper ()) this.m._gk_sim_set_epaper (this.m.stringToNewUTF8 (model));
+  }
+
+  // Plugs in the panel of that name (a new name: a new, white one).
+  epaperPlug (name, model = "") {
+    const n = this.m.stringToNewUTF8 (name), m = this.m.stringToNewUTF8 (model);
+    const ok = this.m._gk_sim_epaper_plug (n, m) === 0;
+    this.m._free (n);
+    this.m._free (m);
+    return ok;
+  }
+
+  epaperUnplug () {
+    this.m._gk_sim_epaper_unplug ();
+  }
+
+  // The name of the panel plugged in, or null.
+  get epaperPlugged () {
+    const p = this.m._gk_sim_epaper_plugged ();
+    return p ? this.m.UTF8ToString (p) : null;
+  }
+
+  // A refresh going on: how far, 0..1; -1: none.
+  get epaperProgress () {
+    return this.m._gk_sim_epaper_progress ();
+  }
+
+  // Paints the panel plugged in on a canvas (resized to it), as its
+  // pigments look now, if that may have changed. false: none plugged in.
+  drawEPaper (canvas) {
+    const w = this.m._gk_web_epaper_width (), h = this.m._gk_web_epaper_height ();
+    if (!w || !h) {
+      this.lastEPaper = -1;
+      return false;
+    }
+    const serial = this.m._gk_sim_epaper_serial ();
+    if (serial === this.lastEPaper && canvas.width === w && canvas.height === h) return true;
+    this.lastEPaper = serial;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const p = this.m._gk_web_epaper_frame ();
+    const rgb = this.m.HEAPU8.subarray (p, p + w * h * 3);
+    const ctx = canvas.getContext ("2d");
+    const image = ctx.createImageData (w, h);
+    for (let i = 0, o = 0; i < rgb.length; i += 3, o += 4) {
+      image.data[o] = rgb[i];
+      image.data[o + 1] = rgb[i + 1];
+      image.data[o + 2] = rgb[i + 2];
+      image.data[o + 3] = 255;
+    }
+    ctx.putImageData (image, 0, 0);
+    return true;
+  }
+
   // Paints the screen on a canvas (width x height), if it changed.
   draw (canvas) {
     const serial = this.frameSerial;

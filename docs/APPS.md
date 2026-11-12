@@ -85,7 +85,7 @@ handlers and timers.
 | `description` | no | One line for the launcher tile, at most 256 bytes of text (below). |
 | `icon` | no | One of the names in `ui.symbols` (default `"file"`), or a picture: see [Picture icons](#picture-icons). |
 | `entry` | no | Entry module (default `"main.js"`). |
-| `permissions` | no | Extra rights: `"apps"` (import `gk:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)). E.g. `["camera"]`. |
+| `permissions` | no | Extra rights: `"apps"` (import `gk:apps`: list and start apps), `"camera"` (`ui.Scanner`, [CAMERA.md](CAMERA.md)), `"rtc"` (setting the clock, [CLOCK.md](CLOCK.md)), `"settings"` (changing the language, number marks and keyboard: [Languages](#languages)), `"epaper"` (writing to an e-paper panel, `ui.epaper`: [EPAPER.md](EPAPER.md)). E.g. `["camera"]`. |
 | `hidden` | no | `true`: not listed in the launcher. |
 | `experimental` | no | `true`: listed and started only with `experimental = yes` in the card's `gapkeep.txt` ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 | `data` | no | The card's data folders the app reads with `gk:data`, e.g. `["pgp"]`: at most 8 names, each `[a-z0-9-]`, at most 32. See [Data files](#data-files). |

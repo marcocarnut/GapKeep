@@ -27,6 +27,8 @@
 #include "markup.h"
 #include "ttfstyles.h"
 #include "scanner.h"
+#include "epaper.h"
+#include "jobs.h"
 #include "lv_mem_limit.h"
 #include "../crypto/wipe.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
@@ -172,6 +174,9 @@ struct TGkUIState
 	JSValue BaseProto;
 	boolean bStopping;
 	TGkAlert *pAlerts;		// open alerts, innermost first
+	JSValue EPaperProto;		// ui.epaper's panels: a Container's, and more
+	CGkEPaperDisplay *pEPaper;	// the open panel, or 0
+	boolean bEPaperClose;		// panel.close() called: deleted in GkUIProcessDeferred
 };
 
 struct TGkAlert
@@ -2917,6 +2922,10 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 	}
 
 	lv_obj_t *pObj = CreateObject (Type, pParent, bMarkup);
+	if (pApp->pUI->pEPaper != 0 && lv_obj_get_screen (pObj) == pApp->pUI->pEPaper->GetScreen ())
+	{
+		lv_group_remove_obj (pObj);	// on the e-paper panel: not a keyboard target
+	}
 	JSValue Obj = Wrap (ctx, pObj, Type, JS_IsObject (Proto) ? (JSValueConst) Proto : JS_UNDEFINED);
 	JS_FreeValue (ctx, Proto);
 	if (JS_IsException (Obj))
@@ -3284,12 +3293,252 @@ const char *GkSymbolByName (const char *pName)
 	return 0;
 }
 
+// --- ui.epaper -----------------------------------------------------------------
+//
+// The e-paper panel gapkeep.txt configures, as a second display, off screen
+// (epaper.h): ui.epaper.open() gives its screen, a Container with
+// refresh(), close(), colors and model; widgets go on it as on any other.
+
+static boolean EPaperAllowed (JSContext *ctx, const char *pFunction)
+{
+	if (!(CAppHost::GetApp (ctx)->pBundle->permissions & GK_PERM_EPAPER))
+	{
+		JS_ThrowTypeError (ctx, "ui.epaper.%s needs \"permissions\": [\"epaper\"] in manifest.json", pFunction);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static JSValue EPaperColors (JSContext *ctx, const TGkEPDModel *pModel)
+{
+	JSValue Colors = JS_NewArray (ctx);
+	JS_SetPropertyUint32 (ctx, Colors, 0, JS_NewString (ctx, "black"));
+	JS_SetPropertyUint32 (ctx, Colors, 1, JS_NewString (ctx, "white"));
+	if (pModel->bRed)
+	{
+		JS_SetPropertyUint32 (ctx, Colors, 2, JS_NewString (ctx, "red"));
+	}
+	return Colors;
+}
+
+static JSValue ThrowError (JSContext *ctx, const char *pMessage)
+{
+	JSValue Error = JS_NewError (ctx);
+	JS_DefinePropertyValueStr (ctx, Error, "message", JS_NewString (ctx, pMessage),
+				   JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+	return JS_Throw (ctx, Error);
+}
+
+// ui.epaper.info(): the configured panel, as open() would give it, or null
+static JSValue js_epaper_info (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!EPaperAllowed (ctx, "info"))
+	{
+		return JS_EXCEPTION;
+	}
+	const TGkSPIDevice *pPanel = CGkEPD::GetPanel ();
+	if (pPanel == 0 || !GkSPIControllerPresent ())
+	{
+		return JS_NULL;
+	}
+	const TGkEPDModel *pModel = pPanel->pModel;
+	boolean bTurned = pModel->nLandscape & 1;
+	JSValue Info = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Info, "model", JS_NewString (ctx, pModel->pModule));
+	JS_SetPropertyStr (ctx, Info, "width", JS_NewInt32 (ctx, bTurned ? pModel->nHeight : pModel->nWidth));
+	JS_SetPropertyStr (ctx, Info, "height", JS_NewInt32 (ctx, bTurned ? pModel->nWidth : pModel->nHeight));
+	JS_SetPropertyStr (ctx, Info, "colors", EPaperColors (ctx, pModel));
+	return Info;
+}
+
+// ui.epaper.open({ orientation, flip })
+static JSValue js_epaper_open (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!EPaperAllowed (ctx, "open"))
+	{
+		return JS_EXCEPTION;
+	}
+	TGkApp *pApp = CAppHost::GetApp (ctx);
+	TGkUIState *pUI = pApp->pUI;
+
+	boolean bPortrait = FALSE, bFlip = FALSE;
+	JSValueConst Options = argc > 0 ? argv[0] : JS_UNDEFINED;
+	if (!JS_IsUndefined (Options))
+	{
+		if (!JS_IsObject (Options))
+		{
+			return JS_ThrowTypeError (ctx, "ui.epaper.open: options must be an object ({ orientation, flip })");
+		}
+		JSPropertyEnum *pProps;
+		uint32_t nProps;
+		if (JS_GetOwnPropertyNames (ctx, &pProps, &nProps, Options, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) < 0)
+		{
+			return JS_EXCEPTION;
+		}
+		int nError = 0;
+		for (uint32_t i = 0; i < nProps && nError == 0; i++)
+		{
+			const char *pName = JS_AtomToCString (ctx, pProps[i].atom);
+			JSValue v = JS_GetProperty (ctx, Options, pProps[i].atom);
+			if (pName == 0 || JS_IsException (v))
+			{
+				nError = -1;
+			}
+			else if (strcmp (pName, "orientation") == 0)
+			{
+				const char *p = JS_IsString (v) ? JS_ToCString (ctx, v) : 0;
+				if (p != 0 && (strcmp (p, "landscape") == 0 || strcmp (p, "portrait") == 0))
+				{
+					bPortrait = p[0] == 'p';
+				}
+				else
+				{
+					JS_ThrowTypeError (ctx, "ui.epaper.open: orientation: \"landscape\" or \"portrait\" expected");
+					nError = -1;
+				}
+				JS_FreeCString (ctx, p);
+			}
+			else if (strcmp (pName, "flip") == 0)
+			{
+				nError = ToBool (ctx, v, "flip", &bFlip);
+			}
+			else
+			{
+				JS_ThrowTypeError (ctx, "ui.epaper.open: unknown option \"%s\"", pName);
+				nError = -1;
+			}
+			JS_FreeCString (ctx, pName);
+			JS_FreeValue (ctx, v);
+		}
+		for (uint32_t i = 0; i < nProps; i++)
+		{
+			JS_FreeAtom (ctx, pProps[i].atom);
+		}
+		js_free (ctx, pProps);
+		if (nError)
+		{
+			return JS_EXCEPTION;
+		}
+	}
+
+	if (pUI->pEPaper != 0 && !pUI->bEPaperClose)
+	{
+		return JS_ThrowTypeError (ctx, "ui.epaper.open: the panel is open already (close() it first)");
+	}
+	if (CheckUIMemory (ctx, 0))
+	{
+		return JS_EXCEPTION;
+	}
+	if (pUI->pEPaper != 0)
+	{
+		delete pUI->pEPaper;		// closed, not yet deleted: now
+		pUI->pEPaper = 0;
+		pUI->bEPaperClose = FALSE;
+	}
+
+	// landscape: the model's own rotation for it; portrait: a quarter turn
+	// from that (0 or 1); flip: a half turn more
+	unsigned nRotation = ((CGkEPaperDisplay::Landscape () ^ (bPortrait ? 1 : 0)) + (bFlip ? 2 : 0)) & 3;
+	const char *pError = 0;
+	CGkEPaperDisplay *pEPaper = CGkEPaperDisplay::Open (nRotation, &pError);
+	if (pEPaper == 0)
+	{
+		return ThrowError (ctx, pError);
+	}
+	pUI->pEPaper = pEPaper;
+
+	lv_obj_t *pScreen = pEPaper->GetScreen ();
+	lv_obj_set_flex_flow (pScreen, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_style_pad_all (pScreen, 4, 0);
+	lv_obj_set_style_pad_row (pScreen, 4, 0);
+	lv_obj_set_style_pad_column (pScreen, 4, 0);
+	return Wrap (ctx, pScreen, WContainer, pUI->EPaperProto);
+}
+
+// this: the open panel's screen; 0 (TypeError thrown) if not
+static CGkEPaperDisplay *GetEPaper (JSContext *ctx, JSValueConst this_val)
+{
+	TGkNode *pNode = GetNode (ctx, this_val);
+	if (pNode == 0)
+	{
+		return 0;
+	}
+	TGkUIState *pUI = pNode->pApp->pUI;
+	if (pUI->pEPaper == 0 || pUI->bEPaperClose || pNode->pObj != pUI->pEPaper->GetScreen ())
+	{
+		JS_ThrowTypeError (ctx, "not an open e-paper panel");
+		return 0;
+	}
+	return pUI->pEPaper;
+}
+
+// panel.refresh({ onProgress })
+static JSValue js_epaper_refresh (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
+	if (pEPaper == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	JSValue OnProgress;
+	if (!GkJobOnProgress (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "refresh", &OnProgress))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValue Promise = pEPaper->Refresh (ctx, OnProgress);
+	JS_FreeValue (ctx, OnProgress);
+	return Promise;
+}
+
+// panel.close(), panel.delete(): the display goes, with its widgets, after
+// the handler that called it (GkUIProcessDeferred). A refresh already asked
+// for goes on: it has its picture.
+static JSValue js_epaper_close (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkNode *pNode = GetNode (ctx, this_val, FALSE);
+	if (pNode == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	TGkUIState *pUI = pNode->pApp->pUI;
+	if (   pNode->pObj == 0 || pNode->bDeleting || pUI->pEPaper == 0
+	    || pNode->pObj != pUI->pEPaper->GetScreen ())
+	{
+		return JS_UNDEFINED;		// closed already
+	}
+	pNode->bDeleting = TRUE;		// (any use throws from now on)
+	pUI->bEPaperClose = TRUE;
+	return JS_UNDEFINED;
+}
+
+static JSValue js_epaper_get_colors (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
+	return pEPaper != 0 ? EPaperColors (ctx, pEPaper->GetModel ()) : JS_EXCEPTION;
+}
+
+static JSValue js_epaper_get_model (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
+	return pEPaper != 0 ? JS_NewString (ctx, pEPaper->GetModel ()->pModule) : JS_EXCEPTION;
+}
+
+static void EPaperFree (TGkUIState *pUI)
+{
+	if (pUI->pEPaper != 0)
+	{
+		delete pUI->pEPaper;		// its widgets release their JS as they go
+		pUI->pEPaper = 0;
+	}
+	pUI->bEPaperClose = FALSE;
+}
+
 static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
 	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
 	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme",
-	"escapeMarkup"
+	"escapeMarkup", "epaper"
 };
 
 static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
@@ -3424,6 +3673,18 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 	JS_SetModuleExport (ctx, m, "escapeMarkup", JS_NewCFunction (ctx, js_ui_escape_markup, "escapeMarkup", 1));
 	JS_SetModuleExport (ctx, m, "theme", JS_NewCFunction (ctx, js_ui_theme, "theme", 1));
 
+	// ui.epaper, and its panels' prototype: a Container's, and more
+	JSValue EPaper = JS_NewObject (ctx);
+	DefineMethod (ctx, EPaper, "open", js_epaper_open, 1);
+	DefineMethod (ctx, EPaper, "info", js_epaper_info, 0);
+	JS_SetModuleExport (ctx, m, "epaper", EPaper);
+	pUI->EPaperProto = JS_NewObjectProto (ctx, pUI->Protos[WContainer]);
+	DefineMethod (ctx, pUI->EPaperProto, "refresh", js_epaper_refresh, 1);
+	DefineMethod (ctx, pUI->EPaperProto, "close", js_epaper_close, 0);
+	DefineMethod (ctx, pUI->EPaperProto, "delete", js_epaper_close, 0);
+	DefineGetter (ctx, pUI->EPaperProto, "colors", js_epaper_get_colors);
+	DefineGetter (ctx, pUI->EPaperProto, "model", js_epaper_get_model);
+
 	return 0;
 }
 
@@ -3494,6 +3755,11 @@ void GkUIProcessDeferred (TGkApp *pApp)
 		return;
 	}
 
+	if (pUI->bEPaperClose)
+	{
+		EPaperFree (pUI);	// panel.close()
+	}
+
 	// close alerts that were answered, innermost first
 	for (TGkAlert **pp = &pUI->pAlerts; *pp != 0; )
 	{
@@ -3533,11 +3799,14 @@ void GkUIAppStopping (TGkApp *pApp)
 		AlertFree (pAlert, FALSE);
 	}
 
+	EPaperFree (pUI);		// while its widgets' JS can be released
+
 	for (unsigned t = 0; t < WTypeCount; t++)
 	{
 		JS_FreeValue (ctx, pUI->Protos[t]);
 	}
 	JS_FreeValue (ctx, pUI->BaseProto);
+	JS_FreeValue (ctx, pUI->EPaperProto);
 
 	// pUI itself stays until the screen is deleted (NodeEventCallback checks
 	// bStopping); the host frees it after the screen with GkUIFree().

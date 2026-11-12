@@ -1113,6 +1113,10 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 				{
 					pApp->permissions |= GK_PERM_SETTINGS;
 				}
+				else if (p != 0 && strcmp (p, "epaper") == 0)
+				{
+					pApp->permissions |= GK_PERM_EPAPER;
+				}
 				else
 				{
 					bPermsOK = FALSE;

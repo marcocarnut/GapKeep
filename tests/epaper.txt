@@ -1,0 +1,79 @@
+# Needs a test build (make TEST=1), and the simulator (its e-paper panel):
+# ui.epaper (docs/EPAPER.md) end to end, the real driver (src/runtime/
+# epd.cpp) talking to EPDPages' SSD1680 model over the simulated SPI. The
+# test card's gapkeep.txt configures a WeAct 2.9" B/W/R; panel "1" is
+# plugged in at boot. tests/apps/epapertest writes codex32-like shares;
+# tools/run_sim_tests.sh then checks the panels' pictures
+# (tests/epaper/check_panel.py: the QR codes decode to the shares, the red
+# title is red, panel 1 kept its share while panel 2 was written).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect epaper: WeAct 2.9" B/W/R \(128x296, red\) on SPI0 CE0 \(GPIO 8\), DC GPIO 25, RST GPIO 17, BUSY GPIO 24, 4000 kHz
+expect epaper-sim: panel 1 \(WeAct 2.9" B/W/R\) plugged in
+expect launcher ready 60
+# a refresh holds BUSY 1.5 s here (18 s on the real panel)
+epaper refresh-ms 1500
+launch epapertest
+expect epapertest ready
+expect epapertest info: \{"model":"WeAct 2.9\\" B/W/R","width":296,"height":128,"colors":\["black","white","red"\]\}
+expect epapertest open: WeAct 2.9" B/W/R, 296x128, black white red
+expect epapertest: ok open twice
+expect epapertest: ok unknown option
+expect epapertest: ok bad orientation
+expect epapertest: ok a Container
+reject epapertest: FAIL
+# opening touches no panel: nothing written yet
+reject epaper: .*refresh
+
+# share 1 on panel 1: reset, init, both planes, the waveform, deep sleep
+mark
+key 1
+expect epaper: WeAct 2.9" B/W/R: refresh: reset
+expect epaper-sim: panel 1: refresh 1 \(full\), BUSY for 1500 ms
+expect epapertest progress: the waveform runs 10
+expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms, asleep 10
+expect epapertest wrote 1
+# (the driver never sent a byte to a sleeping panel)
+reject panel .*: bytes sent in deep sleep
+shot 01-written
+epaper shot 01-panel1
+
+# unplugged: a clear error, and no refresh
+epaper unplug
+mark
+key 2
+expect epapertest failed 2: Error: no panel answers: is one plugged in\? \(BUSY stays high after a reset\) 10
+reject epaper-sim: panel .*: refresh 2
+
+# hot swap: a new panel, white, gets share 2 (a full reset and init)
+epaper plug 2
+mark
+key 2
+expect epaper-sim: panel 2: refresh 1 \(full\) 10
+expect epapertest wrote 2 10
+epaper shot 02-panel2
+
+# panel 1 again: what it showed, untouched (nothing refreshes unasked)
+epaper plug 1
+wait 0.5
+epaper shot 03-panel1-again
+# and written once more (it was asleep: the reset wakes it)
+mark
+key 1
+expect epapertest wrote 1 10
+epaper shot 04-panel1-rewritten
+
+# close and reopen, portrait then landscape
+mark
+key o
+expect epapertest: ok closed
+expect epapertest open: WeAct 2.9" B/W/R, 128x296, black white red
+expect epapertest open: WeAct 2.9" B/W/R, 296x128, black white red
+
+# without the "epaper" permission
+launch epapernoperm
+expect epapernoperm info: TypeError: ui.epaper.info needs "permissions": \["epaper"\] in manifest.json
+expect epapernoperm open: TypeError: ui.epaper.open needs "permissions": \["epaper"\] in manifest.json
+expect epapernoperm done
+reject epaper:.*(MS12|NAME)

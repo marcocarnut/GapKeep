@@ -45,7 +45,7 @@ for t in $SCENARIOS; do
 		echo "SKIP  sim:$name   (needs the serial port)"
 		continue
 	fi
-	if grep -q "^monitor " "$t"; then
+	if grep -q "^monitor \|^# QEMU only" "$t"; then
 		echo "SKIP  sim:$name   (QEMU only: tools/run_tests.sh)"
 		continue
 	fi
@@ -85,6 +85,14 @@ if [ -f "$OUT/dice39/07-words.png" ]; then
 		echo "PASS  sim:dice39_qr"
 	else
 		echo "FAIL  sim:dice39_qr   (see $OUT/dice39_qr.log)"; FAILED=1
+	fi
+fi
+
+if [ -f "$OUT/epaper/04-panel1-rewritten.png" ]; then
+	if python3 tests/epaper/check_panel.py "$OUT/epaper" > "$OUT/epaper_panel.log" 2>&1; then
+		echo "PASS  sim:epaper_panel"
+	else
+		echo "FAIL  sim:epaper_panel   (see $OUT/epaper_panel.log)"; FAILED=1
 	fi
 fi
 
@@ -218,6 +226,12 @@ if command -v node >/dev/null; then
 		echo "PASS  sim:web_pgpcrypto"
 	else
 		echo "FAIL  sim:web_pgpcrypto   (see $OUT/web_pgpcrypto.log)"; FAILED=1
+	fi
+	# the e-paper panel in the WebAssembly build, as the IDE shows it (if it was built)
+	if node --experimental-default-type=module tests/web/epaper.mjs > "$OUT/web_epaper.log" 2>&1; then
+		echo "PASS  sim:web_epaper"
+	else
+		echo "FAIL  sim:web_epaper   (see $OUT/web_epaper.log)"; FAILED=1
 	fi
 	if node --experimental-default-type=module tests/bbqr/run_node.mjs > "$OUT/bbqr.log" 2>&1 \
 		&& python3 tests/bbqr/check_capacity.py >> "$OUT/bbqr.log" 2>&1; then

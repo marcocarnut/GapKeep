@@ -69,6 +69,16 @@ for (const [name, o] of Object.entries(cryptoObjects)) {
   o.destroy();
 }
 
+// an e-paper panel's own members (gksim --epaper)
+let epaperPanel = {};
+try {
+  const panel = ui.epaper.open();
+  epaperPanel = members(Object.getPrototypeOf(panel));
+  panel.close();
+} catch (e) {
+  epaperPanel = { error: String(e) };
+}
+
 const info = {
   modules: {
     "gk:ui": Object.keys(ui).sort(),
@@ -90,6 +100,8 @@ const info = {
   kernel: Object.keys(sys.kernel).sort(),
   version: Object.keys(sys.version).sort(),
   cryptoObjects: cryptoMembers,
+  epaper: Object.getOwnPropertyNames(ui.epaper).sort(),
+  epaperPanel,
   globals: ["console", "setTimeout", "setInterval", "clearTimeout", "clearInterval",
             "fetch", "XMLHttpRequest", "WebSocket", "localStorage", "require", "process",
             "document", "crypto"].filter((g) => typeof globalThis[g] !== "undefined"),

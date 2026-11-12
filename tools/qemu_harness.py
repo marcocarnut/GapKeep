@@ -81,6 +81,16 @@ Scenario file: one command per line, '#' starts a comment.
                                 offers it again 0.5 s later
     usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]
                                 the simulator's own commands (docs/SIMULATOR.md)
+    epaper plug <name> [<model>]
+    epaper unplug               simulator only: the simulated e-paper panel
+    epaper shot <name>          (docs/EPAPER.md): plug a panel in by name (a
+    epaper look <name>          new one is white; an old one shows what it
+    epaper refresh-ms <ms>      showed), pull it out, save what it shows as
+                                <outdir>/<name>.png (landscape, 8 px margin;
+                                "look": as its pigments look now, the 2.9"
+                                B/W/R's physics),
+                                how long a refresh holds BUSY (default: as
+                                the panel's waveform, 18 s on the 2.9" B/W/R)
     reject <regex>              fails if the whole log so far matches, e.g.
                                 "reject after boot: the card" at the end of
                                 a scenario
@@ -528,6 +538,23 @@ class SimMachine:
         self._cmd('keyboard %s' % layout)
         time.sleep(0.05)
 
+    def epaper(self, args, outdir):
+        """The simulated e-paper panel: plug, unplug, shot <name>, refresh-ms."""
+        words = args.split()
+        if words and words[0] in ('shot', 'look') and len(words) == 2:
+            png_path = os.path.abspath(os.path.join(outdir, words[1] + '.png'))
+            args = words[0] + ' ' + png_path
+        want = '#epaper ' + args
+        self._cmd('epaper ' + args)
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            if want in self.answers:
+                return True
+            if any(a.startswith('#error epaper') for a in self.answers):
+                return False
+            time.sleep(0.02)
+        return False
+
     def usbip(self, rest):
         # ${NAME:-default}: from the environment (a test's server address)
         rest = re.sub(r'\$\{(\w+):-([^}]*)\}', lambda m: os.environ.get(m.group(1)) or m.group(2), rest)
@@ -721,6 +748,14 @@ def run_scenario(m, path, outdir):
                     raise SystemExit('%s: usbip is for the simulator' % where)
                 m.usbip(rest.strip())
                 print('[%s] usbip %s' % (where, rest.strip()))
+            elif cmd == 'epaper':
+                if not hasattr(m, 'epaper'):
+                    raise SystemExit('%s: epaper is for the simulator (its simulated panel)' % where)
+                ok = m.epaper(rest.strip(), outdir)
+                print('[%s] epaper %s: %s' % (where, rest.strip(), 'ok' if ok else 'FAILED'))
+                if not ok:
+                    failures += 1
+                    break
             elif cmd == 'reject':
                 pattern = rest.strip()
                 found = re.search(pattern, m.serial())

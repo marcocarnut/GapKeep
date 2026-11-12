@@ -183,6 +183,10 @@ in through `tm()` or `ui.escapeMarkup`, never pasted into markup
   names, `"usb": ["vvvv:pppp"]`, through `gk:usb` (control transfers, 64
   bytes at most); try them in the simulator over USB/IP
   ([SIMULATOR.md](SIMULATOR.md#usb-devices)). Don't log what they send.
+- **An e-paper panel** (a share to unplug and keep): `ui.epaper.open()`
+  with `"permissions": ["epaper"]`, the same widgets on it, then `await
+  panel.refresh()`; try it with `tools/gksim --epaper weact-2.9-bwr`
+  ([EPAPER.md](EPAPER.md)).
 - **Images are raw RGBA** (`{ width, height, data }`); there is no PNG or JPEG
   decoder.
 

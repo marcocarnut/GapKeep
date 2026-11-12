@@ -7,6 +7,7 @@
 #include "clock.h"
 #include "i18n.h"
 #include "keylayout.h"
+#include "epd.h"
 #include <circle/logger.h>
 #include <circle/util.h>
 #ifndef GK_SEALED
@@ -25,6 +26,12 @@ void CGkSettings::SetExperimental (boolean bOn, const char *pFrom)
 }
 
 void CGkSettings::Load (void)
+{
+	LoadFile ();
+	CGkEPD::ConfigDone ();		// the e-paper's keys, checked together
+}
+
+void CGkSettings::LoadFile (void)
 {
 #ifndef GK_SEALED
 	FIL File;
@@ -92,6 +99,10 @@ void CGkSettings::Load (void)
 			continue;
 		}
 		if (GkKeyLayoutConfigure (Clean, pValue, nLine))
+		{
+			continue;
+		}
+		if (CGkEPD::Configure (Clean, pValue, nLine))	// epaper, epaper_dc...
 		{
 			continue;
 		}

@@ -73,7 +73,7 @@ def main():
         subprocess.run(['make', '-C', os.path.join(ROOT, 'sim'), '-s', '-j%d' % (os.cpu_count() or 2),
                         'TEST=1'], check=True, stdout=subprocess.DEVNULL)
         binary = os.path.join(ROOT, 'sim', 'build', 'gksim-test')
-    out = subprocess.run([binary, '--app', 'apiinfo', '--for', '2'], capture_output=True,
+    out = subprocess.run([binary, '--app', 'apiinfo', '--epaper', 'weact-2.9-bwr', '--for', '2'], capture_output=True,
                          text=True, timeout=60).stdout
     if 'apiinfo done' not in out:
         sys.exit('check_api: no API dump from the simulator:\n' + out)
@@ -140,6 +140,22 @@ def main():
         for member, kind in documented.items():
             if actual.get(member) not in (None, kind):
                 problems.append('%s.%s: documented as %s, but it is %s' % (name, member, kind, actual[member]))
+
+    # ui.epaper, and an open panel's own members (EPaperPanel: after "Container &")
+    exports_by_name = {e['name']: e for e in ui['exports']}
+    compare('ui.epaper', ts_keys(exports_by_name['epaper']['ts']), real['epaper'])
+    panel_ts = next(t['ts'] for t in ui['types'] if t['name'] == 'EPaperPanel')
+    documented = {}
+    for line in panel_ts.split('{', 1)[1].splitlines():
+        m = re.match(r'\s*(readonly\s+)?(\w+)\??\s*([(:])', line)
+        if m:
+            documented[m.group(2)] = 'method' if m.group(3) == '(' else 'readonly' if m.group(1) else 'readable'
+    # (delete: a Widget's, which closes the panel)
+    actual = {k: v for k, v in real['epaperPanel'].items() if k != 'delete'}
+    compare('EPaperPanel', documented, actual)
+    for member, kind in documented.items():
+        if actual.get(member) not in (None, kind):
+            problems.append('EPaperPanel.%s: documented as %s, but it is %s' % (member, kind, actual[member]))
 
     compare('globals', ['console', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'],
             real['globals'])

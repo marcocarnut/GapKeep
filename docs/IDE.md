@@ -200,6 +200,19 @@ The setting, and the camera chosen, stay across reboots and reloads (a
 picture is asked for again). GapKeep decodes the codes itself, with the
 decoder it has on the Pi; the IDE only supplies pictures.
 
+## The e-paper panel
+
+Below the camera, **E-paper** picks the e-paper panel GapKeep has
+([EPAPER.md](EPAPER.md)), for apps with `ui.epaper`: None, or one of the
+WeAct modules; the card's `gapkeep.txt` then names it (choosing reboots).
+The panel shows under it, twice its size, as its pigments look: a refresh
+plays as on the real panel, about 18 s on the 2.9" B/W/R (it flashes, the
+picture comes, the red last), with its progress beside the buttons.
+**Unplug** pulls the panel out (a refresh then fails: no panel answers)
+and **Plug in** puts it back, showing what it showed; **New panel** plugs
+in another one, white, as when writing one share a panel. The choice stays
+across reboots and reloads.
+
 ## Changing the launcher
 
 The launcher is an app too (`apps/launcher` in the repository), but built

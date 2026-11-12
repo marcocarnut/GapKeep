@@ -149,6 +149,8 @@ int gk_sim_boot (int width, int height, const char *card)
 	CAppStore::Initialize (FALSE);
 #endif
 
+	GkSimEPaperBoot ();		// --epaper over gapkeep.txt; its panel plugged in
+
 	InitGUI ();
 
 	s_pKeyboard = new CKeyboardIndev;

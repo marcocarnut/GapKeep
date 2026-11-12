@@ -8,3 +8,10 @@ experimental = yes
 language = xx-YY
 decimal_mark = ;
 keyboard = qwertz
+# the e-paper panel (tests/epaper.txt, docs/EPAPER.md): the simulator
+# has one there; QEMU has no SPI controller, so none
+epaper = weact-2.9-bwr
+epaper_cs = ce0
+epaper_dc = 25
+epaper_rst = 17
+epaper_busy = 24
