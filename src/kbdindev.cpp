@@ -32,7 +32,9 @@ CKeyboardIndev::CKeyboardIndev (void)
 	m_pKeyHook (0),
 	m_pKeyHookParam (0),
 	m_pHomeHandler (0),
-	m_pHomeParam (0)
+	m_pHomeParam (0),
+	m_pStopHandler (0),
+	m_pStopParam (0)
 {
 	assert (s_pThis == 0);
 	s_pThis = this;
@@ -68,6 +70,12 @@ void CKeyboardIndev::SetHomeHandler (THomeHandler *pHandler, void *pParam)
 {
 	m_pHomeHandler = pHandler;
 	m_pHomeParam = pParam;
+}
+
+void CKeyboardIndev::SetStopHandler (TStopHandler *pHandler, void *pParam)
+{
+	m_pStopHandler = pHandler;
+	m_pStopParam = pParam;
 }
 
 void CKeyboardIndev::Flush (void)
@@ -174,6 +182,16 @@ void CKeyboardIndev::KeyPressedHandler (const char *pString)
 	pThis->m_bNewPress = FALSE;
 	u32 nChar = 0;
 	if (!pThis->Translate (pString, &Key, &nChar))
+	{
+		return;
+	}
+
+	// Ctrl+C (the keymap's control character, whatever the layout): the
+	// stop handler may take it, to stop a script that runs on
+	if (   (Key.nMods & GK_MOD_CTRL) && !(Key.nMods & GK_MOD_ALT)
+	    && strcmp (Key.Name, "c") == 0 && nChar == 0 && !Key.bRepeat
+	    && pThis->m_pStopHandler != 0
+	    && (*pThis->m_pStopHandler) (pThis->m_pStopParam))
 	{
 		return;
 	}

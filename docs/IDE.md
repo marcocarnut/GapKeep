@@ -103,6 +103,9 @@ of the hidden textarea is taken as GapKeep's Backspace.
   whole steps when it fits. **Run** saves everything, boots a fresh machine
   with the card and starts the app whose file is open (if it doesn't start,
   the log says why and you stay on the launcher). **Stop** halts the machine.
+  A script that runs on holds the page until the watchdog stops it (10 s):
+  the browser hands over no keys meanwhile, so Ctrl+C, which stops it on
+  the device and in `tools/gksim`, can't here.
   **Home** goes back to the launcher. **Restart** boots again into the
   launcher, as switching the device on does. The menu sets the screen size
   (640x480, 800x480, 800x600, 1024x600, 1024x768, 1280x720, 1824x984),

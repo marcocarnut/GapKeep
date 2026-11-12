@@ -103,7 +103,7 @@ public:
 
 	// For long native work done for the running app (gk:crypto's pbkdf2):
 	// whether to give up now, as QuickJS's interrupt handler would (Home,
-	// or the watchdog: more than 10 s in one call). TRUE: the caller
+	// Ctrl+C, or the watchdog: more than 10 s in one call). TRUE: the caller
 	// throws with ThrowInterrupted() and returns.
 	static boolean ShouldInterrupt (JSContext *pContext);
 	static JSValue ThrowInterrupted (JSContext *pContext);
@@ -112,6 +112,12 @@ public:
 
 	// A JS runtime with the zeroing allocator, no memory limit
 	static JSRuntime *NewRuntime (void);
+
+	// Where keys don't come by interrupt while a script runs (the
+	// simulator: its main loop is the one running the script), a function
+	// that delivers what came meanwhile, as interrupts would: called at
+	// each of QuickJS's interrupt checks, so it must be cheap.
+	static void SetInputPoll (void (*pPoll) (void))	{ s_pInputPoll = pPoll; }
 
 private:
 	boolean StartApp (const gk_app_t *pApp);
@@ -124,6 +130,7 @@ private:
 
 	static boolean KeyHook (const TGkKey &rKey, void *pParam);
 	static void HomeHandler (void *pParam);
+	static boolean StopHandler (void *pParam);
 	static int InterruptHandler (JSRuntime *pRuntime, void *pParam);
 
 	static JSModuleDef *ModuleLoader (JSContext *pContext, const char *pName, void *pParam);
@@ -138,10 +145,12 @@ private:
 
 	const gk_app_t *m_pPendingLaunch;
 	volatile boolean m_bHomeRequested;	// set from IRQ context
+	volatile boolean m_bStopRequested;	// Ctrl+C, set from IRQ context
 	boolean m_bInterrupted;			// the pending exception is our interrupt
 	boolean m_bCancelJobs;			// the watchdog stopped a script: end its jobs
 
 	static CAppHost *s_pThis;
+	static void (*s_pInputPoll) (void);
 };
 
 // --- shared with the JS modules (js_ui.cpp, js_sys.cpp) ---

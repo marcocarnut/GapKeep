@@ -12,7 +12,10 @@
 //
 // The GUI ("Windows"/Super) key is the Home key: it asks the system to return
 // to the launcher. That request is raised from interrupt context, so it must
-// only set flags (see SetHomeHandler).
+// only set flags (see SetHomeHandler). Ctrl+C is offered, from interrupt
+// context too, to a stop handler (SetStopHandler): if it takes the key (a
+// script has been running a while: the app host stops it), the key goes no
+// further; otherwise it is an ordinary key.
 //
 // The layout (runtime/keylayout.h) is Circle's keymap, loaded into the
 // keyboard when it is attached and whenever the layout changes; dead keys
@@ -47,6 +50,7 @@ class CKeyboardIndev
 public:
 	typedef boolean TKeyHook (const TGkKey &rKey, void *pParam);	// TRUE: consumed
 	typedef void THomeHandler (void *pParam);			// IRQ context!
+	typedef boolean TStopHandler (void *pParam);			// IRQ context! TRUE: taken
 
 public:
 	CKeyboardIndev (void);
@@ -63,6 +67,8 @@ public:
 
 	void SetKeyHook (TKeyHook *pHook, void *pParam);
 	void SetHomeHandler (THomeHandler *pHandler, void *pParam);
+	// Ctrl+C (a new press, not a repeat), before it is queued
+	void SetStopHandler (TStopHandler *pHandler, void *pParam);
 
 	// Drop queued keys (e.g. when switching apps).
 	void Flush (void);
@@ -116,6 +122,8 @@ private:
 	void *m_pKeyHookParam;
 	THomeHandler *m_pHomeHandler;
 	void *m_pHomeParam;
+	TStopHandler *m_pStopHandler;
+	void *m_pStopParam;
 
 	static CKeyboardIndev *s_pThis;
 };

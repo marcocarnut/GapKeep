@@ -162,7 +162,9 @@ in through `tm()` or `ui.escapeMarkup`, never pasted into markup
   reports the work an app does as "about N ms of JavaScript on a Pi Zero";
   the Zero is 10 to 50 times slower than your machine.
 - **A handler may run 10 s at most**, then it is interrupted (the app keeps
-  running).
+  running). Ctrl+C interrupts it sooner, once it has run half a second
+  (`key ctrl-c` in scenarios); a Ctrl+C while nothing runs that long is an
+  ordinary key, the app's.
 - **Containers don't scroll** unless `scrollable: true`. The screen and
   Panels do. A scrollable Container clips its content and needs 5 px of
   padding for focus rings (it gets that by default). The mouse wheel

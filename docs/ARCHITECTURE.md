@@ -61,7 +61,7 @@ flag; all JavaScript runs from the main loop.
 Runs one app at a time. Starting an app:
 
 1. A new **QuickJS runtime** with a 96 MB heap limit, a 512 KB stack limit, a
-   module loader and an interrupt handler (watchdog and Home key).
+   module loader and an interrupt handler (watchdog, Ctrl+C and Home key).
 2. A new **LVGL screen** and **focus group**; the keyboard is pointed at it.
 3. The app's entry module is evaluated. It imports `gk:*` modules (created
    on demand, permission-checked) and its own files (from memory).
@@ -349,8 +349,13 @@ apps' own JavaScript. Apps in a suite share data this way but never code,
 so each app's hash still covers every line it runs.
 
 **Runaway apps:** QuickJS calls the app host's interrupt handler as it
-runs JavaScript, which stops a call after 10 seconds (the watchdog) or when
-the Windows key is pressed. Native work inside one call is not
+runs JavaScript, which stops a call after 10 seconds (the watchdog), on
+Ctrl+C, or when the Windows key is pressed. Ctrl+C is taken from the
+keyboard in interrupt context, as the Windows key is (`kbdindev.h`), but
+only while a call or a run of promise jobs has been under way for half a
+second or more; the app keeps running, as after the watchdog (its jobs are
+rejected, a banner says it was stopped). Otherwise Ctrl+C is an ordinary
+key, delivered to the app. Native work inside one call is not
 interrupted: a built-in like `Array.prototype.sort` on a large array,
 `JSON.parse` of a long text or BigInt arithmetic on huge numbers runs to
 its end (bounded by the 96 MB heap: seconds on a Pi Zero, not minutes),
@@ -369,8 +374,8 @@ after LVGL has read input and drawn, so the screen and the keyboard stay
 alive. Jobs run one at a time, in order (16 may wait per app); the promise
 is settled from the main loop, as gk:usb's transfers are, and progress is
 reported between slices (`onProgress`). When the app stops, its jobs are
-dropped (wiped, never settled); when the watchdog stops one of its scripts,
-they are rejected. An app cancels one with an `AbortSignal` (`{ signal }`;
+dropped (wiped, never settled); when the watchdog (or Ctrl+C) stops one of its
+scripts, they are rejected. An app cancels one with an `AbortSignal` (`{ signal }`;
 `AbortController` is a small global written in JavaScript in
 `js_sys.cpp`, as QuickJS has none): the job adds an "abort" listener, a
 native function, so the abort is noticed when JavaScript calls
