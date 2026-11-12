@@ -103,6 +103,7 @@ wait 1
 mark
 key ret
 expect dice39: e-paper: wrote share 2 of 3 60
+# (the camera stops once the code matches: no photograph of share 2)
 mark
 key tab
 key ret
@@ -111,9 +112,6 @@ reject dice39: e-paper: read back share 2 of 3: another code
 wait 1
 serialshot 05-share2-checked
 wait 1
-key esc
-wait 1
-serialraw 06-share2-camera
 key meta_l
 expect launcher ready 10
 reject app:dice39: .*(MS12|abandon|about)
