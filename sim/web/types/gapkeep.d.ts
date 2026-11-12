@@ -216,7 +216,7 @@ declare module "gk:ui" {
     font?: number;
     /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
     mono?: boolean;
-    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 20, 30; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. */
+    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. */
     family?: "default" | "epdmono";
     textAlign?: "left" | "center" | "right";
     /** Corner radius, px. */
@@ -417,7 +417,7 @@ declare module "gk:ui" {
     font: number;
     /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
     mono: boolean;
-    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 20, 30; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. */
+    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. */
     family: "default" | "epdmono";
     textAlign: "left" | "center" | "right";
     /** Corner radius, px. */
@@ -653,7 +653,7 @@ declare module "gk:ui" {
   export const fonts: number[];
   /** Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. */
   export const monoFonts: number[];
-  /** Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 20 and 30 (the same, every pixel doubled or tripled: 12x20, 18x30). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). */
+  /** Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 14, 16, 20, 24 and 32 (Terminus Font's bold, 8x14 to 16x32). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). */
   export const epdmonoFonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
   export const symbols: SymbolTable;

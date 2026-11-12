@@ -16,7 +16,7 @@
 //   group_mark = .              (i18n.h, docs/DESIGN.md)
 //   epaper = weact-2.9-bwr      an e-paper panel on SPI0, and its wires:
 //   epaper_cs = ce0             epaper_dc, epaper_rst, epaper_busy (GPIOs),
-//                               epaper_spi_khz (epd.h, docs/EPAPER.md)
+//                               epaper_spi_khz, epaper_rotate (epd.h, docs/EPAPER.md)
 //
 // What it takes and what it refuses is logged, never silently ignored.
 //

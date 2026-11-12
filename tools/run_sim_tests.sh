@@ -104,6 +104,14 @@ if [ -f "$OUT/epaper/04-panel1-rewritten.png" ]; then
 	fi
 fi
 
+if [ -f "$OUT/epaper_rotate/r270-u.png" ]; then
+	if python3 tests/epaper/check_rotation.py "$OUT/epaper_rotate" > "$OUT/epaper_rotation.log" 2>&1; then
+		echo "PASS  sim:epaper_rotation"
+	else
+		echo "FAIL  sim:epaper_rotation   (see $OUT/epaper_rotation.log)"; FAILED=1
+	fi
+fi
+
 if [ -f "$OUT/signer/23-descriptor.png" ]; then
 	if python3 tests/signer/check_descriptor.py "$OUT/signer" > "$OUT/signer_descriptor.log" 2>&1; then
 		echo "PASS  sim:signer_descriptor"

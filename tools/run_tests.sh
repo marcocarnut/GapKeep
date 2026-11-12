@@ -106,7 +106,7 @@ if [ -f "$OUT/signer/30-part-00.png" ]; then
 fi
 
 tools/build.sh qemu SEALED=1 DATA=tests/sdcard/data EXTRA_APPS=tests/sdcard/apps/testsuite \
-	EPAPER=weact-2.9-bwr EPAPER_BUSY=23 >/dev/null
+	EPAPER=weact-2.9-bwr EPAPER_BUSY=23 EPAPER_ROTATE=180 >/dev/null
 for t in tests/*.txt; do
 	! needs_sealed_build "$t" || run "$t" ""
 done

@@ -15,3 +15,5 @@ epaper_cs = ce0
 epaper_dc = 25
 epaper_rst = 17
 epaper_busy = 24
+# mounted turned a quarter turn clockwise: wider than tall, as it is read
+epaper_rotate = 90

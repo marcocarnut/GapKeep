@@ -28,6 +28,9 @@
 //                           name: a new panel, white, of the model given or
 //                           the configured one; an old one: as it was left)
 //   epaper unplug           pull the panel out (BUSY then reads as pulled)
+//   epaper config <model> [rotate=90 dc=25 ...]
+//                           the panel's configuration, as gapkeep.txt's
+//                           epaper keys (a test kernel's "#epaper")
 //   epaper shot <file.png>  what the plugged-in panel shows, landscape;
 //                           answers "#epaper shot <file.png>"
 //   epaper look <file.png>  ...as its pigments look now (the 2.9" B/W/R's
@@ -69,6 +72,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "sim.h"
+#include "../../src/runtime/epd.h"
 #include <circle/timer.h>
 #include <ff.h>
 #include <lvgl/lvgl/lvgl.h>
@@ -152,6 +156,11 @@ static void EPaperCommand (char *pArgs)
 		{
 			printf ("#error epaper plug %s: no such model, or that panel is another\n", pRest);
 		}
+	}
+	else if (strcmp (pArgs, "config") == 0 && *pRest != '\0')
+	{
+		// as a test kernel's "#epaper" (src/testshot.h)
+		printf (CGkEPD::ConfigureLine (pRest, "simulator") ? "#epaper config\n" : "#error epaper config: refused\n");
 	}
 	else if (strcmp (pArgs, "unplug") == 0)
 	{

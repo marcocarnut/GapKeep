@@ -669,7 +669,8 @@ async function run (appId, { focus = true } = {}) {
   if (localStorage.getItem ("gkide.experimental") === "yes") settings += "experimental = yes\n";
   if (language) settings += `language = ${language}\n`;
   const epaperModel = localStorage.getItem ("gkide.epaper") || "none";
-  if (epaperModel !== "none") settings += `epaper = ${epaperModel}\n`;
+  // mounted wider than tall (the 2.9" and 2.13" are taller natively)
+  if (epaperModel !== "none") settings += `epaper = ${epaperModel}\nepaper_rotate = ${epaperModel === "weact-4.2-bw" ? 0 : 90}\n`;
   if (settings) card["gapkeep.txt"] = settings;
   if (Object.keys (card).length) gk.writeCard (card);
   if (Object.keys (builtin).length) gk.writeBuiltin (builtin);

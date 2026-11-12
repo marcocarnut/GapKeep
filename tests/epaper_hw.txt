@@ -12,7 +12,7 @@
 # The app is started and driven over the serial line ("#launch", "#key"),
 # so the rig's USB keyboard isn't needed.
 expect launcher ready 60
-send #epaper weact-2.9-bwr
+send #epaper weact-2.9-bwr rotate=180
 expect epaper: WeAct 2.9" B/W/R \(128x296, red\) on SPI0 CE0 \(GPIO 8\), DC GPIO 25, RST GPIO 17, BUSY GPIO 24, 4000 kHz 10
 send #camera pi
 expect camera: pi 10

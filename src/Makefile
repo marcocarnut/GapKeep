@@ -57,7 +57,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 # the fonts (tools/make_fonts.py)
 OBJS	+= $(patsubst %,runtime/fonts/gk_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
 OBJS	+= $(patsubst %,runtime/fonts/gk_mono_%.o,12 14 16 18 20 24 28)
-OBJS	+= $(patsubst %,runtime/fonts/gk_epdmono_%.o,10 20 30)
+OBJS	+= $(patsubst %,runtime/fonts/gk_epdmono_%.o,10 14 16 20 24 32)
 OBJS	+= runtime/fonts/gk_ttf_bold.o runtime/fonts/gk_ttf_italic.o runtime/fonts/gk_ttf_bolditalic.o runtime/ttfstyles.o
 
 ifeq ($(strip $(TEST)),1)
@@ -86,7 +86,7 @@ endif
 # EPAPER_SPI_KHZ=.., gapkeep.txt's keys (docs/EPAPER.md). Checked here by
 # ../tools/epaper_config.py, with gapkeep.txt's rules; part of the image,
 # so the kernel's hash covers it.
-EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
+EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ EPAPER_ROTATE,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
 ifneq ($(EPAPER_VARS),)
 ifneq ($(strip $(SEALED)),1)
 $(error EPAPER is for sealed builds (SEALED=1); others read it from the card's gapkeep.txt)

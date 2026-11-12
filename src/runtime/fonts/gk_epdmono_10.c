@@ -1,8 +1,11 @@
 /*
- * gk_epdmono_10: misc-fixed 6x10 (gk:ui's "epdmono"), 6x10, 1 bpp.
- * Made by tools/make_epdmono.py from X11 misc-fixed 6x10 (6x10-ISO8859-1.pcf.gz, SHA-256 2c857cdb3472beb1b27b8f413675e4a71ee9837a242c2ecdf1f001704e17a18b):
- * "Public domain terminal emulator font.  Share and enjoy."
- * (LICENCE.misc-fixed). Do not edit.
+ * gk_epdmono_10: gk:ui's "epdmono" (or a candidate for it), 6x10, 1 bpp.
+ * Made by tools/make_epdmono.py from
+ * X11 misc-fixed 6x10 (6x10-ISO8859-1.pcf.gz, SHA-256 2c857cdb3472beb1b27b8f413675e4a71ee9837a242c2ecdf1f001704e17a18b):
+ * "Public domain terminal emulator font.  Share and enjoy." (LICENCE.misc-fixed).
+ * Do not edit.
+ *
+ * SPDX-License-Identifier: LicenseRef-PublicDomain
  */
 #include "lvgl/lvgl/lvgl.h"
 

@@ -71,6 +71,8 @@ struct TGkSPIDevice
 	unsigned nCS;			// chip select: 0 (CE0, GPIO 8) or 1 (CE1, GPIO 7)
 	unsigned nDC, nRST, nBUSY;	// GPIOs
 	unsigned nHz;			// SPI clock
+	unsigned nRotate;		// e-paper: how it is mounted, in quarter turns
+					// clockwise as its viewer sees it (0..3)
 };
 
 // A GPIO the SPI devices' wires may use: on the header (2..27), and not
