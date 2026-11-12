@@ -29,6 +29,8 @@
 #include "seipd.h"
 #include "ocb.h"
 #include "aead.h"
+#include "eax.h"
+#include "gcm.h"
 #include "argon2.h"
 
 static size_t unhex (const char *s, uint8_t *out)
@@ -73,6 +75,8 @@ int main (void)
 	if (r == 0) r = gk_x25519_selftest () ? 8000 + gk_x25519_selftest () : 0;
 	if (r == 0) r = gk_seipd1_selftest () ? 9000 + gk_seipd1_selftest () : 0;
 	if (r == 0) r = gk_ocb_selftest () ? 10000 + gk_ocb_selftest () : 0;
+	if (r == 0) r = gk_eax_selftest () ? 13000 + gk_eax_selftest () : 0;
+	if (r == 0) r = gk_gcm_selftest () ? 14000 + gk_gcm_selftest () : 0;
 	if (r == 0) r = gk_aead_selftest () ? 11000 + gk_aead_selftest () : 0;
 	if (r == 0)
 	{
@@ -244,6 +248,42 @@ int main (void)
 			}
 			else if (dl == 16) printf ("-"); else hex (out, dl - 16);
 			if (kl == 16 || kl == 24 || kl == 32) gk_ocb_key_free (&key);
+		}
+		else if ((strcmp (w[0], "eax") == 0 || strcmp (w[0], "gcm") == 0) && n == 6)
+		{
+			/* eax|gcm enc|dec KEY NONCE AD DATA (dec: DATA is C || tag); in
+			   whole blocks, then the rest */
+			size_t kl = unhex (w[2], a), nl = unhex (w[3], b), al = unhex (w[4], c), dl = unhex (w[5], d);
+			int dec = strcmp (w[1], "dec") == 0, eax = w[0][0] == 'e';
+			size_t pl = dec ? (dl >= 16 ? dl - 16 : 0) : dl, whole = pl & ~(size_t) 15;
+			uint8_t tag[16];
+			gk_eax_key_t ek;
+			gk_eax_t es;
+			gk_gcm_key_t gk;
+			gk_gcm_t gs;
+			if (eax ? gk_eax_key_init (&ek, a, kl) != 0 : gk_gcm_key_init (&gk, a, kl) != 0) { printf ("error key"); }
+			else if (!eax && nl != 12) { printf ("error nonce"); gk_gcm_key_free (&gk); }
+			else if (dec && dl < 16) { printf ("error -1"); if (eax) gk_eax_key_free (&ek); else gk_gcm_key_free (&gk); }
+			else
+			{
+				if (eax)
+				{
+					gk_eax_start (&ek, &es, b, nl, c, al);
+					(dec ? gk_eax_decrypt_blocks : gk_eax_encrypt_blocks) (&ek, &es, d, out, whole);
+					gk_eax_finish (&ek, &es, dec, d + whole, out + whole, pl - whole, tag);
+					gk_eax_key_free (&ek);
+				}
+				else
+				{
+					gk_gcm_start (&gk, &gs, b, c, al);
+					(dec ? gk_gcm_decrypt_blocks : gk_gcm_encrypt_blocks) (&gk, &gs, d, out, whole);
+					gk_gcm_finish (&gk, &gs, dec, d + whole, out + whole, pl - whole, tag);
+					gk_gcm_key_free (&gk);
+				}
+				if (!dec) { memcpy (out + pl, tag, 16); hex (out, pl + 16); }
+				else if (memcmp (tag, d + pl, 16) != 0) printf ("error -1");
+				else if (pl == 0) printf ("-"); else hex (out, pl);
+			}
 		}
 		else if (strcmp (w[0], "aead") == 0 && n == 5)
 		{

@@ -45,7 +45,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o crypto/wipe.o \
-	  crypto/s2k.o crypto/aes.o crypto/ed25519.o crypto/rsa.o crypto/x25519.o crypto/seipd.o crypto/ocb.o crypto/aead.o crypto/argon2.o \
+	  crypto/s2k.o crypto/aes.o crypto/ed25519.o crypto/rsa.o crypto/x25519.o crypto/seipd.o crypto/ocb.o crypto/eax.o crypto/gcm.o crypto/aead.o crypto/argon2.o \
 	  runtime/gk_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
 	  usbclaim.o runtime/usb.o runtime/usbdesc.o runtime/js_usb.o \

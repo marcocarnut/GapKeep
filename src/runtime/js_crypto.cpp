@@ -2408,12 +2408,17 @@ static JSValue js_crypto_seipd_v1_decrypt (JSContext *ctx, JSValueConst this_val
 // --- OpenPGP's AEAD packets: SEIPD v2, GnuPG's OCB packet --------------------
 
 static int OcbTest (void) { return gk_ocb_selftest (); }
+static int EaxTest (void) { return gk_eax_selftest (); }
+static int GcmTest (void) { return gk_gcm_selftest (); }
 static int AeadTest (void) { return gk_aead_selftest (); }
 
+// The modes' known answers, then RFC 9580's sample packets (A.9, A.10,
+// A.11): a few milliseconds, at the first call
 static boolean AeadOK (JSContext *ctx)
 {
-	static int s_nOcb = -1, s_nAead = -1;
+	static int s_nOcb = -1, s_nEax = -1, s_nGcm = -1, s_nAead = -1;
 	return    AesOK (ctx) && HashesOK (ctx) && GroupOK (ctx, &s_nOcb, "OCB", OcbTest)
+	       && GroupOK (ctx, &s_nEax, "EAX", EaxTest) && GroupOK (ctx, &s_nGcm, "GCM", GcmTest)
 	       && GroupOK (ctx, &s_nAead, "AEAD packets", AeadTest);
 }
 
@@ -2423,14 +2428,15 @@ struct TGkAeadJob
 	const char *pFunction;
 };
 
-// 64 KiB decrypted and checked at a time
+// 16 KiB decrypted and checked at a time (GCM, the slowest, about 2 MB/s on
+// a Pi Zero: under 10 ms)
 static boolean AeadStep (void *pParam, unsigned nDeadline)
 {
 	gk_aead_job_t *pJob = &((TGkAeadJob *) pParam)->Job;
 	boolean bMore;
 	do
 	{
-		bMore = gk_aead_step (pJob, 64 * 1024);
+		bMore = gk_aead_step (pJob, 16 * 1024);
 	}
 	while (bMore && Before (nDeadline));
 	return bMore;
@@ -2506,7 +2512,9 @@ static JSValue AeadDecrypt (JSContext *ctx, int argc, JSValueConst *argv, int nP
 		case -3:
 			return JS_ThrowOutOfMemory (ctx);
 		case -5:
-			return JS_ThrowRangeError (ctx, "%s: only OCB for now (the packet's AEAD mode is another)", pFunction);
+			return JS_ThrowRangeError (ctx, nPacket == GK_AEAD_OCBED
+						   ? "%s: the packet's AEAD mode is neither OCB nor EAX"
+						   : "%s: the packet's AEAD mode is not EAX, OCB or GCM", pFunction);
 		default:
 			return JS_ThrowRangeError (ctx, "%s: not such a packet (too short, or a chunk size octet above 16)",
 						   pFunction);
@@ -2752,7 +2760,8 @@ static boolean GetWhole (JSContext *ctx, JSValueConst Obj, const char *pName, ui
 	}
 	if (!(f >= nMin && f <= nMax && f == (uint32_t) f))
 	{
-		JS_ThrowRangeError (ctx, "%s: %s must be a whole number from %u to %u", pFunction, pName, nMin, nMax);
+		JS_ThrowRangeError (ctx, "%s: %s must be a whole number from %u to %u", pFunction, pName,
+				    (unsigned) nMin, (unsigned) nMax);
 		return FALSE;
 	}
 	*pValue = (uint32_t) f;
@@ -2891,7 +2900,7 @@ static JSValue js_crypto_openpgp_s2k_argon2 (JSContext *ctx, JSValueConst this_v
 	if (!(fM >= nMinM && fM <= 31 && fM == (uint32_t) fM))
 	{
 		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: memoryExponent must be %u to 31 (RFC 9580, 3.7.1.4)",
-					   nMinM);
+					   (unsigned) nMinM);
 	}
 	if (fM > 18)
 	{
