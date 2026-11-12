@@ -154,6 +154,16 @@ void CKeyboardIndev::KeyStatusHandlerRaw (unsigned char ucModifiers, const unsig
 	pThis->m_bGUIDown = bGUI;
 }
 
+#ifdef GK_TEST
+void CKeyboardIndev::TestKey (const char *pString)
+{
+	unsigned char Down[6] = {0x04}, Up[6] = {0};
+	KeyStatusHandlerRaw (0, Down);
+	KeyPressedHandler (pString);
+	KeyStatusHandlerRaw (0, Up);
+}
+#endif
+
 void CKeyboardIndev::KeyPressedHandler (const char *pString)
 {
 	assert (s_pThis != 0);
