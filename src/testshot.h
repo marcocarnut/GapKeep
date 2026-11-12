@@ -39,9 +39,12 @@
 // codes of tests/colorqr, by their PNG's name without ".png") for the
 // synthetic camera, as the simulator's "camera picture <file>".
 //
-// "#fonts": the bold and italic fonts made so far, with the glyph bitmaps
-// drawn and the time it took (runtime/ttfstyles.h). "#redraw": the whole
-// screen drawn again at once, logged with the time it took.
+// "#fonts": the fonts made from outlines so far, with the glyph bitmaps
+// drawn and the time it took (runtime/fontcache.h). "#fonts drop": their
+// glyphs dropped (the next draw rasterizes them again). "#fonts outlines
+// on|off": the bitmap fonts' sizes drawn from outlines too, for fonts made
+// from then on. "#redraw": the whole screen drawn again at once, logged
+// with the time it took.
 //
 // "#keyboard <layout>": the keyboard layout (runtime/keylayout.h), as
 // "keyboard = <layout>" in gapkeep.txt would, or a settings app.

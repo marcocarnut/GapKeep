@@ -68,9 +68,13 @@ export async function runSelfTest(parent) {
     const c = new ui.Container(box);
     throws(() => c.set({ width: "wide" }), TypeError, "size");
     throws(() => c.set({ bg: "red" }), TypeError, "color");
-    throws(() => c.set({ font: 13 }), TypeError, "font");
+    throws(() => c.set({ font: "13" }), TypeError, "font");
+    throws(() => c.set({ font: 7 }), RangeError, "font range");
+    throws(() => c.set({ font: 13.5 }), RangeError, "font fraction");
     throws(() => c.set({ layout: "grid" }), TypeError, "enum");
     c.set({ width: "50%", height: "content", bg: "#123", color: 0xffffff, font: 20, layout: "row" });
+    c.set({ font: 13 });                // any size of ui.fontRange, from outlines
+    c.set({ font: 120, mono: true });
   });
 
   await test("instanceof and type", () => {
