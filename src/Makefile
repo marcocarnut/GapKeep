@@ -57,6 +57,7 @@ OBJS	= main.o kernel.o kbdindev.o \
 # the fonts (tools/make_fonts.py)
 OBJS	+= $(patsubst %,runtime/fonts/gk_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
 OBJS	+= $(patsubst %,runtime/fonts/gk_mono_%.o,12 14 16 18 20 24 28)
+OBJS	+= $(patsubst %,runtime/fonts/gk_epdmono_%.o,10 20 30)
 OBJS	+= runtime/fonts/gk_ttf_bold.o runtime/fonts/gk_ttf_italic.o runtime/fonts/gk_ttf_bolditalic.o runtime/ttfstyles.o
 
 ifeq ($(strip $(TEST)),1)

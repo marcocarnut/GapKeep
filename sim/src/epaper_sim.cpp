@@ -50,6 +50,15 @@ static TSimPanel *s_pPlugged;		// the one plugged in, or 0
 static double s_fRefreshMs = -1;	// BUSY for a refresh: < 0 as long as its waveform
 static unsigned s_nSerial;		// bumped when what the panel shows may have changed
 static const char *s_pSetModel;		// --epaper
+// The pigments' physics costs seconds of CPU a refresh, computed when the
+// panel is looked at (or when the next refresh begins: all at once, inside
+// an SPI write). The browser shows it; the command line has it only when
+// asked (gksim --epaper-physics), so that scenarios run at full speed.
+#ifdef __EMSCRIPTEN__
+static boolean s_bPhysics = TRUE;
+#else
+static boolean s_bPhysics = FALSE;
+#endif
 
 static int s_Level[64];			// GPIO outputs
 static TGPIOMode s_Mode[64];
@@ -120,7 +129,7 @@ static TSimPanel *NewPanel (const char *pName, const panel_model_t *pModel)
 	p->pShown[0] = (uint8_t *) malloc (nPlane);
 	p->pShown[1] = (uint8_t *) calloc (1, nPlane);
 	memset (p->pShown[0], 0xFF, nPlane);		// white, as it comes
-	if (pModel->wave3 != 0)
+	if (pModel->wave3 != 0 && s_bPhysics)
 	{
 		eb_params_t Params;
 		eb_params_default (&Params);
@@ -245,6 +254,11 @@ boolean GkSPIControllerPresent (void)
 }
 
 // --- the simulator's side (sim.h) ---------------------------------------------------
+
+void gk_sim_epaper_physics (int on)
+{
+	s_bPhysics = on != 0;
+}
 
 void gk_sim_set_epaper (const char *model)
 {

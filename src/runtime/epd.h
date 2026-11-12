@@ -132,6 +132,11 @@ public:
 	// Ends a refresh going on (its app stopped): the panel is left as it
 	// is (it finishes a refresh on its own); the next one resets it.
 	void Abort (void);
+	// An AbortSignal's abort (epaper.cpp, jobs.h): see epd.cpp. TRUE: the
+	// refresh goes on to deep sleep (Step until it ends), FALSE: stopped.
+	boolean Cancel (void);
+	// Nothing to do now (waiting): jobs.h's Idle.
+	boolean Idle (void) const;
 	boolean IsBusy (void) const		{ return m_State != StateIdle; }
 
 private:
@@ -177,6 +182,7 @@ private:
 	unsigned m_nRow;		// rows of the plane sent
 	boolean m_bSeenBusy;		// BUSY high since the refresh started
 	boolean m_bDone;		// the last refresh ended well
+	unsigned m_nLastPoll;		// BUSY's last read in StateRefresh
 	// timings, for the log (clock ticks, us)
 	unsigned m_nResetStart, m_nResetUs, m_nSoftUs, m_nBusyHighUs;
 	boolean m_bWaitSawBusy, m_bResetSawBusy;

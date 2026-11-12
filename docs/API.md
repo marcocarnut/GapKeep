@@ -43,6 +43,7 @@ import * as ui from "gk:ui";
 | `width`, `height` | number | Display size in pixels. |
 | `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. |
 | `monoFonts` | number[] | Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. |
+| `epdmonoFonts` | number[] | Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 20 and 30 (the same, every pixel doubled or tripled: 12x20, 18x30). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). |
 | `symbols` | object | Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List](#symbols). |
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |
@@ -122,6 +123,7 @@ A **size** is a number of pixels, a percentage of the parent as a string
 | `color` | color | Text color. |
 | `font` | number | Font size, one of `ui.fonts`. |
 | `mono` | boolean | *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. |
+| `family` | `"default"`, `"epdmono"` | *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 20, 30; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above. Set on a container, its children inherit it. |
 | `textAlign` | `"left"`, `"center"`, `"right"` |  |
 | `radius` | number | Corner radius, px. |
 | `borderWidth` | number | px. |
@@ -416,7 +418,7 @@ status.text = "Done: you can unplug the panel.";
 | `panel` | A `Container`, the panel's whole area (`width`, `height` readable), white, a column with 4 px padding and gap: put widgets on it as on `ui.screen`. They are not keyboard targets. |
 | `panel.colors` | `["black", "white"]`, or with `"red"`. |
 | `panel.model` | The module, for people: `"WeAct 2.9\" B/W/R"`. |
-| `panel.refresh(options?)` | Writes what the widgets show onto the panel: a promise, a [long operation](#long-operations) (`onProgress`). Every refresh resets the panel and sets it up again (it may be another panel than last time), writes the picture, plays the panel's own full waveform (18 s on the 2.9" B/W/R: it flashes, then shows the picture, red last) and puts it into deep sleep; then it resolves, and the panel may be unplugged. It rejects with an `Error` if no panel answers (unplugged), or one stops answering. The picture is taken when `refresh()` is called. |
+| `panel.refresh(options?)` | Writes what the widgets show onto the panel: a promise, a [long operation](#long-operations) (`onProgress`). Every refresh resets the panel and sets it up again (it may be another panel than last time), writes the picture, plays the panel's own full waveform (18 s on the 2.9" B/W/R: it flashes, then shows the picture, red last) and puts it into deep sleep; then it resolves, and the panel may be unplugged. It rejects with an `Error` if no panel answers (unplugged), or one stops answering. The picture is taken when `refresh()` is called. `options.signal`, an `AbortSignal`, cancels it: already aborted, the promise rejects at once and nothing is sent; aborted before the refresh command (during the reset, the set-up or the planes), the panel is put into deep sleep (or given a reset, if it was busy) with its picture untouched, and the promise rejects with the signal's reason; aborted after it, the waveform can't be stopped without leaving the pigments part way and its DC balance broken, so it runs to its end and deep sleep, and then the promise rejects. |
 | `panel.close()` | Deletes the panel's widgets and gives the panel back (`delete()` does the same); what the panel shows stays. A refresh asked for goes on. The panel is closed when the app stops, too. |
 
 The panel's widgets are drawn in black on white. Colours become

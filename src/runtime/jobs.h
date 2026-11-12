@@ -61,6 +61,10 @@ struct TGkJobOps
 	// slices (Step until FALSE) to clean up first; FALSE (or no op): it is
 	// dropped at once.
 	boolean (*Abort) (void *pState);
+
+	// Optional: TRUE while the job only waits (for a device) and has
+	// nothing to do in this pass of the main loop: no slice is spent.
+	boolean (*Idle) (void *pState);
 };
 
 // What a long operation's options argument gave: { onProgress, signal }

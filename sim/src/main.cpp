@@ -55,6 +55,8 @@
 //                   weact-2.9-bwr, weact-2.13-bw, weact-4.2-bw, or none;
 //                   a panel of it is plugged in (docs/EPAPER.md)
 //   --epaper-ms MS  as "epaper refresh-ms"
+//   --epaper-physics  the 2.9" B/W/R's pigments' physics, for "epaper look"
+//                   (seconds of CPU a refresh: off by default)
 //   --lang TAG      the language (over the card's gapkeep.txt): en, pt-BR,
 //                   qps (the pseudo-language: shows untranslated text)...
 //   --usbip HOST:PORT[/BUSID]  as "usbip attach", from the start (more than once: more devices)
@@ -409,11 +411,12 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	gk_sim_set_language (argv[++i]);
 		else if (strcmp (argv[i], "--epaper") == 0 && i + 1 < argc)	gk_sim_set_epaper (argv[++i]);
 		else if (strcmp (argv[i], "--epaper-ms") == 0 && i + 1 < argc)	gk_sim_epaper_refresh_ms (atof (argv[++i]));
+		else if (strcmp (argv[i], "--epaper-physics") == 0)		gk_sim_epaper_physics (1);
 		else if (strcmp (argv[i], "--usbip") == 0 && i + 1 < argc && nUSBIP < 4) USBIP[nUSBIP++] = argv[++i];
 		else
 		{
 			fprintf (stderr, "usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG]"
-				 " [--epaper MODEL|none] [--epaper-ms MS]"
+				 " [--epaper MODEL|none] [--epaper-ms MS] [--epaper-physics]"
 				 " [--usbip HOST:PORT[/BUSID]] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}

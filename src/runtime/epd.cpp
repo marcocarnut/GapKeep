@@ -42,7 +42,8 @@ static const unsigned ResetMs = 10;		// RST low, then high, as EPDPages
 static const unsigned AnswerMs = 1000;		// the controller's BUSY after a reset
 static const unsigned SettleMs = 5;		// after the soft reset, before BUSY tells
 static const unsigned NoRefreshMs = 300;	// BUSY never high this long after 0x20: no refresh
-static const unsigned ChunkBytes = 512;		// of a plane, per SPI transfer
+static const unsigned ChunkBytes = 512;
+static const unsigned PollMs = 5;		// BUSY read at most this often while the waveform runs		// of a plane, per SPI transfer
 
 TGkSPIDevice CGkEPD::s_Panel = {"epaper", 0, 0, 25, 17, 24, DefaultHz};	// Waveshare's pins
 CGkEPD *CGkEPD::s_pThis = 0;
@@ -335,6 +336,7 @@ CGkEPD::CGkEPD (const TGkSPIDevice *pDevice)
 	m_nPlane (0), m_nRow (0),
 	m_bSeenBusy (FALSE),
 	m_bDone (FALSE),
+	m_nLastPoll (0),
 	m_nRefreshStart (0),
 	m_pError (0)
 {
@@ -655,6 +657,7 @@ int CGkEPD::Step (unsigned nDeadline)
 			return 1;
 
 		case StateRefresh:
+			m_nLastPoll = CTimer::GetClockTicks ();
 			if (Busy ())
 			{
 				if (!m_bSeenBusy)
@@ -695,6 +698,64 @@ int CGkEPD::Step (unsigned nDeadline)
 	}
 }
 
+// Nothing to do in this pass: waiting out the reset pulse, or the waveform
+// between two reads of BUSY (every PollMs: no slice spent, jobs.h).
+boolean CGkEPD::Idle (void) const
+{
+	switch (m_State)
+	{
+	case StateResetLow:
+	case StateResetHigh:
+		return !Due ();
+	case StateRefresh:
+		return CTimer::GetClockTicks () - m_nLastPoll < PollMs * (CLOCKHZ / 1000);
+	default:
+		return FALSE;
+	}
+}
+
+// An abort (AbortSignal) during a refresh. Before the refresh command the
+// panel's picture hasn't been touched: if the controller is idle (BUSY
+// low) it is put into deep sleep, as after a refresh; if it is busy (a
+// reset under way), it gets a hardware reset pulse and is left idle, its
+// lines let go. Either way nothing more is sent and FALSE says so. After
+// the refresh command (0x20) the waveform runs on its own and can't be
+// stopped without leaving the pigments part way (a picture half made, and
+// the waveform's DC balance broken): TRUE, the refresh goes on to deep
+// sleep, and only then is the job dropped.
+boolean CGkEPD::Cancel (void)
+{
+	switch (m_State)
+	{
+	case StateIdle:
+		return FALSE;
+	case StateRefresh:
+		CLogger::Get ()->Write (From, LogNotice, "%s: abort: the waveform runs, to deep sleep first",
+					m_pModel->pModule);
+		return TRUE;
+	default:
+		break;
+	}
+	if (m_State != StateResetLow && m_pRST != 0 && !Busy ())
+	{
+		Command1 (0x10, 0x01);				// deep sleep
+		CLogger::Get ()->Write (From, LogNotice, "%s: aborted before the refresh: asleep, "
+					"its picture unchanged", m_pModel->pModule);
+	}
+	else if (m_pRST != 0)
+	{
+		m_pRST->Write (LOW);
+		CTimer::SimpleusDelay (100);			// (the SSD1680 wants 10 us)
+		m_pRST->Write (HIGH);
+		CLogger::Get ()->Write (From, LogNotice, "%s: aborted before the refresh: reset, "
+					"its picture unchanged", m_pModel->pModule);
+	}
+	m_State = StateIdle;
+	m_pError = "aborted";
+	FreePlanes ();
+	return FALSE;
+}
+
 double CGkEPD::GetProgress (void) const
 {
 	unsigned nPlane = m_nRowBytes * m_pModel->nHeight;
@@ -706,7 +767,8 @@ double CGkEPD::GetProgress (void) const
 	{
 		double f = (double) (CTimer::GetClockTicks () - m_nRefreshStart)
 			   / ((double) m_pModel->nRefreshMs * (CLOCKHZ / 1000));
-		return 0.05 + 0.94 * (f < 1 ? f : 1);
+		// in steps of 1 %: onProgress is called when it moves (jobs.cpp)
+		return 0.05 + 0.94 * (int) (100 * (f < 1 ? f : 1)) / 100.0;
 	}
 	case StateIdle:
 		return m_bDone ? 1 : 0;

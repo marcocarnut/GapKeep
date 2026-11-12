@@ -49,7 +49,7 @@ public:
 	u8 *Snapshot (unsigned *pBytes);
 
 	// A refresh with what the screen shows now: a promise (jobs.h).
-	JSValue Refresh (JSContext *ctx, JSValueConst OnProgress);
+	JSValue Refresh (JSContext *ctx, const struct TGkJobOptions &Options);
 
 	// The landscape rotation of the configured panel's model.
 	static unsigned Landscape (void);
