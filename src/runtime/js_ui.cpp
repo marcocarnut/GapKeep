@@ -1381,6 +1381,64 @@ SETTER (SetChecked)
 GETTER (GetChecked) { return JS_NewBool (ctx, lv_obj_has_state (OBJ, LV_STATE_CHECKED)); }
 
 // Dropdown
+// LVGL opens the list under the control, left-aligned with it and as wide
+// as its longest option: a dropdown at the right of the screen had its list
+// run past the edge, its scrollbar with it, and nothing showed there were
+// more options. After LVGL has opened and placed it (our callback runs
+// after the class's handler, for each event that may open it), the list is
+// kept on the screen: at most as wide as the screen, right-aligned with the
+// control if it would pass the right edge, then clamped to the screen's
+// edges; and its scrollbar shows whenever it scrolls.
+static void DropdownPlaceList (lv_event_t *e)
+{
+	lv_event_code_t Code = lv_event_get_code (e);
+	if (   Code != LV_EVENT_RELEASED && Code != LV_EVENT_KEY
+	    && Code != LV_EVENT_FOCUSED && Code != LV_EVENT_ROTARY)
+	{
+		return;
+	}
+	lv_obj_t *pDropdown = (lv_obj_t *) lv_event_get_current_target (e);
+	if (!lv_dropdown_is_open (pDropdown))
+	{
+		return;
+	}
+	lv_obj_t *pList = lv_dropdown_get_list (pDropdown);
+	lv_obj_t *pScreen = pList != 0 ? lv_obj_get_parent (pList) : 0;
+	if (pScreen == 0)
+	{
+		return;
+	}
+	lv_obj_update_layout (pList);
+	int32_t nScreenW = lv_obj_get_width (pScreen);
+	int32_t nScreenH = lv_obj_get_height (pScreen);
+	if (lv_obj_get_width (pList) > nScreenW)
+	{
+		lv_obj_set_width (pList, nScreenW);
+		lv_obj_update_layout (pList);
+	}
+
+	lv_area_t List, Control, Screen;
+	lv_obj_get_coords (pList, &List);
+	lv_obj_get_coords (pDropdown, &Control);
+	lv_obj_get_coords (pScreen, &Screen);
+	int32_t w = lv_area_get_width (&List);
+	int32_t h = lv_area_get_height (&List);
+	int32_t x = List.x1, y = List.y1;
+	if (x + w > Screen.x1 + nScreenW)
+	{
+		x = Control.x2 + 1 - w;			// right-aligned with the control
+	}
+	if (x + w > Screen.x1 + nScreenW) x = Screen.x1 + nScreenW - w;
+	if (x < Screen.x1) x = Screen.x1;
+	if (y + h > Screen.y1 + nScreenH) y = Screen.y1 + nScreenH - h;
+	if (y < Screen.y1) y = Screen.y1;
+	if (x != List.x1 || y != List.y1)
+	{
+		lv_obj_set_pos (pList, lv_obj_get_x_aligned (pList) + (x - List.x1),
+				lv_obj_get_y_aligned (pList) + (y - List.y1));
+	}
+}
+
 SETTER (SetOptions)
 {
 	if (!JS_IsArray (ctx, v))
@@ -2796,7 +2854,12 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent, boolean bMar
 	case WTextArea:	p = lv_textarea_create (pParent);		break;
 	case WCheckbox:	p = lv_checkbox_create (pParent); lv_checkbox_set_text (p, "");	break;
 	case WSwitch:	p = lv_switch_create (pParent);			break;
-	case WDropdown:	p = lv_dropdown_create (pParent); lv_dropdown_set_options (p, "");	break;
+	case WDropdown:
+		p = lv_dropdown_create (pParent);
+		lv_dropdown_set_options (p, "");
+		lv_obj_set_scrollbar_mode (lv_dropdown_get_list (p), LV_SCROLLBAR_MODE_AUTO);
+		lv_obj_add_event_cb (p, DropdownPlaceList, LV_EVENT_ALL, 0);
+		break;
 	case WSlider:	p = lv_slider_create (pParent);			break;
 	case WBar:	p = lv_bar_create (pParent);			break;
 	case WTable:	p = lv_table_create (pParent);			break;

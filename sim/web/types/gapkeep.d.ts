@@ -529,7 +529,7 @@ declare module "gk:ui" {
     /** *Readable*. */
     checked: boolean;
   }
-  /** Picks one of several options from a list that opens. */
+  /** Picks one of several options from a list that opens below the control (above it if there is more room there). The list is as wide as its longest option and stays on the screen: near the right edge it lines up with the control's right side; a list too tall to fit scrolls, with a scrollbar. */
   export class Dropdown extends Widget {
     constructor(props?: DropdownProps);
     constructor(parent: Widget, props?: DropdownProps);

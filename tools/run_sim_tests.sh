@@ -112,6 +112,14 @@ if [ -f "$OUT/repl_epaper/panel.png" ]; then
 		echo "FAIL  sim:repl_epaper_qr   (the panel's QR code: $OUT/repl_epaper/panel.png)"; FAILED=1
 	fi
 fi
+# a Dropdown's open list at the right of the screen stays on it, with a scrollbar
+if [ -f "$OUT/dropdown/03-open-mouse.png" ]; then
+	if python3 tests/dropdown/check_list.py "$OUT/dropdown" > "$OUT/dropdown_list.log" 2>&1; then
+		echo "PASS  sim:dropdown_list"
+	else
+		echo "FAIL  sim:dropdown_list   (see $OUT/dropdown_list.log)"; FAILED=1
+	fi
+fi
 if [ -f "$OUT/epaper_rotate/r270-u.png" ]; then
 	if python3 tests/epaper/check_rotation.py "$OUT/epaper_rotate" > "$OUT/epaper_rotation.log" 2>&1; then
 		echo "PASS  sim:epaper_rotation"
