@@ -389,6 +389,7 @@ void CAppHost::StopApp (void)
 	GkClockFree (&m_App);
 	GkUSBFree (&m_App);
 	GkJobsFree (&m_App);
+	GkCryptoAppStopped (&m_App);
 	m_bCancelJobs = FALSE;
 
 	// Deleting the screen deletes every widget of the app; each widget

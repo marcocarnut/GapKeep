@@ -114,7 +114,7 @@ def build():
                          open("lib/mbedtls/mbedtls.mk").read()).group(1).replace("\\", " ").split()
     src = ["tests/native/test_pgp.c"] + [f"src/crypto/{f}.c" for f in
                                           ("sha1", "sha256", "sha512", "hmac", "s2k", "aes", "ed25519", "rsa", "x25519",
-                                           "seipd", "ocb", "aead", "wipe")]
+                                           "seipd", "ocb", "aead", "argon2", "wipe")]
     src += [mbed + f for f in mbed_src]
     src += ["third_party/monocypher/src/monocypher.c", "third_party/monocypher/src/optional/monocypher-ed25519.c"]
     subprocess.run(["cc", "-O2", "-Wall", "-I", "src/crypto", "-I", "lib/mbedtls", "-I", "third_party/mbedtls/include",
@@ -561,11 +561,72 @@ def check_aead(native, rnd, cases):
     check(native("aead", 18, h(bytes(24)), "070206" + "00" * 48, 64) == "error -2", "AEAD key for another cipher")
 
 
+# --- Argon2id ----------------------------------------------------------------
+
+def check_argon2(native, rnd, cases, ref, a12=False):
+    """Known answers from tests/native/argon2_vectors.json (made with the
+    reference implementation, tools/make_argon2_vectors.py) and, given
+    --argon2-ref (the reference built as a shared library), random ones."""
+    n = 0
+    for v in json.load(open("tests/native/argon2_vectors.json")):
+        got = native("argon2", v["t"], v["p"], v["m"], v["password"] or "-", v["salt"], v.get("key") or "-",
+                     v.get("ad") or "-", v["length"], rnd.choice((1, 3, 17, 1000)))
+        check(got == v["tag"], f"Argon2id vector {v}")
+        n += 1
+    print(f"  Argon2id: {n} known answers")
+    if ref:
+        sys.path.insert(0, os.path.dirname(ref))
+        import ctypes
+        lib = ctypes.CDLL(ref)
+
+        class Ctx(ctypes.Structure):
+            _fields_ = [(k, t) for k, t in (("out", ctypes.c_char_p), ("outlen", ctypes.c_uint32),
+                        ("pwd", ctypes.c_char_p), ("pwdlen", ctypes.c_uint32),
+                        ("salt", ctypes.c_char_p), ("saltlen", ctypes.c_uint32),
+                        ("secret", ctypes.c_char_p), ("secretlen", ctypes.c_uint32),
+                        ("ad", ctypes.c_char_p), ("adlen", ctypes.c_uint32),
+                        ("t_cost", ctypes.c_uint32), ("m_cost", ctypes.c_uint32),
+                        ("lanes", ctypes.c_uint32), ("threads", ctypes.c_uint32),
+                        ("version", ctypes.c_uint32), ("allocate_cbk", ctypes.c_void_p),
+                        ("free_cbk", ctypes.c_void_p), ("flags", ctypes.c_uint32))]
+
+        for c in range(cases):
+            t, p = rnd.choice((1, 1, 2, 3, 4)), rnd.choice((1, 1, 2, 3, 4, 8))
+            m = rnd.choice((8 * p, 8 * p + 3, 64, 100, 256, 1000, 4096))
+            m = max(m, 8 * p)
+            pw, salt = rnd.randbytes(rnd.randrange(40)), rnd.randbytes(rnd.choice((8, 16, 33)))
+            key = rnd.randbytes(rnd.choice((0, 0, 8, 32)))
+            ad = rnd.randbytes(rnd.choice((0, 0, 12)))
+            length = rnd.choice((4, 16, 32, 64, 65, 100, 1024))
+            out = ctypes.create_string_buffer(length)
+            ctx = Ctx(ctypes.cast(out, ctypes.c_char_p), length, pw, len(pw), salt, len(salt), key or None, len(key),
+                      ad or None, len(ad), t, m, p, 1, 0x13, None, None, 0)
+            if lib.argon2_ctx(ctypes.byref(ctx), 2) != 0:
+                continue
+            got = native("argon2", t, p, m, h(pw), h(salt), h(key), h(ad), length, rnd.choice((1, 5, 100, 5000)))
+            check(got == out.raw.hex(), f"Argon2id t={t} p={p} m={m} len={length}")
+        print(f"  Argon2id: {cases} random cases against the reference")
+    if a12:
+        # RFC 9580, A.12.1: the v4 SKESK's Argon2 S2K (t 1, p 4, 2^21 KiB:
+        # 2 GiB, host only), then its encrypted session key (AES-CFB, zero
+        # IV) must give algorithm 7 and the session key the RFC shows
+        k = native("argon2", 1, 4, 1 << 21, h(b"password"), "9c52f83c27f95e50d535440ecdff3136", "-", "-", 16, 100000)
+        esk = bytes.fromhex("9e52fcad22cf3f956542cba794ef840b11")
+        sk = Cipher(algorithms.AES(bytes.fromhex(k)), modes.CFB(bytes(16))).decryptor().update(esk)
+        check(sk.hex() == "07" + "01fe16bbacfd1e7b78ef3b865187374f", "RFC 9580 A.12.1 (Argon2, 2 GiB)")
+        print("  Argon2id: RFC 9580 A.12.1 checked")
+    check(native("argon2", 0, 1, 64, "-", "00" * 16, "-", "-", 16, 10) == "error -4", "Argon2id t=0")
+    check(native("argon2", 1, 4, 31, "-", "00" * 16, "-", "-", 16, 10) == "error -4", "Argon2id m < 8p")
+    check(native("argon2", 1, 1, 64, "-", "00" * 16, "-", "-", 3, 10) == "error -4", "Argon2id 3-byte tag")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=200)
     ap.add_argument("--wycheproof", action="append", default=[])
     ap.add_argument("--cavp", action="append", default=[])
+    ap.add_argument("--argon2-ref", default=None, help="the Argon2 reference implementation as a shared library")
+    ap.add_argument("--a12", action="store_true", help="also RFC 9580 A.12.1 (Argon2 with 2 GiB)")
     args = ap.parse_args()
     rnd = random.Random(2026)
     native = Native(build())
@@ -589,6 +650,8 @@ def main():
     print("OCB done")
     check_aead(native, rnd, args.cases)
     print("AEAD packets done")
+    check_argon2(native, rnd, args.cases, args.argon2_ref, args.a12)
+    print("Argon2id done")
     print(f"check_pgp: {len(failures)} failures")
     sys.exit(1 if failures else 0)
 

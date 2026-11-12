@@ -23,11 +23,13 @@
 #include "../crypto/x25519.h"
 #include "../crypto/seipd.h"
 #include "../crypto/aead.h"
+#include "../crypto/argon2.h"
 #include "../crypto/hwrng.h"
 #include "../crypto/wipe.h"
 #include <circle/util.h>
 #include <circle/logger.h>
 #include <circle/timer.h>
+#include <circle/alloc.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -2527,6 +2529,383 @@ static JSValue js_crypto_ocbed_decrypt (JSContext *ctx, JSValueConst this_val, i
 	return AeadDecrypt (ctx, argc, argv, GK_AEAD_OCBED, "ocbedDecrypt");
 }
 
+// --- Argon2id ---------------------------------------------------------------
+//
+// The memory is native (outside the JS heap), one area per app: allocated
+// by the first Argon2 job's first slice (not at the call: a queued job
+// takes nothing), grown when a job needs more, wiped by each job's last
+// slices, and wiped and freed when the app stops. At most MaxArgon2KiB.
+
+static const uint32_t MaxArgon2KiB = 256 * 1024;	// 256 MiB
+static const uint32_t MaxArgon2Passes = 255;
+static const uint32_t MaxArgon2Lanes = 255;
+static const uint32_t MaxArgon2Length = GK_ARGON2_MAX_OUT;
+static const size_t MaxArgon2Salt = 1024;
+static const size_t MaxArgon2Password = 65536;
+
+static gk_argon2_block_t *s_pArgon2Area;
+static size_t s_nArgon2Blocks;
+static boolean s_bArgon2Dirty;		// a job stopped before wiping it
+
+static int s_nArgon2SelfTest = -1;	// -1: not run; 0: passed; > 0: failed
+static gk_argon2_selftest_t s_Argon2SelfTest;
+static unsigned s_nArgon2SelfTestWork;
+
+// Frees the area (wiped first if a job left it unwiped; the kernel's heap
+// zeroes it again as it frees: patches/circle/0011)
+static void Argon2FreeArea (void)
+{
+	if (s_pArgon2Area != 0)
+	{
+		if (s_bArgon2Dirty)
+		{
+			gk_wipe (s_pArgon2Area, s_nArgon2Blocks * sizeof (gk_argon2_block_t));
+		}
+		free (s_pArgon2Area);
+		s_pArgon2Area = 0;
+		s_nArgon2Blocks = 0;
+	}
+	s_bArgon2Dirty = FALSE;
+}
+
+// From the app host when an app stops: its Argon2 memory goes.
+void GkCryptoAppStopped (TGkApp *pApp)
+{
+	Argon2FreeArea ();
+	if (s_nArgon2SelfTest < 0)
+	{
+		gk_wipe (&s_Argon2SelfTest, sizeof s_Argon2SelfTest);	// under way: again next time
+		s_nArgon2SelfTestWork = 0;
+	}
+}
+
+// At least nBlocks blocks, a step per slice: wiping what a stopped job
+// left, freeing a smaller area, allocating (each of these may take a large
+// part of a slice with hundreds of MiB). 1: ready; 0: call again in the
+// next slice; -1: the memory can't be had.
+static int Argon2Area (size_t nBlocks)
+{
+	if (nBlocks < GK_ARGON2_SELFTEST_BLOCKS)
+	{
+		nBlocks = GK_ARGON2_SELFTEST_BLOCKS;
+	}
+	if (s_bArgon2Dirty && s_pArgon2Area != 0)
+	{
+		gk_wipe (s_pArgon2Area, s_nArgon2Blocks * sizeof (gk_argon2_block_t));
+		s_bArgon2Dirty = FALSE;
+		return 0;
+	}
+	if (s_pArgon2Area != 0 && s_nArgon2Blocks >= nBlocks)
+	{
+		return 1;
+	}
+	if (s_pArgon2Area != 0)
+	{
+		Argon2FreeArea ();		// too small: wiped already
+		return 0;
+	}
+	s_pArgon2Area = (gk_argon2_block_t *) malloc (nBlocks * sizeof (gk_argon2_block_t));
+	if (s_pArgon2Area == 0)
+	{
+		CLogger::Get ()->Write ("crypto", LogWarning, "Argon2: %u KiB not available", (unsigned) nBlocks);
+		return -1;
+	}
+	s_nArgon2Blocks = nBlocks;
+	return 0;
+}
+
+struct TGkArgon2Job
+{
+	gk_argon2_job_t Job;
+	boolean bStarted, bNoMemory, bSelfTestFailed;
+	uint32_t nPasses, nLanes, nMemory, nLength;
+	u8 *pPassword;			// copies (wiped), until the job starts
+	size_t nPassword;
+	u8 Salt[MaxArgon2Salt];
+	size_t nSalt;
+};
+
+static boolean Argon2Step (void *pParam, unsigned nDeadline)
+{
+	TGkArgon2Job *pState = (TGkArgon2Job *) pParam;
+	if (!pState->bStarted)
+	{
+		int nArea = Argon2Area (gk_argon2_blocks (pState->nMemory, pState->nLanes));
+		if (nArea < 0)
+		{
+			pState->bNoMemory = TRUE;
+			return FALSE;
+		}
+		if (nArea == 0)
+		{
+			return TRUE;		// more of it in the next slice
+		}
+		// the self-test first, the first time, in the same area
+		if (s_nArgon2SelfTest < 0)
+		{
+			unsigned nStart = CTimer::Get ()->GetClockTicks ();
+			int nResult;
+			do
+			{
+				nResult = gk_argon2_selftest_step (&s_Argon2SelfTest, s_pArgon2Area, 16);
+			}
+			while (nResult > 0 && Before (nDeadline));
+			s_nArgon2SelfTestWork += CTimer::Get ()->GetClockTicks () - nStart;
+			if (nResult > 0)
+			{
+				s_bArgon2Dirty = TRUE;
+				return TRUE;
+			}
+			s_nArgon2SelfTest = -nResult;
+			CLogger::Get ()->Write ("crypto", s_nArgon2SelfTest == 0 ? LogNotice : LogError,
+						s_nArgon2SelfTest == 0 ? "Argon2id self-test passed (%u us of work, in a job's slices)"
+								       : "Argon2id self-test FAILED (%u)",
+						s_nArgon2SelfTest == 0 ? s_nArgon2SelfTestWork : (unsigned) s_nArgon2SelfTest);
+			gk_wipe (&s_Argon2SelfTest, sizeof s_Argon2SelfTest);
+			if (s_nArgon2SelfTest != 0)
+			{
+				pState->bSelfTestFailed = TRUE;
+				return FALSE;
+			}
+			if (!Before (nDeadline))
+			{
+				return TRUE;
+			}
+		}
+		if (s_nArgon2SelfTest > 0)
+		{
+			pState->bSelfTestFailed = TRUE;
+			return FALSE;
+		}
+		gk_argon2_begin (&pState->Job, s_pArgon2Area, pState->nPasses, pState->nLanes, pState->nMemory,
+				 pState->pPassword, pState->nPassword, pState->Salt, pState->nSalt, 0, 0, 0, 0,
+				 pState->nLength);
+		gk_wipe (pState->pPassword, pState->nPassword);
+		free (pState->pPassword);
+		pState->pPassword = 0;
+		pState->bStarted = TRUE;
+		s_bArgon2Dirty = TRUE;
+	}
+	boolean bMore;
+	do
+	{
+		bMore = gk_argon2_step (&pState->Job, 16);
+	}
+	while (bMore && Before (nDeadline));
+	if (!bMore)
+	{
+		s_bArgon2Dirty = FALSE;		// the job's last steps wiped it
+	}
+	return bMore;
+}
+
+static double Argon2Progress (void *pParam)
+{
+	TGkArgon2Job *pState = (TGkArgon2Job *) pParam;
+	return pState->bStarted ? gk_argon2_progress (&pState->Job) : 0;
+}
+
+static JSValue Argon2Finish (JSContext *ctx, void *pParam)
+{
+	TGkArgon2Job *pState = (TGkArgon2Job *) pParam;
+	if (pState->bSelfTestFailed)
+	{
+		return JS_ThrowInternalError (ctx, "Argon2id is disabled: its self-test failed");
+	}
+	if (pState->bNoMemory)
+	{
+		return JS_ThrowRangeError (ctx, "argon2id: %u KiB of memory are not available now",
+					   (unsigned) pState->nMemory);
+	}
+	return NewUint8Array (ctx, pState->Job.out, pState->Job.outlen);
+}
+
+static void Argon2Free (JSContext *ctx, void *pParam)
+{
+	TGkArgon2Job *pState = (TGkArgon2Job *) pParam;
+	if (pState->pPassword != 0)
+	{
+		gk_wipe (pState->pPassword, pState->nPassword);
+		free (pState->pPassword);
+	}
+	gk_argon2_end (&pState->Job);
+	gk_wipe (pState, sizeof *pState);
+	delete pState;
+	// a job dropped half-way leaves the area dirty: wiped before reuse,
+	// or when the app stops (GkCryptoAppStopped)
+}
+
+static const TGkJobOps s_Argon2Job = { "Argon2id", Argon2Step, Argon2Progress, Argon2Finish, Argon2Free };
+
+static boolean GetWhole (JSContext *ctx, JSValueConst Obj, const char *pName, uint32_t nMin, uint32_t nMax,
+			 uint32_t *pValue, const char *pFunction)
+{
+	JSValue v = JS_GetPropertyStr (ctx, Obj, pName);
+	double f;
+	boolean bNumber = JS_IsNumber (v);
+	int nError = bNumber ? JS_ToFloat64 (ctx, &f, v) : 0;
+	JS_FreeValue (ctx, v);
+	if (!bNumber || nError)
+	{
+		JS_ThrowTypeError (ctx, "%s: %s must be given (a number)", pFunction, pName);
+		return FALSE;
+	}
+	if (!(f >= nMin && f <= nMax && f == (uint32_t) f))
+	{
+		JS_ThrowRangeError (ctx, "%s: %s must be a whole number from %u to %u", pFunction, pName, nMin, nMax);
+		return FALSE;
+	}
+	*pValue = (uint32_t) f;
+	return TRUE;
+}
+
+static JSValue StartArgon2 (JSContext *ctx, JSValueConst PasswordArg, JSValueConst SaltArg, uint32_t nPasses,
+			    uint32_t nLanes, uint32_t nMemory, uint32_t nLength, JSValueConst Options,
+			    size_t nMinSalt, const char *pFunction)
+{
+	CBytesArg Password (ctx);
+	boolean bException;
+	if (!Password.Get (PasswordArg, &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, pFunction, "password");
+	}
+	if (Password.Length () > MaxArgon2Password)
+	{
+		return JS_ThrowRangeError (ctx, "%s: the password may be at most %u bytes", pFunction,
+					   (unsigned) MaxArgon2Password);
+	}
+	CBytesOnly Salt (ctx);
+	if (!Salt.Get (SaltArg, pFunction, "salt"))
+	{
+		return JS_EXCEPTION;
+	}
+	if (Salt.Length () < nMinSalt || Salt.Length () > MaxArgon2Salt)
+	{
+		return JS_ThrowRangeError (ctx, nMinSalt == 16 ? "%s: salt must be 16 bytes"
+					   : "%s: salt must be 8 to 1024 bytes", pFunction);
+	}
+	JSValue OnProgress;
+	if (!GkJobOnProgress (ctx, Options, pFunction, &OnProgress))
+	{
+		return JS_EXCEPTION;
+	}
+	TGkArgon2Job *pState = new TGkArgon2Job;
+	memset (pState, 0, sizeof *pState);
+	pState->nPasses = nPasses;
+	pState->nLanes = nLanes;
+	pState->nMemory = nMemory;
+	pState->nLength = nLength;
+	pState->nPassword = Password.Length ();
+	pState->pPassword = (u8 *) malloc (pState->nPassword ? pState->nPassword : 1);
+	if (pState->pPassword == 0)
+	{
+		delete pState;
+		JS_FreeValue (ctx, OnProgress);
+		return JS_ThrowOutOfMemory (ctx);
+	}
+	memcpy (pState->pPassword, Password.Data (), pState->nPassword);
+	memcpy (pState->Salt, Salt.Data (), Salt.Length ());
+	pState->nSalt = Salt.Length ();
+	JSValue Promise = GkJobStart (ctx, &s_Argon2Job, pState, OnProgress);
+	JS_FreeValue (ctx, OnProgress);
+	return Promise;
+}
+
+static boolean Argon2Usable (JSContext *ctx)
+{
+	if (s_nArgon2SelfTest > 0)
+	{
+		JS_ThrowInternalError (ctx, "Argon2id is disabled: its self-test failed");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+// argon2id(password, salt, { passes, lanes, memoryKiB, length, onProgress }) -> Promise<Uint8Array>
+static JSValue js_crypto_argon2id (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!Argon2Usable (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValueConst Options = argc > 2 ? argv[2] : JS_UNDEFINED;
+	if (!JS_IsObject (Options))
+	{
+		return JS_ThrowTypeError (ctx, "argon2id: options { passes, lanes, memoryKiB, length } expected");
+	}
+	uint32_t nPasses, nLanes, nMemory, nLength;
+	if (   !GetWhole (ctx, Options, "passes", 1, MaxArgon2Passes, &nPasses, "argon2id")
+	    || !GetWhole (ctx, Options, "lanes", 1, MaxArgon2Lanes, &nLanes, "argon2id")
+	    || !GetWhole (ctx, Options, "length", 4, MaxArgon2Length, &nLength, "argon2id"))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValue Memory = JS_GetPropertyStr (ctx, Options, "memoryKiB");
+	double fMemory;
+	boolean bNumber = JS_IsNumber (Memory);
+	int nError = bNumber ? JS_ToFloat64 (ctx, &fMemory, Memory) : 0;
+	JS_FreeValue (ctx, Memory);
+	if (!bNumber || nError)
+	{
+		return JS_ThrowTypeError (ctx, "argon2id: memoryKiB must be given (a number)");
+	}
+	if (!(fMemory == (uint32_t) fMemory && fMemory >= 8.0 * nLanes))
+	{
+		return JS_ThrowRangeError (ctx, "argon2id: memoryKiB must be a whole number, at least 8 per lane");
+	}
+	if (fMemory > MaxArgon2KiB)
+	{
+		return JS_ThrowRangeError (ctx, "argon2id: %.0f KiB is more than the %u MiB of memory Argon2 may use "
+					   "on GapKeep", fMemory, (unsigned) (MaxArgon2KiB / 1024));
+	}
+	nMemory = (uint32_t) fMemory;
+	return StartArgon2 (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, argc > 1 ? argv[1] : JS_UNDEFINED,
+			    nPasses, nLanes, nMemory, nLength, Options, 8, "argon2id");
+}
+
+// openpgpS2kArgon2(passphrase, salt, passes, parallelism, memoryExponent, length, { onProgress }?)
+//   -> Promise<Uint8Array(length)>: S2K type 4 (RFC 9580, 3.7.1.4)
+static JSValue js_crypto_openpgp_s2k_argon2 (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!Argon2Usable (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValueConst Args[7];
+	for (int i = 0; i < 7; i++)
+	{
+		Args[i] = i < argc ? argv[i] : JS_UNDEFINED;
+	}
+	double fT, fP, fM, fLength;
+	if (   JS_ToFloat64 (ctx, &fT, Args[2]) || JS_ToFloat64 (ctx, &fP, Args[3])
+	    || JS_ToFloat64 (ctx, &fM, Args[4]) || JS_ToFloat64 (ctx, &fLength, Args[5]))
+	{
+		return JS_EXCEPTION;
+	}
+	if (!(fT >= 1 && fT <= 255 && fT == (uint32_t) fT) || !(fP >= 1 && fP <= 255 && fP == (uint32_t) fP))
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: passes and parallelism must be 1 to 255");
+	}
+	uint32_t nP = (uint32_t) fP, nMinM = 3;
+	while ((1u << (nMinM - 3)) < nP) nMinM++;		// 3 + ceil (log2 (p))
+	if (!(fM >= nMinM && fM <= 31 && fM == (uint32_t) fM))
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: memoryExponent must be %u to 31 (RFC 9580, 3.7.1.4)",
+					   nMinM);
+	}
+	if (fM > 18)
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: 2^%.0f KiB is more than the 256 MiB of memory "
+					   "Argon2 may use on GapKeep", fM);
+	}
+	if (!(fLength >= 4 && fLength <= 64 && fLength == (uint32_t) fLength))
+	{
+		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: length must be 4 to 64");
+	}
+	return StartArgon2 (ctx, Args[0], Args[1], (uint32_t) fT, nP, 1u << (uint32_t) fM, (uint32_t) fLength,
+			    Args[6], 16, "openpgpS2kArgon2");
+}
+
 // The classes, once per runtime; their prototypes, once per context.
 static void InitClasses (JSContext *ctx)
 {
@@ -2602,6 +2981,8 @@ static const JSCFunctionListEntry s_CryptoFunctions[] =
 	JS_CFUNC_DEF ("seipdV1Decrypt", 3, js_crypto_seipd_v1_decrypt),
 	JS_CFUNC_DEF ("seipdV2Decrypt", 3, js_crypto_seipd_v2_decrypt),
 	JS_CFUNC_DEF ("ocbedDecrypt", 3, js_crypto_ocbed_decrypt),
+	JS_CFUNC_DEF ("argon2id", 3, js_crypto_argon2id),
+	JS_CFUNC_DEF ("openpgpS2kArgon2", 7, js_crypto_openpgp_s2k_argon2),
 	JS_CFUNC_DEF ("ripemd160", 1, js_crypto_ripemd160),
 	JS_CFUNC_DEF ("hash160", 1, js_crypto_hash160),
 	JS_CFUNC_DEF ("pbkdf2", 5, js_crypto_pbkdf2),
