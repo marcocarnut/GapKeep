@@ -216,27 +216,44 @@ of the message in steps, hashing as it goes, and gives the plaintext only
 if the MDC matches, the prefix's quick-check bytes ignored; there is no
 code for the old unprotected packet.
 OpenPGP's AEAD packets (`aead.*`: RFC 9580's SEIPD v2, and GnuPG 2.4's
-own OCB packet, tag 20, from LibrePGP) are decrypted in steps on OCB
-(`ocb.*`, RFC 7253, written here over Mbed TLS's AES block, streaming) and
-HKDF-SHA256 (`hmac.*`): every chunk's tag and the final tag (over the total
-length) are checked before the plaintext, decrypted in place in a copy of
-the message, is given. Decompression (`runtime/inflate.*`, gk:zlib) is
+own OCB packet, tag 20, from LibrePGP) are decrypted in steps with
+HKDF-SHA256 (`hmac.*`) and one of three modes behind one interface (a
+table in `aead.c`), each written here over Mbed TLS's AES block and
+streaming: OCB (`ocb.*`, RFC 7253), EAX (`eax.*`, the EAX paper: CTR and
+CMAC) and GCM (`gcm.*`, SP 800-38D, its GHASH multiplying bit by bit
+without tables: constant-time, slower). SEIPD v2 takes all three; tag 20
+OCB and EAX, as LibrePGP allows (no GCM). Every chunk's tag and the
+final tag (over the total length) are checked before the plaintext,
+decrypted in place in a copy of the message, is given. Decompression (`runtime/inflate.*`, gk:zlib) is
 zlib's inflate (`third_party/zlib`, decompression only, no gzip, the
 caller's allocator, which wipes), in steps, its output limited as it
 grows; `tools/fuzz_inflate.sh` fuzzes it with sanitizers.
 OpenPGP's S2K (`s2k.*`, RFC 9580) is written here, over `gk_hash_t`, and
 hashes the repeated salt and passphrase from a 1 KiB buffer, in steps (a
-job, below). Both
+job, below). Argon2id (`argon2.*`, RFC 9106; S2K type 4) is Monocypher's
+`crypto_argon2`, restructured to stop and resume at any block (pass,
+slice, lane, block), the lanes done one after the other in the RFC's
+order; its work area, up to 256 MiB, comes from Circle's heap (outside
+the JS heap) as a job starts, one step per slice (wiping what a stopped
+job left, freeing a smaller area, allocating), is kept for the app's next
+call, wiped as each job ends, and wiped and freed when the app stops.
+Circle's heap never reused a freed block over 512 KiB and panicked when a
+large one could not be had; `patches/circle/0017` reuses them (best fit,
+at most twice the size) and has a request of 1 MiB or more that does not
+fit return 0, so a second 256 MiB Argon2 run, or a big inflate after one,
+works, and running out is an error, not a halt. Both
 libraries are vendored unchanged, pinned to a release (source and SHA-256
 in their `.mk`). `tools/check_pgp.py` builds these files for the host and
 compares them with Python's cryptography (OpenSSL) on random keys and
-inputs, runs Wycheproof's Ed25519 and RSA vectors, NIST CAVP's CFB128 files
-and RFC 9580's S2K examples (`tests/native`), and the negative cases;
+inputs, runs Wycheproof's Ed25519, RSA, X25519, key wrap, AES-GCM and
+AES-EAX vectors, NIST CAVP's CFB128 files, RFC 9580's S2K examples and
+sample AEAD packets (A.9 to A.11), Argon2 against the reference
+implementation (`--argon2-ref`, and RFC 9580 A.12.1's 2 GiB with `--a12`)
+(`tests/native`), and the negative cases;
 `tests/apps/pgpcrypto` runs known answers through the JavaScript API on
 every target, and `tests/pgp/run_gpg_interop.sh` has GnuPG verify
 signatures the simulator made with keys GnuPG exported. The libraries add
-about 150 KB to the kernel (no `--gc-sections`: Monocypher's X25519 and
-Argon2, for later, come along).
+about 150 KB to the kernel (no `--gc-sections`).
 
 ### C runtime
 
@@ -328,9 +345,9 @@ and the AES-CFB functions every 64 KiB, and throw the same uncatchable
 "interrupted" error.
 
 **Long native work** (`runtime/jobs.*`): what can take more than a quarter
-of a second on a Pi Zero (OpenPGP's S2K, RSA signatures; later Argon2id,
-decompression) is a *job*, and its call returns a promise (S2K, PBKDF2,
-RSA signatures and decryption, SEIPD v1 decryption). A job is native
+of a second on a Pi Zero is a *job*, and its call returns a promise
+(S2K, Argon2id, PBKDF2, RSA signatures and decryption, SEIPD v1 and AEAD
+decryption, decompression). A job is native
 state with a step function: the app host's `Update()` gives the first job
 of the running app one slice of about 20 ms per pass of the main loop,
 after LVGL has read input and drawn, so the screen and the keyboard stay

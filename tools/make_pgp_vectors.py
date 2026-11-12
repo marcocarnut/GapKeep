@@ -156,22 +156,39 @@ def main():
             tests.append([t["key"], t["msg"], t["ct"], t["result"][0], t["tcId"]])
     v["aesWrapWycheproof"] = tests
 
-    # AEAD packets (OCB): v2 SEIPD and GnuPG's OCB packet, made by
-    # check_pgp.py's independent encoder (Python's cryptography's OCB)
-    from check_pgp import aead_packet
+    # AEAD packets: v2 SEIPD (EAX, OCB, GCM) and GnuPG's OCB packet (OCB,
+    # EAX), made by check_pgp.py's independent encoder (Python's
+    # cryptography's OCB and GCM; EAX over its CMAC)
+    from check_pgp import aead_packet, AEAD_MODES
     rnd = random.Random(9)
     tests = []
     for packet, keylen, c, size in ((18, 16, 0, 0), (18, 24, 0, 200), (18, 32, 2, 1000), (20, 16, 0, 64),
                                     (20, 24, 1, 129), (20, 32, 16, 3000), (18, 16, 4, 2500), (20, 16, 2, 1)):
         sk, plain = rnd.randbytes(keylen), rnd.randbytes(size)
         data, chunks = aead_packet(packet, sk, plain, c, rnd.randbytes(32 if packet == 18 else 15))
-        tests.append({"packet": packet, "key": sk.hex(), "data": data.hex(), "plain": plain.hex(), "chunks": chunks})
+        tests.append({"packet": packet, "mode": 2, "key": sk.hex(), "data": data.hex(), "plain": plain.hex(),
+                      "chunks": chunks})
+    for packet, mode, keylen, c, size in ((18, 1, 16, 0, 0), (18, 1, 32, 1, 300), (18, 3, 16, 0, 0),
+                                          (18, 3, 24, 0, 200), (18, 3, 32, 2, 1000), (20, 1, 16, 0, 65),
+                                          (20, 1, 24, 16, 2000), (18, 1, 24, 4, 2500), (18, 3, 16, 4, 2500)):
+        sk, plain = rnd.randbytes(keylen), rnd.randbytes(size)
+        data, chunks = aead_packet(packet, sk, plain, c, rnd.randbytes(32 if packet == 18 else AEAD_MODES[mode][1]),
+                                   mode)
+        tests.append({"packet": packet, "mode": mode, "key": sk.hex(), "data": data.hex(), "plain": plain.hex(),
+                      "chunks": chunks})
     v["aeadPackets"] = tests
-    # for timing: 256 KiB of zeros, 16 KiB chunks, in base64
+    # for timing: 256 KiB of zeros (OCB), 128 KiB (EAX, GCM; SEIPD v2), 16
+    # KiB chunks, in base64
     import base64
     sk = rnd.randbytes(16)
     data, chunks = aead_packet(20, sk, bytes(256 * 1024), 8, rnd.randbytes(15))
     v["aeadBig"] = {"packet": 20, "key": sk.hex(), "data": base64.b64encode(data).decode(), "size": 256 * 1024}
+    v["aeadBigOther"] = []
+    for mode, name in ((1, "EAX"), (3, "GCM")):
+        sk = rnd.randbytes(16)
+        data, chunks = aead_packet(18, sk, bytes(128 * 1024), 8, rnd.randbytes(32), mode)
+        v["aeadBigOther"].append({"name": name, "key": sk.hex(), "data": base64.b64encode(data).decode(),
+                                  "size": 128 * 1024})
 
     # gk:zlib: small streams both ways, 1 MiB that compresses well, and 33
     # MiB of zeros (a bomb: over the largest maxOutput)
@@ -185,6 +202,9 @@ def main():
     mib = b"".join(bytes([i % 251]) * 64 for i in range(16384))
     v["zlibMiB"] = {"format": "zlib", "data": deflate(mib, "zlib"), "sha256": hashlib.sha256(mib).hexdigest()}
     v["zlibBomb"] = {"format": "zlib", "data": deflate(bytes(33 << 20), "zlib")}
+
+    # Argon2id: the reference implementation's answers (tools/make_argon2_vectors.py)
+    v["argon2"] = json.load(open("tests/native/argon2_vectors.json"))
 
     # AES-CFB128: CAVP's MMT files (both ways)
     tests = []
