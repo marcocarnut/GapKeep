@@ -620,8 +620,9 @@ its memory first, over its next slices), and its state is wiped; the
 promise rejects with `signal.reason`, an `Error` named `"AbortError"`
 unless `abort(reason)` gave another. A signal aborted already rejects
 at once, nothing started; aborting after the promise settled does
-nothing. (An e-paper panel's `refresh()` takes no signal: a panel
-must finish a refresh once begun.)
+nothing. (An e-paper panel's `refresh()` takes a signal too, but
+once the panel's waveform has begun it runs to its end, and only then
+does the promise reject: `panel.refresh`, above.)
 `pbkdf2` stays synchronous, and so do Ed25519, X25519, verification,
 key wrap, AES-CFB (at most 2 MiB a call) and importing keys, which are
 fast at the sizes apps use; and the hashes (below).
