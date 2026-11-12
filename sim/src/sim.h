@@ -115,6 +115,10 @@ int gk_sim_write_png (const char *path, const uint8_t *rgb, int w, int h);
  * model given or the configured one. Return 0 on success (-1: no such
  * model, or that name is another model). */
 void gk_sim_set_epaper (const char *model);
+/* Before gk_sim_boot: the 2.9" B/W/R's pigments' physics for "physics"
+ * pictures (gksim_epaper_rgb, "epaper look"): on in the browser, off on the
+ * command line unless asked (it costs seconds of CPU a refresh). */
+void gk_sim_epaper_physics (int on);
 int gk_sim_epaper_plug (const char *name, const char *model);
 void gk_sim_epaper_unplug (void);
 /* How long a refresh holds BUSY up, ms; < 0 (the default): as long as its

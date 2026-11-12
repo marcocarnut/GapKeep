@@ -261,15 +261,31 @@ static void RefreshFree (JSContext *ctx, void *pState)
 	delete pJob;
 }
 
+// an AbortSignal's abort: a refresh not started is dropped; one started,
+// as CGkEPD::Cancel() says (the waveform runs to deep sleep)
+static boolean RefreshAbort (void *pState)
+{
+	TRefreshJob *pJob = (TRefreshJob *) pState;
+	CGkEPD *pEPD = CGkEPD::Get ();
+	return pJob->bStarted && pEPD != 0 && pEPD->Cancel ();
+}
+
+static boolean RefreshIdle (void *pState)
+{
+	TRefreshJob *pJob = (TRefreshJob *) pState;
+	CGkEPD *pEPD = CGkEPD::Get ();
+	return pJob->bStarted && pEPD != 0 && pEPD->Idle ();
+}
+
 static const TGkJobOps RefreshOps =
 {
-	"e-paper refresh", RefreshStep, RefreshProgress, RefreshFinish, RefreshFree
+	"e-paper refresh", RefreshStep, RefreshProgress, RefreshFinish, RefreshFree, RefreshAbort, RefreshIdle
 };
 
-JSValue CGkEPaperDisplay::Refresh (JSContext *ctx, JSValueConst OnProgress)
+JSValue CGkEPaperDisplay::Refresh (JSContext *ctx, const TGkJobOptions &Options)
 {
 	TRefreshJob *pJob = new TRefreshJob;
 	memset (pJob, 0, sizeof *pJob);
 	pJob->pPlanes = Snapshot (&pJob->nBytes);
-	return GkJobStart (ctx, &RefreshOps, pJob, OnProgress);
+	return GkJobStart (ctx, &RefreshOps, pJob, Options);	// (an aborted signal: rejected, nothing sent)
 }

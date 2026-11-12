@@ -3472,7 +3472,7 @@ static CGkEPaperDisplay *GetEPaper (JSContext *ctx, JSValueConst this_val)
 	return pUI->pEPaper;
 }
 
-// panel.refresh({ onProgress })
+// panel.refresh({ onProgress, signal })
 static JSValue js_epaper_refresh (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
@@ -3480,13 +3480,13 @@ static JSValue js_epaper_refresh (JSContext *ctx, JSValueConst this_val, int arg
 	{
 		return JS_EXCEPTION;
 	}
-	JSValue OnProgress;
-	if (!GkJobOnProgress (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "refresh", &OnProgress))
+	TGkJobOptions Options;
+	if (!GkJobOnProgress (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "refresh", &Options))
 	{
 		return JS_EXCEPTION;
 	}
-	JSValue Promise = pEPaper->Refresh (ctx, OnProgress);
-	JS_FreeValue (ctx, OnProgress);
+	JSValue Promise = pEPaper->Refresh (ctx, Options);
+	GkJobOptionsFree (ctx, &Options);
 	return Promise;
 }
 

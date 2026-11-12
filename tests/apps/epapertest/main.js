@@ -161,6 +161,26 @@ function readBack(field) {
   });
 }
 
+// AbortSignal: "a" already aborted (nothing sent), "b" aborted 5 ms in
+// (during the reset: the panel is reset, its picture untouched), "c" 500 ms
+// in (the waveform runs to deep sleep, then the promise rejects)
+async function abortTest(after) {
+  if (busy) return;
+  busy = true;
+  draw(0);
+  const controller = new AbortController();
+  if (after < 0) controller.abort();
+  else setTimeout(() => controller.abort(), after);
+  const t0 = Date.now();
+  try {
+    await panel.refresh({ signal: controller.signal });
+    console.log("epapertest abort: not aborted");
+  } catch (e) {
+    console.log(`epapertest abort ${after}: ${e.name} after ${Date.now() - t0 >= 1000 ? "the refresh" : "less than a second"}`);
+  }
+  busy = false;
+}
+
 function reopen() {
   panel.close();
   check("closed", () => {
@@ -180,6 +200,10 @@ ui.onKey((ev) => {
   }
   if (ev.key === "o") {
     reopen();
+    return true;
+  }
+  if (ev.key === "a" || ev.key === "b" || ev.key === "c") {
+    abortTest({ a: -1, b: 5, c: 500 }[ev.key]);
     return true;
   }
   if (ev.key === "t") {

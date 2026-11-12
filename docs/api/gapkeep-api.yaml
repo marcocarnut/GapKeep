@@ -76,7 +76,7 @@ ui:
           /** what it shows: ["black", "white"], or with "red" */
           readonly colors: EPaperColor[];
           /** writes what the panel's widgets show onto the panel: a full refresh, then deep sleep; resolves once it may be unplugged, rejects with an Error (no panel, ...) */
-          refresh(options?: ProgressOptions): Promise<void>;
+          refresh(options?: JobOptions): Promise<void>;
           /** deletes the panel's widgets and gives the panel back (what it shows stays) */
           close(): void;
         }
@@ -547,7 +547,7 @@ ui:
         | `panel` | A `Container`, the panel's whole area (`width`, `height` readable), white, a column with 4 px padding and gap: put widgets on it as on `ui.screen`. They are not keyboard targets. |
         | `panel.colors` | `["black", "white"]`, or with `"red"`. |
         | `panel.model` | The module, for people: `"WeAct 2.9\" B/W/R"`. |
-        | `panel.refresh(options?)` | Writes what the widgets show onto the panel: a promise, a [long operation](#long-operations) (`onProgress`). Every refresh resets the panel and sets it up again (it may be another panel than last time), writes the picture, plays the panel's own full waveform (18 s on the 2.9" B/W/R: it flashes, then shows the picture, red last) and puts it into deep sleep; then it resolves, and the panel may be unplugged. It rejects with an `Error` if no panel answers (unplugged), or one stops answering. The picture is taken when `refresh()` is called. |
+        | `panel.refresh(options?)` | Writes what the widgets show onto the panel: a promise, a [long operation](#long-operations) (`onProgress`). Every refresh resets the panel and sets it up again (it may be another panel than last time), writes the picture, plays the panel's own full waveform (18 s on the 2.9" B/W/R: it flashes, then shows the picture, red last) and puts it into deep sleep; then it resolves, and the panel may be unplugged. It rejects with an `Error` if no panel answers (unplugged), or one stops answering. The picture is taken when `refresh()` is called. `options.signal`, an `AbortSignal`, cancels it: already aborted, the promise rejects at once and nothing is sent; aborted before the refresh command (during the reset, the set-up or the planes), the panel is put into deep sleep (or given a reset, if it was busy) with its picture untouched, and the promise rejects with the signal's reason; aborted after it, the waveform can't be stopped without leaving the pigments part way and its DC balance broken, so it runs to its end and deep sleep, and then the promise rejects. |
         | `panel.close()` | Deletes the panel's widgets and gives the panel back (`delete()` does the same); what the panel shows stays. A refresh asked for goes on. The panel is closed when the app stops, too. |
 
         The panel's widgets are drawn in black on white. Colours become
@@ -1108,11 +1108,6 @@ shared_ts:
       onProgress?: (fraction: number) => void;
       /** cancels it: the promise rejects with signal.reason (an AbortError) */
       signal?: AbortSignal;
-    }
-  ProgressOptions: |
-    {
-      /** called as the work goes on, with how far it is: more than 0, at most 1 */
-      onProgress?: (fraction: number) => void;
     }
   HashName: |
     "SHA-1" | "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512"

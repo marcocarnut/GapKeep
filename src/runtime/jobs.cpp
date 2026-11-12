@@ -219,6 +219,10 @@ void GkJobsUpdate (TGkApp *pApp)
 	}
 	JSContext *ctx = pApp->pContext;
 	TGkJob *pJob = &pJobs->Queue[pJobs->nFirst];
+	if (pJob->pOps->Idle != 0 && pJob->pOps->Idle (pJob->pState))
+	{
+		return;			// waiting, nothing to do now
+	}
 
 	unsigned nStart = CTimer::Get ()->GetClockTicks ();
 	boolean bMore = pJob->pOps->Step (pJob->pState, nStart + GkJobSliceMs * (CLOCKHZ / 1000));

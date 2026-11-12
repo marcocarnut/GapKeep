@@ -75,6 +75,22 @@ key 1
 expect epapertest wrote 1 10
 epaper shot 04-panel1-rewritten
 
+# AbortSignal: already aborted, nothing sent
+mark
+key a
+expect epapertest abort -1: AbortError after less than a second 10
+# aborted during the reset: the panel is reset, no refresh
+mark
+key b
+expect epaper: WeAct 2.9" B/W/R: aborted before the refresh: (reset|asleep), its picture unchanged 10
+expect epapertest abort 5: AbortError after less than a second 10
+# aborted during the waveform: it runs to deep sleep, then the promise rejects
+mark
+key c
+expect epaper: WeAct 2.9" B/W/R: abort: the waveform runs, to deep sleep first 10
+expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms .*asleep 10
+expect epapertest abort 500: AbortError after the refresh 10
+
 # close and reopen, portrait then landscape
 mark
 key o

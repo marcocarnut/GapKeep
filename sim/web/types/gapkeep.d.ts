@@ -13,11 +13,6 @@ type JobOptions = {
   signal?: AbortSignal;
 };
 
-type ProgressOptions = {
-  /** called as the work goes on, with how far it is: more than 0, at most 1 */
-  onProgress?: (fraction: number) => void;
-};
-
 type HashName = "SHA-1" | "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512";
 
 type Hash = {
@@ -158,7 +153,7 @@ declare module "gk:ui" {
   /** what it shows: ["black", "white"], or with "red" */
   readonly colors: EPaperColor[];
   /** writes what the panel's widgets show onto the panel: a full refresh, then deep sleep; resolves once it may be unplugged, rejects with an Error (no panel, ...) */
-  refresh(options?: ProgressOptions): Promise<void>;
+  refresh(options?: JobOptions): Promise<void>;
   /** deletes the panel's widgets and gives the panel back (what it shows stays) */
   close(): void;
 };
