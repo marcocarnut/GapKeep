@@ -46,6 +46,7 @@ static const unsigned ChunkBytes = 512;		// of a plane, per SPI transfer
 
 TGkSPIDevice CGkEPD::s_Panel = {"epaper", 0, 0, 25, 17, 24, DefaultHz};	// Waveshare's pins
 CGkEPD *CGkEPD::s_pThis = 0;
+boolean CGkEPD::s_bBuiltIn = FALSE;
 
 // --- configuration ---------------------------------------------------------------
 
@@ -133,6 +134,12 @@ boolean CGkEPD::Configure (const char *pKey, const char *pValue, unsigned nLine)
 	{
 		return FALSE;
 	}
+	if (s_bBuiltIn)
+	{
+		pLogger->Write (From, LogWarning, "gapkeep.txt:%u: %s: ignored: the panel is built into this "
+				"kernel (EPAPER=%s)", nLine, pKey, s_Panel.pModel != 0 ? s_Panel.pModel->pName : "none");
+		return TRUE;
+	}
 	const char *pWhat = pKey + nPrefix;
 	unsigned n;
 	if (*pWhat == '\0')
@@ -185,8 +192,46 @@ boolean CGkEPD::Configure (const char *pKey, const char *pValue, unsigned nLine)
 	return TRUE;
 }
 
+// The build's (make EPAPER=..., tools/epaper_config.py checked the values
+// as Configure() would), before gapkeep.txt, which then can't change it.
+void CGkEPD::ConfigureBuiltIn (void)
+{
+#ifdef GK_EPAPER
+	static const struct { const char *pKey, *pValue; } Keys[] =
+	{
+		{"epaper", GK_EPAPER},
+#ifdef GK_EPAPER_CS
+		{"epaper_cs", GK_EPAPER_CS},
+#endif
+#ifdef GK_EPAPER_DC
+		{"epaper_dc", GK_EPAPER_DC},
+#endif
+#ifdef GK_EPAPER_RST
+		{"epaper_rst", GK_EPAPER_RST},
+#endif
+#ifdef GK_EPAPER_BUSY
+		{"epaper_busy", GK_EPAPER_BUSY},
+#endif
+#ifdef GK_EPAPER_SPI_KHZ
+		{"epaper_spi_khz", GK_EPAPER_SPI_KHZ},
+#endif
+	};
+	for (unsigned i = 0; i < sizeof Keys / sizeof Keys[0]; i++)
+	{
+		Configure (Keys[i].pKey, Keys[i].pValue, 0);
+	}
+	CLogger::Get ()->Write (From, LogNotice, "the panel is built in (EPAPER=%s)", GK_EPAPER);
+	ConfigDone ();
+	s_bBuiltIn = TRUE;
+#endif
+}
+
 void CGkEPD::ConfigDone (void)
 {
+	if (s_bBuiltIn)
+	{
+		return;		// (said when it was built in)
+	}
 	if (s_Panel.pModel == 0)
 	{
 		return;

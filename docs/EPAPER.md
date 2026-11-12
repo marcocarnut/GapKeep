@@ -92,8 +92,32 @@ above. What is refused is logged (`gapkeep.txt:12: epaper_dc: a GPIO
 number expected...`), and a panel whose DC, RST and BUSY aren't three
 different GPIOs is dropped. The boot log says what was configured:
 `epaper: WeAct 2.9" B/W/R (128x296, red) on SPI0 CE0 (GPIO 8), DC GPIO 25,
-RST GPIO 17, BUSY GPIO 24, 4000 kHz`. Sealed builds read no card, so they
-have no panel for now.
+RST GPIO 17, BUSY GPIO 24, 4000 kHz`. Sealed kernels read no card: their
+panel is built in (below).
+
+### Sealed kernels
+
+A sealed kernel (`SEALED=1`, [ARCHITECTURE.md](ARCHITECTURE.md)) reads no
+card, so its panel is part of the build, with the same keys in capitals:
+
+```sh
+tools/build.sh pi SEALED=1 EPAPER=weact-2.9-bwr                     # Waveshare's pins
+tools/build.sh pi SEALED=1 EPAPER=weact-2.9-bwr EPAPER_BUSY=23 EPAPER_CS=ce1
+```
+
+(`EPAPER_CS`, `EPAPER_DC`, `EPAPER_RST`, `EPAPER_BUSY`, `EPAPER_SPI_KHZ`.)
+The build checks them with gapkeep.txt's rules (`tools/epaper_config.py`)
+and stops on a bad one, saying why (`EPAPER: EPAPER_DC=9: a GPIO number
+expected...`). They are compiled into the kernel, so the kernel's hash
+covers them, as it covers built-in apps and data: two sealed kernels for
+different wiring have different hashes. At boot the log says `epaper: the
+panel is built in (EPAPER=weact-2.9-bwr)` and the configuration line
+above. `EPAPER` is refused for other builds: they read `gapkeep.txt`.
+
+Were a kernel to have both (the simulator can: `make -C sim
+EPAPER=...`, `tests/epaper_builtin.txt`), the built-in panel wins and the
+card's `epaper` keys are ignored, each with a warning in the log; a
+sealed kernel has no card, so only its own configuration ever applies.
 
 The keys have the device's name as their prefix so that more SPI devices
 can come, each on its own chip select (a second panel, an SPI screen):

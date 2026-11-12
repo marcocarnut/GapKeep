@@ -95,6 +95,10 @@ public:
 	// other (chip selects, pins) and logs what is configured. A device
 	// whose wires clash is dropped.
 	static void ConfigDone (void);
+	// A sealed kernel's own (make EPAPER=weact-2.9-bwr EPAPER_DC=..., the
+	// keys of gapkeep.txt): at boot, before any card. Then gapkeep.txt's
+	// keys are ignored (logged). Nothing without GK_EPAPER.
+	static void ConfigureBuiltIn (void);
 	// The e-paper panel configured, or 0.
 	static const TGkSPIDevice *GetPanel (void);
 	// The model of this name, or 0. The list, ", "-separated, for messages.
@@ -174,6 +178,7 @@ private:
 
 	static TGkSPIDevice s_Panel;
 	static CGkEPD *s_pThis;
+	static boolean s_bBuiltIn;	// the build's panel (ConfigureBuiltIn())
 };
 
 #endif

@@ -79,6 +79,25 @@ $(error DATA and EXTRA_APPS are for sealed builds (SEALED=1); others read data f
 endif
 endif
 
+# An e-paper panel built into a sealed kernel, which reads no gapkeep.txt:
+# make SEALED=1 EPAPER=weact-2.9-bwr, and if the wiring differs from the
+# defaults EPAPER_CS=ce1 EPAPER_DC=.. EPAPER_RST=.. EPAPER_BUSY=..
+# EPAPER_SPI_KHZ=.., gapkeep.txt's keys (docs/EPAPER.md). Checked here by
+# ../tools/epaper_config.py, with gapkeep.txt's rules; part of the image,
+# so the kernel's hash covers it.
+EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
+ifneq ($(EPAPER_VARS),)
+ifneq ($(strip $(SEALED)),1)
+$(error EPAPER is for sealed builds (SEALED=1); others read it from the card's gapkeep.txt)
+endif
+EPAPER_DEFS := $(shell python3 ../tools/epaper_config.py $(EPAPER_VARS))
+ifeq ($(strip $(EPAPER_DEFS)),)
+$(error EPAPER: refused (the reason is above))
+endif
+DEFINE	+= $(EPAPER_DEFS)
+BUILDMODE := $(BUILDMODE)-$(subst =,_,$(subst $(eval) ,-,$(strip $(EPAPER_VARS))))
+endif
+
 # The language a build starts in (before gapkeep.txt; the only one for
 # sealed builds): make LANGUAGE=pt-BR. Only from the command line: the
 # shell's LANGUAGE (gettext's, "en_US:en") is something else.
@@ -156,10 +175,10 @@ generated/testpictures.c: FORCE
 
 FORCE:
 
-# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD when switching builds.
+# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD / GK_EPAPER when switching builds.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o: .buildmode
+main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o runtime/epd.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/*.o runtime/fonts/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
