@@ -186,7 +186,12 @@ main.o kernel.o kbdindev.o spiprobe.o testshot.o runtime/appstore.o runtime/i18n
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/*.o runtime/fonts/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
 
+# (not for "clean": a full rebuild cleans lib/fatfs first, so ff.h is gone,
+# and with the %.h rule below a .d naming it would be remade, and make
+# restarted, for ever)
+ifeq ($(filter clean,$(MAKECMDGOALS)),)
 -include $(DEPS)
+endif
 
 # A header named by an old .d file but since removed (e.g. ttfstyles.h)
 # must not stop the build: like gcc -MP, treat it as a target with no
