@@ -187,3 +187,8 @@ EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/
 	      camera/*.o camera/*.d
 
 -include $(DEPS)
+
+# A header named by an old .d file but since removed (e.g. ttfstyles.h)
+# must not stop the build: like gcc -MP, treat it as a target with no
+# recipe, so the objects that named it are simply recompiled.
+%.h: ;
