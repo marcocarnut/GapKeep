@@ -14,7 +14,6 @@
 #include <circle/memio.h>
 #include <circle/synchronize.h>
 
-#define ARM_SPI0_CLK	(ARM_IO_BASE + 0x204008)
 
 boolean GkSPIControllerPresent (void)
 {
