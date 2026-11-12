@@ -1,0 +1,61 @@
+# Needs a test build, and the rig with a WeAct 2.9" B/W/R e-paper module
+# wired to the Zero's header as docs/EPAPER.md says (Waveshare's pins) and
+# the Pi Camera looking at it (docs/RIG.md). The rig's card never changes,
+# so the panel is configured on the serial line ("#epaper", src/testshot.h).
+# tests/apps/epapertest writes two shares in turn, each read back with the
+# camera by the app itself (the log says which share it saw, never what it
+# says), and a page of text sizes, photographed (serialraw) for the record.
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line (neither QEMU nor the simulator has the panel or the camera).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The app is started and driven over the serial line ("#launch", "#key"),
+# so the rig's USB keyboard isn't needed.
+expect launcher ready 60
+send #epaper weact-2.9-bwr
+expect epaper: WeAct 2.9" B/W/R \(128x296, red\) on SPI0 CE0 \(GPIO 8\), DC GPIO 25, RST GPIO 17, BUSY GPIO 24, 4000 kHz 10
+send #camera pi
+expect camera: pi 10
+send #launch epapertest
+expect epapertest ready 30
+expect epapertest open: WeAct 2.9" B/W/R, 296x128, black white red
+
+# share 1: reset, init, BUSY's timings, the 18 s waveform, deep sleep
+mark
+send #key 1
+expect epaper: WeAct 2.9" B/W/R: refresh: BUSY low \d+ us after the reset 10
+expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms \(BUSY high \d+ us after 0x20\), asleep; \d+ ms since the reset 60
+expect epapertest wrote 1
+expect epapertest longest gap: \d+ ms
+mark
+send #key w
+expect picamera: streaming 10
+# the camera's picture first, whatever it reads (for the record)
+wait 3
+serialraw 01-share1-camera
+expect epapertest read back share 1: it is on the panel 60
+wait 1
+serialshot 02-share1-read
+
+# share 2 on the same panel: another QR code read back
+mark
+send #key 2
+expect epapertest wrote 2 60
+expect epapertest longest gap: \d+ ms
+mark
+send #key w
+expect epapertest read back share 2: it is on the panel 60
+reject epapertest read back: share 1, not 2
+wait 1
+serialshot 03-share2-read
+serialraw 04-share2-camera
+
+# the text sizes, photographed
+mark
+send #key t
+expect epapertest wrote the type test 60
+send #key w
+expect picamera: streaming 10
+wait 3
+serialshot 05-type-read
+serialraw 06-type-camera

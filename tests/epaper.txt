@@ -32,7 +32,7 @@ key 1
 expect epaper: WeAct 2.9" B/W/R: refresh: reset
 expect epaper-sim: panel 1: refresh 1 \(full\), BUSY for 1500 ms
 expect epapertest progress: the waveform runs 10
-expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms, asleep 10
+expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms \(BUSY high \d+ us after 0x20\), asleep 10
 expect epapertest wrote 1
 # (the driver never sent a byte to a sleeping panel)
 reject panel .*: bytes sent in deep sleep
@@ -53,6 +53,17 @@ key 2
 expect epaper-sim: panel 2: refresh 1 \(full\) 10
 expect epapertest wrote 2 10
 epaper shot 02-panel2
+expect epapertest longest gap: \d+ ms
+# read back with the camera (on the rig, the real one: tests/epaper_hw.txt):
+# share 1 is not what was written last, share 2 is
+mark
+key r
+expect epapertest reading back share 2 \(center\)
+camera qr MS12NAMEA320ZYXWVUTSRQPNMLKJHGFEDCAXRPP870HKKQRM
+expect epapertest read back: share 1, not 2 10
+camera qr MS12NAMECACDEFGHJKLMNPQRSTUVWXYZ023FTR2GDZMPY6PN
+expect epapertest read back share 2: it is on the panel 10
+camera scene
 
 # panel 1 again: what it showed, untouched (nothing refreshes unasked)
 epaper plug 1

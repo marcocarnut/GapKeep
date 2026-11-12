@@ -99,6 +99,10 @@ public:
 	// keys of gapkeep.txt): at boot, before any card. Then gapkeep.txt's
 	// keys are ignored (logged). Nothing without GK_EPAPER.
 	static void ConfigureBuiltIn (void);
+	// Test builds (src/testshot.h, "#epaper ..."): "<model> [cs=ce0]
+	// [dc=25] [rst=17] [busy=24] [spi_khz=4000]" or "none", as gapkeep.txt's
+	// keys. FALSE if anything was refused (logged).
+	static boolean ConfigureLine (const char *pLine, const char *pFrom);
 	// The e-paper panel configured, or 0.
 	static const TGkSPIDevice *GetPanel (void);
 	// The model of this name, or 0. The list, ", "-separated, for messages.
@@ -173,6 +177,9 @@ private:
 	unsigned m_nRow;		// rows of the plane sent
 	boolean m_bSeenBusy;		// BUSY high since the refresh started
 	boolean m_bDone;		// the last refresh ended well
+	// timings, for the log (clock ticks, us)
+	unsigned m_nResetStart, m_nResetUs, m_nSoftUs, m_nBusyHighUs;
+	boolean m_bWaitSawBusy, m_bResetSawBusy;
 	unsigned m_nRefreshStart;
 	const char *m_pError;
 

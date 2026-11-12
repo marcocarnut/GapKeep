@@ -72,6 +72,12 @@ public:
 	// GapKeep's dead keys must not compose them again. Set around Pressed().
 	void SetComposed (boolean bComposed)	{ m_bComposed = bComposed; }
 
+#ifdef GK_TEST
+	// Test builds' "#key" (src/testshot.h): a key press and release, as a
+	// USB keyboard's handlers get them (pString as its keymap gives it).
+	static void TestKey (const char *pString);
+#endif
+
 private:
 	static void KeyPressedHandler (const char *pString);
 	static void KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6]);

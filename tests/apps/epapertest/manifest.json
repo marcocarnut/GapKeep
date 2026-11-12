@@ -4,5 +4,5 @@
   "version": "1.0.0",
   "description": "Test builds only: writes codex32-like shares on the e-paper panel (tests/epaper.txt).",
   "icon": "image",
-  "permissions": ["epaper"]
+  "permissions": ["epaper", "camera"]
 }

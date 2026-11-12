@@ -227,7 +227,31 @@ sleep after.
 
 ## Checking it on the device
 
-The rig's Zero has no panel wired yet. When it has, the rig's camera,
-pointed at the panel, can check a written share the way
-`tests/epaper/check_panel.py` checks the simulator's pictures: decode its
-QR code from a photo.
+The rig's Zero has a WeAct 2.9" B/W/R wired as above, and its Pi Camera
+looks at it. `tests/epaper_hw.txt` (rig only) configures the panel over the
+serial line (`#epaper weact-2.9-bwr`, test builds: the rig's card never
+changes), starts `tests/apps/epapertest` and drives it with `#launch` and
+`#key` (no USB keyboard needed), writes two shares in turn and has the app
+read each one back with the camera (`ui.Scanner`, the whole field: the log
+says which share it saw, never what it says), then a page of text sizes,
+photographed with `serialraw` (`tools/rig/raw2png.py` turns the raw frame
+into a PNG).
+
+Measured on the rig (2026-11-12), the same at each of three refreshes:
+
+| | |
+| --- | --- |
+| BUSY after the hardware reset | already low when first read (10 ms after RST went high) |
+| BUSY after the soft reset (0x12) | low when first read, 5 ms after (never seen high) |
+| Both planes sent (9.5 KB at 4 MHz) | 19.1 ms, in one slice |
+| BUSY high after 0x20 (refresh) | 3.2 ms |
+| The waveform (BUSY high) | 18.40 s |
+| From the reset to deep sleep | 18.45 to 18.52 s |
+| The job's longest slice | 21 ms |
+| The longest gap of a 5 ms JavaScript timer during a write | 27 ms (98 ms when the camera was being stopped as the write began) |
+
+The QR codes were read back from the panel by GapKeep's own scanner within
+2 s, the second write's (another share) as the second share. In the
+camera's picture the text at 16 and 20 px (monospaced) reads clearly, 14
+px reads, 12 px barely, but there the camera is the limit: the panel spans
+about 200 of its pixels for 296 of the panel's.

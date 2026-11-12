@@ -226,6 +226,47 @@ void CGkEPD::ConfigureBuiltIn (void)
 #endif
 }
 
+// "weact-2.9-bwr [cs=ce0] [dc=25] [rst=17] [busy=24] [spi_khz=4000]", or
+// "none": the panel, as gapkeep.txt's keys would set it (test builds' serial
+// line, src/testshot.h: the rig's card never changes). FALSE if refused.
+boolean CGkEPD::ConfigureLine (const char *pLine, const char *pFrom)
+{
+	if (s_bBuiltIn || (s_pThis != 0 && s_pThis->IsBusy ()))
+	{
+		return FALSE;
+	}
+	char Line[128];
+	strncpy (Line, pLine, sizeof Line - 1);
+	Line[sizeof Line - 1] = '\0';
+	char *pSave = 0;
+	char *pWord = strtok_r (Line, " ", &pSave);
+	if (pWord == 0 || !SetModel (pWord, pFrom))
+	{
+		return FALSE;
+	}
+	boolean bOK = TRUE;
+	while ((pWord = strtok_r (0, " ", &pSave)) != 0)
+	{
+		char *pValue = strchr (pWord, '=');
+		char Key[32];
+		if (pValue == 0 || pValue - pWord > 16)
+		{
+			bOK = FALSE;
+			continue;
+		}
+		*pValue++ = '\0';
+		strcpy (Key, "epaper_");
+		strcat (Key, pWord);
+		if (!Configure (Key, pValue, 0))	// (a bad value: logged)
+		{
+			bOK = FALSE;		// not one of its keys
+		}
+	}
+	CLogger::Get ()->Write (From, LogNotice, "configured from the %s", pFrom);
+	ConfigDone ();
+	return bOK;
+}
+
 void CGkEPD::ConfigDone (void)
 {
 	if (s_bBuiltIn)
@@ -430,7 +471,9 @@ boolean CGkEPD::Start (const u8 *pBW, const u8 *pRed)
 	m_nRow = 0;
 	m_bSeenBusy = FALSE;
 	m_bDone = FALSE;
+	m_bWaitSawBusy = FALSE;
 	m_pError = 0;
+	m_nResetStart = CTimer::GetClockTicks ();
 
 	// a hardware reset, always (TakeLines() set RST low): it may be another
 	// panel than last time, and a panel in deep sleep hears nothing else
@@ -559,6 +602,7 @@ int CGkEPD::Step (unsigned nDeadline)
 			}
 			if (Busy ())
 			{
+				m_bWaitSawBusy = TRUE;
 				if (Due ())
 				{
 					// pulled up: no panel at all, or one that doesn't answer
@@ -571,10 +615,14 @@ int CGkEPD::Step (unsigned nDeadline)
 			}
 			if (m_State == StateWaitReset)
 			{
+				m_nResetUs = CTimer::GetClockTicks () - m_nStateStart;
+				m_bResetSawBusy = m_bWaitSawBusy;
+				m_bWaitSawBusy = FALSE;
 				Command (0x12);				// soft reset
 				Next (StateWaitSoft, AnswerMs);
 				break;
 			}
+			m_nSoftUs = CTimer::GetClockTicks () - m_nStateStart;
 			Setup ();
 			Next (StatePlane, 0);
 			break;
@@ -594,6 +642,13 @@ int CGkEPD::Step (unsigned nDeadline)
 			}
 			Command (0x20);					// refresh
 			m_nRefreshStart = CTimer::GetClockTicks ();
+			m_nBusyHighUs = 0;
+			// BUSY's timings, for the hardware's record (docs/EPAPER.md)
+			CLogger::Get ()->Write (From, LogNotice, "%s: refresh: BUSY low %u us after the reset (%s), "
+						"%u us after the soft reset (%s); planes sent in %u us",
+						m_pModel->pModule, m_nResetUs, m_bResetSawBusy ? "seen high" : "never seen high",
+						m_nSoftUs, m_bWaitSawBusy ? "seen high" : "never seen high",
+						m_nRefreshStart - m_nStateStart);
 			Next (StateRefresh, m_pModel->nTimeoutMs);
 			CLogger::Get ()->Write (From, LogNotice, "%s: refresh: sent, the waveform runs",
 						m_pModel->pModule);
@@ -602,6 +657,10 @@ int CGkEPD::Step (unsigned nDeadline)
 		case StateRefresh:
 			if (Busy ())
 			{
+				if (!m_bSeenBusy)
+				{
+					m_nBusyHighUs = CTimer::GetClockTicks () - m_nRefreshStart;
+				}
 				m_bSeenBusy = TRUE;
 				if (Due ())
 				{
@@ -620,9 +679,10 @@ int CGkEPD::Step (unsigned nDeadline)
 				return -1;
 			}
 			Command1 (0x10, 0x01);				// deep sleep
-			CLogger::Get ()->Write (From, LogNotice, "%s: refresh: done in %u ms, asleep",
-						m_pModel->pModule,
-						(CTimer::GetClockTicks () - m_nRefreshStart) / (CLOCKHZ / 1000));
+			CLogger::Get ()->Write (From, LogNotice, "%s: refresh: done in %u ms (BUSY high %u us after "
+						"0x20), asleep; %u ms since the reset", m_pModel->pModule,
+						(CTimer::GetClockTicks () - m_nRefreshStart) / (CLOCKHZ / 1000), m_nBusyHighUs,
+						(CTimer::GetClockTicks () - m_nResetStart) / (CLOCKHZ / 1000));
 			m_State = StateIdle;
 			FreePlanes ();
 			m_bDone = TRUE;

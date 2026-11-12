@@ -50,6 +50,15 @@
 // "experimental = yes" in gapkeep.txt would, for the rig, whose card never
 // changes. The launcher lists the experimental apps from its next start.
 //
+// "#epaper <model> [cs=ce0] [dc=25] [rst=17] [busy=24] [spi_khz=4000]",
+// "#epaper none": the e-paper panel (runtime/epd.h), as gapkeep.txt's
+// "epaper" keys would set it, for the rig (tests/epaper_hw.txt). Apps that
+// open the panel from then on get it.
+//
+// "#launch <id>": starts that app, as the launcher would. "#key <key>": a
+// key press, as a USB keyboard's keymap gives it ("1", "r"; "ret" for
+// Enter). For the rig when its USB gadget is away (tests/epaper_hw.txt).
+//
 // "#camera grey": the grey frame the running Pi Camera made last, at once, for
 // aiming it (tools/rig/camview.py): as "#camera raw" below, stride = width and
 // no exposure or gains; 640x480 takes 3.4 s at 921600 baud.
