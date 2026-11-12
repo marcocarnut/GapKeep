@@ -175,10 +175,12 @@ generated/testpictures.c: FORCE
 
 FORCE:
 
-# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD / GK_EPAPER when switching builds.
+# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD / GK_EPAPER when switching builds:
+# every object whose source, or a header it includes (kernel.h, kbdindev.h,
+# runtime/epd.h), tests one of them. A new #ifdef GK_* needs its object here.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o runtime/epd.o: .buildmode
+main.o kernel.o kbdindev.o spiprobe.o testshot.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o runtime/epd.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/*.o runtime/fonts/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
