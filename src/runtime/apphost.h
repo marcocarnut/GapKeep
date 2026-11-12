@@ -160,6 +160,7 @@ JSModuleDef *GkInitZlibModule (JSContext *pContext, const char *pName);	// js_zl
 void GkUSBUpdate (TGkApp *pApp);	// js_usb.cpp: events and a transfer, from Update()
 void GkUSBFree (TGkApp *pApp);		// the app's devices, handlers and transfers
 void GkCryptoAppStopped (TGkApp *pApp);	// js_crypto.cpp: its Argon2 memory
+void GkCryptoSetBoardMemory (unsigned nMB);	// at boot: Argon2 gets a quarter
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void GkInitGlobals (JSContext *pContext);

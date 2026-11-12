@@ -604,14 +604,17 @@ group("Argon2id", async () => {
      "637a25b4e2fd12a663f85ebbce4d8cc7", "S2K type 4");
   const salt = new Uint8Array(16);
   throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 21, 16), RangeError, "S2K type 4 with 2 GiB (RFC 9580's first option)");
-  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 19, 16), RangeError, "S2K type 4 with 512 MiB");
+  // a quarter of the board's memory: 128 MiB on the 512 MB Pi Zero (and QEMU's, and the simulator's)
+  const cap = crypto.limits().argon2MemoryKiB;
+  ok(cap === 128 * 1024, `Argon2 limit ${cap} KiB`);
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 18, 16), RangeError, "S2K type 4 with 256 MiB");
   throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 4, 16), RangeError, "S2K type 4 exponent below 3 + log2 p");
   throws(() => crypto.openpgpS2kArgon2("p", salt, 0, 4, 10, 16), RangeError, "S2K type 4 t = 0");
   throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 0, 10, 16), RangeError, "S2K type 4 p = 0");
   throws(() => crypto.openpgpS2kArgon2("p", salt.subarray(1), 1, 4, 10, 16), RangeError, "S2K type 4 15-byte salt");
   throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 10, 3), RangeError, "S2K type 4 3-byte key");
-  throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 1, memoryKiB: 256 * 1024 + 1, length: 16 }), RangeError,
-         "Argon2id over 256 MiB");
+  throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 1, memoryKiB: cap + 1, length: 16 }), RangeError,
+         "Argon2id 128 MiB + 1 KiB");
   throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 4, memoryKiB: 31, length: 16 }), RangeError, "Argon2id m < 8p");
   throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 1, length: 16 }), TypeError, "Argon2id without memoryKiB");
   throws(() => crypto.argon2id("p", salt.subarray(0, 7), { passes: 1, lanes: 1, memoryKiB: 64, length: 16 }), RangeError,
@@ -621,9 +624,9 @@ group("Argon2id", async () => {
     crypto.openpgpS2kArgon2("password", salt, 3, 4, 16, 32, { onProgress }));
   ok(k64.length === 32, "Argon2id 64 MiB");
   for (const round of [1, 2]) {
-    const k = await timeJob(`Argon2id 256 MiB t=1 p=4 (${round})`, (onProgress) =>
-      crypto.argon2id("password", salt, { passes: 1, lanes: 4, memoryKiB: 256 * 1024, length: 32, onProgress }));
-    ok(k.length === 32, `Argon2id 256 MiB (${round}: the memory again)`);
+    const k = await timeJob(`Argon2id 128 MiB t=1 p=4 (${round})`, (onProgress) =>
+      crypto.argon2id("password", salt, { passes: 1, lanes: 4, memoryKiB: cap, length: 32, onProgress }));
+    ok(k.length === 32, `Argon2id 128 MiB (${round}: the memory again)`);
   }
 });
 

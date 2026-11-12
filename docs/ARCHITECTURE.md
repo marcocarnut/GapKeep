@@ -233,14 +233,15 @@ hashes the repeated salt and passphrase from a 1 KiB buffer, in steps (a
 job, below). Argon2id (`argon2.*`, RFC 9106; S2K type 4) is Monocypher's
 `crypto_argon2`, restructured to stop and resume at any block (pass,
 slice, lane, block), the lanes done one after the other in the RFC's
-order; its work area, up to 256 MiB, comes from Circle's heap (outside
+order; its work area, up to a quarter of the board's memory (from its
+revision, at boot: 128 MiB on a 512 MB Pi Zero), comes from Circle's heap (outside
 the JS heap) as a job starts, one step per slice (wiping what a stopped
 job left, freeing a smaller area, allocating), is kept for the app's next
 call, wiped as each job ends, and wiped and freed when the app stops.
 Circle's heap never reused a freed block over 512 KiB and panicked when a
 large one could not be had; `patches/circle/0017` reuses them (best fit,
 at most twice the size) and has a request of 1 MiB or more that does not
-fit return 0, so a second 256 MiB Argon2 run, or a big inflate after one,
+fit return 0, so a second large Argon2 run, or a big inflate after one,
 works, and running out is an error, not a halt. Both
 libraries are vendored unchanged, pinned to a release (source and SHA-256
 in their `.mk`). `tools/check_pgp.py` builds these files for the host and

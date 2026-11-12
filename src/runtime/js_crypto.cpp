@@ -2542,9 +2542,32 @@ static JSValue js_crypto_ocbed_decrypt (JSContext *ctx, JSValueConst this_val, i
 // The memory is native (outside the JS heap), one area per app: allocated
 // by the first Argon2 job's first slice (not at the call: a queued job
 // takes nothing), grown when a job needs more, wiped by each job's last
-// slices, and wiped and freed when the app stops. At most MaxArgon2KiB.
+// slices, and wiped and freed when the app stops. At most a quarter of the
+// board's memory (GkCryptoSetBoardMemory, at boot): 128 MiB on a 512 MB Pi
+// Zero, 64 MiB on a 256 MB board.
 
-static const uint32_t MaxArgon2KiB = 256 * 1024;	// 256 MiB
+static uint32_t s_nArgon2MaxKiB = 64 * 1024;		// until the board says
+
+void GkCryptoSetBoardMemory (unsigned nMB)
+{
+	if (nMB == 0)
+	{
+		CLogger::Get ()->Write ("crypto", LogWarning, "Board memory unknown: Argon2 gets at most %u MiB",
+					(unsigned) (s_nArgon2MaxKiB / 1024));
+		return;
+	}
+	s_nArgon2MaxKiB = (uint32_t) nMB * 1024 / 4;
+	CLogger::Get ()->Write ("crypto", LogNotice, "Argon2 may use up to %u MiB (a quarter of %u MB)",
+				(unsigned) (s_nArgon2MaxKiB / 1024), nMB);
+}
+
+// limits() -> { argon2MemoryKiB }
+static JSValue js_crypto_limits (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	JSValue Obj = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Obj, "argon2MemoryKiB", JS_NewUint32 (ctx, s_nArgon2MaxKiB));
+	return Obj;
+}
 static const uint32_t MaxArgon2Passes = 255;
 static const uint32_t MaxArgon2Lanes = 255;
 static const uint32_t MaxArgon2Length = GK_ARGON2_MAX_OUT;
@@ -2862,10 +2885,11 @@ static JSValue js_crypto_argon2id (JSContext *ctx, JSValueConst this_val, int ar
 	{
 		return JS_ThrowRangeError (ctx, "argon2id: memoryKiB must be a whole number, at least 8 per lane");
 	}
-	if (fMemory > MaxArgon2KiB)
+	if (fMemory > s_nArgon2MaxKiB)
 	{
-		return JS_ThrowRangeError (ctx, "argon2id: %.0f KiB is more than the %u MiB of memory Argon2 may use "
-					   "on GapKeep", fMemory, (unsigned) (MaxArgon2KiB / 1024));
+		return JS_ThrowRangeError (ctx, "argon2id: %.0f KiB is more than Argon2 may use here (%u KiB, a quarter "
+					   "of the board's memory: crypto.limits().argon2MemoryKiB)", fMemory,
+					   (unsigned) s_nArgon2MaxKiB);
 	}
 	nMemory = (uint32_t) fMemory;
 	return StartArgon2 (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, argc > 1 ? argv[1] : JS_UNDEFINED,
@@ -2902,10 +2926,11 @@ static JSValue js_crypto_openpgp_s2k_argon2 (JSContext *ctx, JSValueConst this_v
 		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: memoryExponent must be %u to 31 (RFC 9580, 3.7.1.4)",
 					   (unsigned) nMinM);
 	}
-	if (fM > 18)
+	if (fM > 30 || ((uint32_t) 1 << (uint32_t) fM) > s_nArgon2MaxKiB)
 	{
-		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: 2^%.0f KiB is more than the 256 MiB of memory "
-					   "Argon2 may use on GapKeep", fM);
+		return JS_ThrowRangeError (ctx, "openpgpS2kArgon2: 2^%.0f KiB is more than Argon2 may use here (%u KiB, "
+					   "a quarter of the board's memory: crypto.limits().argon2MemoryKiB)", fM,
+					   (unsigned) s_nArgon2MaxKiB);
 	}
 	if (!(fLength >= 4 && fLength <= 64 && fLength == (uint32_t) fLength))
 	{
@@ -2992,6 +3017,7 @@ static const JSCFunctionListEntry s_CryptoFunctions[] =
 	JS_CFUNC_DEF ("ocbedDecrypt", 3, js_crypto_ocbed_decrypt),
 	JS_CFUNC_DEF ("argon2id", 3, js_crypto_argon2id),
 	JS_CFUNC_DEF ("openpgpS2kArgon2", 7, js_crypto_openpgp_s2k_argon2),
+	JS_CFUNC_DEF ("limits", 0, js_crypto_limits),
 	JS_CFUNC_DEF ("ripemd160", 1, js_crypto_ripemd160),
 	JS_CFUNC_DEF ("hash160", 1, js_crypto_hash160),
 	JS_CFUNC_DEF ("pbkdf2", 5, js_crypto_pbkdf2),
