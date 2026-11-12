@@ -8,14 +8,16 @@
  *   header (0xD2, 2, cipher, AEAD mode, chunk size);
  * - GnuPG 2.4's OCB Encrypted Data packet (LibrePGP, draft-koch-librepgp,
  *   5.16; tag 20, version 1): the session key is the key; a chunk's nonce
- *   is the 15-byte IV xor its index; its associated data the 5-byte
- *   header (0xD4, 1, cipher, mode, chunk size) and the 8-byte index.
+ *   is the IV (as long as the nonce) xor its index; its associated data
+ *   the 5-byte header (0xD4, 1, cipher, mode, chunk size) and the 8-byte
+ *   index. LibrePGP allows OCB there and, to decrypt, EAX; not GCM.
  *
  * Both end with a final tag over the empty string whose associated data
  * also has the total plaintext length (8 bytes): a message cut after a
  * chunk is refused. Every chunk's tag and the final tag are checked
  * before any plaintext is given; every failure is the same failure.
- * AES only; AEAD modes: OCB (more to come: EAX, GCM).
+ * AES only; AEAD modes: EAX (eax.h, 16-byte nonces), OCB (ocb.h, 15),
+ * GCM (gcm.h, 12), behind one interface (aead.c).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -23,6 +25,8 @@
 #define GK_AEAD_H
 
 #include "ocb.h"
+#include "eax.h"
+#include "gcm.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -37,12 +41,17 @@ extern "C" {
 #define GK_AEAD_OCB		2
 #define GK_AEAD_GCM		3
 
+struct gk_aead_mode;
+
 /* Fields are private. */
 typedef struct
 {
 	int packet;
-	gk_ocb_key_t key;
-	gk_ocb_t st;
+	const struct gk_aead_mode *mode;
+	union { gk_ocb_key_t ocb; gk_eax_key_t eax; gk_gcm_key_t gcm; } key;
+	union { gk_ocb_t ocb; gk_eax_t eax; gk_gcm_t gcm; } st;
+	uint8_t ad[21];			/* the chunk's associated data (OCB takes it last) */
+	size_t adlen;
 	uint8_t header[5];		/* the associated data's start */
 	uint8_t iv[16];
 	uint8_t *buf;			/* the encrypted data, then the plaintext (heap) */
@@ -59,8 +68,8 @@ gk_aead_job_t;
    GK_AEAD_SEIPD2, 1 for GK_AEAD_OCBED), copied. key: the session key, as
    long as the cipher's (AES-128, -192, -256: 7, 8, 9). 0: started; -2: the
    key doesn't fit the cipher, or not AES; -3: no memory; -4: not such a
-   packet (too short, chunk size octet above 16); -5: an AEAD mode not
-   supported. On error nothing needs ending. */
+   packet (too short, chunk size octet above 16); -5: not an AEAD mode
+   (EAX, OCB, GCM; in GK_AEAD_OCBED: OCB, EAX). On error nothing needs ending. */
 int gk_aead_begin (gk_aead_job_t *job, int packet, const uint8_t *key, size_t keylen,
 		   const uint8_t *data, size_t len);
 
@@ -75,9 +84,9 @@ int gk_aead_result (gk_aead_job_t *job, const uint8_t **plain, size_t *plainlen)
 
 void gk_aead_end (gk_aead_job_t *job);		/* wipes and frees */
 
-/* RFC 9580's sample v2 SEIPD packet with OCB (A.10.3), decrypted, in
-   steps too; a changed byte, a cut final tag, a missing last chunk
-   refused. 0: OK. */
+/* RFC 9580's sample v2 SEIPD packets with OCB (A.10.3), EAX (A.9.3) and
+   GCM (A.11.3), decrypted, in steps too; a changed byte, a cut final tag,
+   a missing last chunk refused. 0: OK. */
 int gk_aead_selftest (void);
 
 #ifdef __cplusplus

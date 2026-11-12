@@ -114,7 +114,7 @@ def build():
                          open("lib/mbedtls/mbedtls.mk").read()).group(1).replace("\\", " ").split()
     src = ["tests/native/test_pgp.c"] + [f"src/crypto/{f}.c" for f in
                                           ("sha1", "sha256", "sha512", "hmac", "s2k", "aes", "ed25519", "rsa", "x25519",
-                                           "seipd", "ocb", "aead", "wipe")]
+                                           "seipd", "ocb", "eax", "gcm", "aead", "argon2", "wipe")]
     src += [mbed + f for f in mbed_src]
     src += ["third_party/monocypher/src/monocypher.c", "third_party/monocypher/src/optional/monocypher-ed25519.c"]
     subprocess.run(["cc", "-O2", "-Wall", "-I", "src/crypto", "-I", "lib/mbedtls", "-I", "third_party/mbedtls/include",
@@ -483,29 +483,95 @@ def ocb_encrypt(key, nonce, ad, plain):
     return AESOCB3(key).encrypt(nonce, plain, ad)
 
 
-def aead_packet(packet, session_key, plain, c, iv_or_salt):
+def gcm_encrypt(key, nonce, ad, plain):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    return AESGCM(key).encrypt(nonce, plain, ad)
+
+
+def eax_encrypt(key, nonce, ad, plain):
+    """EAX from the paper (Bellare, Rogaway, Wagner), over cryptography's
+    AES and CMAC: an independent implementation for the checks."""
+    from cryptography.hazmat.primitives.cmac import CMAC
+
+    def omac(t, m):
+        c = CMAC(algorithms.AES(key))
+        c.update(bytes(15) + bytes([t]) + m)
+        return c.finalize()
+    n = omac(0, nonce)
+    ctr = Cipher(algorithms.AES(key), modes.CTR(n)).encryptor()
+    ct = ctr.update(plain) + ctr.finalize()
+    tag = bytes(a ^ b ^ c for a, b, c in zip(n, omac(1, ad), omac(2, ct)))
+    return ct + tag
+
+
+AEAD_MODES = {1: (eax_encrypt, 16), 2: (ocb_encrypt, 15), 3: (gcm_encrypt, 12)}
+
+
+def aead_packet(packet, session_key, plain, c, iv_or_salt, mode=2):
     """The body after the version octet of a v2 SEIPD (18) or GnuPG OCB
     (20) packet: an independent encoder (RFC 9580, 5.13.2; LibrePGP, 5.16)."""
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
     from cryptography.hazmat.primitives import hashes as H
+    encrypt, nlen = AEAD_MODES[mode]
     cipher = {16: 7, 24: 8, 32: 9}[len(session_key)]
-    header = bytes([0xd2 if packet == 18 else 0xd4, 2 if packet == 18 else 1, cipher, 2, c])
+    header = bytes([0xd2 if packet == 18 else 0xd4, 2 if packet == 18 else 1, cipher, mode, c])
     if packet == 18:
-        okm = HKDF(H.SHA256(), len(session_key) + 7, iv_or_salt, header).derive(session_key)
+        okm = HKDF(H.SHA256(), len(session_key) + nlen - 8, iv_or_salt, header).derive(session_key)
         key, iv = okm[:len(session_key)], okm[len(session_key):]
         nonce = lambda i: iv + i.to_bytes(8, "big")
         ad = lambda i: header
     else:
         key, iv = session_key, iv_or_salt
-        nonce = lambda i: (int.from_bytes(iv, "big") ^ i).to_bytes(15, "big")
+        nonce = lambda i: (int.from_bytes(iv, "big") ^ i).to_bytes(nlen, "big")
         ad = lambda i: header + i.to_bytes(8, "big")
     size = 1 << (c + 6)
     chunks = [plain[i:i + size] for i in range(0, len(plain), size)] or [b""]
     out = b""
     for i, ch in enumerate(chunks):
-        out += ocb_encrypt(key, nonce(i), ad(i), ch)
-    final = ocb_encrypt(key, nonce(len(chunks)), ad(len(chunks)) + len(plain).to_bytes(8, "big"), b"")
-    return bytes([cipher, 2, c]) + iv_or_salt + out + final, len(chunks)
+        out += encrypt(key, nonce(i), ad(i), ch)
+    final = encrypt(key, nonce(len(chunks)), ad(len(chunks)) + len(plain).to_bytes(8, "big"), b"")
+    return bytes([cipher, mode, c]) + iv_or_salt + out + final, len(chunks)
+
+
+def check_eax_gcm(native, rnd, cases, wy_dirs):
+    """EAX and GCM: Wycheproof (GCM: its 96-bit nonces, the only ones
+    OpenPGP uses), then random cases against cryptography's AES-GCM and
+    eax_encrypt (itself checked against Wycheproof first)."""
+    counts = {}
+    for name, mode in (("aes_eax_test.json", "eax"), ("aes_gcm_test.json", "gcm")):
+        for dr in wy_dirs:
+            for f in sorted(glob.glob(os.path.join(dr, name))):
+                for g in json.load(open(f))["testGroups"]:
+                    for t in g["tests"]:
+                        if mode == "gcm" and g["ivSize"] != 96:
+                            counts[(mode, "skipped: nonce not 96 bits")] = counts.get((mode, "skipped: nonce not 96 bits"), 0) + 1
+                            continue
+                        args = (t["key"], t["iv"] or "-", t["aad"] or "-")
+                        got = native(mode, "dec", *args, t["ct"] + t["tag"])
+                        what = f"Wycheproof {mode} {t['tcId']} {t['flags']}"
+                        if t["result"] == "valid":
+                            check(got == (t["msg"] or "-"), what)
+                            check(native(mode, "enc", *args, t["msg"] or "-") == t["ct"] + t["tag"], what + " enc")
+                            if mode == "eax":
+                                check(eax_encrypt(*(bytes.fromhex(x) for x in (t["key"], t["iv"], t["aad"], t["msg"])))
+                                      == bytes.fromhex(t["ct"] + t["tag"]), what + " (the Python EAX)")
+                        else:
+                            check(got.startswith("error"), what)
+                        key = (mode, t["result"], got.startswith("error"))
+                        counts[key] = counts.get(key, 0) + 1
+    print("  Wycheproof EAX and GCM (mode, result, refused):", counts)
+    for mode, encrypt in (("eax", eax_encrypt), ("gcm", gcm_encrypt)):
+        for c_ in range(cases):
+            key = rnd.randbytes(rnd.choice((16, 24, 32)))
+            nonce = rnd.randbytes(12 if mode == "gcm" else rnd.choice((1, 12, 16, 33)))
+            ad = rnd.randbytes(rnd.choice((0, 5, 13, 16, 21, rnd.randrange(100))))
+            p = rnd.randbytes(rnd.choice((0, 1, 15, 16, 17, 32, 33, rnd.randrange(600))))
+            want = encrypt(key, nonce, ad, p)
+            check(native(mode, "enc", h(key), h(nonce), h(ad), h(p)) == want.hex(), f"{mode} enc {len(p)} {len(ad)}")
+            check(native(mode, "dec", h(key), h(nonce), h(ad), h(want)) == (p.hex() or "-"), f"{mode} dec")
+            bad = bytearray(want)
+            bad[rnd.randrange(len(bad))] ^= 1 << rnd.randrange(8)
+            check(native(mode, "dec", h(key), h(nonce), h(ad), h(bad)) == "error -1", f"{mode} dec changed")
 
 
 def check_ocb(native, rnd, cases):
@@ -529,15 +595,32 @@ def check_aead(native, rnd, cases):
                         "cbcd98fdcade694a877ad4247323f6e857")
     check(native("aead", 18, "28e79ab82397d3c63de24ac217d7b791", h(kat), 64) ==
           "cb1362000000000048656c6c6f2c20776f726c6421d50eae6aa1649b56aa835b2613902bd2", "RFC 9580 A.10")
+    # A.9.3 (EAX) and A.11.3 (GCM): in the native self-test too
+    for sk, body, want, what in (
+            ("3881bafe985412459b86c36f98cb9a5e",
+             "0701069ff90e3b321964f3a42913c8dcc6619325015227efb7eaeaa49f04c2e674175d4a3d226ed6afcb9ca9ac122c1470e11c"
+             "63d4c0ab241c6a938ad48bf99a5a99b90bba8325de61047540258ab7959a95ad051dda96eb15431dfef5f5e2255ca78261546e339a",
+             "cb1362000000000048656c6c6f2c20776f726c6421d50eae5bf0cd6705500355816cb0c8ff", "RFC 9580 A.9"),
+            ("1936fc8568980274bb900d8319360c77",
+             "070306fcb94490bcb98bbdc9d106c6090266940f72e89edc21b5596b1576b101ed0f9ffc6fc6d65bbfd24dcd0790966e6d1e85"
+             "a30053784cb1d8b6a0699ef12155a7b2ad6258531b57651fd7777912fa95e35d9b40216f69a4c248db28ff4331f1632907399e6ff9",
+             "cb1362000000000048656c6c6f2c20776f726c6421d50e1ce2269a9eddef81032172b7ed7c", "RFC 9580 A.11")):
+        check(native("aead", 18, sk, body, 64) == want, what)
+        # and the Python encoder, with the RFC's salt, gives the same packet
+        b = bytes.fromhex(body)
+        check(aead_packet(18, bytes.fromhex(sk), bytes.fromhex(want), b[2], b[3:35], b[1])[0] == b, what + " (Python)")
+    modes_seen = {}
     for c_ in range(cases):
         packet = rnd.choice((18, 20))
+        mode = rnd.choice((1, 2, 3) if packet == 18 else (1, 2))
         sk = rnd.randbytes(rnd.choice((16, 24, 32)))
         c = rnd.choice((0, 0, 1, 2, 4, 16))
         plain = rnd.randbytes(rnd.choice((0, 1, 63, 64, 65, 128, rnd.randrange(3000))))
-        ivs = rnd.randbytes(32 if packet == 18 else 15)
-        data, nchunks = aead_packet(packet, sk, plain, c, ivs)
+        ivs = rnd.randbytes(32 if packet == 18 else AEAD_MODES[mode][1])
+        data, nchunks = aead_packet(packet, sk, plain, c, ivs, mode)
+        modes_seen[(packet, mode)] = modes_seen.get((packet, mode), 0) + 1
         budget = rnd.choice((1, 16, 50, 4096))
-        what = f"AEAD {packet} c={c} {len(plain)} bytes"
+        what = f"AEAD {packet} mode {mode} c={c} {len(plain)} bytes"
         check(native("aead", packet, h(sk), h(data), budget) == (plain.hex() or "-"), what)
         bad = bytearray(data)
         bad[rnd.randrange(3, len(bad))] ^= 1 << rnd.randrange(8)
@@ -556,9 +639,70 @@ def check_aead(native, rnd, cases):
         check(native("aead", packet, h(other), h(data), budget).startswith("error"), what + " another key")
         # the other packet's format with the same bytes
         check(native("aead", 38 - packet, h(sk), h(data), budget).startswith("error"), what + " the other format")
-    check(native("aead", 18, h(bytes(16)), "070106" + "00" * 48, 64) == "error -5", "AEAD EAX: not yet")
+    print("  AEAD packets (packet, mode): cases", modes_seen)
+    check(native("aead", 20, h(bytes(16)), "070306" + "00" * 48, 64) == "error -5", "AEAD GCM in tag 20")
+    check(native("aead", 18, h(bytes(16)), "070406" + "00" * 48, 64) == "error -5", "AEAD mode 4")
     check(native("aead", 18, h(bytes(16)), "070211" + "00" * 48, 64) == "error -4", "AEAD chunk size 17")
     check(native("aead", 18, h(bytes(24)), "070206" + "00" * 48, 64) == "error -2", "AEAD key for another cipher")
+
+
+# --- Argon2id ----------------------------------------------------------------
+
+def check_argon2(native, rnd, cases, ref, a12=False):
+    """Known answers from tests/native/argon2_vectors.json (made with the
+    reference implementation, tools/make_argon2_vectors.py) and, given
+    --argon2-ref (the reference built as a shared library), random ones."""
+    n = 0
+    for v in json.load(open("tests/native/argon2_vectors.json")):
+        got = native("argon2", v["t"], v["p"], v["m"], v["password"] or "-", v["salt"], v.get("key") or "-",
+                     v.get("ad") or "-", v["length"], rnd.choice((1, 3, 17, 1000)))
+        check(got == v["tag"], f"Argon2id vector {v}")
+        n += 1
+    print(f"  Argon2id: {n} known answers")
+    if ref:
+        sys.path.insert(0, os.path.dirname(ref))
+        import ctypes
+        lib = ctypes.CDLL(ref)
+
+        class Ctx(ctypes.Structure):
+            _fields_ = [(k, t) for k, t in (("out", ctypes.c_char_p), ("outlen", ctypes.c_uint32),
+                        ("pwd", ctypes.c_char_p), ("pwdlen", ctypes.c_uint32),
+                        ("salt", ctypes.c_char_p), ("saltlen", ctypes.c_uint32),
+                        ("secret", ctypes.c_char_p), ("secretlen", ctypes.c_uint32),
+                        ("ad", ctypes.c_char_p), ("adlen", ctypes.c_uint32),
+                        ("t_cost", ctypes.c_uint32), ("m_cost", ctypes.c_uint32),
+                        ("lanes", ctypes.c_uint32), ("threads", ctypes.c_uint32),
+                        ("version", ctypes.c_uint32), ("allocate_cbk", ctypes.c_void_p),
+                        ("free_cbk", ctypes.c_void_p), ("flags", ctypes.c_uint32))]
+
+        for c in range(cases):
+            t, p = rnd.choice((1, 1, 2, 3, 4)), rnd.choice((1, 1, 2, 3, 4, 8))
+            m = rnd.choice((8 * p, 8 * p + 3, 64, 100, 256, 1000, 4096))
+            m = max(m, 8 * p)
+            pw, salt = rnd.randbytes(rnd.randrange(40)), rnd.randbytes(rnd.choice((8, 16, 33)))
+            key = rnd.randbytes(rnd.choice((0, 0, 8, 32)))
+            ad = rnd.randbytes(rnd.choice((0, 0, 12)))
+            length = rnd.choice((4, 16, 32, 64, 65, 100, 1024))
+            out = ctypes.create_string_buffer(length)
+            ctx = Ctx(ctypes.cast(out, ctypes.c_char_p), length, pw, len(pw), salt, len(salt), key or None, len(key),
+                      ad or None, len(ad), t, m, p, 1, 0x13, None, None, 0)
+            if lib.argon2_ctx(ctypes.byref(ctx), 2) != 0:
+                continue
+            got = native("argon2", t, p, m, h(pw), h(salt), h(key), h(ad), length, rnd.choice((1, 5, 100, 5000)))
+            check(got == out.raw.hex(), f"Argon2id t={t} p={p} m={m} len={length}")
+        print(f"  Argon2id: {cases} random cases against the reference")
+    if a12:
+        # RFC 9580, A.12.1: the v4 SKESK's Argon2 S2K (t 1, p 4, 2^21 KiB:
+        # 2 GiB, host only), then its encrypted session key (AES-CFB, zero
+        # IV) must give algorithm 7 and the session key the RFC shows
+        k = native("argon2", 1, 4, 1 << 21, h(b"password"), "9c52f83c27f95e50d535440ecdff3136", "-", "-", 16, 100000)
+        esk = bytes.fromhex("9e52fcad22cf3f956542cba794ef840b11")
+        sk = Cipher(algorithms.AES(bytes.fromhex(k)), modes.CFB(bytes(16))).decryptor().update(esk)
+        check(sk.hex() == "07" + "01fe16bbacfd1e7b78ef3b865187374f", "RFC 9580 A.12.1 (Argon2, 2 GiB)")
+        print("  Argon2id: RFC 9580 A.12.1 checked")
+    check(native("argon2", 0, 1, 64, "-", "00" * 16, "-", "-", 16, 10) == "error -4", "Argon2id t=0")
+    check(native("argon2", 1, 4, 31, "-", "00" * 16, "-", "-", 16, 10) == "error -4", "Argon2id m < 8p")
+    check(native("argon2", 1, 1, 64, "-", "00" * 16, "-", "-", 3, 10) == "error -4", "Argon2id 3-byte tag")
 
 
 def main():
@@ -566,6 +710,8 @@ def main():
     ap.add_argument("--cases", type=int, default=200)
     ap.add_argument("--wycheproof", action="append", default=[])
     ap.add_argument("--cavp", action="append", default=[])
+    ap.add_argument("--argon2-ref", default=None, help="the Argon2 reference implementation as a shared library")
+    ap.add_argument("--a12", action="store_true", help="also RFC 9580 A.12.1 (Argon2 with 2 GiB)")
     args = ap.parse_args()
     rnd = random.Random(2026)
     native = Native(build())
@@ -587,8 +733,12 @@ def main():
     print("SEIPD v1 done")
     check_ocb(native, rnd, args.cases)
     print("OCB done")
+    check_eax_gcm(native, rnd, args.cases, ["tests/native/wycheproof"] + args.wycheproof)
+    print("EAX and GCM done")
     check_aead(native, rnd, args.cases)
     print("AEAD packets done")
+    check_argon2(native, rnd, args.cases, args.argon2_ref, args.a12)
+    print("Argon2id done")
     print(f"check_pgp: {len(failures)} failures")
     sys.exit(1 if failures else 0)
 

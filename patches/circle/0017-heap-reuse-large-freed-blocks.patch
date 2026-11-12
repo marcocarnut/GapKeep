@@ -1,0 +1,89 @@
+--- a/lib/heapallocator.cpp
++++ b/lib/heapallocator.cpp
+@@ -28,7 +28,8 @@
+ :	m_pHeapName (pHeapName),
+ 	m_pNext (0),
+ 	m_pLimit (0),
+-	m_nReserve (0)
++	m_nReserve (0),
++	m_pLargeFreeList (0)
+ {
+ 	memset (m_Bucket, 0, sizeof m_Bucket);
+ 
+@@ -97,8 +98,30 @@
+ 	}
+ 
+ 	THeapBlockHeader *pBlockHeader;
+-	if (   pBucket->nSize > 0
+-	    && (pBlockHeader = pBucket->pFreeList) != 0)
++	THeapBlockHeader **ppLarge = 0;
++	if (pBucket->nSize == 0)
++	{
++		// gapkeep: a block bigger than the buckets' comes from the freed
++		// ones if one fits (the smallest, and not more than twice the
++		// size: a big one is kept for big requests). Circle never reused
++		// them: every freed block above 512 KiB was lost.
++		for (THeapBlockHeader **pp = &m_pLargeFreeList; *pp != 0; pp = &(*pp)->pNext)
++		{
++			if (   (*pp)->nSize >= nSize && (*pp)->nSize / 2 <= nSize
++			    && (ppLarge == 0 || (*pp)->nSize < (*ppLarge)->nSize))
++			{
++				ppLarge = pp;
++			}
++		}
++	}
++	if (ppLarge != 0)
++	{
++		pBlockHeader = *ppLarge;
++		assert (pBlockHeader->nMagic == HEAP_BLOCK_FREE_MAGIC);
++		*ppLarge = pBlockHeader->pNext;
++	}
++	else if (   pBucket->nSize > 0
++		 && (pBlockHeader = pBucket->pFreeList) != 0)
+ 	{
+ 		assert (pBlockHeader->nMagic == HEAP_BLOCK_FREE_MAGIC);
+ 		pBucket->pFreeList = pBlockHeader->pNext;
+@@ -113,6 +136,15 @@
+ 		if (   pNextBlock <= m_pNext			// may have wrapped
+ 		    || pNextBlock > m_pLimit-m_nReserve)
+ 		{
++			// gapkeep: a big request that doesn't fit fails, and the
++			// caller says so; only small ones use the reserve (and halt)
++			if (nSize >= 0x100000)
++			{
++				m_SpinLock.Release ();
++
++				return 0;
++			}
++
+ 			if (m_nReserve == 0)
+ 			{
+ 				m_SpinLock.Release ();
+@@ -243,12 +275,11 @@
+ 		}
+ 	}
+ 
+-#ifdef HEAP_DEBUG
+-	CLogger::Get ()->Write (m_pHeapName, LogDebug, "Trying to free large block (size %u)",
+-				pBlockHeader->nSize);
+-
+-	pBlockHeader->nMagic = 0;
+-#endif
++	// gapkeep: kept for reuse (DoAllocate), instead of lost
++	m_SpinLock.Acquire ();
++	pBlockHeader->pNext = m_pLargeFreeList;
++	m_pLargeFreeList = pBlockHeader;
++	m_SpinLock.Release ();
+ }
+ 
+ #ifdef HEAP_DEBUG
+--- a/include/circle/heapallocator.h
++++ b/include/circle/heapallocator.h
+@@ -117,6 +117,7 @@
+ 	u8		*m_pLimit;
+ 	size_t	 	 m_nReserve;
+ 	THeapBlockBucket m_Bucket[HEAP_BLOCK_MAX_BUCKETS+1];
++	THeapBlockHeader *m_pLargeFreeList;	// gapkeep: freed blocks above the buckets
+ 	CSpinLock	 m_SpinLock;
+ 
+ 	static u32 s_nBucketSize[];

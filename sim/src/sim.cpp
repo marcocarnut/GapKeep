@@ -166,6 +166,7 @@ int gk_sim_boot (int width, int height, const char *card)
 	}
 
 	s_pAppHost = new CAppHost (s_pKeyboard);
+	GkCryptoSetBoardMemory (512);		// the emulated Pi Zero's
 	return s_pAppHost->Initialize () ? 0 : -1;
 }
 

@@ -13,6 +13,7 @@
  *   x25519 SECRET PUBLIC                     -> own public, shared | error -1
  *   wrap KEK KEY, unwrap KEK WRAPPED         -> result | error code
  *   seipd KEY DATA BUDGET                    -> plaintext | error code
+ *   argon2 T P M PASS SALT KEY AD LEN BUDGET -> tag | error code (Argon2id)
  *
  * ("-" is an empty hex string; HASH as gk_hash_find names it.)
  *
@@ -28,6 +29,9 @@
 #include "seipd.h"
 #include "ocb.h"
 #include "aead.h"
+#include "eax.h"
+#include "gcm.h"
+#include "argon2.h"
 
 static size_t unhex (const char *s, uint8_t *out)
 {
@@ -71,7 +75,18 @@ int main (void)
 	if (r == 0) r = gk_x25519_selftest () ? 8000 + gk_x25519_selftest () : 0;
 	if (r == 0) r = gk_seipd1_selftest () ? 9000 + gk_seipd1_selftest () : 0;
 	if (r == 0) r = gk_ocb_selftest () ? 10000 + gk_ocb_selftest () : 0;
+	if (r == 0) r = gk_eax_selftest () ? 13000 + gk_eax_selftest () : 0;
+	if (r == 0) r = gk_gcm_selftest () ? 14000 + gk_gcm_selftest () : 0;
 	if (r == 0) r = gk_aead_selftest () ? 11000 + gk_aead_selftest () : 0;
+	if (r == 0)
+	{
+		gk_argon2_selftest_t st;
+		static gk_argon2_block_t work[GK_ARGON2_SELFTEST_BLOCKS];
+		memset (&st, 0, sizeof st);
+		int a;
+		while ((a = gk_argon2_selftest_step (&st, work, 7)) > 0) ;
+		if (a < 0) r = 12000 - a;
+	}
 	printf ("pgp selftests: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	fflush (stdout);
 	if (r != 0)
@@ -234,6 +249,42 @@ int main (void)
 			else if (dl == 16) printf ("-"); else hex (out, dl - 16);
 			if (kl == 16 || kl == 24 || kl == 32) gk_ocb_key_free (&key);
 		}
+		else if ((strcmp (w[0], "eax") == 0 || strcmp (w[0], "gcm") == 0) && n == 6)
+		{
+			/* eax|gcm enc|dec KEY NONCE AD DATA (dec: DATA is C || tag); in
+			   whole blocks, then the rest */
+			size_t kl = unhex (w[2], a), nl = unhex (w[3], b), al = unhex (w[4], c), dl = unhex (w[5], d);
+			int dec = strcmp (w[1], "dec") == 0, eax = w[0][0] == 'e';
+			size_t pl = dec ? (dl >= 16 ? dl - 16 : 0) : dl, whole = pl & ~(size_t) 15;
+			uint8_t tag[16];
+			gk_eax_key_t ek;
+			gk_eax_t es;
+			gk_gcm_key_t gk;
+			gk_gcm_t gs;
+			if (eax ? gk_eax_key_init (&ek, a, kl) != 0 : gk_gcm_key_init (&gk, a, kl) != 0) { printf ("error key"); }
+			else if (!eax && nl != 12) { printf ("error nonce"); gk_gcm_key_free (&gk); }
+			else if (dec && dl < 16) { printf ("error -1"); if (eax) gk_eax_key_free (&ek); else gk_gcm_key_free (&gk); }
+			else
+			{
+				if (eax)
+				{
+					gk_eax_start (&ek, &es, b, nl, c, al);
+					(dec ? gk_eax_decrypt_blocks : gk_eax_encrypt_blocks) (&ek, &es, d, out, whole);
+					gk_eax_finish (&ek, &es, dec, d + whole, out + whole, pl - whole, tag);
+					gk_eax_key_free (&ek);
+				}
+				else
+				{
+					gk_gcm_start (&gk, &gs, b, c, al);
+					(dec ? gk_gcm_decrypt_blocks : gk_gcm_encrypt_blocks) (&gk, &gs, d, out, whole);
+					gk_gcm_finish (&gk, &gs, dec, d + whole, out + whole, pl - whole, tag);
+					gk_gcm_key_free (&gk);
+				}
+				if (!dec) { memcpy (out + pl, tag, 16); hex (out, pl + 16); }
+				else if (memcmp (tag, d + pl, 16) != 0) printf ("error -1");
+				else if (pl == 0) printf ("-"); else hex (out, pl);
+			}
+		}
 		else if (strcmp (w[0], "aead") == 0 && n == 5)
 		{
 			/* aead 18|20 KEY DATA BUDGET */
@@ -257,6 +308,36 @@ int main (void)
 				if (rc != 0) printf ("error %d", rc); else if (plainlen == 0) printf ("-"); else hex (plain, plainlen);
 				gk_aead_end (&job);
 			}
+		}
+		else if (strcmp (w[0], "argon2") == 0 && n == 10)
+		{
+			/* argon2 T P M PASS SALT KEY AD LEN BUDGET */
+			uint32_t t = (uint32_t) atoi (w[1]), lanes = (uint32_t) atoi (w[2]), m = (uint32_t) atoi (w[3]);
+			size_t pl = unhex (w[4], a), sl = unhex (w[5], b), kl = unhex (w[6], c), al = unhex (w[7], d);
+			uint32_t len = (uint32_t) atoi (w[8]);
+			uint32_t nb = gk_argon2_blocks (m, lanes ? lanes : 1);
+			gk_argon2_block_t *work = malloc ((nb ? nb : 1) * sizeof *work);
+			gk_argon2_job_t job;
+			int rc = gk_argon2_begin (&job, work, t, lanes, m, a, pl, b, sl, c, kl, d, al, len);
+			if (rc != 0) { printf ("error %d", rc); }
+			else
+			{
+				uint32_t budget = (uint32_t) atoi (w[9]);
+				double last = -1;
+				while (gk_argon2_step (&job, budget))
+				{
+					double p = gk_argon2_progress (&job);
+					if (p < last || p > 1) rc = -10;
+					last = p;
+				}
+				/* the work area must be wiped */
+				for (size_t i = 0; i < nb && rc == 0; i++)
+					for (int k = 0; k < 128; k++)
+						if (work[i].a[k] != 0) rc = -11;
+				if (rc != 0) printf ("error %d", rc); else hex (job.out, len);
+				gk_argon2_end (&job);
+			}
+			free (work);
 		}
 		else
 		{

@@ -506,14 +506,25 @@ function base64(s) {
 }
 
 group("SEIPD v2 and GnuPG's OCB packet", async () => {
-  // RFC 9580, A.10.3 and A.10.4
+  // RFC 9580, A.10.3 and A.10.4 (OCB), A.9 (EAX), A.11 (GCM)
   const rfc = unhex("07020620a661f731fc9a3032b5623326027e3a5d8db5748ebeff0b0c5910d09ecdd641ff9fd38562758035" +
                     "bc49754ce1bf3fffa7dad0a3b8104f5133cf42a4100a83eef4ca1b4801a8846bf42bcda7c8ce9d65e212f301" +
                     "cbcd98fdcade694a877ad4247323f6e857");
   ok(hex(await crypto.seipdV2Decrypt(unhex("28e79ab82397d3c63de24ac217d7b791"), rfc)) ===
      "cb1362000000000048656c6c6f2c20776f726c6421d50eae6aa1649b56aa835b2613902bd2", "SEIPD v2 RFC 9580 A.10");
+  ok(hex(await crypto.seipdV2Decrypt(unhex("3881bafe985412459b86c36f98cb9a5e"), unhex(
+    "0701069ff90e3b321964f3a42913c8dcc6619325015227efb7eaeaa49f04c2e674175d4a3d226ed6afcb9ca9ac122c1470e11c" +
+    "63d4c0ab241c6a938ad48bf99a5a99b90bba8325de61047540258ab7959a95ad051dda96eb15431dfef5f5e2255ca78261546e339a"))) ===
+     "cb1362000000000048656c6c6f2c20776f726c6421d50eae5bf0cd6705500355816cb0c8ff", "SEIPD v2 RFC 9580 A.9 (EAX)");
+  ok(hex(await crypto.seipdV2Decrypt(unhex("1936fc8568980274bb900d8319360c77"), unhex(
+    "070306fcb94490bcb98bbdc9d106c6090266940f72e89edc21b5596b1576b101ed0f9ffc6fc6d65bbfd24dcd0790966e6d1e85" +
+    "a30053784cb1d8b6a0699ef12155a7b2ad6258531b57651fd7777912fa95e35d9b40216f69a4c248db28ff4331f1632907399e6ff9"))) ===
+     "cb1362000000000048656c6c6f2c20776f726c6421d50e1ce2269a9eddef81032172b7ed7c", "SEIPD v2 RFC 9580 A.11 (GCM)");
+  const modes = {};
   for (const t of V.aeadPackets) {
-    const f = t.packet === 18 ? crypto.seipdV2Decrypt : crypto.ocbedDecrypt, what = `AEAD ${t.packet} ${t.plain.length / 2} bytes`;
+    const f = t.packet === 18 ? crypto.seipdV2Decrypt : crypto.ocbedDecrypt;
+    const what = `AEAD ${t.packet} ${["", "EAX", "OCB", "GCM"][t.mode]} ${t.plain.length / 2} bytes`;
+    modes[what.split(" ").slice(0, 3).join(" ")] = true;
     const key = unhex(t.key), data = unhex(t.data);
     ok(hex(await f(key, data)) === t.plain, what);
     for (const at of [3, Math.floor(data.length / 2), data.length - 17, data.length - 1]) {
@@ -525,10 +536,16 @@ group("SEIPD v2 and GnuPG's OCB packet", async () => {
     const other = key.slice();
     other[1] ^= 1;
     await rejects(f(other, data), Error, `${what}, another key`);
-    await rejects((t.packet === 18 ? crypto.ocbedDecrypt : crypto.seipdV2Decrypt)(key, data), Error, `${what}, the other packet`);
+    if (t.mode === 3) {
+      throws(() => crypto.ocbedDecrypt(key, data), RangeError, `${what}, as GnuPG's packet (no GCM there)`);
+    } else {
+      await rejects((t.packet === 18 ? crypto.ocbedDecrypt : crypto.seipdV2Decrypt)(key, data), Error, `${what}, the other packet`);
+    }
   }
+  console.log(`pgpcrypto: AEAD packets: ${Object.keys(modes).join(", ")}`);
   const k = new Uint8Array(16);
-  throws(() => crypto.seipdV2Decrypt(k, unhex("070106" + "00".repeat(48))), RangeError, "SEIPD v2 EAX: not yet");
+  throws(() => crypto.seipdV2Decrypt(k, unhex("070406" + "00".repeat(48))), RangeError, "SEIPD v2 AEAD mode 4");
+  throws(() => crypto.ocbedDecrypt(k, unhex("070306" + "00".repeat(48))), RangeError, "OCB packet with GCM");
   throws(() => crypto.seipdV2Decrypt(k, unhex("070211" + "00".repeat(48))), RangeError, "SEIPD v2 chunk size 17");
   throws(() => crypto.seipdV2Decrypt(new Uint8Array(32), unhex("070206" + "00".repeat(48))), RangeError, "SEIPD v2 key for another cipher");
   throws(() => crypto.ocbedDecrypt(k, new Uint8Array(10)), RangeError, "OCB packet too short");
@@ -537,6 +554,12 @@ group("SEIPD v2 and GnuPG's OCB packet", async () => {
   const plain = await timeJob(`OCB packet ${big.size / 1024} KiB`,
     (onProgress) => crypto.ocbedDecrypt(unhex(big.key), data, { onProgress }));
   ok(plain.length === big.size && plain.every((x) => x === 0), "OCB packet 256 KiB");
+  for (const b of V.aeadBigOther) {
+    const d = base64(b.data);
+    const p = await timeJob(`SEIPD v2 ${b.name} ${b.size / 1024} KiB`,
+      (onProgress) => crypto.seipdV2Decrypt(unhex(b.key), d, { onProgress }));
+    ok(p.length === b.size && p.every((x) => x === 0), `SEIPD v2 ${b.name} ${b.size / 1024} KiB`);
+  }
 });
 
 group("gk:zlib", async () => {
@@ -564,6 +587,47 @@ group("gk:zlib", async () => {
   ok(hex(crypto.sha256(mib)) === V.zlibMiB.sha256, "inflate 1 MiB");
   await rejects(timeJob("inflate bomb, to the limit", (onProgress) => zlib.inflate(bomb,
     { format: "zlib", maxOutput: 32 << 20, onProgress })), RangeError, "inflate a bomb (33 MiB of zeros): refused at 32 MiB");
+});
+
+group("Argon2id", async () => {
+  let n = 0;
+  for (const v of V.argon2) {
+    if (v.key || v.ad) continue;		// (the API has no secret or associated data)
+    const got = await crypto.argon2id(unhex(v.password), unhex(v.salt),
+      { passes: v.t, lanes: v.p, memoryKiB: v.m, length: v.length });
+    ok(hex(got) === v.tag, `Argon2id t=${v.t} p=${v.p} m=${v.m} length=${v.length}`);
+    n++;
+  }
+  console.log(`pgpcrypto: Argon2id: ${n} known answers`);
+  // S2K type 4: the reference implementation's answer (src/crypto/argon2.c's self-test)
+  ok(hex(await crypto.openpgpS2kArgon2("password", new Uint8Array(16).map((_, i) => i), 1, 4, 6, 16)) ===
+     "637a25b4e2fd12a663f85ebbce4d8cc7", "S2K type 4");
+  const salt = new Uint8Array(16);
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 21, 16), RangeError, "S2K type 4 with 2 GiB (RFC 9580's first option)");
+  // a quarter of the board's memory: 128 MiB on the 512 MB Pi Zero (and QEMU's, and the simulator's)
+  const cap = crypto.limits().argon2MemoryKiB;
+  ok(cap === 128 * 1024, `Argon2 limit ${cap} KiB`);
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 18, 16), RangeError, "S2K type 4 with 256 MiB");
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 4, 16), RangeError, "S2K type 4 exponent below 3 + log2 p");
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 0, 4, 10, 16), RangeError, "S2K type 4 t = 0");
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 0, 10, 16), RangeError, "S2K type 4 p = 0");
+  throws(() => crypto.openpgpS2kArgon2("p", salt.subarray(1), 1, 4, 10, 16), RangeError, "S2K type 4 15-byte salt");
+  throws(() => crypto.openpgpS2kArgon2("p", salt, 1, 4, 10, 3), RangeError, "S2K type 4 3-byte key");
+  throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 1, memoryKiB: cap + 1, length: 16 }), RangeError,
+         "Argon2id 128 MiB + 1 KiB");
+  throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 4, memoryKiB: 31, length: 16 }), RangeError, "Argon2id m < 8p");
+  throws(() => crypto.argon2id("p", salt, { passes: 1, lanes: 1, length: 16 }), TypeError, "Argon2id without memoryKiB");
+  throws(() => crypto.argon2id("p", salt.subarray(0, 7), { passes: 1, lanes: 1, memoryKiB: 64, length: 16 }), RangeError,
+         "Argon2id 7-byte salt");
+  // RFC 9580's second option: 64 MiB, 3 passes, 4 lanes; then the most
+  const k64 = await timeJob("Argon2id 64 MiB t=3 p=4", (onProgress) =>
+    crypto.openpgpS2kArgon2("password", salt, 3, 4, 16, 32, { onProgress }));
+  ok(k64.length === 32, "Argon2id 64 MiB");
+  for (const round of [1, 2]) {
+    const k = await timeJob(`Argon2id 128 MiB t=1 p=4 (${round})`, (onProgress) =>
+      crypto.argon2id("password", salt, { passes: 1, lanes: 4, memoryKiB: cap, length: 32, onProgress }));
+    ok(k.length === 32, `Argon2id 128 MiB (${round}: the memory again)`);
+  }
 });
 
 group("AES-CFB limit", () => {
