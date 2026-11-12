@@ -84,9 +84,25 @@ int gk_aead_result (gk_aead_job_t *job, const uint8_t **plain, size_t *plainlen)
 
 void gk_aead_end (gk_aead_job_t *job);		/* wipes and frees */
 
+/* One message all at once, for small things (an AEAD-protected secret key,
+   RFC 9580, 5.5.3): mode GK_AEAD_EAX, _OCB or _GCM, key 16, 24 or 32
+   bytes (AES), nonce as long as the mode's (16, 15, 12), any associated
+   data; in and out may be the same. 0; -1 (decrypt): the tag is wrong, out
+   zeroed; -2: bad key length; -3: no memory; -5: no such mode; -6: bad
+   nonce length. */
+#define GK_AEAD_TAG		16
+int gk_aead_nonce_size (int mode);	/* 0: no such mode */
+int gk_aead_encrypt (int mode, const uint8_t *key, size_t keylen, const uint8_t *nonce, size_t noncelen,
+		     const uint8_t *ad, size_t adlen, const uint8_t *in, uint8_t *out, size_t len,
+		     uint8_t tag[GK_AEAD_TAG]);
+int gk_aead_decrypt (int mode, const uint8_t *key, size_t keylen, const uint8_t *nonce, size_t noncelen,
+		     const uint8_t *ad, size_t adlen, const uint8_t *in, uint8_t *out, size_t len,
+		     const uint8_t tag[GK_AEAD_TAG]);
+
 /* RFC 9580's sample v2 SEIPD packets with OCB (A.10.3), EAX (A.9.3) and
    GCM (A.11.3), decrypted, in steps too; a changed byte, a cut final tag,
-   a missing last chunk refused. 0: OK. */
+   a missing last chunk refused; A.5.1's locked secret key all at once.
+   0: OK. */
 int gk_aead_selftest (void);
 
 #ifdef __cplusplus

@@ -560,6 +560,42 @@ def check_eax_gcm(native, rnd, cases, wy_dirs):
                         key = (mode, t["result"], got.startswith("error"))
                         counts[key] = counts.get(key, 0) + 1
     print("  Wycheproof EAX and GCM (mode, result, refused):", counts)
+    # the same through the one-shot calls (gk_aead_encrypt, _decrypt), which
+    # take OpenPGP's nonce lengths only
+    once = {}
+    for name, mode, nbits in (("aes_eax_test.json", 1, 128), ("aes_gcm_test.json", 3, 96)):
+        for dr in wy_dirs:
+            for f in sorted(glob.glob(os.path.join(dr, name))):
+                for g in json.load(open(f))["testGroups"]:
+                    if g["ivSize"] != nbits:
+                        continue
+                    for t in g["tests"]:
+                        args = (t["key"], t["iv"], t["aad"] or "-")
+                        got = native("once", "dec", mode, *args, t["ct"] + t["tag"])
+                        what = f"Wycheproof once mode {mode} {t['tcId']}"
+                        if t["result"] == "valid":
+                            check(got == (t["msg"] or "-"), what)
+                            check(native("once", "enc", mode, *args, t["msg"] or "-") == t["ct"] + t["tag"], what + " enc")
+                        else:
+                            check(got == "error -1", what)
+                        once[(mode, t["result"])] = once.get((mode, t["result"]), 0) + 1
+    print("  Wycheproof through the one-shot calls (mode, result):", once)
+    for c_ in range(cases):
+        mode = rnd.choice((1, 2, 3))
+        encrypt, nlen = AEAD_MODES[mode]
+        key, nonce = rnd.randbytes(rnd.choice((16, 24, 32))), rnd.randbytes(nlen)
+        ad = rnd.randbytes(rnd.choice((0, 13, 44, rnd.randrange(300))))
+        p = rnd.randbytes(rnd.choice((0, 1, 15, 16, 17, 32, 33, rnd.randrange(2000))))
+        want = encrypt(key, nonce, ad, p)
+        check(native("once", "enc", mode, h(key), h(nonce), h(ad), h(p)) == want.hex(), f"once {mode} enc {len(p)}")
+        check(native("once", "dec", mode, h(key), h(nonce), h(ad), h(want)) == (p.hex() or "-"), f"once {mode} dec")
+        bad = bytearray(want)
+        bad[rnd.randrange(len(bad))] ^= 1 << rnd.randrange(8)
+        check(native("once", "dec", mode, h(key), h(nonce), h(ad), h(bad)) == "error -1", f"once {mode} changed")
+        check(native("once", "dec", mode, h(key), h(nonce), h(ad + b"x"), h(want)) == "error -1", f"once {mode} other AD")
+        check(native("once", "enc", mode, h(key), h(nonce[1:]), h(ad), h(p)) == "error -6", f"once {mode} short nonce")
+    check(native("once", "enc", 4, h(bytes(16)), h(bytes(16)), "-", "00") == "error -5", "once mode 4")
+    check(native("once", "enc", 2, h(bytes(20)), h(bytes(15)), "-", "00") == "error -2", "once 20-byte key")
     for mode, encrypt in (("eax", eax_encrypt), ("gcm", gcm_encrypt)):
         for c_ in range(cases):
             key = rnd.randbytes(rnd.choice((16, 24, 32)))

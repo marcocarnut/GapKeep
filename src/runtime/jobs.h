@@ -22,6 +22,15 @@
 // A job may report progress: onProgress(fraction), called after each slice
 // that moved it on (a JavaScript call, with the watchdog).
 //
+// A job may be cancelled with an AbortSignal ({ signal }, the web's shape;
+// the globals are js_sys.cpp's): an already aborted signal rejects the
+// promise at once, nothing queued; otherwise the job listens for "abort",
+// and when it comes (from JavaScript, between slices) a waiting job is
+// dropped, wiped, and a running one either too or, if it has an Abort op,
+// given the slices it asks for to clean up (Argon2id wipes its memory),
+// then dropped; its promise is rejected with the signal's reason (an Error
+// named "AbortError" unless abort() was given another).
+//
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #ifndef _jobs_h
@@ -47,6 +56,18 @@ struct TGkJobOps
 	// Wipes and frees pState, and the JS values it holds (ctx may be the
 	// app's last moments: no JavaScript may run).
 	void (*Free) (JSContext *ctx, void *pState);
+
+	// Optional: the job was aborted after it started. TRUE: it wants more
+	// slices (Step until FALSE) to clean up first; FALSE (or no op): it is
+	// dropped at once.
+	boolean (*Abort) (void *pState);
+};
+
+// What a long operation's options argument gave: { onProgress, signal }
+struct TGkJobOptions
+{
+	JSValue OnProgress;		// a function, or undefined
+	JSValue Signal;			// an AbortSignal, or undefined
 };
 
 static const unsigned GkJobSliceMs = 20;
@@ -56,6 +77,8 @@ static const unsigned GkMaxJobs = 16;
 // (freed by ops->Free, also on failure). OnProgress: a function or
 // undefined. JS_EXCEPTION (a RangeError) if MaxJobs are queued already.
 JSValue GkJobStart (JSContext *ctx, const TGkJobOps *pOps, void *pState, JSValueConst OnProgress);
+// The same with { onProgress, signal }: an aborted signal rejects at once.
+JSValue GkJobStart (JSContext *ctx, const TGkJobOps *pOps, void *pState, const TGkJobOptions &Options);
 
 // From the app host's Update(): a slice of the first job.
 void GkJobsUpdate (TGkApp *pApp);
@@ -71,5 +94,10 @@ void GkJobsCancel (TGkApp *pApp);
 // there is none. FALSE: not an object or not a function (TypeError
 // thrown); *pFunc then undefined. The result is held: free it.
 boolean GkJobOnProgress (JSContext *ctx, JSValueConst Options, const char *pFunction, JSValue *pFunc);
+
+// The same with the signal too ({ onProgress, signal }); free with
+// GkJobOptionsFree. FALSE: a TypeError thrown, *pOptions all undefined.
+boolean GkJobOnProgress (JSContext *ctx, JSValueConst Options, const char *pFunction, TGkJobOptions *pOptions);
+void GkJobOptionsFree (JSContext *ctx, TGkJobOptions *pOptions);
 
 #endif

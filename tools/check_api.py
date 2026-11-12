@@ -157,7 +157,8 @@ def main():
         if actual.get(member) not in (None, kind):
             problems.append('EPaperPanel.%s: documented as %s, but it is %s' % (member, kind, actual[member]))
 
-    compare('globals', ['console', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'],
+    compare('globals', ['console', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'AbortController',
+                        'AbortSignal'],
             real['globals'])
 
     # generated files

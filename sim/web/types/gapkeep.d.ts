@@ -9,6 +9,13 @@ type Bytes = ArrayBufferView | ArrayBuffer;
 type JobOptions = {
   /** called as the work goes on, with how far it is: more than 0, at most 1 */
   onProgress?: (fraction: number) => void;
+  /** cancels it: the promise rejects with signal.reason (an AbortError) */
+  signal?: AbortSignal;
+};
+
+type ProgressOptions = {
+  /** called as the work goes on, with how far it is: more than 0, at most 1 */
+  onProgress?: (fraction: number) => void;
 };
 
 type HashName = "SHA-1" | "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512";
@@ -151,7 +158,7 @@ declare module "gk:ui" {
   /** what it shows: ["black", "white"], or with "red" */
   readonly colors: EPaperColor[];
   /** writes what the panel's widgets show onto the panel: a full refresh, then deep sleep; resolves once it may be unplugged, rejects with an Error (no panel, ...) */
-  refresh(options?: JobOptions): Promise<void>;
+  refresh(options?: ProgressOptions): Promise<void>;
   /** deletes the panel's widgets and gives the panel back (what it shows stays) */
   close(): void;
 };
@@ -743,8 +750,14 @@ declare module "gk:crypto" {
   export function aesCfbDecrypt(key: Bytes, iv: Bytes, data: Bytes): Uint8Array;
   /** OpenPGP's string-to-key (RFC 9580, 3.7.1): a promise of the `length`-byte key (1 to 64) a passphrase (at most 64 KiB) gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. A [long operation], every type (one API): on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), twice that when the key is longer than the hash (AES-256 from SHA-1). The passphrase is copied when the call is made. Wrong arguments throw at once. */
   export function openpgpS2k(type: 0 | 1 | 3, hash: HashName, passphrase: BytesLike, salt: Bytes | null, count: number | null, length: number, options?: JobOptions): Promise<Uint8Array>;
+  /** One AEAD message all at once, for keys and small blobs: the ciphertext followed by the 16-byte tag. AES-128, -192 or -256 (`key` 16, 24 or 32 bytes); `nonce` as long as RFC 9580 has it for the mode (OCB 15, EAX 16, GCM 12 bytes), else a `RangeError`; `associatedData` any bytes (empty: `new Uint8Array(0)`), up to 64 KiB. For an AEAD-protected secret key (RFC 9580, 5.5.3: S2K usage 253): the key from `hkdf("SHA-256", s2kOutput, null, [packetTag, version, cipher, mode], keyLength)`, a random nonce stored in the packet, the associated data the packet tag octet (0xC5 or 0xC7) and the public key packet's body. Synchronous, at most 256 KiB (about 0.15 s with GCM, the slowest, on a Pi Zero); **messages** go through `seipdV2Decrypt` and `ocbedDecrypt`, which are long operations. Never use a nonce twice with the same key. */
+  export function aeadEncrypt(mode: "OCB" | "EAX" | "GCM", key: Bytes, nonce: Bytes, associatedData: Bytes, plaintext: Bytes): Uint8Array;
+  /** The other way: `data` is the ciphertext followed by the tag; the plaintext is returned **only if the tag matches**, checked before anything is given. Otherwise it throws an `Error`, the same one whatever went wrong (a wrong key, nonce or associated data, changed or cut data). Arguments as `aeadEncrypt`'s. */
+  export function aeadDecrypt(mode: "OCB" | "EAX" | "GCM", key: Bytes, nonce: Bytes, associatedData: Bytes, data: Bytes): Uint8Array;
+  /** HKDF (RFC 5869) with HMAC over `hash`: `length` bytes (at most 255 digests) from the input keying material, a salt (`null`: none, which is zeros) and info. What RFC 9580 uses for SEIPD v2 and for AEAD-protected keys. */
+  export function hkdf(hash: HashName, ikm: BytesLike, salt: BytesLike | null, info: BytesLike, length: number): Uint8Array;
   /** Argon2id (RFC 9106, version 1.3), without a secret or associated data: a promise of the `length`-byte tag (4 to 1024). `passes` (t) 1 to 255, `lanes` (p) 1 to 255, `memoryKiB` (m) at least 8 per lane and **at most a quarter of the board's memory** (128 MiB on a 512 MB Pi Zero; `limits().argon2MemoryKiB` says how much): more is a `RangeError`, never quietly less. `password` at most 64 KiB, `salt` 8 to 1024 bytes (16 random ones are usual). A [long operation]: the lanes are computed one after the other, a segment at a time in RFC 9106's order, in slices of about 20 ms, so the screen keeps being drawn (the longest wait between updates on a Pi Zero: 30 ms; longer once, when a larger area replaces a smaller one, as the kernel zeroes the old one). On a Pi Zero: 5.4 s for 64 MiB with t = 3, p = 4; 3.8 s for 128 MiB with t = 1. The memory is taken outside the JavaScript heap, when the operation starts (its first slices), and kept for the next call; it is wiped when an operation ends, and wiped and given back when the app stops. If the kernel cannot give it then, the promise rejects with a `RangeError`. Checks itself (RFC 9106's sample and an S2K one) in the slices of its first call. Arguments are checked, and the password and salt copied, when the call is made. */
-  export function argon2id(password: BytesLike, salt: Bytes, options: { passes: number; lanes: number; memoryKiB: number; length: number; onProgress?: (fraction: number) => void }): Promise<Uint8Array>;
+  export function argon2id(password: BytesLike, salt: Bytes, options: { passes: number; lanes: number; memoryKiB: number; length: number; onProgress?: (fraction: number) => void; signal?: AbortSignal }): Promise<Uint8Array>;
   /** OpenPGP's Argon2 S2K (type 4, RFC 9580, 3.7.1.4), the four fields as the packet has them: `salt` 16 bytes, `passes` and `parallelism` 1 to 255, `memoryExponent` the encoded m (the memory is 2^m KiB) from 3 + ⌈log2 p⌉ to 31, `length` the session or key-encryption key's (4 to 64). Argon2id as `argon2id`, with its limit: **more than `argon2id` may use (a quarter of the board's memory: an exponent above 17 on a 512 MB Pi Zero) is a `RangeError`**, so RFC 9580's first recommended option (2 GiB) cannot be opened on GapKeep; its second (t = 3, p = 4, m = 16: 64 MiB) can, in 5.4 s on a Pi Zero. A [long operation]. */
   export function openpgpS2kArgon2(passphrase: BytesLike, salt: Bytes, passes: number, parallelism: number, memoryExponent: number, length: number, options?: JobOptions): Promise<Uint8Array>;
   /** An X25519 key (RFC 7748) from its 32-byte secret, held natively: `publicKey` (32 bytes), `sharedSecret(peerPublic)` (the 32-byte shared secret with a peer's 32-byte public key) and `destroy()` (wipes the secret; `publicKey` stays, `sharedSecret` then throws a `TypeError`). Byte order and clamping are RFC 7748's: the secret and public keys are little-endian, the secret is clamped where it is used (any 32 bytes are a secret), a public key's top bit is ignored. **An all-zero shared secret is refused** (a `RangeError`: the peer's key is of small order). OpenPGP's legacy Curve25519 keys (ECDH, RFC 9580, 5.5.5.6) store the secret as a big-endian MPI: reverse its 32 bytes; their public key and ephemeral key have a 0x40 byte in front: drop it. RFC 9580's X25519 keys (algorithm 25) are native: as they are. The KDF (RFC 6637's, or RFC 9580's HKDF) is the app's, with the hashes here; then `aesKeyUnwrap`. About 2 ms on a Pi Zero. */
@@ -868,7 +881,7 @@ declare module "gk:usb" {
 
 declare module "gk:zlib" {
   /** A promise of `data` (at most 8 MiB, copied when the call is made) decompressed: `format` `"raw"` (DEFLATE) or `"zlib"`, `maxOutput` the most bytes it may decompress to, 1 to 33,554,432 (32 MiB). Missing or wrong options throw at once (a `TypeError` or `RangeError`). */
-  export function inflate(data: Bytes, options: { format: "raw" | "zlib"; maxOutput: number; onProgress?: (fraction: number) => void }): Promise<Uint8Array>;
+  export function inflate(data: Bytes, options: { format: "raw" | "zlib"; maxOutput: number; onProgress?: (fraction: number) => void; signal?: AbortSignal }): Promise<Uint8Array>;
 }
 
 declare module "gk:apps" {
@@ -897,3 +910,19 @@ declare function setTimeout(fn: () => void, ms?: number): number;
 declare function setInterval(fn: () => void, ms?: number): number;
 declare function clearTimeout(id: number): void;
 declare function clearInterval(id: number): void;
+/** the web's, a subset: cancels long operations ({ signal }) */
+declare class AbortSignal {
+  private constructor();
+  readonly aborted: boolean;
+  readonly reason: any;
+  onabort: ((event: { type: "abort"; target: AbortSignal }) => void) | null;
+  throwIfAborted(): void;
+  addEventListener(type: "abort", listener: (event: { type: "abort"; target: AbortSignal }) => void): void;
+  removeEventListener(type: "abort", listener: (event: { type: "abort"; target: AbortSignal }) => void): void;
+  static abort(reason?: any): AbortSignal;
+  static timeout(ms: number): AbortSignal;
+}
+declare class AbortController {
+  readonly signal: AbortSignal;
+  abort(reason?: any): void;
+}

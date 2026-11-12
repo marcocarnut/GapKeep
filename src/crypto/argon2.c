@@ -302,6 +302,15 @@ static void finish (gk_argon2_job_t *job)
 	job->phase = WIPING;
 }
 
+void gk_argon2_abort (gk_argon2_job_t *job)
+{
+	if (job->phase == FILLING)
+	{
+		job->phase = WIPING;
+	}
+	gk_wipe (job->out, sizeof job->out);
+}
+
 int gk_argon2_step (gk_argon2_job_t *job, uint32_t budget)
 {
 	blk tmp;
