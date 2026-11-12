@@ -1,0 +1,12 @@
+gk_epdmono_*.c (gk:ui's "epdmono") are made by tools/make_epdmono.py from
+X11's misc-fixed 6x10 bitmap font, ISO 8859-1:
+
+  /usr/share/fonts/X11/misc/6x10-ISO8859-1.pcf.gz (Debian's xfonts-base,
+  1:1.0.5+nmu1), SHA-256
+  2c857cdb3472beb1b27b8f413675e4a71ee9837a242c2ecdf1f001704e17a18b
+
+Its licence is in the font itself, its COPYRIGHT property:
+
+  Public domain terminal emulator font.  Share and enjoy.
+
+EPDPages uses the same font for its "mono" (its tools/mkassets.py).

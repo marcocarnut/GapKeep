@@ -57,6 +57,13 @@ if (panel) {
   check("open twice", () => throws(() => ui.epaper.open(), TypeError, /open already/));
   check("unknown option", () => throws(() => ui.epaper.open({ rotate: 1 }), TypeError, /unknown option "rotate"/));
   check("bad orientation", () => throws(() => ui.epaper.open({ orientation: "up" }), TypeError, /"landscape" or "portrait"/));
+  check("epdmono", () => {
+    const a = new ui.Label(panel, { font: 30, family: "epdmono", text: "x" });   // either order
+    if (a.family !== "epdmono" || JSON.stringify(ui.epdmonoFonts) !== "[10,20,30]") throw new Error("family");
+    a.delete();
+    throws(() => new ui.Label(panel, { family: "epdmono", font: 14 }), RangeError, /one of ui.epdmonoFonts/);
+    throws(() => new ui.Label(panel, { family: "pixel" }), TypeError, /"epdmono"/);
+  });
   check("a Container", () => {
     if (!(panel instanceof ui.Container)) throw new Error("not a Container");
   });
@@ -89,18 +96,31 @@ function drawType() {
   }
 }
 
+// The pixel font, "epdmono", at its sizes beside the anti-aliased mono:
+// "f" (no secret on it)
+function drawFonts(page) {
+  panel.clear();
+  const sample = "MS12 NAME 0O1lI 5S8B";
+  for (const [family, font] of [["epdmono", 10], ["epdmono", 20], ["epdmono", 30], ["mono", 14], ["mono", 16]]) {
+    const label = `${family} ${font}: ${sample}`;
+    if (family === "mono") new ui.Label(panel, { text: label, font, mono: true });
+    else new ui.Label(panel, { text: label, family, font });
+  }
+}
+
 let busy = false;
 let last = -1;          // the share written last
 async function write(n) {
   if (busy) return;
   busy = true;
-  const what = n < 0 ? "the type test" : `share ${n + 1}`;
+  const what = typeof n === "string" ? `fonts ${n}` : n < 0 ? "the type test" : `share ${n + 1}`;
   if (scanner) {
     scanner.delete();
     scanner = null;
   }
   status.text = `Writing ${what}...`;
-  if (n < 0) drawType();
+  if (typeof n === "string") drawFonts(n);
+  else if (n < 0) drawType();
   else draw(n);
   // how long the screen waits, at most, while the panel is written: a
   // timer every 5 ms, the longest gap between two of its calls
@@ -121,8 +141,9 @@ async function write(n) {
       },
     });
     status.text = `Written (${what}): you can unplug the panel.`;
-    console.log(n < 0 ? "epapertest wrote the type test" : `epapertest wrote ${n + 1}`);
-    if (n >= 0) last = n;
+    console.log(typeof n === "string" ? `epapertest wrote fonts ${n}`
+      : n < 0 ? "epapertest wrote the type test" : `epapertest wrote ${n + 1}`);
+    if (typeof n === "number" && n >= 0) last = n;
   } catch (e) {
     status.text = e.message;
     console.log(`epapertest failed ${n < 0 ? "type test" : n + 1}: ${e.name}: ${e.message}`);
@@ -137,7 +158,6 @@ async function write(n) {
 // it says. field: "center" or "full".
 let scanner = null;
 function readBack(field) {
-  if (last < 0) return;
   if (scanner) scanner.delete();
   const want = last;
   console.log(`epapertest reading back share ${want + 1} (${field})`);
@@ -152,7 +172,7 @@ function readBack(field) {
         console.log(`epapertest read back share ${want + 1}: it is on the panel`);
         status.text = `Share ${want + 1} read back from the panel.`;
       } else if (seen >= 0) {
-        console.log(`epapertest read back: share ${seen + 1}, not ${want + 1}`);
+        console.log(`epapertest read back: share ${seen + 1}, not ${want < 0 ? "a share" : want + 1}`);
       } else {
         console.log(`epapertest read back: another code, ${bytes.length} bytes`);
       }
@@ -204,6 +224,10 @@ ui.onKey((ev) => {
   }
   if (ev.key === "a" || ev.key === "b" || ev.key === "c") {
     abortTest({ a: -1, b: 5, c: 500 }[ev.key]);
+    return true;
+  }
+  if (ev.key === "f") {
+    write(ev.key);
     return true;
   }
   if (ev.key === "t") {

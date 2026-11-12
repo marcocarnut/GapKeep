@@ -73,6 +73,29 @@ pins into an unpowered controller. Still:
 - Never unplug a panel while it refreshes (the app says when it may be
   unplugged): a refresh cut short leaves the panel's pigments part way.
 
+## Text on a panel
+
+A panel's pixels are black, white or red, nothing between: anti-aliased
+text loses its grey edges, which leaves the smaller sizes thin and ragged.
+gk:ui's pixel font is drawn for it: `family: "epdmono"`, X11's misc-fixed
+6x10 (public domain, the font EPDPages uses), one bit a pixel, at
+`font: 10`, `20` and `30` (`ui.epdmonoFonts`: the 6x10 cell, then every
+pixel doubled, 12x20, or tripled, 18x30; never smoothed). Basic Latin and
+Latin-1, so the codex32 and bech32 alphabets; 0 and O, 1, l and I differ.
+
+```js
+new ui.Label(panel, { text: "MS12 NAME A320", family: "epdmono", font: 20 });
+```
+
+On the 2.9" (296 x 128) a codex32 share in groups of four fits beside its
+QR code at 20 (three groups, 14 characters, 168 pixels, a line). Compared
+on the rig's panel with misc-fixed's own 9x18 and 10x20: 10x20 is finer,
+9x18 came out faint (one-pixel strokes), and the 6x10 doubled, with
+two-pixel strokes, read most solidly; it is also EPDPages' font. The
+anti-aliased fonts work too, from 14 up (`mono: true` at 16 reads well).
+`tools/make_epdmono.py` makes the font from the PCF file, whose SHA-256 it
+checks (`src/runtime/fonts/LICENCE.misc-fixed`).
+
 ## gapkeep.txt
 
 The card's `gapkeep.txt` (read at boot, [ARCHITECTURE.md](ARCHITECTURE.md))
@@ -249,6 +272,7 @@ Measured on the rig (2026-11-12), the same at each of three refreshes:
 | From the reset to deep sleep | 18.45 to 18.52 s |
 | The job's longest slice | 21 ms |
 | The longest gap of a 5 ms JavaScript timer during a write | 27 ms (98 ms when the camera was being stopped as the write began) |
+| The job's own time (slices) during a refresh | under 100 ms since BUSY is read every 5 ms (it was 2.6 s, in 4 million slices, when it was read on every pass of the main loop) |
 
 The QR codes were read back from the panel by GapKeep's own scanner within
 2 s, the second write's (another share) as the second share. In the

@@ -1,0 +1,22 @@
+# Needs a test build, and the rig with its e-paper panel and camera, as
+# tests/epaper_hw.txt: the pixel font "epdmono" at its three sizes beside the
+# anti-aliased mono at 14 and 16, photographed (serialraw;
+# tools/rig/raw2png.py). For the record: no checks beyond the write.
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect launcher ready 60
+send #epaper weact-2.9-bwr
+expect epaper: WeAct 2.9" B/W/R \(128x296, red\) 10
+send #camera pi
+expect camera: pi 10
+send #launch epapertest
+expect epapertest ready 30
+mark
+send #key f
+expect epapertest wrote fonts f 60
+send #key w
+expect picamera: streaming 10
+wait 4
+serialraw 01-fonts

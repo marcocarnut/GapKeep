@@ -22,6 +22,7 @@ expect epapertest: ok open twice
 expect epapertest: ok unknown option
 expect epapertest: ok bad orientation
 expect epapertest: ok a Container
+expect epapertest: ok epdmono
 reject epapertest: FAIL
 # opening touches no panel: nothing written yet
 reject epaper: .*refresh
@@ -90,6 +91,12 @@ key c
 expect epaper: WeAct 2.9" B/W/R: abort: the waveform runs, to deep sleep first 10
 expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms .*asleep 10
 expect epapertest abort 500: AbortError after the refresh 10
+
+# the pixel font beside the anti-aliased mono
+mark
+key f
+expect epapertest wrote fonts f 10
+epaper shot 05-fonts
 
 # close and reopen, portrait then landscape
 mark

@@ -132,6 +132,7 @@ struct TGkNode
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
 	int nFontSize;			// "font", 0 if not set
 	boolean bMono;			// "mono"
+	int nFamily;			// "family": FamilyDefault, FamilyEPDMono...
 	boolean bMarkup;		// Label with "markup": an LVGL spangroup
 	char *pMarkup;			// its text as set (the markup)
 };
@@ -688,6 +689,16 @@ static const lv_font_t *MonoFonts[] =
 };
 static const unsigned MonoCount = sizeof MonoSizes / sizeof MonoSizes[0];
 
+// "family": "epdmono", X11's misc-fixed 6x10 in 1 bit, at 1x, 2x and 3x
+// (tools/make_epdmono.py): for e-paper panels, where anti-aliased text
+// loses its grey edges.
+enum { FamilyDefault, FamilyEPDMono, FamilyCount };
+static const char *const FamilyNames[FamilyCount] = {"default", "epdmono"};
+extern "C" const lv_font_t gk_epdmono_10, gk_epdmono_20, gk_epdmono_30;
+static const int EPDMonoSizes[] = {10, 20, 30};
+static const lv_font_t *EPDMonoFonts[] = {&gk_epdmono_10, &gk_epdmono_20, &gk_epdmono_30};
+static const unsigned EPDMonoCount = sizeof EPDMonoSizes / sizeof EPDMonoSizes[0];
+
 // The monospaced font of a size, or the next smaller one there is
 static const lv_font_t *MonoFont (int nSize)
 {
@@ -980,6 +991,22 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 // font of that size, or, for an inherited size it lacks, the next smaller.
 static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 {
+	if (pNode->nFamily != FamilyDefault)
+	{
+		// "epdmono": its sizes only (the default: the middle one, 20)
+		int nSize = pNode->nFontSize != 0 ? pNode->nFontSize : EPDMonoSizes[EPDMonoCount / 2];
+		for (unsigned i = 0; i < EPDMonoCount; i++)
+		{
+			if (EPDMonoSizes[i] == nSize)
+			{
+				lv_obj_set_style_text_font (OBJ, EPDMonoFonts[i], 0);
+				return 0;
+			}
+		}
+		JS_ThrowRangeError (ctx, "%s: \"epdmono\" has no size %d: one of ui.epdmonoFonts (10 20 30)",
+				    pProp, nSize);
+		return -1;
+	}
 	if (!pNode->bMono)
 	{
 		for (unsigned i = 0; i < FontCount; i++)
@@ -1072,9 +1099,40 @@ SETTER (SetFont)
 			}
 		}
 	}
+	if (JS_IsNumber (v) && pNode->nFamily != FamilyDefault)
+	{
+		pNode->nFontSize = n;		// (its family's sizes: ApplyFont checks)
+		return ApplyFont (ctx, pNode, pProp);
+	}
 	JS_ThrowTypeError (ctx, "%s: one of the sizes in ui.fonts expected (12 14 16 18 20 22 24 28 32 40)", pProp);
 	return -1;
 }
+
+SETTER (SetFamily)
+{
+	const char *p = JS_IsString (v) ? JS_ToCString (ctx, v) : 0;
+	int nFamily = -1;
+	for (int i = 0; p != 0 && i < FamilyCount; i++)
+	{
+		if (strcmp (p, FamilyNames[i]) == 0)
+		{
+			nFamily = i;
+		}
+	}
+	JS_FreeCString (ctx, p);
+	if (nFamily < 0)
+	{
+		JS_ThrowTypeError (ctx, "%s: \"default\" or \"epdmono\" expected", pProp);
+		return -1;
+	}
+	if (nFamily == FamilyDefault && pNode->nFamily != FamilyDefault)
+	{
+		pNode->nFontSize = 0;		// (its sizes aren't the default's)
+	}
+	pNode->nFamily = nFamily;
+	return ApplyFont (ctx, pNode, pProp);
+}
+GETTER (GetFamily)	{ return JS_NewString (ctx, FamilyNames[pNode->nFamily]); }
 
 SETTER (SetMono)
 {
@@ -2003,6 +2061,7 @@ static const TProp Props[] =
 	{"color",       ALL, SetColor, 0},
 	{"font",        ALL, SetFont, 0},
 	{"mono",        ALL, SetMono, GetMono},
+	{"family",      ALL, SetFamily, GetFamily},
 	{"textAlign",   ALL, SetTextAlign, 0},
 	{"radius",      ALL, SetRadius, 0},
 	{"borderWidth", ALL, SetBorderWidth, 0},
@@ -2146,9 +2205,24 @@ static int ApplyProps (JSContext *ctx, TGkNode *pNode, JSValueConst Obj)
 		return -1;
 	}
 
+	// "family" first: it says which sizes "font" may have
 	int nRes = 0;
+	JSAtom Family = JS_NewAtom (ctx, "family");
 	for (uint32_t i = 0; i < nLen && nRes == 0; i++)
 	{
+		if (pTab[i].atom == Family)
+		{
+			JSValue v = JS_GetProperty (ctx, Obj, Family);
+			nRes = JS_IsException (v) ? -1 : ApplyProp (ctx, pNode, "family", v);
+			JS_FreeValue (ctx, v);
+		}
+	}
+	for (uint32_t i = 0; i < nLen && nRes == 0; i++)
+	{
+		if (pTab[i].atom == Family)
+		{
+			continue;
+		}
 		const char *pName = JS_AtomToCString (ctx, pTab[i].atom);
 		JSValue v = JS_GetProperty (ctx, Obj, pTab[i].atom);
 		if (pName == 0 || JS_IsException (v))
@@ -2169,6 +2243,7 @@ static int ApplyProps (JSContext *ctx, TGkNode *pNode, JSValueConst Obj)
 	}
 
 	JS_FreePropertyEnum (ctx, pTab, nLen);
+	JS_FreeAtom (ctx, Family);
 
 	return nRes;
 }
@@ -3538,7 +3613,7 @@ static const char *ModuleExports[] =
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
 	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
 	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme",
-	"escapeMarkup", "epaper"
+	"escapeMarkup", "epaper", "epdmonoFonts"
 };
 
 static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
@@ -3660,6 +3735,12 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 		JS_SetPropertyUint32 (ctx, MonoList, i, JS_NewInt32 (ctx, MonoSizes[i]));
 	}
 	JS_SetModuleExport (ctx, m, "monoFonts", MonoList);
+	JSValue EPDList = JS_NewArray (ctx);
+	for (unsigned i = 0; i < EPDMonoCount; i++)
+	{
+		JS_SetPropertyUint32 (ctx, EPDList, i, JS_NewInt32 (ctx, EPDMonoSizes[i]));
+	}
+	JS_SetModuleExport (ctx, m, "epdmonoFonts", EPDList);
 
 	JSValue SymbolObj = JS_NewObject (ctx);
 	for (unsigned i = 0; i < sizeof Symbols / sizeof Symbols[0]; i++)
