@@ -2,7 +2,7 @@
  * gcm.h - GCM (NIST SP 800-38D) with AES, 96-bit nonces and 128-bit tags,
  * written from SP 800-38D over Mbed TLS's AES block, for OpenPGP's AEAD
  * (RFC 9580, 5.13.5). GHASH multiplies bit by bit, without tables and
- * without branches on the data: constant-time (and about 8 MB/s on a Pi
+ * without branches on the data: constant-time (and about 2 MB/s on a Pi
  * Zero). Streaming, as ocb.h.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later

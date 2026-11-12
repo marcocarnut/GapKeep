@@ -555,8 +555,9 @@ group("SEIPD v2 and GnuPG's OCB packet", async () => {
     (onProgress) => crypto.ocbedDecrypt(unhex(big.key), data, { onProgress }));
   ok(plain.length === big.size && plain.every((x) => x === 0), "OCB packet 256 KiB");
   for (const b of V.aeadBigOther) {
+    const d = base64(b.data);
     const p = await timeJob(`SEIPD v2 ${b.name} ${b.size / 1024} KiB`,
-      (onProgress) => crypto.seipdV2Decrypt(unhex(b.key), base64(b.data), { onProgress }));
+      (onProgress) => crypto.seipdV2Decrypt(unhex(b.key), d, { onProgress }));
     ok(p.length === b.size && p.every((x) => x === 0), `SEIPD v2 ${b.name} ${b.size / 1024} KiB`);
   }
 });
