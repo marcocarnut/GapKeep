@@ -1,0 +1,286 @@
+# Needs a test build (make TEST=1), and the simulator (its e-paper panel):
+# dice39 and codex32 write to the panel (apps/dice39/lib/epaper.js). The
+# test card's gapkeep.txt configures a WeAct 2.9" B/W/R, mounted turned 90
+# degrees; panel "1" is plugged in at boot. dice39 splits BIP-39's
+# all-"abandon" test phrase (never a real seed) 2 of 3, identifier TEST,
+# "Panel only": each share on a panel of its own, read back with the
+# camera from the panel's own picture ("camera picture out:..."), a write
+# cancelled, an unplugged panel, the same share on the 2.13" and the 4.2"
+# (B/W: a black title), the share on screen without "Panel only"; then
+# the seed's SeedQR, Compact SeedQR and words. codex32, in Portuguese,
+# recovers the phrase from two of the panels' pictures, and writes the
+# words' QR code and the SeedQR. tools/run_sim_tests.sh then decodes every
+# panel's QR code (tests/epaper/check_shares.py). The log holds no share,
+# word or seed: "wrote share 2 of 3", the layout, "it matches".
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect epaper-sim: panel 1 \(WeAct 2.9" B/W/R\) plugged in
+expect launcher ready 60
+epaper refresh-ms 500
+launch dice39
+expect dice39 selftest: \d+ passed, 0 failed 60
+wait 1
+# "I already have a seed phrase", 12 words: the length (Shift+Tab to the
+# dropdown; 12 is last), then Tab, Tab to the button
+key shift-tab
+key down
+key down
+key down
+key down
+key ret
+key tab
+key tab
+key ret
+wait 1
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type about
+key ret
+expect dice39: import check: checksum ok \(12 words\) 10
+wait 0.5
+key ret
+expect dice39: imported a 12-word phrase 10
+wait 1
+shot 01-results
+
+# 1. Split into shares (second button): identifier TEST, "Panel only" (on
+# by default with a panel), Split; the shares are not on the screen, and
+# "Write to e-paper" takes the focus
+key tab
+key ret
+wait 1
+key tab
+key backspace backspace backspace backspace
+type test
+key tab
+key tab
+key ret
+expect dice39: split 2 of 3, self-check 3 subsets 10
+wait 0.5
+shot 02-split-panel-only
+key ret
+wait 0.5
+shot 03-writer
+# Write: 2 s to change one's mind, then the panel
+mark
+key ret
+expect dice39: e-paper: writing share 1 of 3: landscape, QR 29x29 at 3 px a module, text 20 px 10
+expect epaper-sim: panel 1: refresh 1 \(full\) 10
+expect dice39: e-paper: wrote share 1 of 3 10
+wait 0.5
+shot 04-written
+epaper shot share1
+
+# 2. Check with the camera (Tab past Next share): the panel's picture, its
+# QR code compared with what was written; the camera's view stays hidden
+camera picture out:share1.png
+key tab
+key ret
+expect dice39: e-paper: checking share 1 of 3 with the camera 10
+expect dice39: e-paper: read back share 1 of 3: it matches 15
+wait 0.5
+shot 05-checked
+camera scene
+
+# 3. Next share (focused) on panel 2
+epaper plug 2
+mark
+key ret
+expect epaper-sim: panel 2: refresh 1 \(full\) 10
+expect dice39: e-paper: wrote share 2 of 3 10
+epaper shot share2
+
+# 4. Next share on panel 3, cancelled (Escape) before anything is sent;
+# then written (Write to the panel is focused)
+epaper plug 3
+mark
+key ret
+wait 0.5
+key esc
+expect dice39: e-paper: cancelled share 3 of 3 10
+reject epaper-sim: panel 3: refresh
+wait 0.5
+shot 06-cancelled
+mark
+key ret
+expect dice39: e-paper: wrote share 3 of 3 10
+epaper shot share3
+
+# 5. Unplugged: a clear error (Shift+Tab from Check to Write again)
+epaper unplug
+mark
+key shift-tab
+key ret
+expect dice39: e-paper: writing share 3 of 3 failed: no panel answers 10
+wait 0.5
+shot 07-unplugged
+
+# 6. Other panels, mounted otherwise: the 2.13" B/W and the 4.2" B/W (in
+# portrait there); Write to the panel is focused after the failure, Write
+# again (Shift+Tab from Check) after a success
+epaper config weact-2.13-bw rotate=180
+expect epaper: WeAct 2.13" B/W .* mounted turned 180 degrees clockwise 10
+epaper plug p213
+mark
+key ret
+expect dice39: e-paper: writing share 3 of 3: landscape, QR 29x29 at 3 px a module, text 16 px 10
+expect dice39: e-paper: wrote share 3 of 3 10
+epaper shot share3-213
+epaper config weact-4.2-bw rotate=0
+expect epaper: WeAct 4.2" B/W .* mounted turned 0 degrees clockwise 10
+epaper plug p42
+mark
+key shift-tab
+key ret
+expect dice39: e-paper: writing share 3 of 3: portrait, QR 29x29 at 6 px a module, text 32 px 10
+expect dice39: e-paper: wrote share 3 of 3 10
+epaper shot share3-42
+epaper config weact-2.9-bwr rotate=90
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 90 degrees clockwise 10
+epaper plug 3
+
+# 7. Without "Panel only" (Shift+Tab from Check: Write again, the box):
+# the share and its QR code on the screen too; then on again
+key shift-tab
+key shift-tab
+key spc
+wait 0.5
+shot 08-on-screen
+key spc
+# Back (Escape): the split page, Write to e-paper focused; Tab to Done
+key esc
+wait 0.5
+shot 09-split-again
+key tab
+key ret
+wait 1
+
+# 8. The seed's QR codes: Write to e-paper (third button), behind a warning
+# (Tab to its "Write to e-paper"); SeedQR first
+key tab
+key tab
+key ret
+wait 0.5
+key tab
+key ret
+wait 0.5
+shot 10-seed-writer
+epaper plug s1
+mark
+key ret
+expect dice39: e-paper: writing SeedQR: landscape, QR 25x25 at 3 px a module, text 14 px 10
+expect dice39: e-paper: wrote SeedQR 10
+epaper shot seedqr
+# (Check with the camera is focused: there is no Next here)
+camera picture out:seedqr.png
+key ret
+expect dice39: e-paper: read back SeedQR: it matches 15
+camera scene
+# Compact SeedQR (bytes): Shift+Tab from Back to the dropdown, Down, Down, Enter
+key shift-tab
+key shift-tab
+key shift-tab
+key down
+key down
+key ret
+key tab
+mark
+key ret
+expect dice39: e-paper: writing Compact SeedQR: .*QR 21x21 10
+expect dice39: e-paper: wrote Compact SeedQR 10
+epaper shot compact
+camera picture out:compact.png
+key ret
+expect dice39: e-paper: read back Compact SeedQR: it matches 15
+camera scene
+# the words' own QR code (dropdown again)
+key shift-tab
+key shift-tab
+key shift-tab
+key down
+key down
+key ret
+key tab
+mark
+key ret
+expect dice39: e-paper: writing Words: .*QR 41x41 at 2 px a module 10
+expect dice39: e-paper: wrote Words 10
+epaper shot words
+wait 0.5
+shot 11-seed-written
+key meta_l
+expect launcher ready 10
+
+# 9. codex32, in Portuguese: two of the panels shown to the camera (Tab
+# past box 2 and Recover to Scan), the phrase recovered
+language pt-BR
+launch codex32
+expect codex32 selftest: \d+ passed, 0 failed 30
+wait 0.5
+key tab tab tab
+key ret
+camera picture out:share1.png
+expect codex32: scanned share 1 of 2 10
+camera picture out:share3.png
+expect codex32: scanned share 2 of 2 10
+camera scene
+key ret
+expect codex32: recovered a 16-byte seed \(12 words\) from 2 shares 5
+wait 0.5
+# QR of the words (focused): confirm, then Tab past the two QR buttons to
+# Write to e-paper
+key ret
+key spc
+key tab tab tab
+key ret
+wait 0.5
+shot 12-codex32-writer
+epaper plug c1
+mark
+key ret
+expect codex32: e-paper: wrote words QR 10
+epaper shot codex32-words
+# SeedQR: Shift+Tab from Check (Write again, the dropdown), Down, Down, Enter
+key shift-tab
+key shift-tab
+key down
+key down
+key ret
+key tab
+mark
+key ret
+expect codex32: e-paper: wrote SeedQR 10
+epaper shot codex32-seedqr
+camera picture out:codex32-seedqr.png
+key ret
+expect codex32: e-paper: read back SeedQR: it matches 15
+wait 0.5
+shot 13-codex32-checked
+camera scene
+# Escape: back to the export page
+key esc
+wait 0.5
+shot 14-codex32-back
+reject app:(dice39|codex32): .*(MS12|abandon|about|0000)
+reject e-paper: (?!writing share 3 of 3 failed: no panel answers).*(failed|another code)

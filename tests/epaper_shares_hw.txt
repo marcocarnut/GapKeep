@@ -1,0 +1,119 @@
+# Needs a test build, and the rig with its e-paper panel and camera, as
+# tests/epaper_hw.txt: dice39 writes codex32 shares on the real panel and
+# reads each back with the rig's camera (apps/dice39/lib/epaper.js; the
+# simulator's run of the whole flow: tests/epaper_shares.txt). BIP-39's
+# all-"abandon" test phrase (never a real seed), split 2 of 3 with
+# identifier TEST, "Panel only": the screen never shows a share, and the
+# camera's view stays hidden. Share 1, then share 2 on the same panel (the
+# rig has one): each read back as itself, not the other. The camera's raw
+# frames (serialraw, tools/rig/raw2png.py) are the photographs.
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect launcher ready 60
+send #epaper weact-2.9-bwr rotate=180
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 180 degrees clockwise 10
+send #camera pi
+expect camera: pi 10
+tile dice39
+expect dice39 selftest: \d+ passed, 0 failed 60
+wait 1
+# "I already have a seed phrase", 12 words
+key shift-tab
+key down
+key down
+key down
+key down
+key ret
+key tab
+key tab
+key ret
+wait 2
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type about
+key ret
+expect dice39: import check: checksum ok \(12 words\) 20
+wait 1
+key ret
+expect dice39: imported a 12-word phrase 20
+expect dice39: account key shown 30
+wait 1
+# Split into shares: identifier TEST, Panel only, Split; Write to e-paper
+key tab
+key ret
+wait 2
+key tab
+key backspace backspace backspace backspace
+type test
+key tab
+key tab
+key ret
+expect dice39: split 2 of 3, self-check 3 subsets 20
+wait 1
+key ret
+wait 2
+serialshot 01-writer
+wait 1
+
+# share 1: the 2 s grace, the 18 s refresh
+mark
+key ret
+expect dice39: e-paper: writing share 1 of 3: landscape, QR 29x29 at 3 px a module, text 20 px 10
+expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms .*asleep 60
+expect dice39: e-paper: wrote share 1 of 3 10
+wait 1
+serialshot 02-share1-written
+wait 1
+# Check with the camera (Tab past Next share)
+mark
+key tab
+key ret
+expect picamera: streaming 10
+wait 3
+serialraw 03-share1-camera
+expect dice39: e-paper: read back share 1 of 3: it matches 60
+wait 1
+serialshot 04-share1-checked
+wait 1
+
+# share 2 on the same panel (Next share is focused after the check)
+mark
+key ret
+expect dice39: e-paper: wrote share 2 of 3 60
+mark
+key tab
+key ret
+expect dice39: e-paper: read back share 2 of 3: it matches 60
+reject dice39: e-paper: read back share 2 of 3: another code
+wait 1
+serialshot 05-share2-checked
+wait 1
+key esc
+wait 1
+serialraw 06-share2-camera
+key meta_l
+expect launcher ready 10
+reject app:dice39: .*(MS12|abandon|about)

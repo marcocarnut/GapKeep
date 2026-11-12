@@ -24,6 +24,8 @@ import { checkShare, recover, normalizeShare, Codex32Error } from "./lib/codex32
 import { runCodex32SelfTest } from "./lib/selftest.js";
 import { S, F } from "./lib/strings.js";
 import { codex32Message } from "./lib/messages.js";
+import { epaperInfo, epaperKey, showWriter } from "./lib/epaper.js";
+import { wordTokens } from "./lib/epaperlayout.js";
 
 const GREEN = "#66bb6a", AMBER = "#ffb300", RED = "#ef5350", MUTED = "#8a9199";
 const wide = ui.width >= 900;
@@ -40,6 +42,7 @@ const state = {
   result: null,       // { seed, words, secret, id, thresholdChar, count }
   selftest: null,     // { passed, failed }
   scanCount: 0,
+  panelOnly: true,    // with an e-paper panel: the seed's codes on the panel only, never on screen
 };
 let page = {};        // widgets of the page shown
 
@@ -373,6 +376,11 @@ function showExport(kind) {
     : [["seed", S.qrBtnSeed], ["compact", S.qrBtnCompact]];
   const modeButtons = modes.map(([mode, text]) =>
     new ui.Button(buttons, { text, disabled: true, onClick: () => drawQr(mode) }));
+  // an e-paper panel: the same codes written on it, behind the same confirmation
+  if (epaperInfo()) {
+    modeButtons.push(new ui.Button(buttons, { text: ui.symbols.download + "  " + t("Write to e-paper"), disabled: true,
+      onClick: () => writeSeed(kind) }));
+  }
   const note = words ? null : paragraph(ui.screen, S.qrFormatNote, { color: MUTED, hidden: true });
   const out = new ui.Container({ layout: "row-wrap", gap: 12, width: "100%", justify: "center" });
   const back = buttonRow(ui.screen);
@@ -410,6 +418,33 @@ function showExport(kind) {
     out.scrollIntoView();
   }
   confirm.focus();
+}
+
+// The seed's QR codes on an e-paper panel (lib/epaper.js): one of them,
+// picked on the page, with the numbered words beside it
+function writeSeed(kind) {
+  const r = state.result;
+  if (!r) return;
+  const variants = [{ tokens: wordTokens(r.words), sep: 2 }, { tokens: wordTokens(r.words, true), sep: 2 }];
+  const note = t("{n}-word BIP-39 phrase", { n: r.words.length });
+  const item = (label, title, data, ecc, log) => ({ label, title, note, data, ecc, variants, log });
+  showWriter({
+    tag: "codex32",
+    start: (title) => newPage("epaper", title),
+    choose: true,
+    index: kind === "words" ? 0 : 1,
+    items: [
+      item(S.tabWordsLabel, t("Seed phrase"), r.words.join(" "), "M", "words QR"),
+      item("SeedQR", "SeedQR", seedQrDigits(r.words), SEEDQR_ECC, "SeedQR"),
+      item("Compact SeedQR", "Compact SeedQR", r.seed, SEEDQR_ECC, "Compact SeedQR"),
+    ],
+    intro: t("Pick a QR code: the panel shows it with the numbered words beside it (their first four letters " +
+      "where all of a word does not fit). Plug in a panel, then write."),
+    panelOnly: state.panelOnly,
+    onPanelOnly: (v) => (state.panelOnly = v),
+    camera: true,
+    onBack: () => showExport(kind),
+  });
 }
 
 // --- scanning -----------------------------------------------------------------
@@ -526,6 +561,7 @@ function showAbout() {
 
 // Escape leaves the camera, the exports and About
 ui.onKey((ev) => {
+  if (state.page === "epaper") return epaperKey(ev);
   if (ev.key !== "Escape") return false;
   if (state.page === "scan") showEntry(firstEmpty());
   else if (state.page === "export") showResult();

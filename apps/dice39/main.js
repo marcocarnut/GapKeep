@@ -26,6 +26,8 @@ import { entropyBitsTarget, newPad, addPadSample } from "./lib/entropypad.js";
 import { S } from "./lib/strings.js";
 import { setCrypto } from "./lib/crypto.js";
 import { accountKey, MAX_ACCOUNT } from "./lib/pubkey.js";
+import { epaperInfo, epaperKey, showWriter } from "./lib/epaper.js";
+import { shareTokens, wordTokens } from "./lib/epaperlayout.js";
 
 setCrypto(gkcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
 
@@ -48,6 +50,7 @@ const state = {
   showPassphrase: false,
   keyForm: 0,         // the key's QR code: 0 descriptor, 1 zpub (KEY_FORMS)
   split: null,        // the last codex32 split: { scheme, id, shares, checked }
+  panelOnly: true,    // with an e-paper panel: shares (and the seed's codes) on the panel only, never on screen
 };
 
 // --- entropy from key timing (additive; the hardware RNG is the floor) ---
@@ -62,7 +65,7 @@ ui.onKey((ev) => {
       ms: Date.now(),
     });
   }
-  return false;  // never consume: this only listens
+  return epaperKey(ev);  // this only listens; Escape on the e-paper page is that page's
 });
 
 // --- the entropy pad (accounting in lib/entropypad.js) ----------------------
@@ -552,7 +555,8 @@ function showResults() {
 
   const buttons = buttonRow(ui.screen);
   const first = new ui.Button(buttons, { text: t("QR codes"), onClick: showQR });
-  new ui.Button(buttons, { text: t("Split into shares (codex32)"), onClick: showSplit });
+  new ui.Button(buttons, { text: t("Split into shares (codex32)"), onClick: () => showSplit() });
+  if (epaperInfo()) new ui.Button(buttons, { text: ui.symbols.download + "  " + t("Write to e-paper"), onClick: writeSeed });
   new ui.Button(buttons, {
     text: ui.symbols.trash + "  " + t("Start over"),
     onClick: async () => {
@@ -733,6 +737,34 @@ async function showQR() {
   format.focus();
 }
 
+// The seed's QR codes on an e-paper panel (lib/epaper.js): one of them, with
+// the words beside it, behind the same kind of warning.
+async function writeSeed() {
+  if (!(await confirm(t("The panel will hold your seed: anyone who sees it can take the funds. Keep it as you " +
+    "would the phrase on paper, and wipe it before it holds anything else."), t("Write to e-paper"),
+  t("Seed on a panel")))) return;
+  const r = state.result;
+  if (!r) return;
+  const T = r.finalWords.length;
+  const variants = [{ tokens: wordTokens(r.finalWords), sep: 2 }, { tokens: wordTokens(r.finalWords, true), sep: 2 }];
+  showWriter({
+    tag: "dice39",
+    start: (title) => page(title),
+    choose: true,
+    items: QR_FORMATS.map((f) => {
+      const q = f.make(r);
+      return { label: f.name, title: f.name, note: t("{n}-word BIP-39 phrase", { n: T }), data: q.data, ecc: q.ecc,
+        variants, log: f.log };
+    }),
+    intro: t("Pick a QR code: the panel shows it with the numbered words beside it (their first four letters " +
+      "where all of a word does not fit). Plug in a panel, then write."),
+    panelOnly: state.panelOnly,
+    onPanelOnly: (v) => (state.panelOnly = v),
+    camera: true,
+    onBack: showResults,
+  });
+}
+
 // --- codex32 shares -------------------------------------------------------
 
 const SCHEMES = [[2, 3], [2, 4], [3, 5]];
@@ -759,6 +791,11 @@ function showSplit(focusShare) {
     oneLine: true, width: 100, maxLength: 4, text: last ? last.id : randomIdentifier(),
     accept: CODEX32.CX_CHARSET,
   });
+  // with an e-paper panel: the shares on it only, never on this screen (the default)
+  const panel = epaperInfo();
+  const panelOnly = () => !!panel && state.panelOnly;
+  const only = panel ? new ui.Checkbox({ text: t("Panel only: the shares go on the e-paper panel, never on " +
+    "this screen"), checked: state.panelOnly }) : null;
   const out = new ui.Container({ layout: "column", gap: 6, width: "100%" });
   const buttons = buttonRow(ui.screen);
 
@@ -770,6 +807,11 @@ function showSplit(focusShare) {
         { k, n, checked: sp.checked }),
       color: GREEN, font: 14, width: "100%",
     });
+    if (panelOnly()) {
+      new ui.Label(out, { text: t("Not shown on this screen: write them to the e-paper panel, one panel each."),
+        font: 14, width: "100%" });
+      return;
+    }
     sp.shares.forEach((share, i) => {
       const line = new ui.Container(out, { layout: "row", gap: 8, alignItems: "center", width: "100%" });
       shareButtons.push(new ui.Button(line, { text: "QR", padding: [4, 10], onClick: () => showShareQR(i) }));
@@ -793,12 +835,53 @@ function showSplit(focusShare) {
       } catch (e) {
         new ui.Label(out, { text: ui.symbols.close + " " + e.message, color: RED, width: "100%" });
       }
+      if (write) {
+        write.disabled = !state.split;
+        if (state.split && panelOnly()) write.focus();
+      }
     },
   });
+  const write = panel ? new ui.Button(buttons, {
+    text: ui.symbols.download + "  " + t("Write to e-paper"), disabled: !last, onClick: () => writeShares(),
+  }) : null;
   new ui.Button(buttons, { text: t("Done"), onClick: showResults });
+  if (only) {
+    only.onChange = (ev) => {
+      state.panelOnly = ev.value;
+      out.clear();
+      shareButtons.length = 0;
+      if (state.split) list(state.split);
+    };
+  }
   if (last) list(last);
-  if (focusShare !== undefined && shareButtons[focusShare]) shareButtons[focusShare].focus();
+  if (focusShare === "epaper" && write) write.focus();
+  else if (focusShare !== undefined && shareButtons[focusShare]) shareButtons[focusShare].focus();
   else scheme.focus();
+}
+
+// The shares on e-paper panels, one panel each (lib/epaper.js): a red
+// "Share 2 of 3" and "any 2 recover the phrase", the share in groups of four
+// and its QR code (uppercase, ECC M, as on screen)
+function writeShares() {
+  const sp = state.split;
+  if (!sp) return;
+  const [k, n] = SCHEMES[sp.scheme];
+  showWriter({
+    tag: "dice39",
+    start: (title) => page(title),
+    items: sp.shares.map((share, i) => {
+      const s = share.toUpperCase();
+      const label = t("Share {i} of {n}", { i: i + 1, n });
+      return { label, title: label, note: t("any {k} recover the phrase", { k }), data: s, ecc: "M",
+        variants: [{ tokens: shareTokens(s), sep: 1 }], log: `share ${i + 1} of ${n}` };
+    }),
+    intro: t("Each share goes on a panel of its own: plug in a panel, write the share, and unplug the panel " +
+      "when this page says so; then the next panel, Next share."),
+    panelOnly: state.panelOnly,
+    onPanelOnly: (v) => (state.panelOnly = v),
+    camera: true,
+    onBack: () => showSplit("epaper"),
+  });
 }
 
 // Straight to the code: a share alone reveals nothing. The page says what

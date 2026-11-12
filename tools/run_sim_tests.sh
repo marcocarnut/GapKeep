@@ -104,6 +104,14 @@ if [ -f "$OUT/epaper/04-panel1-rewritten.png" ]; then
 	fi
 fi
 
+if [ -f "$OUT/epaper_shares/codex32-seedqr.png" ]; then
+	if python3 tests/epaper/check_shares.py "$OUT/epaper_shares" > "$OUT/epaper_shares_check.log" 2>&1; then
+		echo "PASS  sim:epaper_shares_check"
+	else
+		echo "FAIL  sim:epaper_shares_check   (see $OUT/epaper_shares_check.log)"; FAILED=1
+	fi
+fi
+
 if [ -f "$OUT/epaper_rotate/r270-u.png" ]; then
 	if python3 tests/epaper/check_rotation.py "$OUT/epaper_rotate" > "$OUT/epaper_rotation.log" 2>&1; then
 		echo "PASS  sim:epaper_rotation"
@@ -259,6 +267,12 @@ if command -v node >/dev/null; then
 		echo "PASS  sim:btc"
 	else
 		echo "FAIL  sim:btc   (see $OUT/btc.log)"; FAILED=1
+	fi
+	# dice39's and codex32's e-paper pages, for every panel (apps/dice39/lib/epaperlayout.js)
+	if node tests/epaper/layout_node.mjs > "$OUT/epaper_layout.log" 2>&1; then
+		echo "PASS  sim:epaper_layout"
+	else
+		echo "FAIL  sim:epaper_layout   (see $OUT/epaper_layout.log)"; FAILED=1
 	fi
 	# Sneakernet's levels and codes, and the levels tests/sneakernet.txt plays
 	if node --experimental-default-type=module tests/sneakernet/run_node.mjs > "$OUT/sneakernet_node.log" 2>&1; then
