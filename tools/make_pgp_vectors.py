@@ -190,6 +190,24 @@ def main():
         v["aeadBigOther"].append({"name": name, "key": sk.hex(), "data": base64.b64encode(data).decode(),
                                   "size": 128 * 1024})
 
+    # one-shot AEAD (aeadEncrypt, aeadDecrypt): Wycheproof's EAX (128-bit
+    # nonces) and GCM (96-bit) cases, and OCB from cryptography (15-byte
+    # nonces: OpenPGP's), [mode, key, nonce, ad, msg, ct || tag, valid]
+    import json as J
+    tests = []
+    for name, mode, nbits in (("aes_eax_test.json", "EAX", 128), ("aes_gcm_test.json", "GCM", 96)):
+        for g in J.load(open(os.path.join("tests/native/wycheproof", name)))["testGroups"]:
+            if g["ivSize"] == nbits:
+                for t in g["tests"]:
+                    tests.append([mode, t["key"], t["iv"], t["aad"], t["msg"], t["ct"] + t["tag"],
+                                  t["result"] == "valid"])
+    from check_pgp import ocb_encrypt
+    for i in range(40):
+        key, nonce = rnd.randbytes(rnd.choice((16, 24, 32))), rnd.randbytes(15)
+        ad, msg = rnd.randbytes(rnd.choice((0, 13, 44, rnd.randrange(200)))), rnd.randbytes(rnd.randrange(300))
+        tests.append(["OCB", key.hex(), nonce.hex(), ad.hex(), msg.hex(), ocb_encrypt(key, nonce, ad, msg).hex(), True])
+    v["aeadOnce"] = tests
+
     # gk:zlib: small streams both ways, 1 MiB that compresses well, and 33
     # MiB of zeros (a bomb: over the largest maxOutput)
     import zlib as Z

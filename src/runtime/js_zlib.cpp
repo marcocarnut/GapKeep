@@ -173,7 +173,7 @@ static JSValue js_zlib_inflate (JSContext *ctx, JSValueConst this_val, int argc,
 					   (unsigned) (MaxOutput / (1024 * 1024)));
 	}
 
-	JSValue OnProgress;
+	TGkJobOptions OnProgress;
 	if (!GkJobOnProgress (ctx, Options, "inflate", &OnProgress))
 	{
 		return JS_EXCEPTION;
@@ -202,13 +202,13 @@ static JSValue js_zlib_inflate (JSContext *ctx, JSValueConst this_val, int argc,
 	if (p == 0)
 	{
 		JS_FreeValue (ctx, Buffer);
-		JS_FreeValue (ctx, OnProgress);
+		GkJobOptionsFree (ctx, &OnProgress);
 		return JS_ThrowTypeError (ctx, "inflate: data must be a Uint8Array (or other typed array) or an ArrayBuffer");
 	}
 	if (nLength > MaxInput)
 	{
 		JS_FreeValue (ctx, Buffer);
-		JS_FreeValue (ctx, OnProgress);
+		GkJobOptionsFree (ctx, &OnProgress);
 		return JS_ThrowRangeError (ctx, "inflate: at most %u MiB of data", (unsigned) (MaxInput >> 20));
 	}
 
@@ -218,11 +218,11 @@ static JSValue js_zlib_inflate (JSContext *ctx, JSValueConst this_val, int argc,
 	if (nResult != 0)
 	{
 		delete pState;
-		JS_FreeValue (ctx, OnProgress);
+		GkJobOptionsFree (ctx, &OnProgress);
 		return JS_ThrowOutOfMemory (ctx);
 	}
 	JSValue Promise = GkJobStart (ctx, &s_InflateJob, pState, OnProgress);
-	JS_FreeValue (ctx, OnProgress);
+	GkJobOptionsFree (ctx, &OnProgress);
 	return Promise;
 }
 

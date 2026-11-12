@@ -562,6 +562,147 @@ group("SEIPD v2 and GnuPG's OCB packet", async () => {
   }
 });
 
+group("aeadEncrypt, aeadDecrypt, hkdf", () => {
+  // RFC 9580, A.5: the locked v6 key's primary key (Argon2 with 2 GiB, so
+  // from the RFC's S2K output): HKDF, then OCB
+  const s2k = unhex("832bd2662a5c2b251ee3fc82aec349a766ca539015880133002e5a21960b3bcf");
+  const kek = crypto.hkdf("SHA-256", s2k, null, unhex("c5060902"), 32);
+  ok(hex(kek) === "9e37cb26787f37e18db172795c4c297550d39ac82511d9af4c8706db6a77fd51", "RFC 9580 A.5.1 HKDF");
+  const ad = unhex("c50663877fe31b00000020f94da7bb48d60a61e567706a6587d0331999bb9d891a08242ead84543df895a3");
+  const nonce = unhex("b4a8a9274fabe632f875a706592021");
+  const locked = unhex("78258fa484d88b27f220e3d2de0203ca0f1feecb6b775381e3e2d9b1485c22338ca551e09a263f22eb4992e9677a8058");
+  const secret = "1972817b12be707e8d5f586ce61361201d344eb266a2c82fde6835762b65b0b7";
+  ok(hex(crypto.aeadDecrypt("OCB", kek, nonce, ad, locked)) === secret, "RFC 9580 A.5.1 unlocked");
+  ok(hex(crypto.aeadEncrypt("OCB", kek, nonce, ad, unhex(secret))) === hex(locked), "RFC 9580 A.5.1 locked again");
+  // RFC 5869, A.1
+  ok(hex(crypto.hkdf("SHA-256", unhex("0b".repeat(22)), unhex("000102030405060708090a0b0c"),
+                     unhex("f0f1f2f3f4f5f6f7f8f9"), 42)) ===
+     "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865", "HKDF RFC 5869 A.1");
+  let n = 0;
+  for (const [mode, k, iv, a, msg, ct, valid] of V.aeadOnce) {
+    const what = `aead ${mode} ${n++}`;
+    if (valid) {
+      ok(hex(crypto.aeadDecrypt(mode, unhex(k), unhex(iv), unhex(a), unhex(ct))) === msg, what);
+      ok(hex(crypto.aeadEncrypt(mode, unhex(k), unhex(iv), unhex(a), unhex(msg))) === ct, what + " encrypt");
+    } else {
+      throws(() => crypto.aeadDecrypt(mode, unhex(k), unhex(iv), unhex(a), unhex(ct)), Error, what + " refused");
+    }
+  }
+  console.log(`pgpcrypto: one-shot AEAD: ${n} cases`);
+  // the negative cases: one Error for any failure; arguments checked
+  const bad = locked.slice();
+  bad[40] ^= 1;
+  const sameError = (fn, what) => {
+    try { fn(); ok(false, `${what} (did not throw)`); }
+    catch (e) { ok(e.constructor === Error && /integrity check failed/.test(e.message), `${what} (${e.name}: ${e.message})`); }
+  };
+  sameError(() => crypto.aeadDecrypt("OCB", kek, nonce, ad, bad), "aeadDecrypt changed tag");
+  sameError(() => crypto.aeadDecrypt("OCB", kek, nonce, ad.subarray(1), locked), "aeadDecrypt other AD");
+  sameError(() => crypto.aeadDecrypt("OCB", kek.map((x, i) => i ? x : x ^ 1), nonce, ad, locked), "aeadDecrypt other key");
+  sameError(() => crypto.aeadDecrypt("OCB", kek, nonce, ad, locked.subarray(0, 15)), "aeadDecrypt under 16 bytes");
+  sameError(() => crypto.aeadDecrypt("EAX", kek, new Uint8Array(16), ad, locked), "aeadDecrypt other mode");
+  throws(() => crypto.aeadEncrypt("CCM", kek, nonce, ad, locked), TypeError, "aead mode CCM");
+  throws(() => crypto.aeadEncrypt("OCB", kek, nonce.subarray(1), ad, locked), RangeError, "aead OCB 14-byte nonce");
+  throws(() => crypto.aeadEncrypt("GCM", kek, nonce, ad, locked), RangeError, "aead GCM 15-byte nonce");
+  throws(() => crypto.aeadEncrypt("OCB", kek.subarray(1), nonce, ad, locked), RangeError, "aead 31-byte key");
+  throws(() => crypto.aeadEncrypt("OCB", kek, nonce, ad, new Uint8Array(256 * 1024 + 1)), RangeError, "aead over 256 KiB");
+  throws(() => crypto.aeadEncrypt("OCB", kek, nonce, "ad", locked), TypeError, "aead AD as a string");
+  // the largest: 256 KiB, synchronous, with GCM (the slowest)
+  const big = new Uint8Array(256 * 1024);
+  const sealed = time("aeadEncrypt GCM 256 KiB", () => crypto.aeadEncrypt("GCM", kek, new Uint8Array(12), ad, big));
+  const opened = time("aeadDecrypt GCM 256 KiB", () => crypto.aeadDecrypt("GCM", kek, new Uint8Array(12), ad, sealed));
+  ok(opened.length === big.length && opened.every((x) => x === 0), "aead GCM 256 KiB");
+  throws(() => crypto.hkdf("SHA-256", s2k, null, ad, 255 * 32 + 1), RangeError, "hkdf too long");
+  throws(() => crypto.hkdf("MD5", s2k, null, ad, 32), TypeError, "hkdf MD5");
+});
+
+group("AbortController: cancelling long operations", async () => {
+  const isAbort = (e) => e && e.name === "AbortError";
+  const salt = new Uint8Array(16);
+  ok(typeof AbortController === "function" && typeof AbortSignal === "function", "AbortController, AbortSignal");
+  throws(() => new AbortSignal(), TypeError, "new AbortSignal()");
+  const ac0 = new AbortController();
+  let heard = 0;
+  ac0.signal.addEventListener("abort", () => heard++);
+  ac0.signal.onabort = () => heard++;
+  ac0.abort();
+  ac0.abort();
+  ok(ac0.signal.aborted && isAbort(ac0.signal.reason) && heard === 2, "abort(): aborted, AbortError, listeners once");
+  throws(() => ac0.signal.throwIfAborted(), Error, "throwIfAborted");
+  // already aborted: rejected at once, nothing started
+  let rejected = null;
+  const p0 = crypto.argon2id("p", salt, { passes: 1, lanes: 1, memoryKiB: 64, length: 16, signal: AbortSignal.abort() });
+  p0.catch((e) => { rejected = e; });
+  await tick();
+  ok(isAbort(rejected), "already aborted: rejected at once");
+  const why = new Error("changed my mind");
+  await rejects(crypto.openpgpS2k(3, "SHA-1", "p", new Uint8Array(8), 255, 16, { signal: AbortSignal.abort(why) }),
+                Error, "already aborted with a reason");
+  try { await crypto.pbkdf2Async("SHA-256", "p", "s", 10, 16, { signal: AbortSignal.abort(why) }); }
+  catch (e) { ok(e === why, "rejected with the reason given"); }
+  throws(() => crypto.pbkdf2Async("SHA-256", "p", "s", 10, 16, { signal: {} }), TypeError, "signal not an AbortSignal");
+
+  // queued: a long S2K runs, the one behind it is aborted while it waits
+  const first = crypto.openpgpS2k(3, "SHA-256", "p", new Uint8Array(8), 255, 32);
+  const acQ = new AbortController();
+  const queued = crypto.openpgpS2k(3, "SHA-256", "p", new Uint8Array(8), 255, 32, { signal: acQ.signal });
+  const third = crypto.pbkdf2Async("SHA-256", "password", "salt", 2, 32);
+  acQ.abort();
+  await rejects(queued, Error, "a waiting job aborted");
+  try { await queued; } catch (e) { ok(isAbort(e), "a waiting job: AbortError"); }
+  ok((await first).length === 32, "the job ahead still runs");
+  ok(hex(await third) === "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43", "the job behind it still runs");
+
+  // running: Argon2id 64 MiB aborted part-way (its memory wiped in its next
+  // slices), S2K and inflate dropped part-way; the jobs after them still run
+  const acA = new AbortController();
+  let progress = 0;
+  const argon = crypto.argon2id("password", salt, { passes: 3, lanes: 4, memoryKiB: 64 * 1024, length: 32,
+    signal: acA.signal, onProgress: (f) => { progress = f; if (f > 0.3) acA.abort(); } });
+  try { await argon; ok(false, "Argon2id aborted (resolved)"); }
+  catch (e) { ok(isAbort(e) && progress > 0.3 && progress < 1, `Argon2id aborted at ${Math.round(progress * 100)}%`); }
+  for (const v of V.argon2) {
+    if (v.key || v.ad) continue;
+    const got = await crypto.argon2id(unhex(v.password), unhex(v.salt), { passes: v.t, lanes: v.p, memoryKiB: v.m, length: v.length });
+    ok(hex(got) === v.tag, "Argon2id after an abort");
+    break;
+  }
+  const acS = new AbortController();
+  const s2k = crypto.openpgpS2k(3, "SHA-1", "p", new Uint8Array(8), 255, 64, { signal: acS.signal,
+    onProgress: (f) => { if (f > 0.2) acS.abort(); } });
+  try { await s2k; ok(false, "S2K aborted (resolved)"); } catch (e) { ok(isAbort(e), "S2K aborted part-way"); }
+  const acZ = new AbortController();
+  const inflating = zlib.inflate(unhex(V.zlibBomb.data), { format: "zlib", maxOutput: 32 << 20, signal: acZ.signal,
+    onProgress: () => acZ.abort() });
+  try { await inflating; ok(false, "inflate aborted (resolved)"); } catch (e) { ok(isAbort(e), `inflate aborted part-way (${e && e.name})`); }
+  ok(hex(await crypto.pbkdf2Async("SHA-256", "password", "salt", 2, 32)) ===
+     "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43", "a job after the aborts");
+
+  // after it ended: no effect
+  const acD = new AbortController();
+  const done = await crypto.pbkdf2Async("SHA-256", "password", "salt", 2, 32, { signal: acD.signal });
+  acD.abort();
+  await tick();
+  ok(hex(done) === "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43", "aborted after it ended: no effect");
+  // every long operation takes the signal (already aborted: rejected)
+  const sig = AbortSignal.abort();
+  const key = crypto.rsaPrivateKey(keyOf(V.rsaKeys[0].key));
+  const all = [
+    ["openpgpS2kArgon2", () => crypto.openpgpS2kArgon2("p", salt, 1, 4, 10, 16, { signal: sig })],
+    ["seipdV1Decrypt", () => crypto.seipdV1Decrypt(new Uint8Array(16), new Uint8Array(64), { signal: sig })],
+    ["seipdV2Decrypt", () => crypto.seipdV2Decrypt(new Uint8Array(16), unhex("070206" + "00".repeat(48)), { signal: sig })],
+    ["ocbedDecrypt", () => crypto.ocbedDecrypt(new Uint8Array(16), unhex("070206" + "00".repeat(48)), { signal: sig })],
+    ["RSA sign", () => key.sign("SHA-256", new Uint8Array(32), { signal: sig })],
+    ["RSA decrypt", () => key.decrypt(new Uint8Array(key.bits / 8), { signal: sig })],
+    ["inflate", () => zlib.inflate(unhex("789c030000000001"), { format: "zlib", maxOutput: 16, signal: sig })],
+  ];
+  for (const [what, start] of all) {
+    try { await start(); ok(false, `${what} with an aborted signal (resolved)`); }
+    catch (e) { ok(isAbort(e), `${what} with an aborted signal (${e && e.name}: ${e && e.message})`); }
+  }
+  key.destroy();
+});
+
 group("gk:zlib", async () => {
   for (const t of V.zlibSmall) {
     const out = await zlib.inflate(unhex(t.data), { format: t.format, maxOutput: Math.max(1, t.plain.length / 2) });

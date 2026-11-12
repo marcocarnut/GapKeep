@@ -102,7 +102,7 @@ const info = {
   cryptoObjects: cryptoMembers,
   epaper: Object.getOwnPropertyNames(ui.epaper).sort(),
   epaperPanel,
-  globals: ["console", "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+  globals: ["console", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "AbortController", "AbortSignal",
             "fetch", "XMLHttpRequest", "WebSocket", "localStorage", "require", "process",
             "document", "crypto"].filter((g) => typeof globalThis[g] !== "undefined"),
 };

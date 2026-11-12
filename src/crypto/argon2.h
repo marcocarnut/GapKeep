@@ -65,6 +65,10 @@ double gk_argon2_progress (const gk_argon2_job_t *job);
 /* Wipes the job (not the work area: the caller's). */
 void gk_argon2_end (gk_argon2_job_t *job);
 
+/* Stops filling: the steps that follow only wipe the work area (then the
+   job is done, its output zeros). */
+void gk_argon2_abort (gk_argon2_job_t *job);
+
 /* RFC 9106, 5.3 (Argon2id: 32 KiB, 3 passes, 4 lanes, a secret and
    associated data) and an S2K type 4 known answer (RFC 9580, 3.7.1.4),
    both in small steps, run in steps of budget blocks: the caller gives

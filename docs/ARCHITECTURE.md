@@ -231,7 +231,9 @@ CMAC) and GCM (`gcm.*`, SP 800-38D, its GHASH multiplying bit by bit
 without tables: constant-time, slower). SEIPD v2 takes all three; tag 20
 OCB and EAX, as LibrePGP allows (no GCM). Every chunk's tag and the
 final tag (over the total length) are checked before the plaintext,
-decrypted in place in a copy of the message, is given. Decompression (`runtime/inflate.*`, gk:zlib) is
+decrypted in place in a copy of the message, is given. The same modes encrypt and decrypt one small
+message at once (`gk_aead_encrypt`, `gk_aead_decrypt`: an AEAD-protected
+secret key, RFC 9580, 5.5.3), synchronously, up to 256 KiB. Decompression (`runtime/inflate.*`, gk:zlib) is
 zlib's inflate (`third_party/zlib`, decompression only, no gzip, the
 caller's allocator, which wipes), in steps, its output limited as it
 grows; `tools/fuzz_inflate.sh` fuzzes it with sanitizers.
@@ -367,7 +369,15 @@ alive. Jobs run one at a time, in order (16 may wait per app); the promise
 is settled from the main loop, as gk:usb's transfers are, and progress is
 reported between slices (`onProgress`). When the app stops, its jobs are
 dropped (wiped, never settled); when the watchdog stops one of its scripts,
-they are rejected. A slice ends at its deadline, overrunning it by at most
+they are rejected. An app cancels one with an `AbortSignal` (`{ signal }`;
+`AbortController` is a small global written in JavaScript in
+`js_sys.cpp`, as QuickJS has none): the job adds an "abort" listener, a
+native function, so the abort is noticed when JavaScript calls
+`abort()`, between slices, and no JavaScript runs from the main loop to
+poll for it; a waiting job is dropped, a running one too unless it has an
+Abort op (Argon2id: its next slices wipe its memory), and the promise is
+rejected with the signal's reason as a promise job, after the running
+script. A slice ends at its deadline, overrunning it by at most
 one unit of the job's work: 64 KiB of hashing for S2K (a slice lasts 22 ms
 on a Pi Zero), one modular exponentiation of the CRT for RSA (220 ms with
 4096 bits: `crypto/rsa.c` runs the steps of Mbed TLS's private operation

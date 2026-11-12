@@ -228,6 +228,69 @@ void GkTimersFree (TGkApp *pApp)
 	}
 }
 
+// AbortController and AbortSignal, the web's (a subset: abort(reason),
+// signal.aborted, .reason, .onabort, .throwIfAborted(), add- and
+// removeEventListener("abort"), AbortSignal.abort() and .timeout()), for
+// cancelling long operations (jobs.h); QuickJS has none.
+static const char s_AbortJS[] =
+	"(() => {\n"
+	"  const state = new WeakMap();\n"
+	"  let making = false;\n"
+	"  const named = (name, message) => { const e = new Error(message); e.name = name; return e; };\n"
+	"  const make = () => { making = true; try { return new AbortSignal(); } finally { making = false; } };\n"
+	"  const fire = (signal, reason) => {\n"
+	"    const s = state.get(signal);\n"
+	"    if (s.aborted) return;\n"
+	"    s.aborted = true;\n"
+	"    s.reason = reason === undefined ? named(\"AbortError\", \"the operation was aborted\") : reason;\n"
+	"    const event = { type: \"abort\", target: signal };\n"
+	"    const listeners = s.listeners;\n"
+	"    s.listeners = [];\n"
+	"    if (typeof signal.onabort === \"function\") listeners.unshift(signal.onabort);\n"
+	"    for (const f of listeners) {\n"
+	"      try { f.call(signal, event); } catch (e) { console.error(e); }\n"
+	"    }\n"
+	"  };\n"
+	"  const own = (signal) => {\n"
+	"    const s = state.get(signal);\n"
+	"    if (s === undefined) throw new TypeError(\"not an AbortSignal\");\n"
+	"    return s;\n"
+	"  };\n"
+	"  class AbortSignal {\n"
+	"    constructor() {\n"
+	"      if (!making) throw new TypeError(\"AbortSignal: make one with new AbortController()\");\n"
+	"      state.set(this, { aborted: false, reason: undefined, listeners: [] });\n"
+	"      this.onabort = null;\n"
+	"    }\n"
+	"    get aborted() { return own(this).aborted; }\n"
+	"    get reason() { return own(this).reason; }\n"
+	"    throwIfAborted() { const s = own(this); if (s.aborted) throw s.reason; }\n"
+	"    addEventListener(type, listener) {\n"
+	"      const s = own(this);\n"
+	"      if (type === \"abort\" && typeof listener === \"function\" && !s.aborted && !s.listeners.includes(listener)) {\n"
+	"        s.listeners.push(listener);\n"
+	"      }\n"
+	"    }\n"
+	"    removeEventListener(type, listener) {\n"
+	"      const s = own(this);\n"
+	"      if (type === \"abort\") s.listeners = s.listeners.filter((f) => f !== listener);\n"
+	"    }\n"
+	"    static abort(reason) { const signal = make(); fire(signal, reason); return signal; }\n"
+	"    static timeout(ms) {\n"
+	"      const signal = make();\n"
+	"      setTimeout(() => fire(signal, named(\"TimeoutError\", \"the operation timed out\")), ms);\n"
+	"      return signal;\n"
+	"    }\n"
+	"  }\n"
+	"  class AbortController {\n"
+	"    constructor() { Object.defineProperty(this, \"signal\", { value: make(), enumerable: true }); }\n"
+	"    abort(reason) { fire(this.signal, reason); }\n"
+	"  }\n"
+	"  for (const [name, value] of [[\"AbortSignal\", AbortSignal], [\"AbortController\", AbortController]]) {\n"
+	"    Object.defineProperty(globalThis, name, { value, writable: true, configurable: true });\n"
+	"  }\n"
+	"})();\n";
+
 void GkInitGlobals (JSContext *ctx)
 {
 	JSValue Global = JS_GetGlobalObject (ctx);
@@ -244,6 +307,14 @@ void GkInitGlobals (JSContext *ctx)
 	JS_SetPropertyStr (ctx, Global, "setInterval",   JS_NewCFunctionMagic (ctx, js_set_timer, "setInterval", 2, JS_CFUNC_generic_magic, 1));
 	JS_SetPropertyStr (ctx, Global, "clearTimeout",  JS_NewCFunction (ctx, js_clear_timer, "clearTimeout", 1));
 	JS_SetPropertyStr (ctx, Global, "clearInterval", JS_NewCFunction (ctx, js_clear_timer, "clearInterval", 1));
+
+	JSValue Result = JS_Eval (ctx, s_AbortJS, sizeof s_AbortJS - 1, "<abort>", JS_EVAL_TYPE_GLOBAL);
+	if (JS_IsException (Result))
+	{
+		CLogger::Get ()->Write ("sys", LogError, "AbortController could not be defined");
+		JS_FreeValue (ctx, JS_GetException (ctx));
+	}
+	JS_FreeValue (ctx, Result);
 
 	JS_FreeValue (ctx, Global);
 }
