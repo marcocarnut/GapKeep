@@ -36,6 +36,20 @@ const EXAMPLES = [
   [t("Bitcoin: an account's descriptor"),
     `var account = btc.words("${ABANDON}").derive("m/86'/0'/0'");\naccount.descriptor()`],
   [t("Bitcoin: what btc does"), "btc.help()"],
+  [t("E-paper: write to the panel"),
+    "// the panel: a container like ui.screen, off screen; refresh() writes it\n" +
+    "if (typeof panel === \"object\") panel.close();\n" +
+    "var panel = ui.epaper.open();\n" +
+    "var row = new ui.Container(panel, { layout: \"row\", gap: 8, width: \"100%\", height: \"100%\", alignItems: \"center\" });\n" +
+    "new ui.QRCode(row, { data: \"https://gapkeep.org\", size: panel.height - 16 });\n" +
+    "var text = new ui.Container(row, { layout: \"column\", gap: 4, grow: 1 });\n" +
+    "new ui.Label(text, { text: \"Hello from the REPL\", font: 24, color: 0xff0000, width: \"100%\", overflow: \"wrap\" });\n" +
+    "new ui.Label(text, { text: \"ABCD EFGH 0O1lI\", family: \"epdmono\", font: 20 });\n" +
+    "var status = new ui.Label({ text: \"Writing…\" });\n" +
+    "panel.refresh({ onProgress: (f) => { status.text = \"Writing… \" + Math.round(f * 100) + \"%\"; } })\n" +
+    "  .then(() => { status.text = \"Done: you can unplug the panel.\"; },\n" +
+    "        (e) => { status.text = String(e); });\n" +
+    "panel.model"],
 ];
 
 const header = new ui.Container({ layout: "row", width: "100%", gap: 12, alignItems: "center" });

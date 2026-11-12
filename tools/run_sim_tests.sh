@@ -104,6 +104,14 @@ if [ -f "$OUT/epaper/04-panel1-rewritten.png" ]; then
 	fi
 fi
 
+# the REPL's e-paper example: its QR code, read off the panel
+if [ -f "$OUT/repl_epaper/panel.png" ]; then
+	if [ "$(zbarimg -q --raw "$OUT/repl_epaper/panel.png" 2>&1)" = "https://gapkeep.org" ]; then
+		echo "PASS  sim:repl_epaper_qr"
+	else
+		echo "FAIL  sim:repl_epaper_qr   (the panel's QR code: $OUT/repl_epaper/panel.png)"; FAILED=1
+	fi
+fi
 if [ -f "$OUT/epaper_rotate/r270-u.png" ]; then
 	if python3 tests/epaper/check_rotation.py "$OUT/epaper_rotate" > "$OUT/epaper_rotation.log" 2>&1; then
 		echo "PASS  sim:epaper_rotation"

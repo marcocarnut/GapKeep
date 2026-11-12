@@ -3,5 +3,8 @@
   "name": "REPL",
   "version": "1.0.0",
   "description": "Type JavaScript, see what it does.",
-  "icon": "keyboard"
+  "icon": "keyboard",
+  "permissions": [
+    "epaper"
+  ]
 }
