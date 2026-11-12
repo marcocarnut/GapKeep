@@ -418,6 +418,10 @@ static JSValue AppInfo (JSContext *ctx, const gk_app_t *pApp)
 	{
 		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "settings"));
 	}
+	if (pApp->permissions & GK_PERM_EPAPER)
+	{
+		JS_SetPropertyUint32 (ctx, Perms, nPerms++, JS_NewString (ctx, "epaper"));
+	}
 	JS_SetPropertyStr (ctx, Obj, "permissions", Perms);
 
 	// its suite (apps/<suite>/<id>), and the data folders it may read
