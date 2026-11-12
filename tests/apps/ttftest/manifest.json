@@ -1,7 +1,7 @@
 {
   "id": "ttftest",
-  "name": "Bold and italic (test)",
+  "name": "Font sizes (test)",
   "version": "1.0.0",
-  "description": "Test builds only: what bold and italic cost (tests/ttf.txt).",
+  "description": "Test builds only: text from outlines, its cost and memory (tests/ttf.txt, tests/fontsizes.txt).",
   "icon": "edit"
 }

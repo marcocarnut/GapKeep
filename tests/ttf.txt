@@ -1,8 +1,13 @@
-# Needs a test build (make TEST=1): bold and italic (src/runtime/ttfstyles.h),
-# what they cost. Boot makes none ("fonts:" only once a label uses one); a
-# bold paragraph's first draw rasterizes its glyphs, a redraw takes them
-# from the cache ("#fonts", "#redraw": src/testshot.h); tests/apps/ttftest
-# logs LVGL's memory after each. The numbers are for reading, not checked.
+# Needs a test build (make TEST=1): text drawn from outlines
+# (src/runtime/fontcache.h), what it costs and what it looks like, with
+# tests/apps/ttftest. Boot makes no font ("fonts:" only once a label uses
+# one); a bold paragraph's first draw rasterizes its glyphs, a redraw takes
+# them from the cache ("#fonts", "#redraw": src/testshot.h); the app logs
+# LVGL's memory after each. Then the cost of a glyph's first use at 12, 24,
+# 48 and 96 px ("#fonts outlines on": the bitmap fonts' sizes from outlines
+# too), the first draw of a screenful at 50 and 120 px ("#fonts drop": as
+# if never drawn), and the bitmap fonts beside the outlines at their own
+# sizes (shots 03 and 04). The numbers are for reading, not checked.
 expect Keyboard attached 60
 expect launcher ready 60
 tile ttftest
@@ -44,3 +49,57 @@ mark
 send #redraw
 expect redraw: \d+ us 10
 shot 02-bold-28
+# a glyph's first use, Medium from outlines at 12, 24, 48, 96 px
+send #fonts outlines on
+expect fonts: outlines on 10
+key 1
+expect ttftest m 12: ui 10
+key 2
+expect ttftest m 24: ui 10
+key 3
+expect ttftest m 48: ui 10
+key 4
+expect ttftest m 96: ui 20
+mark
+send #fonts
+expect fonts: regular 96 px: \d+ glyph bitmaps 10
+send #fonts outlines off
+expect fonts: outlines off 10
+# a screenful's first draw at sizes without bitmaps, and its redraw
+key f
+expect ttftest screen 50: ui 20
+mark
+send #fonts drop
+expect fonts: glyphs dropped 10
+send #redraw
+expect redraw: \d+ us 20
+mark
+send #redraw
+expect redraw: \d+ us 20
+key shift-f
+expect ttftest screen 120: ui 30
+mark
+send #fonts drop
+expect fonts: glyphs dropped 10
+send #redraw
+expect redraw: \d+ us 30
+mark
+send #redraw
+expect redraw: \d+ us 30
+send #fonts
+expect fonts: \d+ fonts: \d+ bytes of glyphs 10
+# the bitmaps' sizes (16, 24) beside sizes from outlines (15, 17, 23, 25),
+# then the same screen all from outlines
+key q
+expect ttftest side by side: ui 10
+wait 1
+shot 03-side-by-side-bitmaps
+send #fonts outlines on
+expect fonts: outlines on 10
+mark
+key q
+expect ttftest side by side: ui 10
+wait 1
+shot 04-side-by-side-outlines
+send #fonts outlines off
+expect fonts: outlines off 10

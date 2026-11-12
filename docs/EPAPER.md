@@ -92,7 +92,9 @@ QR code at 20 (three groups, 14 characters, 168 pixels, a line). Compared
 on the rig's panel with misc-fixed's own 9x18 and 10x20: 10x20 is finer,
 9x18 came out faint (one-pixel strokes), and the 6x10 doubled, with
 two-pixel strokes, read most solidly; it is also EPDPages' font. The
-anti-aliased fonts work too, from 14 up (`mono: true` at 16 reads well).
+anti-aliased fonts work too, from 14 up (`mono: true` at 16 reads well),
+at any size of `ui.fontRange`; epdmono, a bitmap font, has only its three
+sizes, never drawn from outlines.
 `tools/make_epdmono.py` makes the font from the PCF file, whose SHA-256 it
 checks (`src/runtime/fonts/LICENCE.misc-fixed`).
 
