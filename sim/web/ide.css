@@ -172,8 +172,21 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 #screen { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #screen.smooth { image-rendering: auto; }
 #screen-input { font-size: 16px; }
-/* Phone-only parts: the panes' fold buttons and the key bar. */
+/* Phone-only parts: the panes' fold buttons and the key bar; but the
+   console folds on a desktop too, giving its height to the editor and the
+   screen (ide.js remembers it). */
 .fold, #keybar { display: none; }
+.fold {
+  align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--dim);
+}
+.fold::before { content: "\25BE"; font-size: 14px; }
+.fold[aria-expanded="false"]::before { content: "\25B8"; }
+#console-pane .fold { display: inline-flex; }
+#console-pane > .pane-head { cursor: pointer; }
+.pane.folded > :not(.pane-head) { display: none; }
+#console-pane.folded #clear { display: none; }
+#layout.console-folded { grid-template-rows: minmax(0, 1fr) auto; }
 
 /* Phones (ide.js has the same query, PHONE): one column that scrolls.
    GapKeep's screen first, as wide as the page, with the run controls
@@ -206,13 +219,8 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 
   .pane > .pane-head { min-height: 44px; cursor: pointer; }
   #screen-pane > .pane-head { cursor: auto; }
-  .fold {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--dim);
-  }
-  .fold::before { content: "\25BE"; font-size: 16px; }
-  .fold[aria-expanded="false"]::before { content: "\25B8"; }
-  .pane.folded > :not(.pane-head) { display: none; }
+  .fold { display: inline-flex; width: 32px; height: 32px; }
+  .fold::before { font-size: 16px; }
   .pane.folded .pane-head .dim, #console-pane.folded #clear { display: none; }
   #tree { max-height: 55vh; flex: none; }
   #tree .row { padding-top: 6px; padding-bottom: 6px; }
