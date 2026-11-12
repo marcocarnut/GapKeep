@@ -338,7 +338,10 @@ are read whole, hashed and kept in memory at boot (`appstore.cpp`), so
 what an app reads is what was hashed, and swapping or removing the card
 afterwards changes nothing. A sealed kernel can carry its data instead
 (`SEALED=1 DATA=dir`): then the kernel's hash covers it and is per person,
-and the data folder's hash lets the keyring be checked on its own. Nothing in the data is executed; what parses it is FatFs and the
+and the data folder's hash lets the keyring be checked on its own. Its e-paper panel, if it
+has one, is built in the same way (`SEALED=1 EPAPER=weact-2.9-bwr`, with
+the wiring's keys: [EPAPER.md](EPAPER.md#sealed-kernels)), covered by the
+kernel's hash too. Nothing in the data is executed; what parses it is FatFs and the
 apps' own JavaScript. Apps in a suite share data this way but never code,
 so each app's hash still covers every line it runs.
 

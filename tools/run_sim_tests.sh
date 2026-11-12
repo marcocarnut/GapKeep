@@ -67,6 +67,14 @@ for t in $SCENARIOS; do
 	else
 		sim=sim/build/gksim; card=$OUT/card-apps
 	fi
+	# "# Built with: EPAPER=... ...": a simulator built with that panel of its
+	# own, as a sealed kernel's (sim/Makefile)
+	built=$(sed -n 's/^# Built with: //p' "$t")
+	if [ -n "$built" ]; then
+		# shellcheck disable=SC2086
+		make -C sim -s -j"$(nproc)" TEST=1 $built >/dev/null
+		sim=sim/build/gksim-test-epaper
+	fi
 	# "# Card: empty": an SD card without apps (a screen that depends on nothing else)
 	if grep -q "^# Card: empty" "$t"; then
 		card=$OUT/card-empty; mkdir -p "$card"

@@ -2,9 +2,10 @@
 #
 # Builds src/kernel.img for QEMU or for the real Pi Zero.
 #
-# Usage: tools/build.sh qemu|pi [TEST=1 | SEALED=1 [DATA=dir] [EXTRA_APPS=dir]]
+# Usage: tools/build.sh qemu|pi [TEST=1 | SEALED=1 [DATA=dir] [EXTRA_APPS=dir] [EPAPER=model ...]]
 #   (see src/Makefile for what TEST and SEALED build; DATA=dir builds
-#   the data folders in dir into a sealed kernel, docs/APPS.md, "Data files")
+#   the data folders in dir into a sealed kernel, docs/APPS.md, "Data files";
+#   EPAPER=model [EPAPER_DC=... ...] its e-paper panel, docs/EPAPER.md)
 #
 # The two targets need differently configured Circle libraries (QEMU lacks
 # some peripherals the real board has). When the target changes, Circle,

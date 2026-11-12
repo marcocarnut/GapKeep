@@ -43,6 +43,20 @@ CXX      := g++
 OPT      := -O2 -g
 endif
 
+# An e-paper panel built in, as a sealed kernel's (../src/Makefile):
+# make EPAPER=weact-2.13-bw [EPAPER_DC=...]: build/gksim[-test]-epaper,
+# whose panel is that one, whatever the card's gapkeep.txt says
+# (tests/epaper_builtin.txt).
+EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
+ifneq ($(EPAPER_VARS),)
+EPAPER_DEFS := $(shell python3 $(ROOT)/tools/epaper_config.py $(EPAPER_VARS))
+ifeq ($(strip $(EPAPER_DEFS)),)
+$(error EPAPER: refused (the reason is above))
+endif
+MODE     := $(MODE)-$(subst =,_,$(subst $(eval) ,-,$(strip $(EPAPER_VARS))))
+EPSUFFIX := -epaper
+endif
+
 # The QR decoder: zxing-cpp's QR code reader (third_party/zxing-cpp and
 # ../lib/zxing/zxing.mk). Without it, scanners report "this build has no
 # QR decoder".
@@ -57,7 +71,7 @@ OBJDIR   := build/$(TARGET)-$(MODE)$(if $(HAVEZX),-zxing)
 # did 67 units in 2.0 s, QuickJS's test suite 155 in 3.9 s.
 ZERO_WORK_PER_SECOND := 36
 
-DEFS     := -DGK_SIM $(MODEDEF) -DGK_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<gk_lv_conf.h>" \
+DEFS     := -DGK_SIM $(MODEDEF) $(EPAPER_DEFS) -DGK_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<gk_lv_conf.h>" \
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
 INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -I $(ROOT)/lib/colorqr/include -idirafter $(ROOT)/circle/addon
@@ -142,13 +156,13 @@ CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 
 .PHONY: all web clean FORCE
-all: build/gksim$(if $(filter test,$(MODE)),-test)
+all: build/gksim$(if $(filter test%,$(MODE)),-test)$(EPSUFFIX)
 
-build/gksim build/gksim-test: $(OBJS)
+build/gksim build/gksim-test build/gksim-epaper build/gksim-test-epaper: $(OBJS)
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) -o $@ $(OBJS) -lm
 
-web: build/web/gksim$(if $(filter test,$(MODE)),-test).js
+web: build/web/gksim$(if $(filter test%,$(MODE)),-test)$(EPSUFFIX).js
 
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
 	    -sMODULARIZE=1 -sEXPORT_NAME=createGapkeep -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
@@ -156,7 +170,7 @@ WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -
 	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_sim_camera_in_use,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height,_gk_sim_set_epaper,_gk_sim_epaper_plug,_gk_sim_epaper_unplug,_gk_sim_epaper_serial,_gk_sim_epaper_progress,_gk_sim_epaper_plugged,_gk_sim_epaper_refresh_ms,_gk_web_epaper_width,_gk_web_epaper_height,_gk_web_epaper_frame \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
-build/web/gksim.js build/web/gksim-test.js: $(OBJS)
+build/web/gksim.js build/web/gksim-test.js build/web/gksim-epaper.js build/web/gksim-test-epaper.js: $(OBJS)
 	@mkdir -p build/web
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) $(WEBFLAGS) -o $@ $(OBJS)

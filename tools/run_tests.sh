@@ -105,7 +105,8 @@ if [ -f "$OUT/signer/30-part-00.png" ]; then
 	check signer_bbqr node --experimental-default-type=module tests/signer/check_bbqr.mjs "$OUT/signer"
 fi
 
-tools/build.sh qemu SEALED=1 DATA=tests/sdcard/data EXTRA_APPS=tests/sdcard/apps/testsuite >/dev/null
+tools/build.sh qemu SEALED=1 DATA=tests/sdcard/data EXTRA_APPS=tests/sdcard/apps/testsuite \
+	EPAPER=weact-2.9-bwr EPAPER_BUSY=23 >/dev/null
 for t in tests/*.txt; do
 	! needs_sealed_build "$t" || run "$t" ""
 done
