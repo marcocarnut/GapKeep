@@ -1303,12 +1303,17 @@ function setupUi () {
 
 // The phone layout's panes fold (ide.css hides a folded pane's body). They
 // start folded, but for the console when it has news; the editor loads when
-// first unfolded.
+// first unfolded. On a desktop only the console folds, its row shrinking to
+// its bar (the screen refits: its ResizeObserver); that is remembered.
 function fold (id, folded = !$(id).classList.contains ("folded")) {
   const pane = $(id);
   pane.classList.toggle ("folded", folded);
   pane.querySelector (".fold").setAttribute ("aria-expanded", !folded);
   if (!folded && id === "editor-pane" && PHONE.matches) ensureEditor ();
+  if (id === "console-pane") {
+    $("layout").classList.toggle ("console-folded", folded && !PHONE.matches);
+    if (!PHONE.matches) localStorage.setItem ("gkide.consoleFolded", folded ? "1" : "");
+  }
 }
 
 function setupFolds () {
@@ -1316,15 +1321,18 @@ function setupFolds () {
     if (PHONE.matches) fold (id, true);
     // the whole bar is the button, but for the bar's own buttons
     $(id).querySelector (".pane-head").addEventListener ("click", (e) => {
-      if (!PHONE.matches) return;
+      if (!PHONE.matches && id !== "console-pane") return;
       const b = e.target.closest ("button");
       if (b && !b.classList.contains ("fold")) return;
       fold (id);
     });
   }
-  // a phone turned into a desktop (a wider window): the editor is shown
+  if (!PHONE.matches && localStorage.getItem ("gkide.consoleFolded")) fold ("console-pane", true);
+  // a phone turned into a desktop (a wider window): the editor is shown;
+  // and back: the console's row
   PHONE.addEventListener ("change", () => {
     if (!PHONE.matches) ensureEditor ();
+    $("layout").classList.toggle ("console-folded", !PHONE.matches && $("console-pane").classList.contains ("folded"));
     fitScreen ();
   });
 }
