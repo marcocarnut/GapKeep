@@ -146,9 +146,11 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 #epaper-bar .label { font-weight: 600; padding-top: 3px; }
 #epaper-bar select, #epaper-bar button { font-size: 12px; }
 #epaper-info { padding-top: 3px; }
-/* the panel, twice its size, in its bezel */
+/* the panel, on a line of its own, at its true size (one pixel of the
+   panel, one pixel of the page: ide.js caps the width at the panel's), in
+   its bezel; narrower only when the pane is */
 #epaper {
-  flex-basis: 100%; max-width: 100%; image-rendering: pixelated;
+  flex-basis: 100%; max-width: 100%; height: auto; image-rendering: pixelated;
   border: 6px solid #d8d8d4; border-radius: 4px; box-sizing: content-box;
 }
 

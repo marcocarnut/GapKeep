@@ -1236,7 +1236,7 @@ function setupEPaper () {
       const visible = machine.drawEPaper (canvas);
       canvas.hidden = !visible;
       if (visible) {
-        canvas.style.width = canvas.width * 2 + "px";
+        canvas.style.maxWidth = `min(100%, ${canvas.width}px)`;
         const p = machine.epaperProgress;
         const name = machine.epaperPlugged;
         text = `panel ${name}` + (p >= 0 ? `: refreshing, ${Math.round (p * 100)}%` : "");
