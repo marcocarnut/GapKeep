@@ -68,6 +68,53 @@ static void gcm_finish (gk_aead_job_t *job, const uint8_t *in, uint8_t *out, siz
 	gk_gcm_finish (&job->key.gcm, &job->st.gcm, 1, in, out, len, tag);
 }
 
+/* one message, all at once, any associated data: encrypt (tag out) or
+   decrypt (tag compared by the caller) */
+static int ocb_once (int encrypt, const uint8_t *k, size_t klen, const uint8_t *n, const uint8_t *ad, size_t adlen,
+		     const uint8_t *in, uint8_t *out, size_t len, uint8_t tag[TAG])
+{
+	gk_ocb_key_t key;
+	gk_ocb_t st;
+	int r = gk_ocb_key_init (&key, k, klen);
+	if (r != 0) return r;
+	size_t whole = len & ~(size_t) 15;
+	gk_ocb_start (&key, &st, n, GK_OCB_MAX_NONCE);
+	(encrypt ? gk_ocb_encrypt_blocks : gk_ocb_decrypt_blocks) (&key, &st, in, out, whole);
+	gk_ocb_finish (&key, &st, !encrypt, in + whole, out + whole, len - whole, ad, adlen, tag);
+	gk_ocb_key_free (&key);
+	return 0;
+}
+
+static int eax_once (int encrypt, const uint8_t *k, size_t klen, const uint8_t *n, const uint8_t *ad, size_t adlen,
+		     const uint8_t *in, uint8_t *out, size_t len, uint8_t tag[TAG])
+{
+	gk_eax_key_t key;
+	gk_eax_t st;
+	int r = gk_eax_key_init (&key, k, klen);
+	if (r != 0) return r;
+	size_t whole = len & ~(size_t) 15;
+	gk_eax_start (&key, &st, n, 16, ad, adlen);
+	(encrypt ? gk_eax_encrypt_blocks : gk_eax_decrypt_blocks) (&key, &st, in, out, whole);
+	gk_eax_finish (&key, &st, !encrypt, in + whole, out + whole, len - whole, tag);
+	gk_eax_key_free (&key);
+	return 0;
+}
+
+static int gcm_once (int encrypt, const uint8_t *k, size_t klen, const uint8_t *n, const uint8_t *ad, size_t adlen,
+		     const uint8_t *in, uint8_t *out, size_t len, uint8_t tag[TAG])
+{
+	gk_gcm_key_t key;
+	gk_gcm_t st;
+	int r = gk_gcm_key_init (&key, k, klen);
+	if (r != 0) return r;
+	size_t whole = len & ~(size_t) 15;
+	gk_gcm_start (&key, &st, n, ad, adlen);
+	(encrypt ? gk_gcm_encrypt_blocks : gk_gcm_decrypt_blocks) (&key, &st, in, out, whole);
+	gk_gcm_finish (&key, &st, !encrypt, in + whole, out + whole, len - whole, tag);
+	gk_gcm_key_free (&key);
+	return 0;
+}
+
 struct gk_aead_mode
 {
 	uint8_t id;			/* RFC 9580's AEAD algorithm octet */
@@ -78,16 +125,63 @@ struct gk_aead_mode
 	void (*start) (gk_aead_job_t *job, const uint8_t *nonce, const uint8_t *ad, size_t adlen);
 	void (*blocks) (gk_aead_job_t *job, const uint8_t *in, uint8_t *out, size_t len);
 	void (*finish) (gk_aead_job_t *job, const uint8_t *in, uint8_t *out, size_t len, uint8_t tag[TAG]);
+	int (*once) (int encrypt, const uint8_t *k, size_t klen, const uint8_t *n, const uint8_t *ad, size_t adlen,
+		     const uint8_t *in, uint8_t *out, size_t len, uint8_t tag[TAG]);
 };
 
 /* LibrePGP (draft-koch-librepgp-06, 5.16) allows OCB and, for decryption,
    EAX in its packet; GCM only in SEIPD v2 */
 static const struct gk_aead_mode Modes[] =
 {
-	{ GK_AEAD_EAX, 16, 1, eax_key, eax_free, eax_start, eax_blocks, eax_finish },
-	{ GK_AEAD_OCB, 15, 1, ocb_key, ocb_free, ocb_start, ocb_blocks, ocb_finish },
-	{ GK_AEAD_GCM, 12, 0, gcm_key, gcm_free, gcm_start, gcm_blocks, gcm_finish },
+	{ GK_AEAD_EAX, 16, 1, eax_key, eax_free, eax_start, eax_blocks, eax_finish, eax_once },
+	{ GK_AEAD_OCB, 15, 1, ocb_key, ocb_free, ocb_start, ocb_blocks, ocb_finish, ocb_once },
+	{ GK_AEAD_GCM, 12, 0, gcm_key, gcm_free, gcm_start, gcm_blocks, gcm_finish, gcm_once },
 };
+
+static int tag_ok (const uint8_t *a, const uint8_t *b);
+
+static const struct gk_aead_mode *find_mode (int mode)
+{
+	for (unsigned i = 0; i < sizeof Modes / sizeof Modes[0]; i++)
+	{
+		if (Modes[i].id == mode) return &Modes[i];
+	}
+	return 0;
+}
+
+int gk_aead_nonce_size (int mode)
+{
+	const struct gk_aead_mode *m = find_mode (mode);
+	return m != 0 ? m->nonce : 0;
+}
+
+int gk_aead_encrypt (int mode, const uint8_t *key, size_t keylen, const uint8_t *nonce, size_t noncelen,
+		     const uint8_t *ad, size_t adlen, const uint8_t *in, uint8_t *out, size_t len,
+		     uint8_t tag[GK_AEAD_TAG])
+{
+	const struct gk_aead_mode *m = find_mode (mode);
+	if (m == 0) return -5;
+	if (noncelen != m->nonce) return -6;
+	return m->once (1, key, keylen, nonce, ad, adlen, in, out, len, tag);
+}
+
+int gk_aead_decrypt (int mode, const uint8_t *key, size_t keylen, const uint8_t *nonce, size_t noncelen,
+		     const uint8_t *ad, size_t adlen, const uint8_t *in, uint8_t *out, size_t len,
+		     const uint8_t tag[GK_AEAD_TAG])
+{
+	const struct gk_aead_mode *m = find_mode (mode);
+	if (m == 0) return -5;
+	if (noncelen != m->nonce) return -6;
+	uint8_t got[TAG];
+	int r = m->once (0, key, keylen, nonce, ad, adlen, in, out, len, got);
+	if (r == 0 && !tag_ok (got, tag))
+	{
+		gk_wipe (out, len);
+		r = -1;
+	}
+	gk_wipe (got, sizeof got);
+	return r;
+}
 
 static void be64 (uint8_t *out, uint64_t x)
 {
@@ -397,6 +491,26 @@ int gk_aead_selftest (void)
 		if (decrypt (k, d, l, Other[i][2], 16) != 0) return 7 + 2 * (int) i;
 		d[50] ^= 1;
 		if (decrypt (k, d, l, Other[i][2], 4096) != 1) return 8 + 2 * (int) i;
+	}
+	/* RFC 9580, A.5.1: the locked v6 primary key's secret (A.4), with
+	   OCB, all at once both ways; a changed tag refused */
+	{
+		static const char Key[] = "9e37cb26787f37e18db172795c4c297550d39ac82511d9af4c8706db6a77fd51";
+		static const char Ad[] = "c50663877fe31b00000020f94da7bb48d60a61e567706a6587d0331999bb9d891a08242ead84543df895a3";
+		static const char Ct[] = "78258fa484d88b27f220e3d2de0203ca0f1feecb6b775381e3e2d9b1485c22338ca551e09a263f22eb4992e9677a8058";
+		static const char Secret[] = "1972817b12be707e8d5f586ce61361201d344eb266a2c82fde6835762b65b0b7";
+		uint8_t k[32], n[15], a[64], c[48], p[32], t[16];
+		unhex (Key, k);
+		unhex ("b4a8a9274fabe632f875a706592021", n);
+		size_t al = unhex (Ad, a);
+		unhex (Ct, c);
+		if (gk_aead_decrypt (GK_AEAD_OCB, k, 32, n, 15, a, al, c, p, 32, c + 32) != 0
+		    || !gk_hex_equal (p, 32, Secret)) return 11;
+		if (gk_aead_encrypt (GK_AEAD_OCB, k, 32, n, 15, a, al, p, p, 32, t) != 0
+		    || memcmp (p, c, 32) != 0 || memcmp (t, c + 32, 16) != 0) return 12;
+		c[47] ^= 1;
+		if (gk_aead_decrypt (GK_AEAD_OCB, k, 32, n, 15, a, al, c, p, 32, c + 32) != -1) return 13;
+		for (int i = 0; i < 32; i++) if (p[i] != 0) return 14;		/* nothing given */
 	}
 	if (decrypt (key, data, len, Plain, 4096) != 0) return 1;
 	if (decrypt (key, data, len, Plain, 16) != 0) return 2;		/* block by block */

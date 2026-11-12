@@ -285,6 +285,23 @@ int main (void)
 				else if (pl == 0) printf ("-"); else hex (out, pl);
 			}
 		}
+		else if (strcmp (w[0], "once") == 0 && n == 7)
+		{
+			/* once enc|dec MODE KEY NONCE AD DATA (dec: DATA is C || tag) */
+			size_t kl = unhex (w[3], a), nl = unhex (w[4], b), al = unhex (w[5], c), dl = unhex (w[6], d);
+			int mode = atoi (w[2]), rc;
+			if (strcmp (w[1], "enc") == 0)
+			{
+				rc = gk_aead_encrypt (mode, a, kl, b, nl, c, al, d, out, dl, out + dl);
+				if (rc != 0) printf ("error %d", rc); else hex (out, dl + 16);
+			}
+			else if (dl < 16) printf ("error -1");
+			else
+			{
+				rc = gk_aead_decrypt (mode, a, kl, b, nl, c, al, d, out, dl - 16, d + dl - 16);
+				if (rc != 0) printf ("error %d", rc); else if (dl == 16) printf ("-"); else hex (out, dl - 16);
+			}
+		}
 		else if (strcmp (w[0], "aead") == 0 && n == 5)
 		{
 			/* aead 18|20 KEY DATA BUDGET */
