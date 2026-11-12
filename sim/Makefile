@@ -201,22 +201,22 @@ $(call obj,$(QJS)/quickjs.c): Makefile		# flags above: rebuild when they change
 $(OBJDIR)/up/%.c.o: ../%.c
 	@mkdir -p $(dir $@)
 	@echo "  CC    $<"
-	@$(CC) $(CFLAGS) -std=gnu11 -MMD -c -o $@ $<
+	@$(CC) $(CFLAGS) -std=gnu11 -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/up/%.cpp.o: ../%.cpp
 	@mkdir -p $(dir $@)
 	@echo "  CXX   $<"
-	@$(CXX) $(CXXFLAGS) -MMD -c -o $@ $<
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/%.c.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "  CC    $<"
-	@$(CC) $(CFLAGS) -std=gnu11 -MMD -c -o $@ $<
+	@$(CC) $(CFLAGS) -std=gnu11 -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/%.cpp.o: %.cpp
 	@mkdir -p $(dir $@)
 	@echo "  CXX   $<"
-	@$(CXX) $(CXXFLAGS) -MMD -c -o $@ $<
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
 FORCE:
 
@@ -224,3 +224,7 @@ clean:
 	rm -rf build
 
 -include $(shell find $(OBJDIR) -name '*.d' 2>/dev/null)
+
+# Headers named by old .d files but since removed must not stop the build
+# (gcc -MP, above, covers .d files made from now on).
+%.h: ;
