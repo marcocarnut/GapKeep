@@ -47,7 +47,7 @@ endif
 # make EPAPER=weact-2.13-bw [EPAPER_DC=...]: build/gksim[-test]-epaper,
 # whose panel is that one, whatever the card's gapkeep.txt says
 # (tests/epaper_builtin.txt).
-EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
+EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ EPAPER_ROTATE,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
 ifneq ($(EPAPER_VARS),)
 EPAPER_DEFS := $(shell python3 $(ROOT)/tools/epaper_config.py $(EPAPER_VARS))
 ifeq ($(strip $(EPAPER_DEFS)),)

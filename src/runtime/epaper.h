@@ -51,8 +51,9 @@ public:
 	// A refresh with what the screen shows now: a promise (jobs.h).
 	JSValue Refresh (JSContext *ctx, const struct TGkJobOptions &Options);
 
-	// The landscape rotation of the configured panel's model.
-	static unsigned Landscape (void);
+	// The rotation (Open()'s) for an app's orientation and flip, on the
+	// configured panel as it is mounted (epaper_rotate).
+	static unsigned Rotation (boolean bPortrait, boolean bFlip);
 
 private:
 	CGkEPaperDisplay (void) {}

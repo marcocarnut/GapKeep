@@ -77,26 +77,29 @@ pins into an unpowered controller. Still:
 
 A panel's pixels are black, white or red, nothing between: anti-aliased
 text loses its grey edges, which leaves the smaller sizes thin and ragged.
-gk:ui's pixel font is drawn for it: `family: "epdmono"`, X11's misc-fixed
-6x10 (public domain, the font EPDPages uses), one bit a pixel, at
-`font: 10`, `20` and `30` (`ui.epdmonoFonts`: the 6x10 cell, then every
-pixel doubled, 12x20, or tripled, 18x30; never smoothed). Basic Latin and
-Latin-1, so the codex32 and bech32 alphabets; 0 and O, 1, l and I differ.
+gk:ui's pixel fonts are drawn for it: `family: "epdmono"`, one bit a
+pixel, each size a design of its own (`ui.epdmonoFonts`): 10 is X11's
+misc-fixed 6x10 (public domain, EPDPages' font), 14, 16, 20, 24 and 32 are
+Terminus Font's bold (8x14 to 16x32, SIL Open Font License,
+`src/runtime/fonts/LICENCE.terminus`). Basic Latin and Latin-1, so the
+codex32 and bech32 alphabets; 0 (slashed) and O, 1, l and I, 5 and S, 8
+and B differ.
 
 ```js
 new ui.Label(panel, { text: "MS12 NAME A320", family: "epdmono", font: 20 });
 ```
 
 On the 2.9" (296 x 128) a codex32 share in groups of four fits beside its
-QR code at 20 (three groups, 14 characters, 168 pixels, a line). Compared
-on the rig's panel with misc-fixed's own 9x18 and 10x20: 10x20 is finer,
-9x18 came out faint (one-pixel strokes), and the 6x10 doubled, with
-two-pixel strokes, read most solidly; it is also EPDPages' font. The
-anti-aliased fonts work too, from 14 up (`mono: true` at 16 reads well),
-at any size of `ui.fontRange`; epdmono, a bitmap font, has only its three
-sizes, never drawn from outlines.
-`tools/make_epdmono.py` makes the font from the PCF file, whose SHA-256 it
-checks (`src/runtime/fonts/LICENCE.misc-fixed`).
+QR code at 20 (three groups, 14 characters, 140 pixels, a line). Chosen on
+the rig's panel, photographed: Terminus bold, two-pixel strokes from 20
+up, reads clearly at every size; Terminus regular (one-pixel strokes)
+came out faint, misc-fixed's 9x18 too; the 6x10 doubled and tripled (the
+first epdmono 20 and 30) read, but blocky. The anti-aliased fonts work
+too, from 14 up (`mono: true` at 16 reads well), at any size of
+`ui.fontRange`; epdmono, a bitmap font, has only its own sizes, never
+drawn from outlines. `tools/make_epdmono.py`
+makes the fonts from the PCF and PSF files, whose SHA-256s it checks: the
+six sizes add about 40 KB to the kernel.
 
 ## gapkeep.txt
 
@@ -110,6 +113,7 @@ epaper_dc = 25             # GPIOs: 2 to 27, not 7 to 11 (SPI0) nor 14, 15 (seri
 epaper_rst = 17
 epaper_busy = 24
 epaper_spi_khz = 4000      # the SPI clock: 100 to 20000 kHz
+epaper_rotate = 0          # how it is mounted: 0, 90, 180 or 270
 ```
 
 The values shown are the defaults: only `epaper` is needed for the wiring
@@ -117,8 +121,44 @@ above. What is refused is logged (`gapkeep.txt:12: epaper_dc: a GPIO
 number expected...`), and a panel whose DC, RST and BUSY aren't three
 different GPIOs is dropped. The boot log says what was configured:
 `epaper: WeAct 2.9" B/W/R (128x296, red) on SPI0 CE0 (GPIO 8), DC GPIO 25,
-RST GPIO 17, BUSY GPIO 24, 4000 kHz`. Sealed kernels read no card: their
-panel is built in (below).
+RST GPIO 17, BUSY GPIO 24, 4000 kHz, mounted turned 0 degrees clockwise`.
+Sealed kernels read no card: their panel is built in (below).
+
+### Mounting: epaper_rotate
+
+How the panel is mounted is the installation's, not an app's: apps ask for
+`landscape` or `portrait` as the person looking at the panel sees it, and
+GapKeep turns their picture to the panel as mounted. `epaper_rotate` is the
+panel's turn from its native position, **clockwise, as seen from its
+front** (by the person reading it). Native is the controller's: its
+first row (gate 0) at the top. The WeAct 2.9" and 2.13" stand taller than
+wide then; on the 2.9" the first row is at the end with the 8-pin header
+(J2), the panel's flat cable at the other (as the rig's camera shows it).
+The 4.2" is wider than tall.
+
+```
+ epaper_rotate = 0        90             180          270
+   +--------+     +--------------+    +--------+    +--------------+
+   |  TOP   |     |            T |    |        |    | P            |
+   |        |     |            O |    |        |    | O            |
+   |        |     |            P |    |        |    | T            |
+   |        |     +--------------+    |  POT   |    +--------------+
+   +--------+                         +--------+
+   (a 2.9": its native top row, "TOP", where the viewer sees it)
+```
+
+So `90` hangs a 2.9" wider than tall, its native top on the right; `180`
+stands it upside down. Then:
+
+- `ui.epaper.info()` and `panel.width`, `panel.height` are as mounted:
+  `landscape` is wider than tall for the viewer.
+- An app's page is upright for the viewer when its orientation is the
+  panel's as mounted (`landscape` on a panel mounted wider than tall).
+  Otherwise it is turned a quarter turn counter-clockwise (the viewer
+  turns the panel a quarter turn clockwise to read it, as a 2.9" mounted
+  at 0 is read in landscape). `flip: true` adds a half turn.
+- `tests/epaper_rotate.txt` checks the 16 cases in the simulator, whose
+  pictures show the panel as its viewer sees it, mounted.
 
 ### Sealed kernels
 
@@ -130,7 +170,8 @@ tools/build.sh pi SEALED=1 EPAPER=weact-2.9-bwr                     # Waveshare'
 tools/build.sh pi SEALED=1 EPAPER=weact-2.9-bwr EPAPER_BUSY=23 EPAPER_CS=ce1
 ```
 
-(`EPAPER_CS`, `EPAPER_DC`, `EPAPER_RST`, `EPAPER_BUSY`, `EPAPER_SPI_KHZ`.)
+(`EPAPER_CS`, `EPAPER_DC`, `EPAPER_RST`, `EPAPER_BUSY`, `EPAPER_SPI_KHZ`,
+`EPAPER_ROTATE`.)
 The build checks them with gapkeep.txt's rules (`tools/epaper_config.py`)
 and stops on a bad one, saying why (`EPAPER: EPAPER_DC=9: a GPIO number
 expected...`). They are compiled into the kernel, so the kernel's hash
@@ -261,6 +302,12 @@ read each one back with the camera (`ui.Scanner`, the whole field: the log
 says which share it saw, never what it says), then a page of text sizes,
 photographed with `serialraw` (`tools/rig/raw2png.py` turns the raw frame
 into a PNG).
+
+The rig's panel is mounted turned 180 degrees (`#epaper weact-2.9-bwr
+rotate=180`): its native top, the J2 end, is at the top of the camera's
+picture, so a page reads upright for someone at the panel's flat-cable end,
+the bottom of the camera's picture (`tests/epaper_rotate_hw.txt`
+photographs a portrait and a landscape page, and one as if mounted at 90).
 
 Measured on the rig (2026-11-12), the same at each of three refreshes:
 

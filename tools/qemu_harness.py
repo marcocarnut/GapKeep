@@ -84,6 +84,8 @@ Scenario file: one command per line, '#' starts a comment.
     epaper plug <name> [<model>]
     epaper unplug               simulator only: the simulated e-paper panel
     epaper shot <name>          (docs/EPAPER.md): plug a panel in by name (a
+    epaper config <model> [rotate=180 ...]   the configuration, as a test
+                                kernel's "#epaper" (src/testshot.h)
     epaper look <name>          new one is white; an old one shows what it
     epaper refresh-ms <ms>      showed), pull it out, save what it shows as
                                 <outdir>/<name>.png (landscape, 8 px margin;
@@ -544,7 +546,7 @@ class SimMachine:
         if words and words[0] in ('shot', 'look') and len(words) == 2:
             png_path = os.path.abspath(os.path.join(outdir, words[1] + '.png'))
             args = words[0] + ' ' + png_path
-        want = '#epaper ' + args
+        want = '#epaper ' + (args if words[0] != 'config' else 'config')
         self._cmd('epaper ' + args)
         deadline = time.time() + 10
         while time.time() < deadline:

@@ -58,10 +58,10 @@ if (panel) {
   check("unknown option", () => throws(() => ui.epaper.open({ rotate: 1 }), TypeError, /unknown option "rotate"/));
   check("bad orientation", () => throws(() => ui.epaper.open({ orientation: "up" }), TypeError, /"landscape" or "portrait"/));
   check("epdmono", () => {
-    const a = new ui.Label(panel, { font: 30, family: "epdmono", text: "x" });   // either order
-    if (a.family !== "epdmono" || JSON.stringify(ui.epdmonoFonts) !== "[10,20,30]") throw new Error("family");
+    const a = new ui.Label(panel, { font: 32, family: "epdmono", text: "x" });   // either order
+    if (a.family !== "epdmono" || JSON.stringify(ui.epdmonoFonts) !== "[10,14,16,20,24,32]") throw new Error("family");
     a.delete();
-    throws(() => new ui.Label(panel, { family: "epdmono", font: 14 }), RangeError, /one of ui.epdmonoFonts/);
+    throws(() => new ui.Label(panel, { family: "epdmono", font: 12 }), RangeError, /one of ui.epdmonoFonts/);
     throws(() => new ui.Label(panel, { family: "pixel" }), TypeError, /"epdmono"/);
   });
   check("a Container", () => {
@@ -97,15 +97,31 @@ function drawType() {
 }
 
 // The pixel font, "epdmono", at its sizes beside the anti-aliased mono:
-// "f" (no secret on it)
+// "f" and "g" (no secret on them)
 function drawFonts(page) {
   panel.clear();
-  const sample = "MS12 NAME 0O1lI 5S8B";
-  for (const [family, font] of [["epdmono", 10], ["epdmono", 20], ["epdmono", 30], ["mono", 14], ["mono", 16]]) {
+  const sample = "0O1lI 5S8B:qp";
+  const rows = page === "f"
+    ? [["epdmono", 10], ["epdmono", 14], ["epdmono", 16], ["epdmono", 20], ["mono", 16]]
+    : [["epdmono", 24], ["epdmono", 32], ["mono", 20]];
+  for (const [family, font] of rows) {
     const label = `${family} ${font}: ${sample}`;
     if (family === "mono") new ui.Label(panel, { text: label, font, mono: true });
     else new ui.Label(panel, { text: label, family, font });
   }
+}
+
+// The orientation page (tests/epaper_rotate.txt): a black square in the
+// top left corner, a red one in the top right, and a QR code: the panel's
+// picture then says how the page came out. Keys: "q" landscape, "e"
+// landscape flipped, "y" portrait, "u" portrait flipped (the panel
+// reopened so).
+function drawOrientation() {
+  panel.clear();
+  panel.layout = "none";
+  new ui.Container(panel, { width: 24, height: 24, bg: 0x000000, align: "top-left" });
+  new ui.Container(panel, { width: 24, height: 24, bg: 0xff0000, align: "top-right" });
+  new ui.QRCode(panel, { data: `${panel.width}x${panel.height}`, size: 84, align: "center" });
 }
 
 let busy = false;
@@ -119,7 +135,8 @@ async function write(n) {
     scanner = null;
   }
   status.text = `Writing ${what}...`;
-  if (typeof n === "string") drawFonts(n);
+  if (n === "orientation") drawOrientation();
+  else if (typeof n === "string") drawFonts(n);
   else if (n < 0) drawType();
   else draw(n);
   // how long the screen waits, at most, while the panel is written: a
@@ -167,7 +184,7 @@ function readBack(field) {
     field,
     onDetect: ({ text, bytes }) => {
       const seen = SHARES.indexOf(text);
-      if (seen === want) {
+      if (want >= 0 && seen === want) {
         // (the scanner goes on, for the camera's pictures, until the next write)
         console.log(`epapertest read back share ${want + 1}: it is on the panel`);
         status.text = `Share ${want + 1} read back from the panel.`;
@@ -226,7 +243,13 @@ ui.onKey((ev) => {
     abortTest({ a: -1, b: 5, c: 500 }[ev.key]);
     return true;
   }
-  if (ev.key === "f") {
+  if ("qeyu".includes(ev.key) && ev.key.length === 1) {
+    panel.close();
+    open({ orientation: "qe".includes(ev.key) ? "landscape" : "portrait", flip: "eu".includes(ev.key) });
+    write("orientation");
+    return true;
+  }
+  if (ev.key === "f" || ev.key === "g") {
     write(ev.key);
     return true;
   }

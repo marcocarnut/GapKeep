@@ -130,8 +130,8 @@ ui:
       ts: number[]
       md: >-
         Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed
-        6x10), 20 and 30 (the same, every pixel doubled or tripled: 12x20,
-        18x30). One bit a pixel, Basic Latin and Latin-1, for e-paper panels
+        6x10), 14, 16, 20, 24 and 32 (Terminus Font's bold, 8x14 to 16x32).
+        One bit a pixel, Basic Latin and Latin-1, for e-paper panels
         ([EPAPER.md](EPAPER.md#text-on-a-panel)).
     - name: symbols
       kind: object
@@ -282,13 +282,14 @@ ui:
           ts: '"default" | "epdmono"'
           readable: true
           md: >-
-            *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit,
-            for e-paper panels, where anti-aliased text loses its grey edges;
-            `font` is then one of `ui.epdmonoFonts` (10, 20, 30; 20 if not
-            given), whatever the order of the two. `"default"` (the default):
-            the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap
-            font: it has only its own sizes, never drawn from outlines. Set on a
-            container, its children inherit it.
+            *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed
+            6x10 at 10, Terminus Font's bold above), for e-paper panels, where
+            anti-aliased text loses its grey edges;
+            `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32;
+            20 if not given), whatever the order of the two. `"default"` (the
+            default): the fonts above, at any size of `ui.fontRange`. epdmono
+            is a bitmap font: it has only its own sizes, never drawn from
+            outlines. Set on a container, its children inherit it.
         - {name: textAlign, ts: '"left" | "center" | "right"', md: ''}
         - {name: radius, ts: number, value: number, md: 'Corner radius, px.'}
         - {name: borderWidth, ts: number, value: number, md: px.}
@@ -576,7 +577,7 @@ ui:
         | Member | Description |
         | --- | --- |
         | `ui.epaper.info()` | The configured panel, `{ model, width, height, colors }` (landscape), or `null` if there is none (none in `gapkeep.txt`, or no SPI controller, as on QEMU). |
-        | `ui.epaper.open(options?)` | Opens it: an **EPaperPanel**. `options`: `orientation` `"landscape"` (the default: wider than tall) or `"portrait"`, `flip: true` (a half turn more). Throws an `Error` if there is no panel, a `TypeError` if it is open already. Opening sends nothing to the panel. |
+        | `ui.epaper.open(options?)` | Opens it: an **EPaperPanel**. `options`: `orientation` `"landscape"` (the default: wider than tall) or `"portrait"`, as the person looking at the panel sees it, mounted (`gapkeep.txt`'s `epaper_rotate`: an app needn't know how it is mounted); `flip: true` (a half turn more). Throws an `Error` if there is no panel, a `TypeError` if it is open already. Opening sends nothing to the panel. |
         | `panel` | A `Container`, the panel's whole area (`width`, `height` readable), white, a column with 4 px padding and gap: put widgets on it as on `ui.screen`. They are not keyboard targets. |
         | `panel.colors` | `["black", "white"]`, or with `"red"`. |
         | `panel.model` | The module, for people: `"WeAct 2.9\" B/W/R"`. |

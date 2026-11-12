@@ -121,10 +121,12 @@ Rig-only scenario commands and serial commands (test builds, `src/testshot.h`):
 - `send #experimental on`: experimental features on, as `experimental = yes`
   in `gapkeep.txt` would (the rig's card never changes); the launcher lists
   the experimental apps from its next start (`tests/colorqr_hw.txt`).
-- `send #epaper weact-2.9-bwr [dc=25 rst=17 busy=24 cs=ce0 spi_khz=4000]`:
+- `send #epaper weact-2.9-bwr [dc=25 rst=17 busy=24 cs=ce0 spi_khz=4000 rotate=0]`:
   the e-paper panel, as `gapkeep.txt`'s `epaper` keys would set it; the
-  rig's Zero has a WeAct 2.9" B/W/R wired as docs/EPAPER.md says, and the
-  camera looks at it (`tests/epaper_hw.txt`).
+  rig's Zero has a WeAct 2.9" B/W/R wired as docs/EPAPER.md says, mounted
+  turned 180 degrees (`rotate=180`, docs/EPAPER.md, "Mounting"), and the
+  camera looks at it (`tests/epaper_hw.txt`, `epaper_fonts_hw.txt`,
+  `epaper_rotate_hw.txt`).
 - `send #launch <id>`, `send #key <key>`: start an app and press a key
   (`1`, `r`, `ret`...) over the serial line, without the USB gadget.
 - `tools/rig/raw2png.py <name>.raw`: a `serialraw` frame as a PNG to look

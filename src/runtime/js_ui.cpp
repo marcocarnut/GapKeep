@@ -669,14 +669,17 @@ static int ToEnum (JSContext *ctx, JSValueConst v, const char *pProp,
 	return -1;
 }
 
-// "family": "epdmono", X11's misc-fixed 6x10 in 1 bit, at 1x, 2x and 3x
-// (tools/make_epdmono.py): for e-paper panels, where anti-aliased text
+// "family": "epdmono", 1-bit bitmap fonts at their own sizes: X11 misc-fixed
+// 6x10 at 10, Terminus Font's bold above (tools/make_epdmono.py): for e-paper panels, where anti-aliased text
 // loses its grey edges.
 enum { FamilyDefault, FamilyEPDMono, FamilyCount };
 static const char *const FamilyNames[FamilyCount] = {"default", "epdmono"};
-extern "C" const lv_font_t gk_epdmono_10, gk_epdmono_20, gk_epdmono_30;
-static const int EPDMonoSizes[] = {10, 20, 30};
-static const lv_font_t *EPDMonoFonts[] = {&gk_epdmono_10, &gk_epdmono_20, &gk_epdmono_30};
+extern "C" const lv_font_t gk_epdmono_10, gk_epdmono_14, gk_epdmono_16, gk_epdmono_20, gk_epdmono_24,
+	gk_epdmono_32;
+static const int EPDMonoSizes[] = {10, 14, 16, 20, 24, 32};
+static const lv_font_t *EPDMonoFonts[] = {&gk_epdmono_10, &gk_epdmono_14, &gk_epdmono_16, &gk_epdmono_20,
+					   &gk_epdmono_24, &gk_epdmono_32};
+static const int EPDMonoDefault = 20;
 static const unsigned EPDMonoCount = sizeof EPDMonoSizes / sizeof EPDMonoSizes[0];
 
 // --- properties -------------------------------------------------------------
@@ -922,8 +925,8 @@ static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 {
 	if (pNode->nFamily != FamilyDefault)
 	{
-		// "epdmono": its sizes only (the default: the middle one, 20)
-		int nSize = pNode->nFontSize != 0 ? pNode->nFontSize : EPDMonoSizes[EPDMonoCount / 2];
+		// "epdmono": its sizes only (the default: 20)
+		int nSize = pNode->nFontSize != 0 ? pNode->nFontSize : EPDMonoDefault;
 		for (unsigned i = 0; i < EPDMonoCount; i++)
 		{
 			if (EPDMonoSizes[i] == nSize)
@@ -932,7 +935,7 @@ static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 				return 0;
 			}
 		}
-		JS_ThrowRangeError (ctx, "%s: \"epdmono\" has no size %d: one of ui.epdmonoFonts (10 20 30)",
+		JS_ThrowRangeError (ctx, "%s: \"epdmono\" has no size %d: one of ui.epdmonoFonts (10 14 16 20 24 32)",
 				    pProp, nSize);
 		return -1;
 	}
@@ -3298,7 +3301,7 @@ static JSValue js_epaper_info (JSContext *ctx, JSValueConst this_val, int argc, 
 		return JS_NULL;
 	}
 	const TGkEPDModel *pModel = pPanel->pModel;
-	boolean bTurned = pModel->nLandscape & 1;
+	boolean bTurned = CGkEPaperDisplay::Rotation (FALSE, FALSE) & 1;	// landscape, as mounted
 	JSValue Info = JS_NewObject (ctx);
 	JS_SetPropertyStr (ctx, Info, "model", JS_NewString (ctx, pModel->pModule));
 	JS_SetPropertyStr (ctx, Info, "width", JS_NewInt32 (ctx, bTurned ? pModel->nHeight : pModel->nWidth));
@@ -3394,7 +3397,7 @@ static JSValue js_epaper_open (JSContext *ctx, JSValueConst this_val, int argc, 
 
 	// landscape: the model's own rotation for it; portrait: a quarter turn
 	// from that (0 or 1); flip: a half turn more
-	unsigned nRotation = ((CGkEPaperDisplay::Landscape () ^ (bPortrait ? 1 : 0)) + (bFlip ? 2 : 0)) & 3;
+	unsigned nRotation = CGkEPaperDisplay::Rotation (bPortrait, bFlip);
 	const char *pError = 0;
 	CGkEPaperDisplay *pEPaper = CGkEPaperDisplay::Open (nRotation, &pError);
 	if (pEPaper == 0)

@@ -216,7 +216,7 @@ declare module "gk:ui" {
     font?: number;
     /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. */
     mono?: boolean;
-    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 20, 30; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
+    /** *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
     family?: "default" | "epdmono";
     textAlign?: "left" | "center" | "right";
     /** Corner radius, px. */
@@ -417,7 +417,7 @@ declare module "gk:ui" {
     font: number;
     /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. */
     mono: boolean;
-    /** *Readable*. `"epdmono"`: the pixel font, misc-fixed 6x10 in one bit, for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 20, 30; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
+    /** *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
     family: "default" | "epdmono";
     textAlign: "left" | "center" | "right";
     /** Corner radius, px. */
@@ -655,7 +655,7 @@ declare module "gk:ui" {
   export const monoFonts: number[];
   /** `{ min: 8, max: 120 }`: the sizes `font` and markup's `<span size>` take, in whole pixels, for the normal and the monospaced font (not for `family: "epdmono"`, a pixel font with its own sizes). Sizes not in `ui.fonts` (or `ui.monoFonts`) are drawn from outlines, each glyph when first drawn: a little slower the first time, and soft under about 12 px. [Font sizes](APPS.md#font-sizes). */
   export const fontRange: { min: number; max: number };
-  /** Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 20 and 30 (the same, every pixel doubled or tripled: 12x20, 18x30). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). */
+  /** Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 14, 16, 20, 24 and 32 (Terminus Font's bold, 8x14 to 16x32). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). */
   export const epdmonoFonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
   export const symbols: SymbolTable;

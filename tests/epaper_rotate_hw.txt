@@ -1,0 +1,43 @@
+# Needs a test build, and the rig with its e-paper panel and camera, as
+# tests/epaper_hw.txt: the panel's mounting (epaper_rotate) on the real
+# panel. The rig's panel is mounted turned 180 degrees: the orientation page
+# of tests/apps/epapertest (a black square top left, a red one top right, a
+# QR code of the page's size) in landscape and portrait, photographed; then
+# the same as if mounted at 90. Each page's QR code must be read back by
+# GapKeep's own scanner; the pictures (serialraw, tools/rig/raw2png.py)
+# show which way up the page came. tests/epaper_rotate.txt checks the
+# 16 cases in the simulator.
+# Rig only: tools/run_tests.sh and tools/run_sim_tests.sh skip scenarios
+# with this line.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect launcher ready 60
+send #epaper weact-2.9-bwr rotate=180
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 180 degrees clockwise 10
+send #camera pi
+expect camera: pi 10
+send #launch epapertest
+expect epapertest ready 30
+mark
+send #key y
+expect epapertest open: WeAct 2.9" B/W/R, 128x296 10
+expect epapertest wrote fonts orientation 60
+send #key w
+expect epapertest read back: another code, 7 bytes 30
+serialraw 01-r180-portrait
+mark
+send #key q
+expect epapertest open: WeAct 2.9" B/W/R, 296x128 10
+expect epapertest wrote fonts orientation 60
+send #key w
+expect epapertest read back: another code, 7 bytes 30
+serialraw 02-r180-landscape
+send #epaper weact-2.9-bwr rotate=90
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 90 degrees clockwise 10
+mark
+send #key q
+expect epapertest open: WeAct 2.9" B/W/R, 296x128 10
+expect epapertest wrote fonts orientation 60
+send #key w
+expect epapertest read back: another code, 7 bytes 30
+serialraw 03-r90-landscape

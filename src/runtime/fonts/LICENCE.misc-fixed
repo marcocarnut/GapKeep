@@ -1,4 +1,4 @@
-gk_epdmono_*.c (gk:ui's "epdmono") are made by tools/make_epdmono.py from
+gk_epdmono_10.c (gk:ui's "epdmono" at 10) is made by tools/make_epdmono.py from
 X11's misc-fixed 6x10 bitmap font, ISO 8859-1:
 
   /usr/share/fonts/X11/misc/6x10-ISO8859-1.pcf.gz (Debian's xfonts-base,

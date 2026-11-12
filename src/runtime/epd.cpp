@@ -45,7 +45,7 @@ static const unsigned NoRefreshMs = 300;	// BUSY never high this long after 0x20
 static const unsigned ChunkBytes = 512;
 static const unsigned PollMs = 5;		// BUSY read at most this often while the waveform runs		// of a plane, per SPI transfer
 
-TGkSPIDevice CGkEPD::s_Panel = {"epaper", 0, 0, 25, 17, 24, DefaultHz};	// Waveshare's pins
+TGkSPIDevice CGkEPD::s_Panel = {"epaper", 0, 0, 25, 17, 24, DefaultHz, 0};	// Waveshare's pins
 CGkEPD *CGkEPD::s_pThis = 0;
 boolean CGkEPD::s_bBuiltIn = FALSE;
 
@@ -175,6 +175,17 @@ boolean CGkEPD::Configure (const char *pKey, const char *pValue, unsigned nLine)
 					"but not 7 to 11 (SPI0) nor 14 and 15 (the serial port)", nLine, pKey);
 		}
 	}
+	else if (strcmp (pWhat, "_rotate") == 0)
+	{
+		if (ParseUnsigned (pValue, 270, &n) && n % 90 == 0)
+		{
+			s_Panel.nRotate = n / 90;
+		}
+		else
+		{
+			pLogger->Write (From, LogWarning, "gapkeep.txt:%u: %s: 0, 90, 180 or 270 expected", nLine, pKey);
+		}
+	}
 	else if (strcmp (pWhat, "_spi_khz") == 0)
 	{
 		if (ParseUnsigned (pValue, 20000, &n) && n >= 100)
@@ -215,6 +226,9 @@ void CGkEPD::ConfigureBuiltIn (void)
 #endif
 #ifdef GK_EPAPER_SPI_KHZ
 		{"epaper_spi_khz", GK_EPAPER_SPI_KHZ},
+#endif
+#ifdef GK_EPAPER_ROTATE
+		{"epaper_rotate", GK_EPAPER_ROTATE},
 #endif
 	};
 	for (unsigned i = 0; i < sizeof Keys / sizeof Keys[0]; i++)
@@ -289,10 +303,10 @@ void CGkEPD::ConfigDone (void)
 		return;
 	}
 	CLogger::Get ()->Write (From, LogNotice, "%s (%ux%u%s) on SPI0 CE%u (GPIO %u), DC GPIO %u, "
-				"RST GPIO %u, BUSY GPIO %u, %u kHz", s_Panel.pModel->pModule,
-				s_Panel.pModel->nWidth, s_Panel.pModel->nHeight,
+				"RST GPIO %u, BUSY GPIO %u, %u kHz, mounted turned %u degrees clockwise",
+				s_Panel.pModel->pModule, s_Panel.pModel->nWidth, s_Panel.pModel->nHeight,
 				s_Panel.pModel->bRed ? ", red" : "", s_Panel.nCS, s_Panel.nCS ? 7 : 8,
-				s_Panel.nDC, s_Panel.nRST, s_Panel.nBUSY, s_Panel.nHz / 1000);
+				s_Panel.nDC, s_Panel.nRST, s_Panel.nBUSY, s_Panel.nHz / 1000, s_Panel.nRotate * 90);
 }
 
 const TGkSPIDevice *CGkEPD::GetPanel (void)

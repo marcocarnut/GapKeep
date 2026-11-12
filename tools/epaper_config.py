@@ -8,6 +8,7 @@ value: the reason on stderr, nothing on stdout, exit status 1.
 
 Usage: epaper_config.py EPAPER=<model> [EPAPER_CS=ce0|ce1] [EPAPER_DC=<gpio>]
                         [EPAPER_RST=<gpio>] [EPAPER_BUSY=<gpio>] [EPAPER_SPI_KHZ=<khz>]
+                        [EPAPER_ROTATE=0|90|180|270]
 
 The models are those of Models[] in src/runtime/epd.cpp.
 
@@ -18,7 +19,7 @@ import re
 import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-KEYS = ['EPAPER', 'EPAPER_CS', 'EPAPER_DC', 'EPAPER_RST', 'EPAPER_BUSY', 'EPAPER_SPI_KHZ']
+KEYS = ['EPAPER', 'EPAPER_CS', 'EPAPER_DC', 'EPAPER_RST', 'EPAPER_BUSY', 'EPAPER_SPI_KHZ', 'EPAPER_ROTATE']
 DEFAULTS = {'EPAPER_DC': 25, 'EPAPER_RST': 17, 'EPAPER_BUSY': 24}
 
 
@@ -64,6 +65,8 @@ def main():
     if len(set(pins.values())) != 3:
         fail('EPAPER_DC, EPAPER_RST and EPAPER_BUSY must be three different GPIOs (%s)' %
              ', '.join('%s=%d' % kv for kv in sorted(pins.items())))
+    if 'EPAPER_ROTATE' in given and given['EPAPER_ROTATE'] not in ('0', '90', '180', '270'):
+        fail('EPAPER_ROTATE=%s: 0, 90, 180 or 270 expected' % given['EPAPER_ROTATE'])
     if 'EPAPER_SPI_KHZ' in given:
         v = given['EPAPER_SPI_KHZ']
         if not re.fullmatch(r'\d{1,5}', v) or not 100 <= int(v) <= 20000:

@@ -340,43 +340,47 @@ void gk_sim_epaper_refresh_ms (double ms)
 	}
 }
 
-// The plugged-in panel turned to landscape (its model's EPDPages rotation,
-// as ui.epaper.open() draws by default), w x h
-static boolean View (int *pWidth, int *pHeight, int *pTurned)
+// The plugged-in panel as its viewer sees it, mounted as gapkeep.txt's
+// epaper_rotate says (its native rows turned that many quarter turns
+// clockwise; 0 if none is configured): w x h, and the quarter turns
+static boolean View (int *pWidth, int *pHeight, int *pTurns)
 {
 	if (s_pPlugged == 0)
 	{
 		return FALSE;
 	}
 	const panel_model_t *m = s_pPlugged->pModel;
-	*pTurned = m->height > m->width;
-	*pWidth = *pTurned ? m->height : m->width;
-	*pHeight = *pTurned ? m->width : m->height;
+	const TGkSPIDevice *pWires = Wires ();
+	*pTurns = pWires != 0 ? pWires->nRotate & 3 : 0;
+	*pWidth = *pTurns & 1 ? m->height : m->width;
+	*pHeight = *pTurns & 1 ? m->width : m->height;
 	return TRUE;
 }
 
-// native (nx, ny) for the view's (x, y): rotation 1, EPDPages' to_native()
-static size_t NativeIndex (const panel_model_t *m, int bTurned, int x, int y)
+// native (nx, ny) for the view's (x, y): each quarter turn clockwise
+// undone, the last first (V_k(x, y) = V_k-1(y, h_k-1 - 1 - x))
+static size_t NativeIndex (const panel_model_t *m, int nTurns, int x, int y)
 {
-	int nx = x, ny = y;
-	if (bTurned)
+	for (int k = nTurns; k > 0; k--)
 	{
-		nx = y;
-		ny = m->height - 1 - x;
+		int nPrevHeight = (k - 1) & 1 ? m->width : m->height;
+		int t = x;
+		x = y;
+		y = nPrevHeight - 1 - t;
 	}
-	return (size_t) ny * m->width + nx;
+	return (size_t) y * m->width + x;
 }
 
 int gk_sim_epaper_size (int *width, int *height)
 {
-	int bTurned;
-	return View (width, height, &bTurned) ? 0 : -1;
+	int nTurns;
+	return View (width, height, &nTurns) ? 0 : -1;
 }
 
 void gk_sim_epaper_rgb (uint8_t *rgb, int physics)
 {
-	int w, h, bTurned;
-	if (!View (&w, &h, &bTurned))
+	int w, h, nTurns;
+	if (!View (&w, &h, &nTurns))
 	{
 		return;
 	}
@@ -394,7 +398,7 @@ void gk_sim_epaper_rgb (uint8_t *rgb, int physics)
 	{
 		for (int x = 0; x < w; x++)
 		{
-			size_t i = NativeIndex (m, bTurned, x, y);
+			size_t i = NativeIndex (m, nTurns, x, y);
 			uint8_t *pOut = rgb + 3 * ((size_t) y * w + x);
 			if (pRGBA != 0)
 			{

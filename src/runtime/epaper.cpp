@@ -15,10 +15,24 @@ static const char From[] = "epaper";
 
 // --- the display -----------------------------------------------------------------
 
-unsigned CGkEPaperDisplay::Landscape (void)
+// The picture's way to the panel: quarter turns counter-clockwise (EPDPages'
+// rotation), for an app's orientation and flip on the panel as mounted
+// (gapkeep.txt's epaper_rotate: m quarter turns clockwise, as its viewer
+// sees it). The viewer sees the native rows turned m clockwise, so a
+// picture turned m counter-clockwise on its way there shows upright. A
+// panel mounted taller than wide (a 2.9" as it comes, m 0 or 180) asked
+// for landscape gets a quarter turn more (counter-clockwise: the panel
+// is read turned clockwise), and the other way round; flip, a half turn.
+unsigned CGkEPaperDisplay::Rotation (boolean bPortrait, boolean bFlip)
 {
 	const TGkSPIDevice *pPanel = CGkEPD::GetPanel ();
-	return pPanel != 0 ? pPanel->pModel->nLandscape : 0;
+	if (pPanel == 0)
+	{
+		return 0;
+	}
+	unsigned m = pPanel->nRotate & 3;
+	boolean bTall = (pPanel->pModel->nHeight > pPanel->pModel->nWidth) != ((m & 1) != 0);
+	return (m + (bPortrait != bTall ? 1 : 0) + (bFlip ? 2 : 0)) & 3;
 }
 
 CGkEPaperDisplay *CGkEPaperDisplay::Open (unsigned nRotation, const char **ppError)
