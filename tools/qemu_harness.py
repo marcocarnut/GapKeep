@@ -58,7 +58,9 @@ Scenario file: one command per line, '#' starts a comment.
                                 or no camera at all. The simulator also takes
                                 "camera qrhex <hex>", "camera picture <file>"
                                 (PGM, PPM or PNG, colour kept; relative to the
-                                scenario's folder); test builds take the
+                                scenario's folder, or "out:<file>" in the
+                                output folder: an "epaper shot", to read a
+                                panel back); test builds take the
                                 colour codes of tests/colorqr by name
     language <tag>              the language of the apps started from now on
                                 (pt-BR, qps, en), as a settings app sets it:
@@ -620,9 +622,13 @@ def screen_coord(m, value, axis):
 
 
 def picture_file(name, scenario, outdir):
-    """A picture for "camera picture": relative to the scenario's folder;
-    a PNG becomes a PPM (what the simulator reads) in outdir."""
-    full = os.path.join(os.path.dirname(os.path.abspath(scenario)), name)
+    """A picture for "camera picture": relative to the scenario's folder, or
+    "out:<file>" in the output folder (a panel's "epaper shot", say); a PNG
+    becomes a PPM (what the simulator reads) in outdir."""
+    if name.startswith('out:'):
+        full = os.path.join(os.path.abspath(outdir), name[4:])
+    else:
+        full = os.path.join(os.path.dirname(os.path.abspath(scenario)), name)
     if not full.lower().endswith('.png'):
         return full
     from PIL import Image
