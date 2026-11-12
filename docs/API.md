@@ -247,7 +247,7 @@ An on/off switch.
 
 #### Dropdown
 
-Picks one of several options from a list that opens.
+Picks one of several options from a list that opens below the control (above it if there is more room there). The list is as wide as its longest option and stays on the screen: near the right edge it lines up with the control's right side; a list too tall to fit scrolls, with a scrollbar.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -495,7 +495,7 @@ import * as crypto from "gk:crypto";
 | `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto (`"SHA-1"`, `"SHA-224"`, `"SHA-256"`, `"SHA-384"` or `"SHA-512"`): a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
 | `ripemd160(data)` | RIPEMD-160, a `Uint8Array(20)`. |
 | `hash160(data)` | RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. |
-| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. |
+| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s), Ctrl+C and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. |
 | `pbkdf2Async(hash, password, salt, iterations, length, options?)` | The same as a [long operation](#long-operations): a promise, the work done in slices while the screen keeps being drawn (about 30,000 SHA-512 iterations a second on a Pi Zero). Arguments as `pbkdf2`'s, checked at once. |
 | `isPrivateKey(key)` | Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). |
 | `isPublicKey(key)` | Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). |
@@ -609,7 +609,7 @@ may wait (a 17th throws a `RangeError`). Arguments are checked when the
 call is made (errors are thrown, not rejected). When the app stops (it
 exits, or the Windows key takes the person home) its operations are
 dropped and wiped, their promises never settled; when the watchdog
-stops one of its scripts, they are rejected with an `InternalError`.
+(or Ctrl+C) stops one of its scripts, they are rejected with an `InternalError`.
 The last argument may be `{ onProgress, signal }`. `onProgress`: a
 function called after each slice that moved the work on, with a
 fraction (more than 0, at most 1). `signal`: an `AbortSignal`, to cancel
@@ -1012,5 +1012,5 @@ Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage` (see
 | --- | --- |
 | JS heap per app | 96 MB |
 | JS stack | 512 KB |
-| One handler, timer or job | 10 s, then interrupted (the app keeps running) |
+| One handler, timer or job | 10 s, then interrupted (the app keeps running); Ctrl+C interrupts it after 0.5 s |
 | Display | Whatever the HDMI output negotiates (640×480 in QEMU and, by default, the simulator) |

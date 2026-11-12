@@ -10,6 +10,9 @@
 //                           meta_l...)
 //   keydown <name>          press a key and hold it (it auto-repeats)
 //   keyup                   release it
+//                           (key commands are taken even while a script
+//                           runs, as the Pi's keyboard interrupt: Ctrl+C
+//                           can stop it; other commands wait for it)
 //   pointer <x> <y> <0|1>   mouse at (x, y), left button up (0) or down (1)
 //   wheel <notches>         the mouse wheel where the pointer is: > 0 down
 //   shot <file.png>         screenshot; answers "#shot <file.png>"
@@ -81,6 +84,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <deque>
+#include <string>
 
 void GkSimLogLine (const char *pLine)
 {
@@ -96,6 +101,83 @@ static const unsigned KeyHoldTicks = 60000;	// "key": 60 ms, as the harness hold
 
 static unsigned s_nReleaseAt;
 static int s_bReleasePending;
+
+static int s_bInput;			// commands come on stdin
+static char s_Line[4096];		// the command line being read
+static size_t s_nLine;
+static std::deque<std::string> s_Pending;	// read during a script, not run yet
+static int s_bEOF;			// ... and then stdin ended
+
+static int Command (char *pLine);
+
+// A character of a command line: TRUE when s_Line holds a whole line.
+static int InputChar (char c)
+{
+	if (c == '\n' || s_nLine == sizeof s_Line - 1)
+	{
+		s_Line[s_nLine] = '\0';
+		s_nLine = 0;
+		return 1;
+	}
+	if (c != '\r')
+	{
+		s_Line[s_nLine++] = c;
+	}
+	return 0;
+}
+
+// While a script runs (CAppHost's interrupt checks), as the Pi's keyboard
+// interrupt would: reads what came on stdin, runs the key commands at the
+// head of it (so Ctrl+C reaches kbdindev, which may stop the script), and
+// keeps the rest, in order, for the main loop. Every 5 ms at most.
+static void InputPoll (void)
+{
+	static unsigned s_nLastPoll;
+	unsigned nNow = CTimer::GetClockTicks ();
+	if (nNow - s_nLastPoll < 5000)
+	{
+		return;
+	}
+	s_nLastPoll = nNow;
+
+	if (s_bReleasePending && (int) (nNow - s_nReleaseAt) >= 0)
+	{
+		gk_sim_key_up ();
+		s_bReleasePending = 0;
+	}
+
+	struct pollfd Poll = {0, POLLIN, 0};
+	while (!s_bEOF && poll (&Poll, 1, 0) > 0)
+	{
+		char Buf[256];
+		ssize_t n = read (0, Buf, sizeof Buf);
+		if (n <= 0)
+		{
+			s_bEOF = 1;
+			break;
+		}
+		for (ssize_t i = 0; i < n; i++)
+		{
+			if (InputChar (Buf[i]))
+			{
+				s_Pending.push_back (s_Line);
+			}
+		}
+	}
+
+	while (!s_Pending.empty ())
+	{
+		const std::string &rLine = s_Pending.front ();
+		if (   rLine.compare (0, 4, "key ") != 0 && rLine.compare (0, 8, "keydown ") != 0
+		    && rLine != "keyup")
+		{
+			break;		// for the main loop, and what follows it too
+		}
+		std::string Line = rLine;
+		s_Pending.pop_front ();
+		Command (&Line[0]);
+	}
+}
 
 // A binary PGM (P5) or PPM (P6) file, 8 bits: its pixels, *pChannels
 // bytes each (1 grey, 3 RGB). 0 if it isn't one.
@@ -457,9 +539,11 @@ int main (int argc, char **argv)
 		return 1;
 	}
 
-	char Line[4096];
-	size_t nLine = 0;
-	int bInput = fFor < 0;		// with --for, stdin is not read
+	s_bInput = fFor < 0;		// with --for, stdin is not read
+	if (s_bInput)
+	{
+		gk_sim_set_input_poll (InputPoll);
+	}
 	for (;;)
 	{
 		gk_sim_step ();
@@ -484,10 +568,26 @@ int main (int argc, char **argv)
 			return 0;
 		}
 
-		struct pollfd Poll = {0, POLLIN, 0};
-		if (!bInput || poll (&Poll, 1, 1) <= 0)		// otherwise: 1 ms idle
+		// lines read while a script ran, that InputPoll left: in order
+		if (!s_Pending.empty ())
 		{
-			if (!bInput)
+			std::string Line = s_Pending.front ();
+			s_Pending.pop_front ();
+			if (!Command (&Line[0]))
+			{
+				return 0;
+			}
+			continue;
+		}
+		if (s_bEOF)
+		{
+			return 0;
+		}
+
+		struct pollfd Poll = {0, POLLIN, 0};
+		if (!s_bInput || poll (&Poll, 1, 1) <= 0)	// otherwise: 1 ms idle
+		{
+			if (!s_bInput)
 			{
 				usleep (1000);
 			}
@@ -500,18 +600,9 @@ int main (int argc, char **argv)
 		{
 			return 0;		// EOF
 		}
-		if (c == '\n' || nLine == sizeof Line - 1)
+		if (InputChar (c) && !Command (s_Line))
 		{
-			Line[nLine] = '\0';
-			nLine = 0;
-			if (!Command (Line))
-			{
-				return 0;
-			}
-		}
-		else if (c != '\r')
-		{
-			Line[nLine++] = c;
+			return 0;
 		}
 	}
 }

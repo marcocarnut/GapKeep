@@ -729,8 +729,11 @@ widgets, timers, handlers and memory are freed.
 
 Uncaught exceptions and unhandled promise rejections show a red banner with
 the message and stack, and are written to the serial log. The app keeps
-running. Long-running code is stopped after 10 seconds, or when the
-Windows key is pressed; one built-in operation on a lot of data (sorting a
+running. Long-running code is stopped after 10 seconds, or sooner with
+Ctrl+C (once it has run for half a second; the app keeps running, with a
+banner that says so), or when the Windows key is pressed (back to the
+launcher). A Ctrl+C while nothing has been running that long is an
+ordinary key, the app's (copy in a `TextArea`, say). One built-in operation on a lot of data (sorting a
 million-element array, say) finishes first, and `gk:crypto`'s `pbkdf2` is
 stopped too. Each app may use up to 96 MB of memory for its JavaScript, and
 32 MB for what it shows (widgets, their text, pictures: a `RangeError`

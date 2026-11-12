@@ -52,6 +52,13 @@ int gk_sim_key_down_qemu (const char *name);
 int gk_sim_key_down_dom (const char *key, int mods);
 void gk_sim_key_up (void);
 
+/* On the Pi, keys come by interrupt, even while a script runs (Ctrl+C stops
+ * one, kbdindev.h). Here the main loop is the one running it: poll is
+ * called during the script, about every QuickJS interrupt check, to hand
+ * over the keys that came meanwhile (gk_sim_key_down_*, gk_sim_key_up).
+ * 0: none (the browser, where nothing comes while a script runs). */
+void gk_sim_set_input_poll (void (*poll) (void));
+
 /* Starts the app with this id (as the launcher would), or the launcher
  * (id 0). Returns 0 if there is such an app. */
 int gk_sim_launch (const char *id);

@@ -470,6 +470,11 @@ int gk_sim_key_down_dom (const char *pKey, int nMods)
 	return -1;		// Shift, Control, Alt alone, dead keys, beyond Latin-1
 }
 
+void gk_sim_set_input_poll (void (*pPoll) (void))
+{
+	CAppHost::SetInputPoll (pPoll);
+}
+
 int gk_sim_launch (const char *pID)
 {
 	return s_pAppHost->RequestLaunch (pID) ? 0 : -1;

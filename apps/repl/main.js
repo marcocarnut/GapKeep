@@ -59,7 +59,7 @@ const examples = new ui.Dropdown(header, {
   width: 260,
 });
 
-new ui.Label({ text: t("Enter runs the code; Shift+Enter starts a new line."), width: "100%" });
+new ui.Label({ text: t("Enter runs the code; Shift+Enter starts a new line; Ctrl+C stops it."), width: "100%" });
 const input = new ui.TextArea({ mono: true, font: 16, width: "100%", height: 110 });
 const output = new ui.Label({ mono: true, font: 16, width: "100%", padding: [4, 8], radius: 4, bg: "#000", text: " " });
 const area = new ui.Container({ width: "100%", height: "content", layout: "column", gap: 8 });
@@ -134,26 +134,43 @@ const BTC_LOADED = () => !Object.getOwnPropertyDescriptor(globalThis, "btc").get
 
 // The log says what kind of result, never the code or the value: it goes
 // to the serial port in test builds, and the code could hold a secret.
-let running = false;
+//
+// A run may be stopped (Ctrl+C, or the system's 10 s watchdog) with an
+// exception nothing can catch: no catch or finally of ours runs then. So
+// nothing here is left half-done by that: the output says "stopped" before
+// the code runs, and only its result or its error replace that; and a run
+// waiting for btc to load only gives way to a newer run (Enter again).
+let lastRun = 0;
+function fail(code, e) {
+  output.set({ text: String(e), bg: "#ff8080", color: "#000" });
+  console.log("repl: ran " + code.length + " characters: " + (e && e.name ? e.name : "exception"));
+}
 async function run() {
-  if (running) return;
-  running = true;
+  const thisRun = ++lastRun;
   area.clear();
   const code = input.text;
-  try {
-    if (/\bbtc\b/.test(code) && !BTC_LOADED()) {
-      output.set({ text: t("Loading btc…"), bg: "#000", color: "#fff" });
+  if (/\bbtc\b/.test(code) && !BTC_LOADED()) {
+    output.set({ text: t("Loading btc…"), bg: "#000", color: "#fff" });
+    try {
       await loadBtc();
+    } catch (e) {
+      if (thisRun === lastRun) fail(code, e);
+      return;
     }
-    const value = (0, eval)(code);
-    output.set({ text: show(value), bg: "#000", color: "#fff" });
-    console.log("repl: ran " + code.length + " characters: " + kindOf(value));
-  } catch (e) {
-    output.set({ text: String(e), bg: "#ff8080", color: "#000" });
-    console.log("repl: ran " + code.length + " characters: " + (e && e.name ? e.name : "exception"));
-  } finally {
-    running = false;
+    if (thisRun !== lastRun) return;
   }
+  output.set({ text: t("Stopped (Ctrl+C, or after 10 s)"), bg: "#ff8080", color: "#000" });
+  let text, kind;
+  try {
+    const value = (0, eval)(code);
+    text = show(value);         // the value's own toString() runs code too
+    kind = kindOf(value);
+  } catch (e) {
+    fail(code, e);
+    return;
+  }
+  output.set({ text, bg: "#000", color: "#fff" });
+  console.log("repl: ran " + code.length + " characters: " + kind);
 }
 
 // Enter in the code box runs it, before the box sees it (so no line break

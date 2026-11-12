@@ -529,7 +529,7 @@ declare module "gk:ui" {
     /** *Readable*. */
     checked: boolean;
   }
-  /** Picks one of several options from a list that opens. */
+  /** Picks one of several options from a list that opens below the control (above it if there is more room there). The list is as wide as its longest option and stays on the screen: near the right edge it lines up with the control's right side; a list too tall to fit scrolls, with a scrollbar. */
   export class Dropdown extends Widget {
     constructor(props?: DropdownProps);
     constructor(parent: Widget, props?: DropdownProps);
@@ -709,7 +709,7 @@ declare module "gk:crypto" {
   export function ripemd160(data: BytesLike): Uint8Array;
   /** RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. */
   export function hash160(data: BytesLike): Uint8Array;
-  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. */
+  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s), Ctrl+C and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. */
   export function pbkdf2(hash: HashName, password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
   /** The same as a [long operation]: a promise, the work done in slices while the screen keeps being drawn (about 30,000 SHA-512 iterations a second on a Pi Zero). Arguments as `pbkdf2`'s, checked at once. */
   export function pbkdf2Async(hash: HashName, password: BytesLike, salt: BytesLike, iterations: number, length: number, options?: JobOptions): Promise<Uint8Array>;
