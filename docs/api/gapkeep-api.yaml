@@ -21,7 +21,7 @@ intro: |
 
   | Module | Available to | Purpose |
   | --- | --- | --- |
-  | [`gk:ui`](#gkui) | every app | Widgets, layout, input, alerts |
+  | [`gk:ui`](#gkui) | every app (the e-paper panel: `"epaper"`) | Widgets, layout, input, alerts; an e-paper panel |
   | [`gk:sys`](#gksys) | every app | App info, versions, uptime, memory, exit |
   | [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), OpenPGP's Ed25519, X25519, RSA signatures and decryption, AES-CFB, key wrap, S2K and message decryption, hardware random bytes |
   | [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
@@ -62,6 +62,25 @@ ui:
         An **image source** is `{ width, height, data }`: `data` holds
         `width * height * 4` bytes of RGBA (straight alpha, rows top to bottom),
         as canvas `ImageData`.
+    - name: EPaperColor
+      ts: '"black" | "white" | "red"'
+      md: 'A colour an e-paper panel shows.'
+    - name: EPaperInfo
+      ts: '{ model: string; width: number; height: number; colors: EPaperColor[] }'
+      md: 'The configured e-paper panel, as `ui.epaper.open()` (landscape) would give it.'
+    - name: EPaperPanel
+      ts: |-
+        Container & {
+          /** the module, for people: "WeAct 2.9\" B/W/R" */
+          readonly model: string;
+          /** what it shows: ["black", "white"], or with "red" */
+          readonly colors: EPaperColor[];
+          /** writes what the panel's widgets show onto the panel: a full refresh, then deep sleep; resolves once it may be unplugged, rejects with an Error (no panel, ...) */
+          refresh(options?: JobOptions): Promise<void>;
+          /** deletes the panel's widgets and gives the panel back (what it shows stays) */
+          close(): void;
+        }
+      md: 'An open e-paper panel: a Container (the root of what the panel shows) with more.'
 
   exports:
     - name: Widget
@@ -113,6 +132,10 @@ ui:
       ts: '(text: string) => string'
       signature: escapeMarkup(text)
       md: 'The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `''` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`''s `tm()`.'
+    - name: epaper
+      kind: object
+      ts: '{ open: (options?: { orientation?: "landscape" | "portrait"; flip?: boolean }) => EPaperPanel; info: () => EPaperInfo | null }'
+      md: 'An e-paper panel on the GPIO header, as a second, off-screen display: `open()`, `info()`. Needs `"permissions": ["epaper"]`. [Details](#uiepaper).'
 
   creating: |
     ```js
@@ -498,6 +521,44 @@ ui:
         Shift+PageUp and Shift+PageDown are the system's too: they scroll the
         focused widget's nearest scrollable ancestor by a page, as the mouse
         wheel scrolls what is under the pointer, and never reach `ui.onKey`.
+    - title: ui.epaper
+      md: |
+        An e-paper panel wired to the GPIO header (a WeAct 2.9" black, white
+        and red one, say), which keeps its picture without power, for years:
+        a secret share written on it can be unplugged and put away, never
+        photographed. The panel is a second display, off screen: build what
+        it shows with the same widgets as the screen, then `refresh()` writes
+        it. Needs `"permissions": ["epaper"]` in the manifest (otherwise both
+        functions throw a `TypeError`). The card's `gapkeep.txt` says which
+        panel is there and on which pins ([EPAPER.md](EPAPER.md)).
+
+        ```js
+        const panel = ui.epaper.open();             // landscape; throws if there is none
+        new ui.Label(panel, { text: "Share A", font: 20, color: 0xff0000 });
+        new ui.QRCode(panel, { data: share, size: panel.height - 8 });
+        await panel.refresh({ onProgress: (f) => (bar.value = f * 100) });
+        status.text = "Done: you can unplug the panel.";
+        ```
+
+        | Member | Description |
+        | --- | --- |
+        | `ui.epaper.info()` | The configured panel, `{ model, width, height, colors }` (landscape), or `null` if there is none (none in `gapkeep.txt`, or no SPI controller, as on QEMU). |
+        | `ui.epaper.open(options?)` | Opens it: an **EPaperPanel**. `options`: `orientation` `"landscape"` (the default: wider than tall) or `"portrait"`, `flip: true` (a half turn more). Throws an `Error` if there is no panel, a `TypeError` if it is open already. Opening sends nothing to the panel. |
+        | `panel` | A `Container`, the panel's whole area (`width`, `height` readable), white, a column with 4 px padding and gap: put widgets on it as on `ui.screen`. They are not keyboard targets. |
+        | `panel.colors` | `["black", "white"]`, or with `"red"`. |
+        | `panel.model` | The module, for people: `"WeAct 2.9\" B/W/R"`. |
+        | `panel.refresh(options?)` | Writes what the widgets show onto the panel: a promise, a [long operation](#long-operations) (`onProgress`). Every refresh resets the panel and sets it up again (it may be another panel than last time), writes the picture, plays the panel's own full waveform (18 s on the 2.9" B/W/R: it flashes, then shows the picture, red last) and puts it into deep sleep; then it resolves, and the panel may be unplugged. It rejects with an `Error` if no panel answers (unplugged), or one stops answering. The picture is taken when `refresh()` is called. |
+        | `panel.close()` | Deletes the panel's widgets and gives the panel back (`delete()` does the same); what the panel shows stays. A refresh asked for goes on. The panel is closed when the app stops, too. |
+
+        The panel's widgets are drawn in black on white. Colours become
+        the panel's: red (`0xff0000`, and colours near it: red at least
+        128, green and blue under 96) where the panel has red, black where
+        it hasn't; other colours black if darker than a middle grey, white
+        if lighter. Text is drawn without its grey edges: prefer sizes of 16
+        and up, and the monospaced font for codes.
+
+        GapKeep never refreshes or clears a panel unless an app asks. What
+        a panel shows is never logged.
     - title: ui.theme
       md: |
         ```js

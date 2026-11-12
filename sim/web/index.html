@@ -88,6 +88,19 @@
       <span id="camera-info" class="dim"></span>
       <input type="file" id="camera-file" accept="image/*" hidden>
     </div>
+    <div id="epaper-bar" title="An e-paper panel on GapKeep's GPIO header, for apps with ui.epaper (docs/EPAPER.md)">
+      <span class="label">E-paper</span>
+      <select id="epaper-model" title="The panel the card's gapkeep.txt names (reboots)">
+        <option value="none">None</option>
+        <option value="weact-2.9-bwr">WeAct 2.9" B/W/R</option>
+        <option value="weact-2.13-bw">WeAct 2.13" B/W</option>
+        <option value="weact-4.2-bw">WeAct 4.2" B/W</option>
+      </select>
+      <button id="epaper-plug" title="Pull the panel out, or plug it back in (it keeps its picture)">Unplug</button>
+      <button id="epaper-new" title="Plug in another panel, a new, white one">New panel</button>
+      <span id="epaper-info" class="dim"></span>
+      <canvas id="epaper" width="296" height="128" hidden></canvas>
+    </div>
   </section>
 
   <section id="console-pane" class="pane">

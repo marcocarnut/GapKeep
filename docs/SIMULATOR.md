@@ -40,6 +40,7 @@ on stdin, one per line:
 | `shot <file.png>` | Screenshot; answers `#shot <file.png>`. |
 | `launch [<id>]` | Start that app, or the launcher. |
 | `camera <what>` | What the camera films: see [The camera](#the-camera). |
+| `epaper <what>` | The e-paper panel (`--epaper MODEL`, or the card's `gapkeep.txt`): `plug <name> [<model>]`, `unplug`, `shot <file.png>`, `refresh-ms <ms>`. See [EPAPER.md](EPAPER.md#trying-it-without-a-panel-the-simulator). |
 | `language <tag>` | The language of the apps started from now on (`pt-BR`, `qps`, `en`), as the Settings app sets it. |
 | `keyboard <layout>` | The keyboard layout (`us`, `br-abnt2`), as `keyboard` in `gapkeep.txt` or the Settings app sets it. |
 | `eject` | Take the SD card out: its folder is no longer read (GapKeep must not need it after boot; `tests/card_removal.txt`). |
@@ -172,6 +173,8 @@ before the first screen. The device logs the work too, without the estimate.
 - **The clock** runs on the host's timer but otherwise as on the device:
   `Date` counts from 1970 until the Clock app sets it, and `gapkeep.txt` on
   the card is read at boot ([CLOCK.md](CLOCK.md)).
+- **The e-paper panel** is EPDPages' model of its controller, under the
+  real driver ([EPAPER.md](EPAPER.md)); SPI transfers take no time.
 - **The camera** is synthetic (above), as in test kernels; the Pi Camera's
   driver is the kernel's ([CAMERA.md](CAMERA.md#the-pi-camera)), and
   the IDE can use a webcam instead ([IDE.md](IDE.md#the-camera)).

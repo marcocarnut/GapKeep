@@ -139,6 +139,18 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
 }
 #camera-bar label { white-space: nowrap; padding-top: 3px; }
 #camera-info { padding-top: 3px; }
+#epaper-bar {
+  display: flex; align-items: flex-start; gap: 8px; flex: none; flex-wrap: wrap;
+  padding: 4px 8px; font-size: 12px; border-top: 1px solid var(--line);
+}
+#epaper-bar .label { font-weight: 600; padding-top: 3px; }
+#epaper-bar select, #epaper-bar button { font-size: 12px; }
+#epaper-info { padding-top: 3px; }
+/* the panel, twice its size, in its bezel */
+#epaper {
+  flex-basis: 100%; max-width: 100%; image-rendering: pixelated;
+  border: 6px solid #d8d8d4; border-radius: 4px; box-sizing: content-box;
+}
 
 /* Console */
 #console {
@@ -184,6 +196,7 @@ kbd { font: 11px var(--mono); padding: 0 3px; border: 1px solid var(--line); bor
   #keybar { order: 3; }
   #screen-foot { order: 4; background: var(--pane); }
   #camera-bar { order: 5; background: var(--pane); }
+  #epaper-bar { order: 6; background: var(--pane); }
   #files-pane { order: 6; }
   #editor-pane { order: 7; }
   #console-pane { order: 8; }
