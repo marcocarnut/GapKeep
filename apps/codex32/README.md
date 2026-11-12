@@ -95,6 +95,21 @@ It needs `vendor/codex32.js` beside it in `../vendor/`.
   `codex32: box 1 refused: checksum, a fix suggested`.
 - The camera's picture never reaches the app, only the QR code's text.
 
+## An e-paper panel
+
+With a panel configured (`ui.epaper`, docs/EPAPER.md; the `"epaper"`
+permission), both export pages have **Write to e-paper**, behind the same
+confirmation: one of the seed's QR codes (the words, SeedQR, Compact
+SeedQR) on the panel, with the numbered words beside it (their first four
+letters where whole words don't fit). **Panel only** (on by default) keeps
+the code off the screen. Then Write again, Check with the camera (the
+panel read back, the result only) and Back; Escape cancels a write in its
+first 2 seconds, before anything is sent to the panel. The page is
+dice39's (`lib/epaper.js`, `lib/epaperlayout.js`, copied by
+`tools/share_libs.py`: edit them in apps/dice39), which writes the shares
+themselves, one panel each. codex32 reads such a panel back like any
+share: Scan with the camera.
+
 ## How it works
 
 - `vendor/`: dice39's code, copied byte for byte from `codex32_recover.html`
@@ -147,3 +162,6 @@ still has the bug.
   split, grouped shares, the QR exports, a letter codex32 lacks, vector 1,
   a 64-byte secret, and the camera (not a share, the same share twice,
   another split, then three shares). `tools/run_sim_tests.sh` runs it.
+- `tests/epaper_shares.txt` (simulator): the shares dice39 wrote on
+  panels, recovered from the panels' pictures; the words' QR code and the
+  SeedQR written to a panel and read back, in Portuguese.

@@ -75,6 +75,32 @@ the phrase does, so going back from a share's code shows the same shares.
 The QR codes of the whole seed (SeedQR, Compact SeedQR, words) still ask
 first.
 
+**An e-paper panel** (GapKeep's `ui.epaper`, docs/EPAPER.md; the
+`"epaper"` and `"camera"` permissions): with a panel configured, the split
+page has **Panel only** (on by default) and **Write to e-paper**. In Panel
+only the shares are never drawn on the screen: the split page says how
+many were made, and the writing page says "Share 2 of 3 written to the
+panel", nothing more. Each share goes on a panel of its own: a red "Share
+2 of 3" (black on a black and white panel), "any 2 recover the phrase",
+the share in groups of four in the panel's pixel font, and its QR code
+(uppercase, ECC M, as on the screen). Then **Next share** (after swapping
+the panel), **Write again**, **Check with the camera** (the panel's QR
+code read back and compared with what was written: the result only; in
+Panel only the camera's view is hidden too, as it would show the panel)
+and **Back**. A write starts 2 seconds after the button (Cancel or Escape
+stop it until then: once the panel's refresh command is sent, its
+waveform must run to the end, about 18 s on the 2.9" B/W/R, with a
+progress bar); one write runs at a time. The result page's **Write to
+e-paper** does the same for the seed's QR codes (SeedQR, Compact SeedQR,
+the words), with the numbered words beside the code, after a warning.
+`lib/epaperlayout.js` lays the page out for the panel: landscape or
+portrait, whichever keeps the QR code's modules at 3 px or more (2 at
+least) and the text largest (`node tests/epaper/layout_node.mjs` checks
+every panel model); `lib/epaper.js` is the page. Both are copied into
+codex32 by `tools/share_libs.py`. The log says "wrote share 2 of 3" and
+the layout, never what was written. Tests: `tests/epaper_shares.txt`
+(simulator), `tests/epaper_shares_hw.txt` (the rig's panel and camera).
+
 Not ported: printing the dice tables (print them from the web page on any
 computer; they hold no secret), the clipboard export, the network probe
 (there is no network), and the page's language button: languages are

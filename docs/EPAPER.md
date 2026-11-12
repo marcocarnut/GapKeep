@@ -90,7 +90,14 @@ new ui.Label(panel, { text: "MS12 NAME A320", family: "epdmono", font: 20 });
 ```
 
 On the 2.9" (296 x 128) a codex32 share in groups of four fits beside its
-QR code at 20 (three groups, 14 characters, 140 pixels, a line). Chosen on
+QR code at 20 (three groups, 14 characters, 140 pixels, a line): dice39
+writes its shares so, one panel each, and both dice39 and codex32 the
+seed's QR codes with the numbered words (**Write to e-paper**, and **Panel
+only** to keep the secret off the screen: apps/dice39/README.md). Their
+layout (`apps/dice39/lib/epaperlayout.js`) picks landscape or portrait
+and the sizes for each panel: the QR code's modules at 3 px where they
+fit (2 at least), then the largest epdmono text; a 24-word share takes
+16 on the 2.9" and the 2.13", 32 on the 4.2". Chosen on
 the rig's panel, photographed: Terminus bold, two-pixel strokes from 20
 up, reads clearly at every size; Terminus regular (one-pixel strokes)
 came out faint, misc-fixed's 9x18 too; the 6x10 doubled and tripled (the
@@ -307,7 +314,10 @@ The rig's panel is mounted turned 180 degrees (`#epaper weact-2.9-bwr
 rotate=180`): its native top, the J2 end, is at the top of the camera's
 picture, so a page reads upright for someone at the panel's flat-cable end,
 the bottom of the camera's picture (`tests/epaper_rotate_hw.txt`
-photographs a portrait and a landscape page, and one as if mounted at 90).
+photographs a portrait and a landscape page, and one as if mounted at 90,
+then writes the landscape page again, so the panel is left upright).
+`tests/epaper_shares_hw.txt` has dice39 write two codex32 shares of a test
+phrase on it, each read back with the camera by the app.
 
 Measured on the rig (2026-11-12), the same at each of three refreshes:
 

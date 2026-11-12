@@ -126,7 +126,7 @@ Rig-only scenario commands and serial commands (test builds, `src/testshot.h`):
   rig's Zero has a WeAct 2.9" B/W/R wired as docs/EPAPER.md says, mounted
   turned 180 degrees (`rotate=180`, docs/EPAPER.md, "Mounting"), and the
   camera looks at it (`tests/epaper_hw.txt`, `epaper_fonts_hw.txt`,
-  `epaper_rotate_hw.txt`).
+  `epaper_rotate_hw.txt`, `epaper_shares_hw.txt`).
 - `send #launch <id>`, `send #key <key>`: start an app and press a key
   (`1`, `r`, `ret`...) over the serial line, without the USB gadget.
 - `tools/rig/raw2png.py <name>.raw`: a `serialraw` frame as a PNG to look
