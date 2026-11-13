@@ -22,10 +22,13 @@ import {
   seedQrDigits, samplesToBytes,
 } from "./vendor/dice.js";
 import { runDice39SelfTest } from "./lib/selftest.js";
+import { fullMnemonic } from "./lib/fullphrase.js";
 import { entropyBitsTarget, newPad, addPadSample } from "./lib/entropypad.js";
 import { S } from "./lib/strings.js";
 import { setCrypto } from "./lib/crypto.js";
 import { accountKey, MAX_ACCOUNT } from "./lib/pubkey.js";
+import { epaperInfo, epaperKey, showWriter } from "./lib/epaper.js";
+import { shareTokens, wordTokens } from "./lib/epaperlayout.js";
 
 setCrypto(gkcrypto);   // for the signer's BIP-39 and BIP-32 (lib/pubkey.js)
 
@@ -48,6 +51,7 @@ const state = {
   showPassphrase: false,
   keyForm: 0,         // the key's QR code: 0 descriptor, 1 zpub (KEY_FORMS)
   split: null,        // the last codex32 split: { scheme, id, shares, checked }
+  panelOnly: true,    // with an e-paper panel: shares (and the seed's codes) on the panel only, never on screen
 };
 
 // --- entropy from key timing (additive; the hardware RNG is the floor) ---
@@ -62,7 +66,7 @@ ui.onKey((ev) => {
       ms: Date.now(),
     });
   }
-  return false;  // never consume: this only listens
+  return epaperKey(ev);  // this only listens; Escape on the e-paper page is that page's
 });
 
 // --- the entropy pad (accounting in lib/entropypad.js) ----------------------
@@ -146,11 +150,19 @@ async function confirm(text, yes, title) {
 
 // --- start ----------------------------------------------------------------
 
+// The dice tables, as PDFs to print (gapkeep.org, in the person's language)
+const TABLES_URL = t("https://gapkeep.org/dice39.html");
+
 function showStart() {
   state.result = null;
   page(S.tagline);
 
-  paragraph(ui.screen, S.need);
+  const tables = new ui.Container({ layout: "row", gap: 12, alignItems: "center", width: "100%" });
+  new ui.QRCode(tables, { size: 116, data: TABLES_URL, ecc: "M" });
+  const need = new ui.Container(tables, { layout: "column", gap: 4, grow: 1 });
+  paragraph(need, S.need);
+  paragraph(need, S.tablesWhere, { color: MUTED, font: 12 });
+  new ui.Label(need, { text: TABLES_URL.replace("https://", ""), font: 14, color: GREEN });
   paragraph(ui.screen, S.procedure, { color: MUTED });
   paragraph(ui.screen, S.order, { color: MUTED });
 
@@ -195,13 +207,15 @@ function showStart() {
 function showEntry() {
   const spec = PHRASE_SIZES[state.total];
   state.mode = "dice";
-  page(t("Words 1 to {max} of {total}", { max: spec.maxUser, total: state.total }));
+  page(t("Words 1 to {max}, or all {total}", { max: spec.maxUser, total: state.total }));
   paragraph(ui.screen, S.entryHelp, { color: MUTED });
+  paragraph(ui.screen, S.allWords(state.total, spec.maxUser, 11 - spec.checksumBits, spec.checksumBits),
+    { color: MUTED, font: 12 });
 
   const grid = new ui.Container({ layout: "row-wrap", gap: 10, width: "100%" });
   const cellWidth = Math.max(180, Math.floor((ui.width - 40 - 20) / 3));
   state.fields = [];
-  for (let i = 0; i < spec.maxUser; i++) state.fields.push(makeField(grid, i, cellWidth));
+  for (let i = 0; i < state.total; i++) state.fields.push(makeField(grid, i, cellWidth));
 
   const status = new ui.Label({ width: "100%", font: 14 });
   const target = entropyBitsTarget(spec);
@@ -216,22 +230,42 @@ function showEntry() {
   });
   backButton(buttons);
 
-  state.next = () => (state.padFull() ? generate : pad);
+  // all the words typed: nothing from the device, so no entropy pad needed
+  const all = () => countWords() === state.total;
+  state.next = () => (state.padFull() || all() ? generate : pad);
   state.ready = () => {
     const n = countWords();
-    return n >= spec.minUser && n <= spec.maxUser;
+    return (n >= spec.minUser && n <= spec.maxUser) || n === state.total;
   };
   state.padFull = () => state.pad.bits >= target;
+  let seq = 0;
   state.refresh = () => {
     const n = countWords();
     const ready = state.ready();
-    generate.disabled = !(ready && state.padFull());
+    const s = ++seq;
+    generate.disabled = !(ready && (state.padFull() || all()));
     const typed = state.fields.filter((f) => normalize(f.ta.text)).length;
-    const text = [plural(n, "{n} word entered ({min} to {max}).", "{n} words entered ({min} to {max}).",
-      { min: spec.minUser, max: spec.maxUser })];
-    if (ready) text.push(t("Words {from} to {total} will come from this device.", { from: n + 1, total: state.total }));
-    else text.push(t("Enter at least {n} more.", { n: spec.minUser - n }));
-    if (ready && !state.padFull()) text.push(t("Fill the entropy bar below to enable Generate."));
+    const text = [plural(n, "{n} word entered ({min} to {max}, or all {total}).",
+      "{n} words entered ({min} to {max}, or all {total}).",
+      { min: spec.minUser, max: spec.maxUser, total: state.total })];
+    if (all()) {
+      // whether the last word will change: the outcome only, never a word
+      text.push(t("Checking..."));
+      fullMnemonic(BIP39_WORDS, state.fields.map((f) => f.word)).then((r) => {
+        r.entropyBytes.fill(0);
+        if (s !== seq || !status.alive) return;
+        status.set({ text: [text[0], S.allWordsStatus(state.total, r.corrected, spec.checksumBits)].join(" "),
+          color: GREEN });
+      }, () => {});
+    } else if (n > spec.maxUser) {
+      text.push(t("Use at most {max} words, so that this device adds the rest, or type all {total}.",
+        { max: spec.maxUser, total: state.total }));
+    } else if (ready) {
+      text.push(t("Words {from} to {total} will come from this device.", { from: n + 1, total: state.total }));
+    } else {
+      text.push(t("Enter at least {n} more.", { n: spec.minUser - n }));
+    }
+    if (ready && !all() && !state.padFull()) text.push(t("Fill the entropy bar below to enable Generate."));
     if (typed > n) text.push(t("Words after the first empty or unfinished box are not used."));
     status.set({ text: text.join(" "), color: ready ? GREEN : MUTED });
   };
@@ -465,6 +499,15 @@ async function onGenerate() {
   const n = countWords();
   const userWords = state.fields.slice(0, n).map((f) => f.word);
   try {
+    if (n === state.total) {
+      const r = await fullMnemonic(BIP39_WORDS, userWords);
+      r.typed = userWords;
+      r.sorted = r.patternSuspected === "identical" ? null : sortedPairsSuspected(userWords);
+      state.result = r;
+      console.log(`dice39: all ${n} words typed, ` +
+        (r.corrected ? "the last word's checksum recomputed" : "the checksum already valid"));
+      return showResults();
+    }
     const baseline = gkcrypto.randomBytes(32);
     // dice39 hashes the CSPRNG baseline with the pad samples; GapKeep adds
     // the key timings after them
@@ -494,6 +537,9 @@ function showResults() {
   const legend = new ui.Container({ layout: "row", gap: 16 });
   if (r.imported) {
     new ui.Label(legend, { text: t("yours, as typed"), color: GREEN, font: 14 });
+  } else if (r.full) {
+    new ui.Label(legend, { text: t("from you (dice), verbatim"), color: GREEN, font: 14 });
+    if (r.corrected) new ui.Label(legend, { text: t("checksum fixed"), color: AMBER, font: 14 });
   } else {
     new ui.Label(legend, { text: t("from you (dice), verbatim"), color: GREEN, font: 14 });
     new ui.Label(legend, { text: t("from this device"), color: AMBER, font: 14 });
@@ -513,7 +559,8 @@ function showResults() {
 
   // Every word typed must come back unchanged, in its place. dice39 shows
   // the comparison word by word; here only a failure is shown, and loudly.
-  const verbatim = n <= T && r.typed.every((w, i) => r.finalWords[i] === w);
+  // (all the words typed: the last one may have had its checksum fixed)
+  const verbatim = n <= T && r.typed.every((w, i) => r.finalWords[i] === w || (r.corrected && i === T - 1));
   console.log("dice39: verbatim check " + (verbatim ? "ok" : "FAILED"));
   if (!verbatim) {
     const box = new ui.Panel({ width: "100%", layout: "column", padding: 10, borderColor: RED, borderWidth: 2 });
@@ -537,6 +584,8 @@ function showResults() {
 
   if (r.imported) {
     paragraph(ui.screen, S.summaryImport(T, spec.entropyBits));
+  } else if (r.full) {
+    paragraph(ui.screen, S.summaryAll(T, spec.entropyBits, spec.checksumBits, r.corrected, r.lastTyped));
   } else {
     paragraph(ui.screen, t("Words 1 to {n}: yours, used verbatim, {userBits} bits. " +
       "Words {from} to {total}: from this device, {deviceBits} bits. " +
@@ -552,7 +601,8 @@ function showResults() {
 
   const buttons = buttonRow(ui.screen);
   const first = new ui.Button(buttons, { text: t("QR codes"), onClick: showQR });
-  new ui.Button(buttons, { text: t("Split into shares (codex32)"), onClick: showSplit });
+  new ui.Button(buttons, { text: t("Split into shares (codex32)"), onClick: () => showSplit() });
+  if (epaperInfo()) new ui.Button(buttons, { text: ui.symbols.download + "  " + t("Write to e-paper"), onClick: writeSeed });
   new ui.Button(buttons, {
     text: ui.symbols.trash + "  " + t("Start over"),
     onClick: async () => {
@@ -733,6 +783,34 @@ async function showQR() {
   format.focus();
 }
 
+// The seed's QR codes on an e-paper panel (lib/epaper.js): one of them, with
+// the words beside it, behind the same kind of warning.
+async function writeSeed() {
+  if (!(await confirm(t("The panel will hold your seed: anyone who sees it can take the funds. Keep it as you " +
+    "would the phrase on paper, and wipe it before it holds anything else."), t("Write to e-paper"),
+  t("Seed on a panel")))) return;
+  const r = state.result;
+  if (!r) return;
+  const T = r.finalWords.length;
+  const variants = [{ tokens: wordTokens(r.finalWords), sep: 2 }, { tokens: wordTokens(r.finalWords, true), sep: 2 }];
+  showWriter({
+    tag: "dice39",
+    start: (title) => page(title),
+    choose: true,
+    items: QR_FORMATS.map((f) => {
+      const q = f.make(r);
+      return { label: f.name, title: f.name, note: t("{n}-word BIP-39 phrase", { n: T }), data: q.data, ecc: q.ecc,
+        variants, log: f.log };
+    }),
+    intro: t("Pick a QR code: the panel shows it with the numbered words beside it (their first four letters " +
+      "where all of a word does not fit). Plug in a panel, then write."),
+    panelOnly: state.panelOnly,
+    onPanelOnly: (v) => (state.panelOnly = v),
+    camera: true,
+    onBack: showResults,
+  });
+}
+
 // --- codex32 shares -------------------------------------------------------
 
 const SCHEMES = [[2, 3], [2, 4], [3, 5]];
@@ -759,6 +837,11 @@ function showSplit(focusShare) {
     oneLine: true, width: 100, maxLength: 4, text: last ? last.id : randomIdentifier(),
     accept: CODEX32.CX_CHARSET,
   });
+  // with an e-paper panel: the shares on it only, never on this screen (the default)
+  const panel = epaperInfo();
+  const panelOnly = () => !!panel && state.panelOnly;
+  const only = panel ? new ui.Checkbox({ text: t("Panel only: the shares go on the e-paper panel, never on " +
+    "this screen"), checked: state.panelOnly }) : null;
   const out = new ui.Container({ layout: "column", gap: 6, width: "100%" });
   const buttons = buttonRow(ui.screen);
 
@@ -770,6 +853,11 @@ function showSplit(focusShare) {
         { k, n, checked: sp.checked }),
       color: GREEN, font: 14, width: "100%",
     });
+    if (panelOnly()) {
+      new ui.Label(out, { text: t("Not shown on this screen: write them to the e-paper panel, one panel each."),
+        font: 14, width: "100%" });
+      return;
+    }
     sp.shares.forEach((share, i) => {
       const line = new ui.Container(out, { layout: "row", gap: 8, alignItems: "center", width: "100%" });
       shareButtons.push(new ui.Button(line, { text: "QR", padding: [4, 10], onClick: () => showShareQR(i) }));
@@ -793,12 +881,53 @@ function showSplit(focusShare) {
       } catch (e) {
         new ui.Label(out, { text: ui.symbols.close + " " + e.message, color: RED, width: "100%" });
       }
+      if (write) {
+        write.disabled = !state.split;
+        if (state.split && panelOnly()) write.focus();
+      }
     },
   });
+  const write = panel ? new ui.Button(buttons, {
+    text: ui.symbols.download + "  " + t("Write to e-paper"), disabled: !last, onClick: () => writeShares(),
+  }) : null;
   new ui.Button(buttons, { text: t("Done"), onClick: showResults });
+  if (only) {
+    only.onChange = (ev) => {
+      state.panelOnly = ev.value;
+      out.clear();
+      shareButtons.length = 0;
+      if (state.split) list(state.split);
+    };
+  }
   if (last) list(last);
-  if (focusShare !== undefined && shareButtons[focusShare]) shareButtons[focusShare].focus();
+  if (focusShare === "epaper" && write) write.focus();
+  else if (focusShare !== undefined && shareButtons[focusShare]) shareButtons[focusShare].focus();
   else scheme.focus();
+}
+
+// The shares on e-paper panels, one panel each (lib/epaper.js): a red
+// "Share 2 of 3" and "any 2 recover the phrase", the share in groups of four
+// and its QR code (uppercase, ECC M, as on screen)
+function writeShares() {
+  const sp = state.split;
+  if (!sp) return;
+  const [k, n] = SCHEMES[sp.scheme];
+  showWriter({
+    tag: "dice39",
+    start: (title) => page(title),
+    items: sp.shares.map((share, i) => {
+      const s = share.toUpperCase();
+      const label = t("Share {i} of {n}", { i: i + 1, n });
+      return { label, title: label, note: t("any {k} recover the phrase", { k }), data: s, ecc: "M",
+        variants: [{ tokens: shareTokens(s), sep: 1 }], log: `share ${i + 1} of ${n}` };
+    }),
+    intro: t("Each share goes on a panel of its own: plug in a panel, write the share, and unplug the panel " +
+      "when this page says so; then the next panel, Next share."),
+    panelOnly: state.panelOnly,
+    onPanelOnly: (v) => (state.panelOnly = v),
+    camera: true,
+    onBack: () => showSplit("epaper"),
+  });
 }
 
 // Straight to the code: a share alone reveals nothing. The page says what
@@ -831,8 +960,8 @@ function showAbout() {
     "tools/extract_dice39.py. Each copied file names the source file and its SHA-256, so it can be " +
     "checked against the published page."), { color: MUTED });
   paragraph(ui.screen, t(
-    "Different from the web page: there is no printing (print the dice tables from the web page on any " +
-    "computer), no clipboard, and no network check, because this device has no network. The entropy pad " +
+    "Different from the web page: there is no printing (download the dice tables from gapkeep.org/dice39.html " +
+    "on any computer and print them), no clipboard, and no network check, because this device has no network. The entropy pad " +
     "also takes Space presses, for use without a mouse, and your key timing is mixed in too. The public key " +
     "(BIP-84, a zpub) is GapKeep's, from the signer's BIP-39 and BIP-32 code: dice39's page has none."),
     { color: MUTED });

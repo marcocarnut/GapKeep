@@ -33,7 +33,7 @@ import sys
 from textcheck import FORBIDDEN_IN_NAMES  # src/runtime/textcheck.h's set
 
 PERMISSIONS = {'apps': 'GK_PERM_APPS', 'camera': 'GK_PERM_CAMERA', 'rtc': 'GK_PERM_RTC',
-               'settings': 'GK_PERM_SETTINGS'}
+               'settings': 'GK_PERM_SETTINGS', 'epaper': 'GK_PERM_EPAPER'}
 FILE_EXTENSIONS = ('.js', '.json', '.txt')
 ID_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,31}$')
 NAME_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')     # loaded files and folders

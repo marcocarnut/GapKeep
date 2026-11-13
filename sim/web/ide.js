@@ -540,7 +540,7 @@ const MANIFEST_SCHEMA = {
       ],
     },
     entry: { type: "string", description: "Entry module (default main.js)." },
-    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc", "settings"] }, description: "Extra rights: \"apps\" (gk:apps), \"camera\" (ui.Scanner), \"rtc\" (setting gk:clock), \"settings\" (gk:i18n's setters)." },
+    permissions: { type: "array", items: { enum: ["apps", "camera", "rtc", "settings", "epaper"] }, description: "Extra rights: \"apps\" (gk:apps), \"camera\" (ui.Scanner), \"rtc\" (setting gk:clock), \"settings\" (gk:i18n's setters), \"epaper\" (ui.epaper)." },
     hidden: { type: "boolean", description: "true: not listed in the launcher." },
     experimental: { type: "boolean", description: "true: only with experimental features on (docs/EXPERIMENTAL.md)." },
     data: { type: "array", maxItems: 8, uniqueItems: true, items: { type: "string", pattern: "^[a-z0-9][a-z0-9-]{0,31}$" }, description: "The card's data folders (data/<name>) the app reads with gk:data." },
@@ -668,6 +668,9 @@ async function run (appId, { focus = true } = {}) {
   let settings = "";
   if (localStorage.getItem ("gkide.experimental") === "yes") settings += "experimental = yes\n";
   if (language) settings += `language = ${language}\n`;
+  const epaperModel = localStorage.getItem ("gkide.epaper") || "none";
+  // mounted wider than tall (the 2.9" and 2.13" are taller natively)
+  if (epaperModel !== "none") settings += `epaper = ${epaperModel}\nepaper_rotate = ${epaperModel === "weact-4.2-bw" ? 0 : 90}\n`;
   if (settings) card["gapkeep.txt"] = settings;
   if (Object.keys (card).length) gk.writeCard (card);
   if (Object.keys (builtin).length) gk.writeBuiltin (builtin);
@@ -1196,8 +1199,65 @@ async function restoreExamples () {
 // ---------------------------------------------------------------------------
 // Start
 
+// The e-paper panel (docs/EPAPER.md): which one the card's gapkeep.txt
+// names (it reboots), the panel as its pigments look, the refresh as it
+// happens (18 s on the 2.9" B/W/R), and plugging panels in and out, as a
+// person writing one share a panel does. Each panel keeps its picture.
+function setupEPaper () {
+  const model = $("epaper-model"), plug = $("epaper-plug"), fresh = $("epaper-new");
+  const canvas = $("epaper"), info = $("epaper-info");
+  model.value = localStorage.getItem ("gkide.epaper") || "none";
+  model.onchange = () => {
+    localStorage.setItem ("gkide.epaper", model.value);
+    run (machine ? lastApp : null);
+  };
+  let panels = 1, last = "1";
+  plug.onclick = () => {
+    if (!machine?.hasEPaper ()) return;
+    const name = machine.epaperPlugged;
+    if (name) {
+      last = name;
+      machine.epaperUnplug ();
+    } else {
+      machine.epaperPlug (last);
+    }
+  };
+  fresh.onclick = () => {
+    if (!machine?.hasEPaper ()) return;
+    last = String (++panels);
+    machine.epaperPlug (last);
+  };
+  let shown = null;
+  const paint = () => {
+    const on = machine && !machine.halted && machine.hasEPaper () && model.value !== "none";
+    plug.disabled = fresh.disabled = !on;
+    let text = "";
+    if (on) {
+      const visible = machine.drawEPaper (canvas);
+      canvas.hidden = !visible;
+      if (visible) {
+        canvas.style.maxWidth = `min(100%, ${canvas.width}px)`;
+        const p = machine.epaperProgress;
+        const name = machine.epaperPlugged;
+        text = `panel ${name}` + (p >= 0 ? `: refreshing, ${Math.round (p * 100)}%` : "");
+        plug.textContent = "Unplug";
+      } else {
+        text = "unplugged";
+        plug.textContent = "Plug in";
+      }
+    } else {
+      canvas.hidden = true;
+      if (model.value !== "none" && machine && !machine.hasEPaper ()) text = "this simulator has none: rebuild it";
+    }
+    if (text !== shown) info.textContent = shown = text;
+    requestAnimationFrame (paint);
+  };
+  requestAnimationFrame (paint);
+}
+
 function setupUi () {
   camera = new CameraBar (() => machine, ideLog);
+  setupEPaper ();
   $("new-app").onclick = newApp;
   $("new-file").onclick = newFile;
   $("rename").onclick = renameSelected;
@@ -1243,12 +1303,17 @@ function setupUi () {
 
 // The phone layout's panes fold (ide.css hides a folded pane's body). They
 // start folded, but for the console when it has news; the editor loads when
-// first unfolded.
+// first unfolded. On a desktop only the console folds, its row shrinking to
+// its bar (the screen refits: its ResizeObserver); that is remembered.
 function fold (id, folded = !$(id).classList.contains ("folded")) {
   const pane = $(id);
   pane.classList.toggle ("folded", folded);
   pane.querySelector (".fold").setAttribute ("aria-expanded", !folded);
   if (!folded && id === "editor-pane" && PHONE.matches) ensureEditor ();
+  if (id === "console-pane") {
+    $("layout").classList.toggle ("console-folded", folded && !PHONE.matches);
+    if (!PHONE.matches) localStorage.setItem ("gkide.consoleFolded", folded ? "1" : "");
+  }
 }
 
 function setupFolds () {
@@ -1256,15 +1321,18 @@ function setupFolds () {
     if (PHONE.matches) fold (id, true);
     // the whole bar is the button, but for the bar's own buttons
     $(id).querySelector (".pane-head").addEventListener ("click", (e) => {
-      if (!PHONE.matches) return;
+      if (!PHONE.matches && id !== "console-pane") return;
       const b = e.target.closest ("button");
       if (b && !b.classList.contains ("fold")) return;
       fold (id);
     });
   }
-  // a phone turned into a desktop (a wider window): the editor is shown
+  if (!PHONE.matches && localStorage.getItem ("gkide.consoleFolded")) fold ("console-pane", true);
+  // a phone turned into a desktop (a wider window): the editor is shown;
+  // and back: the console's row
   PHONE.addEventListener ("change", () => {
     if (!PHONE.matches) ensureEditor ();
+    $("layout").classList.toggle ("console-folded", !PHONE.matches && $("console-pane").classList.contains ("folded"));
     fitScreen ();
   });
 }

@@ -45,7 +45,7 @@ for t in $SCENARIOS; do
 		echo "SKIP  sim:$name   (needs the serial port)"
 		continue
 	fi
-	if grep -q "^monitor " "$t"; then
+	if grep -q "^monitor \|^# QEMU only" "$t"; then
 		echo "SKIP  sim:$name   (QEMU only: tools/run_tests.sh)"
 		continue
 	fi
@@ -71,6 +71,14 @@ for t in $SCENARIOS; do
 	else
 		sim=sim/build/gksim; card=$OUT/card-apps
 	fi
+	# "# Built with: EPAPER=... ...": a simulator built with that panel of its
+	# own, as a sealed kernel's (sim/Makefile)
+	built=$(sed -n 's/^# Built with: //p' "$t")
+	if [ -n "$built" ]; then
+		# shellcheck disable=SC2086
+		make -C sim -s -j"$(nproc)" TEST=1 $built >/dev/null
+		sim=sim/build/gksim-test-epaper
+	fi
 	# "# Card: empty": an SD card without apps (a screen that depends on nothing else)
 	if grep -q "^# Card: empty" "$t"; then
 		card=$OUT/card-empty; mkdir -p "$card"
@@ -89,6 +97,57 @@ if [ -f "$OUT/dice39/07-words.png" ]; then
 		echo "PASS  sim:dice39_qr"
 	else
 		echo "FAIL  sim:dice39_qr   (see $OUT/dice39_qr.log)"; FAILED=1
+	fi
+fi
+
+if [ -f "$OUT/epaper/04-panel1-rewritten.png" ]; then
+	if python3 tests/epaper/check_panel.py "$OUT/epaper" > "$OUT/epaper_panel.log" 2>&1; then
+		echo "PASS  sim:epaper_panel"
+	else
+		echo "FAIL  sim:epaper_panel   (see $OUT/epaper_panel.log)"; FAILED=1
+	fi
+fi
+
+# the REPL's e-paper example: its QR code, read off the panel
+if [ -f "$OUT/repl_epaper/panel.png" ]; then
+	if [ "$(zbarimg -q --raw "$OUT/repl_epaper/panel.png" 2>&1)" = "https://gapkeep.org" ]; then
+		echo "PASS  sim:repl_epaper_qr"
+	else
+		echo "FAIL  sim:repl_epaper_qr   (the panel's QR code: $OUT/repl_epaper/panel.png)"; FAILED=1
+	fi
+fi
+
+# dice39's start page: the QR code of the dice tables' page
+if [ -f "$OUT/dice39_allwords/01-start.png" ]; then
+	if [ "$(zbarimg -q --raw "$OUT/dice39_allwords/01-start.png" 2>&1)" = "https://gapkeep.org/dice39.html" ]; then
+		echo "PASS  sim:dice39_tables_qr"
+	else
+		echo "FAIL  sim:dice39_tables_qr   (the start page's QR code: $OUT/dice39_allwords/01-start.png)"; FAILED=1
+	fi
+fi
+
+if [ -f "$OUT/epaper_shares/codex32-seedqr.png" ]; then
+	if python3 tests/epaper/check_shares.py "$OUT/epaper_shares" > "$OUT/epaper_shares_check.log" 2>&1; then
+		echo "PASS  sim:epaper_shares_check"
+	else
+		echo "FAIL  sim:epaper_shares_check   (see $OUT/epaper_shares_check.log)"; FAILED=1
+	fi
+fi
+
+# a Dropdown's open list at the right of the screen stays on it, with a scrollbar
+if [ -f "$OUT/dropdown/03-open-mouse.png" ]; then
+	if python3 tests/dropdown/check_list.py "$OUT/dropdown" > "$OUT/dropdown_list.log" 2>&1; then
+		echo "PASS  sim:dropdown_list"
+	else
+		echo "FAIL  sim:dropdown_list   (see $OUT/dropdown_list.log)"; FAILED=1
+	fi
+fi
+
+if [ -f "$OUT/epaper_rotate/r270-u.png" ]; then
+	if python3 tests/epaper/check_rotation.py "$OUT/epaper_rotate" > "$OUT/epaper_rotation.log" 2>&1; then
+		echo "PASS  sim:epaper_rotation"
+	else
+		echo "FAIL  sim:epaper_rotation   (see $OUT/epaper_rotation.log)"; FAILED=1
 	fi
 fi
 
@@ -159,6 +218,17 @@ else
 	echo "FAIL  sim:wipes   (see $OUT/wipes.log)"; FAILED=1
 fi
 
+# OpenPGP signatures made with gk:crypto, checked by GnuPG (if it is here)
+if command -v gpg >/dev/null; then
+	if tests/pgp/run_gpg_interop.sh "$OUT/gpg_interop" > "$OUT/gpg_interop.log" 2>&1; then
+		echo "PASS  sim:gpg_interop"
+	else
+		echo "FAIL  sim:gpg_interop   (see $OUT/gpg_interop.log)"; FAILED=1
+	fi
+else
+	echo "SKIP  sim:gpg_interop   (no gpg)"
+fi
+
 # apps that carry a copy of another app's library (tools/share_libs.py)
 if python3 tools/share_libs.py --check > "$OUT/share_libs.log" 2>&1; then
 	echo "PASS  sim:share_libs"
@@ -174,6 +244,14 @@ if [ -f circle/Rules.mk ]; then
 	else
 		echo "FAIL  sim:fuzz_usbmouse   (see $OUT/fuzz_usbmouse.log)"; FAILED=1
 	fi
+fi
+
+# gk:zlib's decompression (zlib's inflate): seeds, then a short fuzz run
+# (tools/fuzz_inflate.sh for long ones)
+if tools/fuzz_inflate.sh 20000 > "$OUT/fuzz_inflate.log" 2>&1; then
+	echo "PASS  sim:fuzz_inflate"
+else
+	echo "FAIL  sim:fuzz_inflate   (see $OUT/fuzz_inflate.log)"; FAILED=1
 fi
 
 # gk:usb's descriptor parsers (src/runtime/usbdesc.c): fixed cases and a
@@ -226,6 +304,18 @@ if command -v node >/dev/null; then
 	else
 		echo "FAIL  sim:web_textinput   (see $OUT/web_textinput.log)"; FAILED=1
 	fi
+	# gk:crypto's long operations in the WebAssembly build (if it was built)
+	if node --experimental-default-type=module tests/web/pgpcrypto.mjs > "$OUT/web_pgpcrypto.log" 2>&1; then
+		echo "PASS  sim:web_pgpcrypto"
+	else
+		echo "FAIL  sim:web_pgpcrypto   (see $OUT/web_pgpcrypto.log)"; FAILED=1
+	fi
+	# the e-paper panel in the WebAssembly build, as the IDE shows it (if it was built)
+	if node --experimental-default-type=module tests/web/epaper.mjs > "$OUT/web_epaper.log" 2>&1; then
+		echo "PASS  sim:web_epaper"
+	else
+		echo "FAIL  sim:web_epaper   (see $OUT/web_epaper.log)"; FAILED=1
+	fi
 	if node --experimental-default-type=module tests/bbqr/run_node.mjs > "$OUT/bbqr.log" 2>&1 \
 		&& python3 tests/bbqr/check_capacity.py >> "$OUT/bbqr.log" 2>&1; then
 		echo "PASS  sim:bbqr"
@@ -236,6 +326,12 @@ if command -v node >/dev/null; then
 		echo "PASS  sim:btc"
 	else
 		echo "FAIL  sim:btc   (see $OUT/btc.log)"; FAILED=1
+	fi
+	# dice39's and codex32's e-paper pages, for every panel (apps/dice39/lib/epaperlayout.js)
+	if node tests/epaper/layout_node.mjs > "$OUT/epaper_layout.log" 2>&1; then
+		echo "PASS  sim:epaper_layout"
+	else
+		echo "FAIL  sim:epaper_layout   (see $OUT/epaper_layout.log)"; FAILED=1
 	fi
 	# Sneakernet's levels and codes, and the levels tests/sneakernet.txt plays
 	if node --experimental-default-type=module tests/sneakernet/run_node.mjs > "$OUT/sneakernet_node.log" 2>&1; then

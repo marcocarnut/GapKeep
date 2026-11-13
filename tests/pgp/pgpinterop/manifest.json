@@ -1,0 +1,8 @@
+{
+  "id": "pgpinterop",
+  "name": "PGP interop test",
+  "version": "1.0.0",
+  "description": "Test only: unlocks GnuPG-exported secret keys and makes detached signatures for gpg --verify (tests/pgp/run_gpg_interop.sh).",
+  "icon": "settings",
+  "data": ["pgp-interop"]
+}

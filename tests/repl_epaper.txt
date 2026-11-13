@@ -1,0 +1,34 @@
+# Needs a test build (make TEST=1), and the simulator (its e-paper panel):
+# the REPL's e-paper example (apps/repl: the "epaper" permission) writes the
+# test card's WeAct 2.9" B/W/R, panel "1": a QR code, a red title and a line
+# of epdmono. tools/run_sim_tests.sh decodes the panel's QR code.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect epaper-sim: panel 1 \(WeAct 2.9" B/W/R\) plugged in
+expect launcher ready 60
+epaper refresh-ms 1500
+launch repl
+expect repl ready
+key shift-tab
+key ret
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key ret
+key ret
+expect repl: ran \d+ characters: string
+expect epaper: WeAct 2.9" B/W/R: refresh: done in \d+ ms .*asleep 10
+wait 0.5
+shot 01-written
+epaper shot panel

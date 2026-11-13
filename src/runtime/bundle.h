@@ -26,6 +26,7 @@ extern "C" {
 #define GK_PERM_RTC	(1u << 2)	/* gk:clock's set, setTrim, setUtcOffset */
 #define GK_PERM_CAMERA	(1u << 1)	/* ui.Scanner - the camera, for QR codes and such */
 #define GK_PERM_SETTINGS (1u << 3)	/* gk:i18n's setLanguage, setMarks, setKeyboard */
+#define GK_PERM_EPAPER	(1u << 4)	/* ui.epaper - write to an e-paper panel (docs/EPAPER.md) */
 
 typedef struct
 {

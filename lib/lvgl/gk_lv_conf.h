@@ -1020,12 +1020,12 @@
 #endif
 
 /** Built-in TTF decoder */
-#define LV_USE_TINY_TTF 1	/* markup's bold and italic: src/runtime/ttfstyles.cpp */
+#define LV_USE_TINY_TTF 1	/* sizes and styles without a bitmap font: src/runtime/fontcache.cpp */
 #if LV_USE_TINY_TTF
     /* Enable loading TTF data from files */
     #define LV_TINY_TTF_FILE_SUPPORT 0
-    #define LV_TINY_TTF_CACHE_GLYPH_CNT 96	/* glyphs kept drawn, per style and size */
-    #define LV_TINY_TTF_CACHE_KERNING_CNT 0	/* see ttfstyles.cpp */
+    #define LV_TINY_TTF_CACHE_GLYPH_CNT 96	/* glyphs kept drawn, per font (and a cap for all: fontcache.h) */
+    #define LV_TINY_TTF_CACHE_KERNING_CNT 0	/* see fontcache.cpp */
 #endif
 
 /** Rlottie library */

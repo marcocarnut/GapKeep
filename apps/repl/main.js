@@ -36,6 +36,20 @@ const EXAMPLES = [
   [t("Bitcoin: an account's descriptor"),
     `var account = btc.words("${ABANDON}").derive("m/86'/0'/0'");\naccount.descriptor()`],
   [t("Bitcoin: what btc does"), "btc.help()"],
+  [t("E-paper: write to the panel"),
+    "// the panel: a container like ui.screen, off screen; refresh() writes it\n" +
+    "if (typeof panel === \"object\") panel.close();\n" +
+    "var panel = ui.epaper.open();\n" +
+    "var row = new ui.Container(panel, { layout: \"row\", gap: 8, width: \"100%\", height: \"100%\", alignItems: \"center\" });\n" +
+    "new ui.QRCode(row, { data: \"https://gapkeep.org\", size: panel.height - 16 });\n" +
+    "var text = new ui.Container(row, { layout: \"column\", gap: 4, grow: 1 });\n" +
+    "new ui.Label(text, { text: \"Hello from the REPL\", font: 24, color: 0xff0000, width: \"100%\", overflow: \"wrap\" });\n" +
+    "new ui.Label(text, { text: \"ABCD EFGH 0O1lI\", family: \"epdmono\", font: 20 });\n" +
+    "var status = new ui.Label({ text: \"Writing…\" });\n" +
+    "panel.refresh({ onProgress: (f) => { status.text = \"Writing… \" + Math.round(f * 100) + \"%\"; } })\n" +
+    "  .then(() => { status.text = \"Done: you can unplug the panel.\"; },\n" +
+    "        (e) => { status.text = String(e); });\n" +
+    "panel.model"],
 ];
 
 const header = new ui.Container({ layout: "row", width: "100%", gap: 12, alignItems: "center" });
@@ -45,7 +59,7 @@ const examples = new ui.Dropdown(header, {
   width: 260,
 });
 
-new ui.Label({ text: t("Enter runs the code; Shift+Enter starts a new line."), width: "100%" });
+new ui.Label({ text: t("Enter runs the code; Shift+Enter starts a new line; Ctrl+C stops it."), width: "100%" });
 const input = new ui.TextArea({ mono: true, font: 16, width: "100%", height: 110 });
 const output = new ui.Label({ mono: true, font: 16, width: "100%", padding: [4, 8], radius: 4, bg: "#000", text: " " });
 const area = new ui.Container({ width: "100%", height: "content", layout: "column", gap: 8 });
@@ -120,26 +134,43 @@ const BTC_LOADED = () => !Object.getOwnPropertyDescriptor(globalThis, "btc").get
 
 // The log says what kind of result, never the code or the value: it goes
 // to the serial port in test builds, and the code could hold a secret.
-let running = false;
+//
+// A run may be stopped (Ctrl+C, or the system's 10 s watchdog) with an
+// exception nothing can catch: no catch or finally of ours runs then. So
+// nothing here is left half-done by that: the output says "stopped" before
+// the code runs, and only its result or its error replace that; and a run
+// waiting for btc to load only gives way to a newer run (Enter again).
+let lastRun = 0;
+function fail(code, e) {
+  output.set({ text: String(e), bg: "#ff8080", color: "#000" });
+  console.log("repl: ran " + code.length + " characters: " + (e && e.name ? e.name : "exception"));
+}
 async function run() {
-  if (running) return;
-  running = true;
+  const thisRun = ++lastRun;
   area.clear();
   const code = input.text;
-  try {
-    if (/\bbtc\b/.test(code) && !BTC_LOADED()) {
-      output.set({ text: t("Loading btc…"), bg: "#000", color: "#fff" });
+  if (/\bbtc\b/.test(code) && !BTC_LOADED()) {
+    output.set({ text: t("Loading btc…"), bg: "#000", color: "#fff" });
+    try {
       await loadBtc();
+    } catch (e) {
+      if (thisRun === lastRun) fail(code, e);
+      return;
     }
-    const value = (0, eval)(code);
-    output.set({ text: show(value), bg: "#000", color: "#fff" });
-    console.log("repl: ran " + code.length + " characters: " + kindOf(value));
-  } catch (e) {
-    output.set({ text: String(e), bg: "#ff8080", color: "#000" });
-    console.log("repl: ran " + code.length + " characters: " + (e && e.name ? e.name : "exception"));
-  } finally {
-    running = false;
+    if (thisRun !== lastRun) return;
   }
+  output.set({ text: t("Stopped (Ctrl+C, or after 10 s)"), bg: "#ff8080", color: "#000" });
+  let text, kind;
+  try {
+    const value = (0, eval)(code);
+    text = show(value);         // the value's own toString() runs code too
+    kind = kindOf(value);
+  } catch (e) {
+    fail(code, e);
+    return;
+  }
+  output.set({ text, bg: "#000", color: "#fff" });
+  console.log("repl: ran " + code.length + " characters: " + kind);
 }
 
 // Enter in the code box runs it, before the box sees it (so no line break

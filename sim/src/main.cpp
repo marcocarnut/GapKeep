@@ -10,6 +10,9 @@
 //                           meta_l...)
 //   keydown <name>          press a key and hold it (it auto-repeats)
 //   keyup                   release it
+//                           (key commands are taken even while a script
+//                           runs, as the Pi's keyboard interrupt: Ctrl+C
+//                           can stop it; other commands wait for it)
 //   pointer <x> <y> <0|1>   mouse at (x, y), left button up (0) or down (1)
 //   wheel <notches>         the mouse wheel where the pointer is: > 0 down
 //   shot <file.png>         screenshot; answers "#shot <file.png>"
@@ -23,6 +26,20 @@
 //   camera none             there is no camera
 //   language <tag>          the language of the apps started from now on
 //                           (pt-BR, qps...), as a settings app sets it
+//   epaper plug <name> [<model>]
+//                           plug in the e-paper panel of that name (a new
+//                           name: a new panel, white, of the model given or
+//                           the configured one; an old one: as it was left)
+//   epaper unplug           pull the panel out (BUSY then reads as pulled)
+//   epaper config <model> [rotate=90 dc=25 ...]
+//                           the panel's configuration, as gapkeep.txt's
+//                           epaper keys (a test kernel's "#epaper")
+//   epaper shot <file.png>  what the plugged-in panel shows, landscape;
+//                           answers "#epaper shot <file.png>"
+//   epaper look <file.png>  ...as its pigments look now (the 2.9" B/W/R's
+//                           physics: mid-refresh too)
+//   epaper refresh-ms <ms>  how long a refresh holds BUSY (< 0: its
+//                           waveform's, 18 s on the 2.9" B/W/R)
 //   eject                   remove the SD card (its folder is no longer read)
 //   usbip attach <host>:<port> [<busid>]
 //                           plug in the USB device a USB/IP server offers
@@ -32,13 +49,20 @@
 //   usbip detach [<busid>]  pulls its cable (none given: every one)
 //   quit                    exit
 //
-// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--usbip HOST:PORT[/BUSID]]
+// Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--epaper MODEL]
+//              [--epaper-ms MS] [--usbip HOST:PORT[/BUSID]]
 //              [--for SECONDS] [--shot FILE.png]
 //   --card DIR      DIR plays the SD card: apps load from DIR/apps, data
 //                   folders (gk:data) from DIR/data
 //   --builtin DIR   DIR/<id> replaces the built-in app <id> (DIR/launcher:
 //                   a launcher to try out; see docs/SIMULATOR.md)
 //   --app ID        start that app right after boot
+//   --epaper MODEL  the e-paper panel (over the card's gapkeep.txt):
+//                   weact-2.9-bwr, weact-2.13-bw, weact-4.2-bw, or none;
+//                   a panel of it is plugged in (docs/EPAPER.md)
+//   --epaper-ms MS  as "epaper refresh-ms"
+//   --epaper-physics  the 2.9" B/W/R's pigments' physics, for "epaper look"
+//                   (seconds of CPU a refresh: off by default)
 //   --lang TAG      the language (over the card's gapkeep.txt): en, pt-BR,
 //                   qps (the pseudo-language: shows untranslated text)...
 //   --usbip HOST:PORT[/BUSID]  as "usbip attach", from the start (more than once: more devices)
@@ -51,6 +75,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "sim.h"
+#include "../../src/runtime/epd.h"
 #include <circle/timer.h>
 #include <ff.h>
 #include <lvgl/lvgl/lvgl.h>
@@ -59,6 +84,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <deque>
+#include <string>
 
 void GkSimLogLine (const char *pLine)
 {
@@ -74,6 +101,83 @@ static const unsigned KeyHoldTicks = 60000;	// "key": 60 ms, as the harness hold
 
 static unsigned s_nReleaseAt;
 static int s_bReleasePending;
+
+static int s_bInput;			// commands come on stdin
+static char s_Line[4096];		// the command line being read
+static size_t s_nLine;
+static std::deque<std::string> s_Pending;	// read during a script, not run yet
+static int s_bEOF;			// ... and then stdin ended
+
+static int Command (char *pLine);
+
+// A character of a command line: TRUE when s_Line holds a whole line.
+static int InputChar (char c)
+{
+	if (c == '\n' || s_nLine == sizeof s_Line - 1)
+	{
+		s_Line[s_nLine] = '\0';
+		s_nLine = 0;
+		return 1;
+	}
+	if (c != '\r')
+	{
+		s_Line[s_nLine++] = c;
+	}
+	return 0;
+}
+
+// While a script runs (CAppHost's interrupt checks), as the Pi's keyboard
+// interrupt would: reads what came on stdin, runs the key commands at the
+// head of it (so Ctrl+C reaches kbdindev, which may stop the script), and
+// keeps the rest, in order, for the main loop. Every 5 ms at most.
+static void InputPoll (void)
+{
+	static unsigned s_nLastPoll;
+	unsigned nNow = CTimer::GetClockTicks ();
+	if (nNow - s_nLastPoll < 5000)
+	{
+		return;
+	}
+	s_nLastPoll = nNow;
+
+	if (s_bReleasePending && (int) (nNow - s_nReleaseAt) >= 0)
+	{
+		gk_sim_key_up ();
+		s_bReleasePending = 0;
+	}
+
+	struct pollfd Poll = {0, POLLIN, 0};
+	while (!s_bEOF && poll (&Poll, 1, 0) > 0)
+	{
+		char Buf[256];
+		ssize_t n = read (0, Buf, sizeof Buf);
+		if (n <= 0)
+		{
+			s_bEOF = 1;
+			break;
+		}
+		for (ssize_t i = 0; i < n; i++)
+		{
+			if (InputChar (Buf[i]))
+			{
+				s_Pending.push_back (s_Line);
+			}
+		}
+	}
+
+	while (!s_Pending.empty ())
+	{
+		const std::string &rLine = s_Pending.front ();
+		if (   rLine.compare (0, 4, "key ") != 0 && rLine.compare (0, 8, "keydown ") != 0
+		    && rLine != "keyup")
+		{
+			break;		// for the main loop, and what follows it too
+		}
+		std::string Line = rLine;
+		s_Pending.pop_front ();
+		Command (&Line[0]);
+	}
+}
 
 // A binary PGM (P5) or PPM (P6) file, 8 bits: its pixels, *pChannels
 // bytes each (1 grey, 3 RGB). 0 if it isn't one.
@@ -104,6 +208,62 @@ static uint8_t *ReadPicture (const char *pPath, unsigned *pWidth, unsigned *pHei
 	*pWidth = w;
 	*pHeight = h;
 	return pPixels;
+}
+
+// epaper plug <name> [<model>] | unplug | shot <file.png> | refresh-ms <ms>
+static void EPaperCommand (char *pArgs)
+{
+	char *pRest = strchr (pArgs, ' ');
+	if (pRest != 0)
+	{
+		*pRest++ = '\0';
+	}
+	else
+	{
+		pRest = pArgs + strlen (pArgs);
+	}
+
+	if (strcmp (pArgs, "plug") == 0 && *pRest != '\0')
+	{
+		char *pModel = strchr (pRest, ' ');
+		if (pModel != 0)
+		{
+			*pModel++ = '\0';
+		}
+		if (gk_sim_epaper_plug (pRest, pModel) == 0)
+		{
+			printf ("#epaper plug %s\n", pRest);
+		}
+		else
+		{
+			printf ("#error epaper plug %s: no such model, or that panel is another\n", pRest);
+		}
+	}
+	else if (strcmp (pArgs, "config") == 0 && *pRest != '\0')
+	{
+		// as a test kernel's "#epaper" (src/testshot.h)
+		printf (CGkEPD::ConfigureLine (pRest, "simulator") ? "#epaper config\n" : "#error epaper config: refused\n");
+	}
+	else if (strcmp (pArgs, "unplug") == 0)
+	{
+		gk_sim_epaper_unplug ();
+		printf ("#epaper unplug\n");
+	}
+	else if ((strcmp (pArgs, "shot") == 0 || strcmp (pArgs, "look") == 0) && *pRest != '\0')
+	{
+		int bLook = pArgs[0] == 'l';
+		printf (gk_sim_epaper_shot (pRest, bLook) == 0 ? "#epaper %s %s\n" : "#error epaper %s %s: no panel plugged in\n",
+			pArgs, pRest);
+	}
+	else if (strcmp (pArgs, "refresh-ms") == 0 && *pRest != '\0')
+	{
+		gk_sim_epaper_refresh_ms (atof (pRest));
+		printf ("#epaper refresh-ms %s\n", pRest);
+	}
+	else
+	{
+		printf ("#error epaper plug <name> [<model>] | unplug | shot <file.png> | look <file.png> | refresh-ms <ms>\n");
+	}
 }
 
 static void CameraCommand (char *pArgs)
@@ -278,6 +438,10 @@ static int Command (char *pLine)
 			printf ("#error no keyboard layout %s\n", pArgs);
 		}
 	}
+	else if (strcmp (pLine, "epaper") == 0)
+	{
+		EPaperCommand (pArgs);
+	}
 	else if (strcmp (pLine, "eject") == 0)
 	{
 		GkSimSetCardRoot (0);	// the card is gone: nothing may need it now
@@ -336,10 +500,14 @@ int main (int argc, char **argv)
 		else if (strcmp (argv[i], "--for") == 0 && i + 1 < argc)	fFor = atof (argv[++i]);
 		else if (strcmp (argv[i], "--shot") == 0 && i + 1 < argc)	pShot = argv[++i];
 		else if (strcmp (argv[i], "--lang") == 0 && i + 1 < argc)	gk_sim_set_language (argv[++i]);
+		else if (strcmp (argv[i], "--epaper") == 0 && i + 1 < argc)	gk_sim_set_epaper (argv[++i]);
+		else if (strcmp (argv[i], "--epaper-ms") == 0 && i + 1 < argc)	gk_sim_epaper_refresh_ms (atof (argv[++i]));
+		else if (strcmp (argv[i], "--epaper-physics") == 0)		gk_sim_epaper_physics (1);
 		else if (strcmp (argv[i], "--usbip") == 0 && i + 1 < argc && nUSBIP < 4) USBIP[nUSBIP++] = argv[++i];
 		else
 		{
 			fprintf (stderr, "usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG]"
+				 " [--epaper MODEL|none] [--epaper-ms MS] [--epaper-physics]"
 				 " [--usbip HOST:PORT[/BUSID]] [--for SECONDS] [--shot FILE.png]\n");
 			return 2;
 		}
@@ -371,9 +539,11 @@ int main (int argc, char **argv)
 		return 1;
 	}
 
-	char Line[4096];
-	size_t nLine = 0;
-	int bInput = fFor < 0;		// with --for, stdin is not read
+	s_bInput = fFor < 0;		// with --for, stdin is not read
+	if (s_bInput)
+	{
+		gk_sim_set_input_poll (InputPoll);
+	}
 	for (;;)
 	{
 		gk_sim_step ();
@@ -398,10 +568,26 @@ int main (int argc, char **argv)
 			return 0;
 		}
 
-		struct pollfd Poll = {0, POLLIN, 0};
-		if (!bInput || poll (&Poll, 1, 1) <= 0)		// otherwise: 1 ms idle
+		// lines read while a script ran, that InputPoll left: in order
+		if (!s_Pending.empty ())
 		{
-			if (!bInput)
+			std::string Line = s_Pending.front ();
+			s_Pending.pop_front ();
+			if (!Command (&Line[0]))
+			{
+				return 0;
+			}
+			continue;
+		}
+		if (s_bEOF)
+		{
+			return 0;
+		}
+
+		struct pollfd Poll = {0, POLLIN, 0};
+		if (!s_bInput || poll (&Poll, 1, 1) <= 0)	// otherwise: 1 ms idle
+		{
+			if (!s_bInput)
 			{
 				usleep (1000);
 			}
@@ -414,18 +600,9 @@ int main (int argc, char **argv)
 		{
 			return 0;		// EOF
 		}
-		if (c == '\n' || nLine == sizeof Line - 1)
+		if (InputChar (c) && !Command (s_Line))
 		{
-			Line[nLine] = '\0';
-			nLine = 0;
-			if (!Command (Line))
-			{
-				return 0;
-			}
-		}
-		else if (c != '\r')
-		{
-			Line[nLine++] = c;
+			return 0;
 		}
 	}
 }

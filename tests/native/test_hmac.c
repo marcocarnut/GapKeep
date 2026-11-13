@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "hmac.h"
 #include "ripemd160.h"
 #include "pbkdf2.h"
@@ -33,11 +34,12 @@ int main (int argc, char **argv)
 
 	/* "random N": N cases as lines "hash keyhex msghex digest hmac" */
 	int cases = atoi (argv[1]);
-	static const gk_hash_t *const hashes[] = { &gk_hash_sha1, &gk_hash_sha256, &gk_hash_sha512 };
+	static const gk_hash_t *const hashes[] =
+		{ &gk_hash_sha1, &gk_hash_sha256, &gk_hash_sha512, &gk_hash_sha224, &gk_hash_sha384 };
 	srand (1);
 	for (int c = 0; c < cases; c++)
 	{
-		const gk_hash_t *h = hashes[c % 3];
+		const gk_hash_t *h = hashes[c % 5];
 		size_t kl = (size_t) rand () % 300, ml = (size_t) rand () % 600;
 		static uint8_t k[300], m[600];
 		for (size_t i = 0; i < kl; i++) k[i] = (uint8_t) rand ();
@@ -75,6 +77,12 @@ int main (int argc, char **argv)
 			size_t dl = 1 + (size_t) rand () % 150, pl = kl % 150, sl = ml % 80;
 			uint8_t dk[150];
 			gk_pbkdf2 (h, k, pl, m, sl, it, dk, dl);
+			/* the same in steps of 1 to 7 iterations */
+			gk_pbkdf2_job_t job;
+			if (gk_pbkdf2_begin (&job, h, k, pl, m, sl, it, dl) != 0) return 1;
+			while (gk_pbkdf2_step (&job, 1 + (uint32_t) (c % 7))) ;
+			if (memcmp (job.out, dk, dl) != 0) { printf ("PBKDF2 in steps differs\n"); return 1; }
+			gk_pbkdf2_end (&job);
 			printf ("PBKDF2 %s ", h->name);
 			hex (k, pl); printf (" "); hex (m, sl); printf (" %u ", (unsigned) it); hex (dk, dl);
 			printf ("\n");

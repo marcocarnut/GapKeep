@@ -113,6 +113,46 @@ false
 ],
 [
 "<span size='13'>x</span>",
+true
+],
+[
+"<span size='8'>x</span>",
+true
+],
+[
+"<span size='120'>x</span>",
+true
+],
+[
+"<b><i><span size='97'>x</span></i></b>",
+true
+],
+[
+"<span size='7'>x</span>",
+false
+],
+[
+"<span size='121'>x</span>",
+false
+],
+[
+"<span size='0'>x</span>",
+false
+],
+[
+"<span size='-20'>x</span>",
+false
+],
+[
+"<span size='20.5'>x</span>",
+false
+],
+[
+"<span size=''>x</span>",
+false
+],
+[
+"<span size='99999999999'>x</span>",
 false
 ],
 [

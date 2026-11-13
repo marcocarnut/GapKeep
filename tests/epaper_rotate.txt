@@ -1,0 +1,110 @@
+# Needs a test build (make TEST=1), and the simulator (its e-paper panel):
+# the panel's mounting (gapkeep.txt's epaper_rotate, here the simulator's
+# "epaper config", as a test kernel's "#epaper") composed with the app's
+# orientation and flip, for the 4 x 4 cases. tests/apps/epapertest draws a
+# page with a black square top left, a red one top right and a QR code of
+# its size; tools/run_sim_tests.sh then checks each picture, the panel as
+# its viewer sees it (tests/epaper/check_rotation.py, docs/EPAPER.md).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect launcher ready 60
+epaper refresh-ms 200
+launch epapertest
+expect epapertest ready
+
+# mounted turned 0 degrees clockwise
+epaper config weact-2.9-bwr rotate=0
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 0 degrees clockwise
+mark
+key q
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r0-q
+mark
+key e
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r0-e
+mark
+key y
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r0-y
+mark
+key u
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r0-u
+
+# mounted turned 90 degrees clockwise
+epaper config weact-2.9-bwr rotate=90
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 90 degrees clockwise
+mark
+key q
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r90-q
+mark
+key e
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r90-e
+mark
+key y
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r90-y
+mark
+key u
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r90-u
+
+# mounted turned 180 degrees clockwise
+epaper config weact-2.9-bwr rotate=180
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 180 degrees clockwise
+mark
+key q
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r180-q
+mark
+key e
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r180-e
+mark
+key y
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r180-y
+mark
+key u
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r180-u
+
+# mounted turned 270 degrees clockwise
+epaper config weact-2.9-bwr rotate=270
+expect epaper: WeAct 2.9" B/W/R .* mounted turned 270 degrees clockwise
+mark
+key q
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r270-q
+mark
+key e
+expect epapertest open: WeAct 2.9" B/W/R, 296x128
+expect epapertest wrote fonts orientation 10
+epaper shot r270-e
+mark
+key y
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r270-y
+mark
+key u
+expect epapertest open: WeAct 2.9" B/W/R, 128x296
+expect epapertest wrote fonts orientation 10
+epaper shot r270-u

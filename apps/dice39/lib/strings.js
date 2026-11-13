@@ -9,8 +9,9 @@ import { t } from "gk:i18n";
 
 export const S = {
   tagline: t("Entropy you see."),
-  need: t("You need a coin, four six-sided dice (one works: roll it four times) and the printed dice tables. " +
-    "Print the tables from the dice39 web page on any computer: they hold no secret."),
+  need: t("You need a coin, four six-sided dice (one works: roll it four times) and the dice tables, printed."),
+  tablesWhere: t("This device can't print. Download the tables on any computer, from the address below (or scan " +
+    "the code with a phone), and print them: they hold no secret."),
   procedure: t("For each word: flip the coin to pick the table, then roll two pairs of dice. First pair = column, " +
     "second pair = row. If the cell says REROLL, roll the dice again on this same table; do not re-flip the coin."),
   order: t("Read each pair left to right, where the dice land, never smallest first: column 3-5 means first die 3, " +
@@ -22,6 +23,21 @@ export const S = {
   entryHelp: t("Type each word, or its dice code instead: a3526 or b3526 (table, then the four dice). " +
     "Just 3526 offers both tables' words to pick from. Enter moves to the next box; Enter on an empty box " +
     "goes on to the entropy pad below."),
+  allWords: (total, max, tail, cs) => t("Or type all {total} words, to split a phrase made entirely of your own " +
+    "throws: then nothing comes from this device, and the last word is changed only if the checksum doesn't match " +
+    "(its first {tail} bits stay yours; its last {cs} become the checksum). Up to {max} words, this device adds the " +
+    "rest.", { total, max, tail, cs }),
+  allWordsStatus: (total, corrected, cs) => (corrected
+    ? t("All {total} words are yours. The checksum doesn't match, so the last word will change: only its last {cs} " +
+      "bits, the checksum.", { total, cs })
+    : t("All {total} words are yours, and the checksum matches: the phrase will be used exactly as typed.",
+      { total })),
+  summaryAll: (total, ent, cs, corrected, typed) => (corrected
+    ? t("All {total} words came from your dice: {ent} bits, none of it from this device. The last word's checksum " +
+      "({cs} bits) didn't match and was recomputed: you typed “{typed}”. Write the phrase down as shown here.",
+    { total, ent, cs, typed })
+    : t("All {total} words came from your dice, used exactly as typed: {ent} bits, none of it from this device. " +
+      "The checksum already matched.", { total, ent })),
   reroll: t("REROLL: throw the four dice again on this same table, and do not re-flip the coin."),
 
   coinSkip: (n, table, odds, actual, ideal) => [

@@ -6,6 +6,59 @@ type BytesLike = ArrayBufferView | ArrayBuffer | string;
 
 type Bytes = ArrayBufferView | ArrayBuffer;
 
+type JobOptions = {
+  /** called as the work goes on, with how far it is: more than 0, at most 1 */
+  onProgress?: (fraction: number) => void;
+  /** cancels it: the promise rejects with signal.reason (an AbortError) */
+  signal?: AbortSignal;
+};
+
+type HashName = "SHA-1" | "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512";
+
+type Hash = {
+  /** "SHA-256", ... */
+  readonly algorithm: HashName;
+  /** adds data (strings as UTF-8); returns this hash */
+  update(data: BytesLike): Hash;
+  /** the digest; the hash is finished (using it again throws) */
+  digest(): Uint8Array;
+  /** a new hash in the same state */
+  copy(): Hash;
+  /** wipes the state; the hash is finished */
+  destroy(): void;
+};
+
+type Ed25519PrivateKey = {
+  /** 32 bytes */
+  readonly publicKey: Uint8Array;
+  /** the 64-byte signature of message (pure Ed25519) */
+  sign(message: Bytes): Uint8Array;
+  /** wipes the private key; sign() then throws */
+  destroy(): void;
+};
+
+type X25519PrivateKey = {
+  /** 32 bytes, little-endian (RFC 7748) */
+  readonly publicKey: Uint8Array;
+  /** the 32-byte shared secret; a RangeError if it is all zeros */
+  sharedSecret(peerPublic: Bytes): Uint8Array;
+  /** wipes the secret; sharedSecret() then throws */
+  destroy(): void;
+};
+
+type RsaPrivateKey = {
+  /** the modulus's size, 2048 to 4096 */
+  readonly bits: number;
+  /** n and e, big-endian, without leading zeros */
+  readonly publicKey: { n: Uint8Array; e: Uint8Array };
+  /** RSASSA-PKCS1-v1_5 of a digest: as many bytes as n (not SHA-1); a long operation */
+  sign(hash: "SHA-224" | "SHA-256" | "SHA-384" | "SHA-512", digest: Bytes, options?: JobOptions): Promise<Uint8Array>;
+  /** RSAES-PKCS1-v1_5, implicit rejection (bad padding gives a pseudo-random message); a long operation */
+  decrypt(ciphertext: Bytes, options?: JobOptions): Promise<Uint8Array>;
+  /** wipes the private key; the key can't be used again */
+  destroy(): void;
+};
+
 type SessionValue = string | number | boolean | null | bigint | Date | ArrayBuffer | ArrayBufferView
   | SessionValue[] | { [key: string]: SessionValue };
 
@@ -89,6 +142,21 @@ declare module "gk:ui" {
    * as canvas `ImageData`.
    */
   export type ImageSource = { width: number; height: number; data: Uint8Array | ArrayBuffer };
+  /** A colour an e-paper panel shows. */
+  export type EPaperColor = "black" | "white" | "red";
+  /** The configured e-paper panel, as `ui.epaper.open()` (landscape) would give it. */
+  export type EPaperInfo = { model: string; width: number; height: number; colors: EPaperColor[] };
+  /** An open e-paper panel: a Container (the root of what the panel shows) with more. */
+  export type EPaperPanel = Container & {
+  /** the module, for people: "WeAct 2.9\" B/W/R" */
+  readonly model: string;
+  /** what it shows: ["black", "white"], or with "red" */
+  readonly colors: EPaperColor[];
+  /** writes what the panel's widgets show onto the panel: a full refresh, then deep sleep; resolves once it may be unplugged, rejects with an Error (no panel, ...) */
+  refresh(options?: JobOptions): Promise<void>;
+  /** deletes the panel's widgets and gives the panel back (what it shows stays) */
+  close(): void;
+};
   export type SymbolName = "audio" | "video" | "list" | "ok" | "close" | "power" | "settings" | "home" | "download" | "drive" | "refresh" | "mute" | "volume-mid" | "volume-max" | "image" | "tint" | "prev" | "play" | "pause" | "stop" | "next" | "eject" | "left" | "right" | "plus" | "minus" | "eye-open" | "eye-close" | "warning" | "shuffle" | "up" | "down" | "loop" | "directory" | "upload" | "call" | "cut" | "copy" | "save" | "bars" | "envelope" | "charge" | "paste" | "bell" | "keyboard" | "gps" | "file" | "wifi" | "battery-full" | "battery-3" | "battery-2" | "battery-1" | "battery-empty" | "usb" | "bluetooth" | "trash" | "edit" | "backspace" | "sd-card" | "new-line";
   export type SymbolTable = { readonly [name in SymbolName]: string };
   export type EventName = "click" | "change" | "submit" | "focus" | "blur" | "longpress" | "key" | "press" | "drag" | "release" | "detect" | "error";
@@ -144,10 +212,12 @@ declare module "gk:ui" {
     bg?: Color;
     /** Text color. */
     color?: Color;
-    /** Font size, one of `ui.fonts`. */
+    /** Font size in pixels, a whole number of `ui.fontRange` (8 to 120; `ui.fonts` are the fastest); else a `RangeError`. With `family: "epdmono"`, one of `ui.epdmonoFonts`. */
     font?: number;
-    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
+    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. */
     mono?: boolean;
+    /** *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
+    family?: "default" | "epdmono";
     textAlign?: "left" | "center" | "right";
     /** Corner radius, px. */
     radius?: number;
@@ -196,7 +266,7 @@ declare module "gk:ui" {
     text?: string;
     /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow?: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
-    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the same size), `<big>` and `<small>` (the next size of `ui.fonts` up or down), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (whole pixels, 8 to 120: `ui.fontRange`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
     markup?: boolean;
   }
   export interface ButtonProps extends CommonProps {
@@ -343,10 +413,12 @@ declare module "gk:ui" {
     bg: Color;
     /** Text color. */
     color: Color;
-    /** Font size, one of `ui.fonts`. */
+    /** Font size in pixels, a whole number of `ui.fontRange` (8 to 120; `ui.fonts` are the fastest); else a `RangeError`. With `family: "epdmono"`, one of `ui.epdmonoFonts`. */
     font: number;
-    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. */
+    /** *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. */
     mono: boolean;
+    /** *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. */
+    family: "default" | "epdmono";
     textAlign: "left" | "center" | "right";
     /** Corner radius, px. */
     radius: number;
@@ -410,7 +482,7 @@ declare module "gk:ui" {
     text: string;
     /** What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). */
     overflow: "wrap" | "clip" | "dots" | "scroll" | "scroll-circular";
-    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
+    /** *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the same size), `<big>` and `<small>` (the next size of `ui.fonts` up or down), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (whole pixels, 8 to 120: `ui.fontRange`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). */
     markup: boolean;
   }
   /** A button: clicked with the mouse, or Enter or Space while focused. */
@@ -457,7 +529,7 @@ declare module "gk:ui" {
     /** *Readable*. */
     checked: boolean;
   }
-  /** Picks one of several options from a list that opens. */
+  /** Picks one of several options from a list that opens below the control (above it if there is more room there). The list is as wide as its longest option and stays on the screen: near the right edge it lines up with the control's right side; a list too tall to fit scrolls, with a scrollbar. */
   export class Dropdown extends Widget {
     constructor(props?: DropdownProps);
     constructor(parent: Widget, props?: DropdownProps);
@@ -577,10 +649,14 @@ declare module "gk:ui" {
   export const width: number;
   /** Display size in pixels. */
   export const height: number;
-  /** Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
+  /** The fastest font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40, built in as bitmaps. Any other size of `ui.fontRange` works too, drawn from the font's outlines when first used ([Font sizes](APPS.md#font-sizes)). Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. */
   export const fonts: number[];
-  /** Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. */
+  /** The fastest sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28, built in as bitmaps; any other size of `ui.fontRange` is drawn from outlines. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. */
   export const monoFonts: number[];
+  /** `{ min: 8, max: 120 }`: the sizes `font` and markup's `<span size>` take, in whole pixels, for the normal and the monospaced font (not for `family: "epdmono"`, a pixel font with its own sizes). Sizes not in `ui.fonts` (or `ui.monoFonts`) are drawn from outlines, each glyph when first drawn: a little slower the first time, and soft under about 12 px. [Font sizes](APPS.md#font-sizes). */
+  export const fontRange: { min: number; max: number };
+  /** Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 14, 16, 20, 24 and 32 (Terminus Font's bold, 8x14 to 16x32). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). */
+  export const epdmonoFonts: number[];
   /** Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List]. */
   export const symbols: SymbolTable;
   /** Modal message. [Details]. */
@@ -591,6 +667,8 @@ declare module "gk:ui" {
   export function theme(options: { dark?: boolean; primary?: Color; secondary?: Color }): void;
   /** The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`'s `tm()`. */
   export function escapeMarkup(text: string): string;
+  /** An e-paper panel on the GPIO header, as a second, off-screen display: `open()`, `info()`. Needs `"permissions": ["epaper"]`. [Details]. */
+  export const epaper: { open: (options?: { orientation?: "landscape" | "portrait"; flip?: boolean }) => EPaperPanel; info: () => EPaperInfo | null };
 }
 
 declare module "gk:sys" {
@@ -619,14 +697,22 @@ declare module "gk:crypto" {
   export function sha256(data: BytesLike): Uint8Array;
   /** SHA-512, a `Uint8Array(64)`. */
   export function sha512(data: BytesLike): Uint8Array;
-  /** HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). */
-  export function hmac(hash: "SHA-1" | "SHA-256" | "SHA-512", key: BytesLike, data: BytesLike): Uint8Array;
+  /** SHA-224, a `Uint8Array(28)`. */
+  export function sha224(data: BytesLike): Uint8Array;
+  /** SHA-384, a `Uint8Array(48)`. */
+  export function sha384(data: BytesLike): Uint8Array;
+  /** A hash to feed in pieces: `update(data)` (returns the hash, so calls chain), `digest()` (the result; the hash is then finished, and using it again throws a `TypeError`), `copy()` (a new hash in the same state: hash what is common once, then each copy's own end), `destroy()` (wipes the state now, rather than when the object is collected) and `algorithm` (its name). `hash` as for `hmac`. For data too big for one array, or that arrives in parts. Like the one-shot hashes, each `update` blocks while it hashes ([how long]). */
+  export function createHash(hash: HashName): Hash;
+  /** HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto (`"SHA-1"`, `"SHA-224"`, `"SHA-256"`, `"SHA-384"` or `"SHA-512"`): a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). */
+  export function hmac(hash: HashName, key: BytesLike, data: BytesLike): Uint8Array;
   /** RIPEMD-160, a `Uint8Array(20)`. */
   export function ripemd160(data: BytesLike): Uint8Array;
   /** RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. */
   export function hash160(data: BytesLike): Uint8Array;
-  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. */
-  export function pbkdf2(hash: "SHA-1" | "SHA-256" | "SHA-512", password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
+  /** PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s), Ctrl+C and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. */
+  export function pbkdf2(hash: HashName, password: BytesLike, salt: BytesLike, iterations: number, length: number): Uint8Array;
+  /** The same as a [long operation]: a promise, the work done in slices while the screen keeps being drawn (about 30,000 SHA-512 iterations a second on a Pi Zero). Arguments as `pbkdf2`'s, checked at once. */
+  export function pbkdf2Async(hash: HashName, password: BytesLike, salt: BytesLike, iterations: number, length: number, options?: JobOptions): Promise<Uint8Array>;
   /** Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). */
   export function isPrivateKey(key: Bytes): boolean;
   /** Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). */
@@ -653,6 +739,44 @@ declare module "gk:crypto" {
   export function taprootTweakPublicKey(publicKey: Bytes, tweak: Bytes): { key: Uint8Array; parity: 0 | 1 };
   /** The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. */
   export function taprootTweakPrivateKey(privateKey: Bytes, tweak: Bytes): Uint8Array;
+  /** An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Ed25519 hashes the message itself (SHA-512, twice when signing), at about 9 MB/s on a Pi Zero: a digest takes no time, a big message would block (sign a digest). Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. */
+  export function ed25519PrivateKey(seed: Bytes): Ed25519PrivateKey;
+  /** Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. Hashes the message (SHA-512, about 9 MB/s on a Pi Zero). */
+  export function ed25519Verify(signature: Bytes, message: Bytes, publicKey: Bytes): boolean;
+  /** An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest, options?), decrypt(ciphertext, options?), destroy() }`. `sign` returns a promise of the RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-224 to SHA-512; SHA-1 throws a `TypeError`), as many bytes as `n`: a [long operation], about 90 ms with 2048 bits on a Pi Zero, 460 ms with 4096. Wrong arguments throw at once; a fault caught by the checks rejects with an `InternalError`, and `destroy()` before the signature is made rejects it with a `TypeError`. `decrypt` returns a promise of the message in an RSAES-PKCS1-v1_5 ciphertext (RFC 8017, 7.2.2), a long operation like `sign` (460 ms with 4096 bits): `ciphertext` exactly as long as `n` (pad an OpenPGP MPI with zeros on the left) and below `n`, else a `RangeError` at once. **Bad padding is not an error**: with *implicit rejection* (draft-irtf-cfrg-rsa-guidance, 7.2, as written), it decrypts to a message derived from the key and the ciphertext, the same each time, unpredictable without the key, 0 to `n`'s length − 11 bytes, so neither the app nor an attacker can tell. Check what comes out: for OpenPGP, the session key's algorithm, length and checksum, and then the message's integrity, will fail. `destroy()` wipes the key; `sign` and `decrypt` then throw a `TypeError`. */
+  export function rsaPrivateKey(key: { n: Bytes; e: Bytes; d: Bytes; p: Bytes; q: Bytes; u?: Bytes | null }): RsaPrivateKey;
+  /** Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }`: 1024 to 4096 bits, else `false`. **Keys under 2048 bits are weak** (1024-bit RSA is within reach of a well-funded attacker): they verify for old signatures only, and the app should say so (the size is that of `n`, which the app has); they can't be imported to sign. `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. */
+  export function rsaVerify(signature: Bytes, hash: HashName, digest: Bytes, publicKey: { n: Bytes; e: Bytes }): boolean;
+  /** AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 2 MiB (about 0.2 s on a Pi Zero), no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. For OpenPGP's encrypted messages, use `seipdV1Decrypt`, which checks them, and has no such limit. */
+  export function aesCfbEncrypt(key: Bytes, iv: Bytes, data: Bytes): Uint8Array;
+  /** The other way, as `aesCfbEncrypt`. */
+  export function aesCfbDecrypt(key: Bytes, iv: Bytes, data: Bytes): Uint8Array;
+  /** OpenPGP's string-to-key (RFC 9580, 3.7.1): a promise of the `length`-byte key (1 to 64) a passphrase (at most 64 KiB) gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. A [long operation], every type (one API): on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), twice that when the key is longer than the hash (AES-256 from SHA-1). The passphrase is copied when the call is made. Wrong arguments throw at once. */
+  export function openpgpS2k(type: 0 | 1 | 3, hash: HashName, passphrase: BytesLike, salt: Bytes | null, count: number | null, length: number, options?: JobOptions): Promise<Uint8Array>;
+  /** One AEAD message all at once, for keys and small blobs: the ciphertext followed by the 16-byte tag. AES-128, -192 or -256 (`key` 16, 24 or 32 bytes); `nonce` as long as RFC 9580 has it for the mode (OCB 15, EAX 16, GCM 12 bytes), else a `RangeError`; `associatedData` any bytes (empty: `new Uint8Array(0)`), up to 64 KiB. For an AEAD-protected secret key (RFC 9580, 5.5.3: S2K usage 253): the key from `hkdf("SHA-256", s2kOutput, null, [packetTag, version, cipher, mode], keyLength)`, a random nonce stored in the packet, the associated data the packet tag octet (0xC5 or 0xC7) and the public key packet's body. Synchronous, at most 256 KiB (about 0.15 s with GCM, the slowest, on a Pi Zero); **messages** go through `seipdV2Decrypt` and `ocbedDecrypt`, which are long operations. Never use a nonce twice with the same key. */
+  export function aeadEncrypt(mode: "OCB" | "EAX" | "GCM", key: Bytes, nonce: Bytes, associatedData: Bytes, plaintext: Bytes): Uint8Array;
+  /** The other way: `data` is the ciphertext followed by the tag; the plaintext is returned **only if the tag matches**, checked before anything is given. Otherwise it throws an `Error`, the same one whatever went wrong (a wrong key, nonce or associated data, changed or cut data). Arguments as `aeadEncrypt`'s. */
+  export function aeadDecrypt(mode: "OCB" | "EAX" | "GCM", key: Bytes, nonce: Bytes, associatedData: Bytes, data: Bytes): Uint8Array;
+  /** HKDF (RFC 5869) with HMAC over `hash`: `length` bytes (at most 255 digests) from the input keying material, a salt (`null`: none, which is zeros) and info. What RFC 9580 uses for SEIPD v2 and for AEAD-protected keys. */
+  export function hkdf(hash: HashName, ikm: BytesLike, salt: BytesLike | null, info: BytesLike, length: number): Uint8Array;
+  /** Argon2id (RFC 9106, version 1.3), without a secret or associated data: a promise of the `length`-byte tag (4 to 1024). `passes` (t) 1 to 255, `lanes` (p) 1 to 255, `memoryKiB` (m) at least 8 per lane and **at most a quarter of the board's memory** (128 MiB on a 512 MB Pi Zero; `limits().argon2MemoryKiB` says how much): more is a `RangeError`, never quietly less. `password` at most 64 KiB, `salt` 8 to 1024 bytes (16 random ones are usual). A [long operation]: the lanes are computed one after the other, a segment at a time in RFC 9106's order, in slices of about 20 ms, so the screen keeps being drawn (the longest wait between updates on a Pi Zero: 30 ms; longer once, when a larger area replaces a smaller one, as the kernel zeroes the old one). On a Pi Zero: 5.4 s for 64 MiB with t = 3, p = 4; 3.8 s for 128 MiB with t = 1. The memory is taken outside the JavaScript heap, when the operation starts (its first slices), and kept for the next call; it is wiped when an operation ends, and wiped and given back when the app stops. If the kernel cannot give it then, the promise rejects with a `RangeError`. Checks itself (RFC 9106's sample and an S2K one) in the slices of its first call. Arguments are checked, and the password and salt copied, when the call is made. */
+  export function argon2id(password: BytesLike, salt: Bytes, options: { passes: number; lanes: number; memoryKiB: number; length: number; onProgress?: (fraction: number) => void; signal?: AbortSignal }): Promise<Uint8Array>;
+  /** OpenPGP's Argon2 S2K (type 4, RFC 9580, 3.7.1.4), the four fields as the packet has them: `salt` 16 bytes, `passes` and `parallelism` 1 to 255, `memoryExponent` the encoded m (the memory is 2^m KiB) from 3 + ⌈log2 p⌉ to 31, `length` the session or key-encryption key's (4 to 64). Argon2id as `argon2id`, with its limit: **more than `argon2id` may use (a quarter of the board's memory: an exponent above 17 on a 512 MB Pi Zero) is a `RangeError`**, so RFC 9580's first recommended option (2 GiB) cannot be opened on GapKeep; its second (t = 3, p = 4, m = 16: 64 MiB) can, in 5.4 s on a Pi Zero. A [long operation]. */
+  export function openpgpS2kArgon2(passphrase: BytesLike, salt: Bytes, passes: number, parallelism: number, memoryExponent: number, length: number, options?: JobOptions): Promise<Uint8Array>;
+  /** An X25519 key (RFC 7748) from its 32-byte secret, held natively: `publicKey` (32 bytes), `sharedSecret(peerPublic)` (the 32-byte shared secret with a peer's 32-byte public key) and `destroy()` (wipes the secret; `publicKey` stays, `sharedSecret` then throws a `TypeError`). Byte order and clamping are RFC 7748's: the secret and public keys are little-endian, the secret is clamped where it is used (any 32 bytes are a secret), a public key's top bit is ignored. **An all-zero shared secret is refused** (a `RangeError`: the peer's key is of small order). OpenPGP's legacy Curve25519 keys (ECDH, RFC 9580, 5.5.5.6) store the secret as a big-endian MPI: reverse its 32 bytes; their public key and ephemeral key have a 0x40 byte in front: drop it. RFC 9580's X25519 keys (algorithm 25) are native: as they are. The KDF (RFC 6637's, or RFC 9580's HKDF) is the app's, with the hashes here; then `aesKeyUnwrap`. About 2 ms on a Pi Zero. */
+  export function x25519PrivateKey(secret: Bytes): X25519PrivateKey;
+  /** AES key wrap (RFC 3394, its default IV): `kek` 16, 24 or 32 bytes, `key` a multiple of 8 bytes, 16 to 4096; returns 8 bytes more. */
+  export function aesKeyWrap(kek: Bytes, key: Bytes): Uint8Array;
+  /** The other way (RFC 3394), for OpenPGP's ECDH (RFC 9580, 11.5): `wrapped` a multiple of 8 bytes, 24 to 4096; returns 8 bytes fewer. Its integrity check is compared without a shortcut; if it fails (a wrong key, or changed data), an `Error` (not a `TypeError` or `RangeError`) and nothing else. */
+  export function aesKeyUnwrap(kek: Bytes, wrapped: Bytes): Uint8Array;
+  /** Decrypts OpenPGP's Symmetrically Encrypted Integrity Protected Data, version 1 (RFC 9580, 5.13.1; GnuPG's usual encryption): `data` is the packet's body after its version octet (1), at least 40 bytes and at most 8 MiB, `sessionKey` 16, 24 or 32 bytes (AES-128, -192, -256: the session key's algorithm 7, 8 or 9). AES-CFB with a zero IV over the random prefix, the plaintext and the MDC packet (0xD3 0x14 and SHA-1 of everything before it); a promise of the plaintext (the packets inside: literal data, compressed data, signatures...) **only if the MDC matches**. Otherwise the promise rejects with an `Error`, the same one whatever went wrong (a wrong key, a changed or cut message): nothing decrypted reaches JavaScript, and the prefix's repeated bytes (the "quick check") play no part. A [long operation]: about 6.5 MB/s on a Pi Zero (1 MiB in 0.16 s, in slices of at most 28 ms). The data is copied when the call is made. There is no function for the old Symmetrically Encrypted Data packet (tag 9, no integrity): refuse it. For AEAD packets: `seipdV2Decrypt`, `ocbedDecrypt`. */
+  export function seipdV1Decrypt(sessionKey: Bytes, data: Bytes, options?: JobOptions): Promise<Uint8Array>;
+  /** Decrypts a version 2 SEIPD packet (RFC 9580, 5.13.2: OpenPGP's AEAD, what RFC 9580 implementations write): `data` is the packet's body after its version octet (2): cipher, AEAD mode, chunk size octet (0 to 16), 32-byte salt, the chunks with their tags, the final tag; at most 8 MiB. `sessionKey` as long as the cipher's key (AES-128, -192, -256: 16, 24, 32 bytes; else a `RangeError`). The message key and IV come from HKDF-SHA256; each chunk is decrypted and its tag checked, and then the final tag, over the total length, so a message cut after a chunk fails too: a promise of the plaintext **only if every tag matched**, else an `Error`, the same one whatever went wrong. AEAD modes: EAX (1), OCB (2) and GCM (3), all three in GapKeep's code over the AES block (another mode is a `RangeError`). A [long operation]: on a Pi Zero, about 6 MB/s with OCB, 6 with EAX and 2 with GCM (whose GHASH multiplies bit by bit, constant-time). The data is copied when the call is made. */
+  export function seipdV2Decrypt(sessionKey: Bytes, data: Bytes, options?: JobOptions): Promise<Uint8Array>;
+  /** Decrypts GnuPG's OCB Encrypted Data packet (tag 20, version 1: LibrePGP, draft-koch-librepgp, 5.16): **what GnuPG 2.4 writes by default** (to its own keys, which announce AEAD). Not RFC 9580's: the session key is the key itself (no HKDF), a chunk's nonce is the packet's IV xor the chunk's index, and its associated data has the index too. AEAD mode OCB (2, a 15-byte IV: what GnuPG writes) or EAX (1, a 16-byte IV, which LibrePGP allows to be read); LibrePGP has no GCM there (a `RangeError`). `data` is the body after its version octet (1); otherwise as `seipdV2Decrypt`: every chunk's tag and the final tag checked before anything is given, one `Error` for every failure, at most 8 MiB. About 6 MB/s on a Pi Zero. */
+  export function ocbedDecrypt(sessionKey: Bytes, data: Bytes, options?: JobOptions): Promise<Uint8Array>;
+  /** What this board allows: `argon2MemoryKiB`, the most memory `argon2id` and `openpgpS2kArgon2` may use, a quarter of the board's memory (131,072 on a 512 MB Pi Zero, 65,536 on a 256 MB board), for apps to explain a refusal. */
+  export function limits(): { argon2MemoryKiB: number };
   /** `Uint8Array(n)` of random bytes, `n` ≤ 65536. */
   export function randomBytes(n: number): Uint8Array;
   /** Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. */
@@ -758,6 +882,11 @@ declare module "gk:usb" {
   export function onDetach(fn: (device: UsbDevice) => void): () => void;
 }
 
+declare module "gk:zlib" {
+  /** A promise of `data` (at most 8 MiB, copied when the call is made) decompressed: `format` `"raw"` (DEFLATE) or `"zlib"`, `maxOutput` the most bytes it may decompress to, 1 to 33,554,432 (32 MiB). Missing or wrong options throw at once (a `TypeError` or `RangeError`). */
+  export function inflate(data: Bytes, options: { format: "raw" | "zlib"; maxOutput: number; onProgress?: (fraction: number) => void; signal?: AbortSignal }): Promise<Uint8Array>;
+}
+
 declare module "gk:apps" {
   /** Array of `{ id, name, version, description, icon, image, permissions, source, hash, experimental, suite, data, usb }` (as `sys.app`) (`name` and `description` in the language: each app's own catalog translates them) for every app not marked `hidden`, and not marked `experimental` unless the card's `gapkeep.txt` says `experimental = yes`: the built-in apps (sorted by id; test builds list their test-only apps last), then those from the SD card (sorted by folder; a [suite](APPS.md#suites)'s apps, in `apps/<suite>/<id>`, where the suite's folder sorts, each with `suite` set to the suite's id). */
   export function list(): AppInfo[];
@@ -784,3 +913,19 @@ declare function setTimeout(fn: () => void, ms?: number): number;
 declare function setInterval(fn: () => void, ms?: number): number;
 declare function clearTimeout(id: number): void;
 declare function clearInterval(id: number): void;
+/** the web's, a subset: cancels long operations ({ signal }) */
+declare class AbortSignal {
+  private constructor();
+  readonly aborted: boolean;
+  readonly reason: any;
+  onabort: ((event: { type: "abort"; target: AbortSignal }) => void) | null;
+  throwIfAborted(): void;
+  addEventListener(type: "abort", listener: (event: { type: "abort"; target: AbortSignal }) => void): void;
+  removeEventListener(type: "abort", listener: (event: { type: "abort"; target: AbortSignal }) => void): void;
+  static abort(reason?: any): AbortSignal;
+  static timeout(ms: number): AbortSignal;
+}
+declare class AbortController {
+  readonly signal: AbortSignal;
+  abort(reason?: any): void;
+}

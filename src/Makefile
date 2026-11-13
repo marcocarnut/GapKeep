@@ -7,6 +7,9 @@
 #   ../lib/quickjs       QuickJS engine
 #   ../lib/fatfs         FatFs, read-only (not for SEALED=1)
 #   ../lib/secp256k1     libsecp256k1 (third_party/secp256k1)
+#   ../lib/mbedtls       Mbed TLS's bignum, RSA and AES (third_party/mbedtls)
+#   ../lib/monocypher    Monocypher, for Ed25519 (third_party/monocypher)
+#   ../lib/zlib          zlib's inflate (third_party/zlib)
 #   ../lib/zxing         the QR decoder, if third_party/zxing-cpp is there
 #                        (without it, QR scanners report "no QR decoder")
 #   ../circle/addon/SDCard  SD card driver (not for SEALED=1)
@@ -38,13 +41,15 @@ CIRCLEHOME = ../circle
 QJSDIR     = ../third_party/quickjs
 
 OBJS	= main.o kernel.o kbdindev.o \
-	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o \
+	  runtime/apphost.o runtime/appstore.o runtime/stackguard.o runtime/jobs.o runtime/inflate.o runtime/js_zlib.o \
 	  runtime/js_ui.o runtime/js_sys.o runtime/js_crypto.o \
 	  crypto/sha1.o crypto/sha256.o crypto/sha512.o crypto/hmac.o crypto/hwrng.o \
 	  crypto/ripemd160.o crypto/pbkdf2.o crypto/secp.o crypto/wipe.o \
+	  crypto/s2k.o crypto/aes.o crypto/ed25519.o crypto/rsa.o crypto/x25519.o crypto/seipd.o crypto/ocb.o crypto/eax.o crypto/gcm.o crypto/aead.o crypto/argon2.o \
 	  runtime/gk_bridge.o runtime/libc_shim.o runtime/lv_mem_wipe.o runtime/cursor.o runtime/cursor_install.o \
 	  runtime/scanner.o runtime/clock.o runtime/settings.o runtime/js_clock.o \
 	  usbclaim.o runtime/usb.o runtime/usbdesc.o runtime/js_usb.o \
+	  runtime/epd.o runtime/epaper.o spiprobe.o \
 	  runtime/session.o runtime/js_session.o runtime/js_data.o runtime/i18n.o runtime/markup.o generated/i18n_js.o runtime/keylayout.o runtime/wheel.o \
 	  camera/picamera.o camera/imx219.o camera/unicam.o \
 	  generated/apps_bundle.o
@@ -52,7 +57,8 @@ OBJS	= main.o kernel.o kbdindev.o \
 # the fonts (tools/make_fonts.py)
 OBJS	+= $(patsubst %,runtime/fonts/gk_montserrat_%.o,12 14 16 18 20 22 24 28 32 40)
 OBJS	+= $(patsubst %,runtime/fonts/gk_mono_%.o,12 14 16 18 20 24 28)
-OBJS	+= runtime/fonts/gk_ttf_bold.o runtime/fonts/gk_ttf_italic.o runtime/fonts/gk_ttf_bolditalic.o runtime/ttfstyles.o
+OBJS	+= $(patsubst %,runtime/fonts/gk_epdmono_%.o,10 14 16 20 24 32)
+OBJS	+= $(patsubst %,runtime/fonts/gk_ttf_%.o,regular mono bold italic bolditalic icons) runtime/fontcache.o
 
 ifeq ($(strip $(TEST)),1)
 BUNDLE	= ../apps ../tests/apps
@@ -72,6 +78,25 @@ ifneq ($(strip $(SEALED)),1)
 ifneq ($(strip $(DATA)$(EXTRA_APPS)),)
 $(error DATA and EXTRA_APPS are for sealed builds (SEALED=1); others read data folders from the card)
 endif
+endif
+
+# An e-paper panel built into a sealed kernel, which reads no gapkeep.txt:
+# make SEALED=1 EPAPER=weact-2.9-bwr, and if the wiring differs from the
+# defaults EPAPER_CS=ce1 EPAPER_DC=.. EPAPER_RST=.. EPAPER_BUSY=..
+# EPAPER_SPI_KHZ=.., gapkeep.txt's keys (docs/EPAPER.md). Checked here by
+# ../tools/epaper_config.py, with gapkeep.txt's rules; part of the image,
+# so the kernel's hash covers it.
+EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ EPAPER_ROTATE,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
+ifneq ($(EPAPER_VARS),)
+ifneq ($(strip $(SEALED)),1)
+$(error EPAPER is for sealed builds (SEALED=1); others read it from the card's gapkeep.txt)
+endif
+EPAPER_DEFS := $(shell python3 ../tools/epaper_config.py $(EPAPER_VARS))
+ifeq ($(strip $(EPAPER_DEFS)),)
+$(error EPAPER: refused (the reason is above))
+endif
+DEFINE	+= $(EPAPER_DEFS)
+BUILDMODE := $(BUILDMODE)-$(subst =,_,$(subst $(eval) ,-,$(strip $(EPAPER_VARS))))
 endif
 
 # The language a build starts in (before gapkeep.txt; the only one for
@@ -115,6 +140,7 @@ OBJS	+= runtime/qrdecode.o
 endif
 
 LIBS	+= ../lib/secp256k1/libsecp256k1.a ../lib/colorqr/libcolorqr.a \
+	  ../lib/mbedtls/libmbedtls.a ../lib/monocypher/libmonocypher.a ../lib/zlib/libz.a \
 	  ../lib/lvgl/liblvgl.a \
 	  ../lib/quickjs/libquickjs.a \
 	  $(CIRCLEHOME)/lib/usb/libusb.a \
@@ -126,7 +152,9 @@ LIBS	+= ../lib/secp256k1/libsecp256k1.a ../lib/colorqr/libcolorqr.a \
 DEFINE += -DLV_CONF_PATH="<gk_lv_conf.h>"
 DEFINE += -DQJS_VERSION=\"$(shell cat $(QJSDIR)/VERSION)\"
 EXTRAINCLUDE = -I ../lib/lvgl -I $(QJSDIR) -I ../lib/fatfs/src -I ../third_party/secp256k1/include \
-	       -I ../lib/colorqr/include
+	       -I ../lib/colorqr/include -I ../lib/mbedtls -I ../third_party/mbedtls/include \
+	       -I ../third_party/monocypher/src -I ../third_party/monocypher/src/optional -I ../third_party/zlib
+DEFINE += -DMBEDTLS_CONFIG_FILE='"gk_mbedtls_config.h"' -DZ_SOLO
 
 include $(CIRCLEHOME)/Rules.mk
 
@@ -148,12 +176,24 @@ generated/testpictures.c: FORCE
 
 FORCE:
 
-# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD when switching builds.
+# Recompile what depends on GK_TEST / GK_SEALED / GK_LANGUAGE / GK_KEYBOARD / GK_EPAPER when switching builds:
+# every object whose source, or a header it includes (kernel.h, kbdindev.h,
+# runtime/epd.h), tests one of them. A new #ifdef GK_* needs its object here.
 .buildmode: FORCE
 	@[ "$$(cat $@ 2>/dev/null)" = "$(BUILDMODE)" ] || echo "$(BUILDMODE)" > $@
-main.o kernel.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o: .buildmode
+main.o kernel.o kbdindev.o spiprobe.o testshot.o runtime/appstore.o runtime/i18n.o runtime/settings.o runtime/js_sys.o runtime/keylayout.o runtime/epd.o: .buildmode
 
 EXTRACLEAN += generated/*.o generated/*.d runtime/*.o runtime/*.d runtime/fonts/*.o runtime/fonts/*.d crypto/*.o crypto/*.d \
 	      camera/*.o camera/*.d
 
+# (not for "clean": a full rebuild cleans lib/fatfs first, so ff.h is gone,
+# and with the %.h rule below a .d naming it would be remade, and make
+# restarted, for ever)
+ifeq ($(filter clean,$(MAKECMDGOALS)),)
 -include $(DEPS)
+endif
+
+# A header named by an old .d file but since removed (e.g. ttfstyles.h)
+# must not stop the build: like gcc -MP, treat it as a target with no
+# recipe, so the objects that named it are simply recompiled.
+%.h: ;

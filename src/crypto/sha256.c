@@ -1,5 +1,5 @@
 /*
- * sha256.c - SHA-256 (FIPS 180-4), written from the standard.
+ * sha256.c - SHA-256 and SHA-224 (FIPS 180-4), written from the standard.
  *
  * Plain portable C with no dependencies, so it can be built and tested on
  * the development machine as well (tests/native/test_sha256.c).
@@ -8,6 +8,7 @@
  */
 #include "sha256.h"
 #include "wipe.h"
+#include "hexcheck.h"
 #include <string.h>
 
 static const uint32_t K[64] =
@@ -126,6 +127,28 @@ void gk_sha256_final (gk_sha256_t *ctx, uint8_t digest[GK_SHA256_DIGEST_SIZE])
 	gk_wipe (ctx, sizeof *ctx);	/* don't leave hashed secrets behind */
 }
 
+/* SHA-224: SHA-256 with other initial values, cut to 28 bytes (FIPS 180-4,
+   5.3.2 and 6.3) */
+void gk_sha224_init (gk_sha256_t *ctx)
+{
+	static const uint32_t H0[8] =
+	{
+		0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939,
+		0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4,
+	};
+	memcpy (ctx->state, H0, sizeof H0);
+	ctx->length = 0;
+	ctx->fill = 0;
+}
+
+void gk_sha224_final (gk_sha256_t *ctx, uint8_t digest[GK_SHA224_DIGEST_SIZE])
+{
+	uint8_t full[GK_SHA256_DIGEST_SIZE];
+	gk_sha256_final (ctx, full);
+	memcpy (digest, full, GK_SHA224_DIGEST_SIZE);
+	gk_wipe (full, sizeof full);
+}
+
 void gk_sha256 (const void *data, size_t len, uint8_t digest[GK_SHA256_DIGEST_SIZE])
 {
 	gk_sha256_t ctx;
@@ -186,6 +209,24 @@ int gk_sha256_selftest (void)
 	if (!hex_equal (d, "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"))
 	{
 		return 100;
+	}
+
+	/* SHA-224, FIPS 180-4 examples ("SHA224.pdf") */
+	static const struct { const char *msg; const char *hex; } v224[] =
+	{
+		{"abc", "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"},
+		{"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+		 "75388b16512776cc5dba5da1fd890150b0c6455cb4f58b1952522525"},
+	};
+	for (unsigned i = 0; i < sizeof v224 / sizeof v224[0]; i++)
+	{
+		gk_sha224_init (&ctx);
+		gk_sha256_update (&ctx, v224[i].msg, strlen (v224[i].msg));
+		gk_sha224_final (&ctx, d);
+		if (!gk_hex_equal (d, GK_SHA224_DIGEST_SIZE, v224[i].hex))
+		{
+			return 200 + (int) i;
+		}
 	}
 
 	return 0;

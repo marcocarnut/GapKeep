@@ -4,5 +4,5 @@
   "version": "0.1.0",
   "description": "Recombine codex32 (BIP-93) shares into the seed phrase, by keyboard or camera.",
   "icon": "shuffle",
-  "permissions": ["camera"]
+  "permissions": ["camera", "epaper"]
 }

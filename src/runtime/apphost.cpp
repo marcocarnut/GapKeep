@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include "apphost.h"
+#include "jobs.h"
 #include "appstore.h"
 #include "i18n.h"
 #include "../crypto/wipe.h"
@@ -20,8 +21,10 @@ static const char FromHost[] = "apphost";
 static const size_t AppMemoryLimit = 96 * 1024 * 1024;	// of 512 MB total
 static const size_t AppStackLimit = 512 * 1024;		// kernel stack is 1 MB
 static const unsigned WatchdogSeconds = 10;		// max. time in one JS call
+static const unsigned StopAfterMs = 500;		// Ctrl+C stops a call running this long
 
 CAppHost *CAppHost::s_pThis = 0;
+void (*CAppHost::s_pInputPoll) (void) = 0;
 
 // --- JS memory allocation ---------------------------------------------------
 //
@@ -116,7 +119,9 @@ CAppHost::CAppHost (CKeyboardIndev *pKeyboard)
 	m_pErrorBanner (0),
 	m_pPendingLaunch (0),
 	m_bHomeRequested (FALSE),
-	m_bInterrupted (FALSE)
+	m_bStopRequested (FALSE),
+	m_bInterrupted (FALSE),
+	m_bCancelJobs (FALSE)
 {
 	memset (&m_App, 0, sizeof m_App);
 
@@ -154,6 +159,7 @@ boolean CAppHost::Initialize (void)
 
 	m_pKeyboard->SetKeyHook (KeyHook, this);
 	m_pKeyboard->SetHomeHandler (HomeHandler, this);
+	m_pKeyboard->SetStopHandler (StopHandler, this);
 
 	const gk_app_t *pLauncher = CAppStore::Find ("launcher");
 	if (pLauncher == 0)
@@ -218,6 +224,16 @@ void CAppHost::Update (void)
 	// USB attaches and detaches (dropped without an app that takes them),
 	// and the app's next control transfer
 	GkUSBUpdate (&m_App);
+
+	// a slice of the app's long native work (jobs.h): about 20 ms, between
+	// LVGL's passes, so the screen keeps being drawn; none left if the
+	// watchdog stopped one of the app's scripts
+	if (m_bCancelJobs)
+	{
+		m_bCancelJobs = FALSE;
+		GkJobsCancel (&m_App);
+	}
+	GkJobsUpdate (&m_App);
 
 	if (m_App.pBundle != 0)
 	{
@@ -325,6 +341,7 @@ boolean CAppHost::StartApp (const gk_app_t *pApp)
 	m_App.nCallDepth = 1;
 	m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
 	m_bInterrupted = FALSE;
+	m_bStopRequested = FALSE;
 	unsigned nStartTicks = m_App.nCallStartTicks;
 	JSValue Result = JS_Eval (m_App.pContext, pEntry->data, pEntry->size, pEntry->path,
 				  JS_EVAL_TYPE_MODULE);
@@ -376,6 +393,9 @@ void CAppHost::StopApp (void)
 	GkTimersFree (&m_App);
 	GkClockFree (&m_App);
 	GkUSBFree (&m_App);
+	GkJobsFree (&m_App);
+	GkCryptoAppStopped (&m_App);
+	m_bCancelJobs = FALSE;
 
 	// Deleting the screen deletes every widget of the app; each widget
 	// releases its JS event handlers as it goes.
@@ -404,8 +424,10 @@ void CAppHost::RunJobs (void)
 	if (m_App.nCallDepth++ == 0)
 	{
 		// a new top-level run: an interrupt of an earlier one whose
-		// exception native code swallowed must not hide this one's
+		// exception native code swallowed must not hide this one's; a
+		// Ctrl+C taken as an earlier run ended must not stop this one
 		m_bInterrupted = FALSE;
+		m_bStopRequested = FALSE;
 	}
 	m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
 
@@ -435,6 +457,7 @@ JSValue CAppHost::Call (JSValueConst Func, JSValueConst This, int argc, JSValueC
 	{
 		m_App.nCallStartTicks = CTimer::Get ()->GetClockTicks ();
 		m_bInterrupted = FALSE;		// as in RunJobs()
+		m_bStopRequested = FALSE;
 	}
 
 	// keep the function alive even if the callback drops its last reference
@@ -585,6 +608,25 @@ void CAppHost::HomeHandler (void *pParam)		// IRQ context
 	((CAppHost *) pParam)->m_bHomeRequested = TRUE;
 }
 
+// Ctrl+C: taken only while a script has been running for a while (a JS call
+// or a run of promise jobs, StopAfterMs or more), so that an ordinary Ctrl+C
+// (copy in a TextArea, an app's own) is never taken from the app.
+boolean CAppHost::StopHandler (void *pParam)		// IRQ context
+{
+	CAppHost *pThis = (CAppHost *) pParam;
+	const volatile TGkApp *pApp = &pThis->m_App;
+	if (   pApp->pBundle == 0
+	    || pApp->nCallDepth == 0
+	    || CTimer::Get ()->GetClockTicks () - pApp->nCallStartTicks
+			< StopAfterMs * (CLOCKHZ / 1000))
+	{
+		return FALSE;
+	}
+
+	pThis->m_bStopRequested = TRUE;
+	return TRUE;
+}
+
 boolean CAppHost::ShouldInterrupt (JSContext *pContext)
 {
 	return s_pThis != 0 && InterruptHandler (JS_GetRuntime (pContext), s_pThis) != 0;
@@ -603,11 +645,28 @@ int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)
 	CAppHost *pThis = (CAppHost *) pParam;
 	pThis->m_App.nWork++;
 
+	if (s_pInputPoll != 0)
+	{
+		(*s_pInputPoll) ();		// the simulator's keys
+	}
+
 	if (   pThis->m_bHomeRequested
 	    && pThis->m_App.pBundle != 0
 	    && strcmp (pThis->m_App.pBundle->id, "launcher") != 0)
 	{
 		pThis->m_bInterrupted = TRUE;
+		return 1;
+	}
+
+	if (pThis->m_bStopRequested && pThis->m_App.nCallDepth > 0)
+	{
+		pThis->m_bStopRequested = FALSE;
+		CLogger::Get ()->Write (FromHost, LogNotice, "%s: script stopped with Ctrl+C",
+					pThis->m_App.pBundle->id);
+		pThis->ShowError (LV_SYMBOL_WARNING "  Script stopped",
+				  "Ctrl+C stopped a script that was running.");
+		pThis->m_bInterrupted = TRUE;
+		pThis->m_bCancelJobs = TRUE;	// and its long native work (jobs.h)
 		return 1;
 	}
 
@@ -620,6 +679,7 @@ int CAppHost::InterruptHandler (JSRuntime *pRuntime, void *pParam)
 		pThis->ShowError (LV_SYMBOL_WARNING "  Script interrupted",
 				  "A script ran for too long and was stopped.");
 		pThis->m_bInterrupted = TRUE;
+		pThis->m_bCancelJobs = TRUE;	// and its long native work (jobs.h)
 		return 1;
 	}
 
@@ -751,6 +811,10 @@ JSModuleDef *CAppHost::ModuleLoader (JSContext *pContext, const char *pName, voi
 	if (strcmp (pName, "gk:i18n-native") == 0)	// only for gk:i18n (ModuleNormalize)
 	{
 		return GkInitI18nNativeModule (pContext, pName);
+	}
+	if (strcmp (pName, "gk:zlib") == 0)
+	{
+		return GkInitZlibModule (pContext, pName);
 	}
 	if (strcmp (pName, "gk:usb") == 0)
 	{

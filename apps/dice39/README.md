@@ -44,6 +44,24 @@ The 32 random bytes come from GapKeep's hardware random generator
 (`gk:crypto`, health-checked and SHA-256 conditioned) instead of
 `crypto.getRandomValues`.
 
+**All the words from the dice** (not on dice39's page, which always has
+the device supply the last two words): the entry page has a box for every
+word, and besides dice39's range (12 to 22 at 24 words) takes all of them,
+to split a phrase made entirely of your own throws. Nothing then comes from
+the device and the entropy pad isn't needed. The first T-1 words, and the
+last word's top bits (3 at 24 words), are used verbatim; if the checksum
+doesn't match, its checksum bits are recomputed, so only the last word
+changes (shown in amber, "checksum fixed", with the word typed named in
+the summary). The status line says beforehand whether it will. dice39's
+mistake detectors (one table, one word, wordlist order, sorted pairs) apply
+as for dice words. `lib/fullphrase.js`; `tests/dice39_allwords.txt`.
+
+**Where the tables come from**: the start page shows the address of
+gapkeep.org's page for them (`/dice39.html`, `/pt-br/dice39.html` in
+Portuguese), as text and as a QR code, to download them on any computer or
+phone and print them: PDFs of dice39's own print-out, in English and
+Portuguese, A4 and Letter.
+
 **A phrase you already have** ("I already have a seed phrase"; the page's
 import mode, a start of its own here): all the words typed, checked by
 dice39's `importMnemonic`, which refuses a bad checksum (shown as a likely
@@ -75,8 +93,34 @@ the phrase does, so going back from a share's code shows the same shares.
 The QR codes of the whole seed (SeedQR, Compact SeedQR, words) still ask
 first.
 
-Not ported: printing the dice tables (print them from the web page on any
-computer; they hold no secret), the clipboard export, the network probe
+**An e-paper panel** (GapKeep's `ui.epaper`, docs/EPAPER.md; the
+`"epaper"` and `"camera"` permissions): with a panel configured, the split
+page has **Panel only** (on by default) and **Write to e-paper**. In Panel
+only the shares are never drawn on the screen: the split page says how
+many were made, and the writing page says "Share 2 of 3 written to the
+panel", nothing more. Each share goes on a panel of its own: a red "Share
+2 of 3" (black on a black and white panel), "any 2 recover the phrase",
+the share in groups of four in the panel's pixel font, and its QR code
+(uppercase, ECC M, as on the screen). Then **Next share** (after swapping
+the panel), **Write again**, **Check with the camera** (the panel's QR
+code read back and compared with what was written: the result only; in
+Panel only the camera's view is hidden too, as it would show the panel)
+and **Back**. A write starts 2 seconds after the button (Cancel or Escape
+stop it until then: once the panel's refresh command is sent, its
+waveform must run to the end, about 18 s on the 2.9" B/W/R, with a
+progress bar); one write runs at a time. The result page's **Write to
+e-paper** does the same for the seed's QR codes (SeedQR, Compact SeedQR,
+the words), with the numbered words beside the code, after a warning.
+`lib/epaperlayout.js` lays the page out for the panel: landscape or
+portrait, whichever keeps the QR code's modules at 3 px or more (2 at
+least) and the text largest (`node tests/epaper/layout_node.mjs` checks
+every panel model); `lib/epaper.js` is the page. Both are copied into
+codex32 by `tools/share_libs.py`. The log says "wrote share 2 of 3" and
+the layout, never what was written. Tests: `tests/epaper_shares.txt`
+(simulator), `tests/epaper_shares_hw.txt` (the rig's panel and camera).
+
+Not ported: printing the dice tables (above: download them, or print them
+from the web page on any computer; they hold no secret), the clipboard export, the network probe
 (there is no network), and the page's language button: languages are
 GapKeep's (`language` in `gapkeep.txt`, or the Settings app). The Brazilian
 Portuguese catalog (`lang/pt-BR.json`) follows the page's own Portuguese

@@ -2,9 +2,10 @@
 #
 # Builds src/kernel.img for QEMU or for the real Pi Zero.
 #
-# Usage: tools/build.sh qemu|pi [TEST=1 | SEALED=1 [DATA=dir] [EXTRA_APPS=dir]]
+# Usage: tools/build.sh qemu|pi [TEST=1 | SEALED=1 [DATA=dir] [EXTRA_APPS=dir] [EPAPER=model ...]]
 #   (see src/Makefile for what TEST and SEALED build; DATA=dir builds
-#   the data folders in dir into a sealed kernel, docs/APPS.md, "Data files")
+#   the data folders in dir into a sealed kernel, docs/APPS.md, "Data files";
+#   EPAPER=model [EPAPER_DC=... ...] its e-paper panel, docs/EPAPER.md)
 #
 # The two targets need differently configured Circle libraries (QEMU lacks
 # some peripherals the real board has). When the target changes, Circle,
@@ -83,6 +84,9 @@ if [ "$(cat .buildtarget 2>/dev/null)" != "$TARGET $CONFIG $OPTIMIZE" ]; then
 	make -C lib/fatfs -s clean >/dev/null
 	make -C lib/zxing -s clean >/dev/null
 	make -C lib/secp256k1 -s clean >/dev/null
+	make -C lib/mbedtls -s clean >/dev/null
+	make -C lib/monocypher -s clean >/dev/null
+	make -C lib/zlib -s clean >/dev/null
 	make -C lib/colorqr -s clean >/dev/null
 	make -C circle/addon/SDCard -s clean >/dev/null
 	make -C src -s clean >/dev/null
@@ -94,6 +98,9 @@ make -C lib/lvgl -s $J >/dev/null
 make -C lib/quickjs -s $J >/dev/null
 make -C lib/fatfs -s $J >/dev/null
 make -C lib/secp256k1 -s $J >/dev/null
+make -C lib/mbedtls -s $J >/dev/null
+make -C lib/monocypher -s $J >/dev/null
+make -C lib/zlib -s $J >/dev/null
 make -C lib/colorqr -s $J >/dev/null
 # the QR decoder (QR scanners report "no QR decoder" without the submodule)
 [ ! -f third_party/zxing-cpp/core/src/ReadBarcode.cpp ] || make -C lib/zxing -s $J >/dev/null

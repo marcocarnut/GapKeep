@@ -347,7 +347,7 @@ def names(text):
 # --- markup (src/runtime/markup.cpp: the same rules) -------------------------------
 
 MARKUP_TAGS = ('b', 'i', 'tt', 'big', 'small', 'u', 's', 'span')
-FONT_SIZES = (12, 14, 16, 18, 20, 22, 24, 28, 32, 40)
+FONT_SIZES = (8, 120)                # ui.fontRange: the sizes markup's size= takes
 ENTITY = re.compile(r'&(lt|gt|amp|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);')
 
 
@@ -399,7 +399,7 @@ def markup_tags(text):
                 ok = {'color': re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', value),
                       'foreground': re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', value),
                       'fgcolor': re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', value),
-                      'size': value.isdigit() and int(value) in FONT_SIZES,
+                      'size': value.isdigit() and FONT_SIZES[0] <= int(value) <= FONT_SIZES[1],
                       'font_family': value == 'monospace', 'face': value == 'monospace',
                       'underline': value in ('single', 'none'),
                       'strikethrough': value in ('true', 'false'),

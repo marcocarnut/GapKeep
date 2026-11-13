@@ -74,8 +74,8 @@ const expect = (code, want) => {
   got.firstShareLost = firstShareLost;
   for (const k of Object.keys(want)) if (got[k] !== want[k]) bad.push(`${code}: ${k} is ${got[k]}, not ${want[k]}`);
 };
-expect("0800-21YS", { shares: "15,11 23,15 15,5", aps: "11,3", exit: "15,1", firstShareLost: 87600 });
-expect("0800-0QV2", { firstShareLost: 7200 });
+expect("0800-21YS", { shares: "15,11 23,15 15,5", aps: "11,3", exit: "15,1", firstShareLost: 146000 });
+expect("0800-0QV2", { firstShareLost: 12000 });
 
 for (const b of bad.slice(0, 20)) console.log("FAIL", b);
 console.log(bad.length ? `${bad.length} failures` : "all passed");

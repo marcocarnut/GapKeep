@@ -43,6 +43,20 @@ CXX      := g++
 OPT      := -O2 -g
 endif
 
+# An e-paper panel built in, as a sealed kernel's (../src/Makefile):
+# make EPAPER=weact-2.13-bw [EPAPER_DC=...]: build/gksim[-test]-epaper,
+# whose panel is that one, whatever the card's gapkeep.txt says
+# (tests/epaper_builtin.txt).
+EPAPER_VARS := $(strip $(foreach v,EPAPER EPAPER_CS EPAPER_DC EPAPER_RST EPAPER_BUSY EPAPER_SPI_KHZ EPAPER_ROTATE,$(if $(strip $($(v))),$(v)=$(strip $($(v))))))
+ifneq ($(EPAPER_VARS),)
+EPAPER_DEFS := $(shell python3 $(ROOT)/tools/epaper_config.py $(EPAPER_VARS))
+ifeq ($(strip $(EPAPER_DEFS)),)
+$(error EPAPER: refused (the reason is above))
+endif
+MODE     := $(MODE)-$(subst =,_,$(subst $(eval) ,-,$(strip $(EPAPER_VARS))))
+EPSUFFIX := -epaper
+endif
+
 # The QR decoder: zxing-cpp's QR code reader (third_party/zxing-cpp and
 # ../lib/zxing/zxing.mk). Without it, scanners report "this build has no
 # QR decoder".
@@ -57,7 +71,7 @@ OBJDIR   := build/$(TARGET)-$(MODE)$(if $(HAVEZX),-zxing)
 # did 67 units in 2.0 s, QuickJS's test suite 155 in 3.9 s.
 ZERO_WORK_PER_SECOND := 36
 
-DEFS     := -DGK_SIM $(MODEDEF) -DGK_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<gk_lv_conf.h>" \
+DEFS     := -DGK_SIM $(MODEDEF) $(EPAPER_DEFS) -DGK_ZERO_WORK_PER_SECOND=$(ZERO_WORK_PER_SECOND) -DLV_CONF_PATH="<gk_lv_conf.h>" \
 	    -DQJS_VERSION=\"$(shell cat $(QJS)/VERSION)\" \
 	    -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -D_GNU_SOURCE
 INCS     := -I include -I src -I $(ROOT)/lib/lvgl -I $(QJS) -I $(ROOT)/lib/colorqr/include -idirafter $(ROOT)/circle/addon
@@ -76,7 +90,8 @@ CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-exceptions -fno-rtti
 ZXFLAGS  := $(CFLAGS) -std=c++20 -fno-exceptions -fno-rtti $(ZXING_DEFINES) -I $(ROOT)/lib/zxing -I $(ZXING) \
 	    -Wno-missing-braces -Wno-unused-template
 
-RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
+RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp $(ROOT)/src/runtime/jobs.cpp \
+	    $(ROOT)/src/runtime/inflate.c $(ROOT)/src/runtime/js_zlib.cpp \
 	    $(ROOT)/src/runtime/js_ui.cpp $(ROOT)/src/runtime/js_sys.cpp \
 	    $(ROOT)/src/runtime/js_crypto.cpp $(ROOT)/src/runtime/gk_bridge.cpp \
 	    $(ROOT)/src/runtime/lv_mem_wipe.c $(ROOT)/src/runtime/cursor.c \
@@ -84,19 +99,31 @@ RUNTIME  := $(ROOT)/src/runtime/apphost.cpp $(ROOT)/src/runtime/appstore.cpp \
 	    $(ROOT)/src/runtime/scanner.cpp $(ROOT)/src/runtime/qrdecode.cpp \
 	    $(ROOT)/src/runtime/synthcam.cpp $(ROOT)/src/runtime/clock.cpp $(ROOT)/src/runtime/settings.cpp \
 	    $(ROOT)/src/runtime/js_clock.cpp $(ROOT)/src/runtime/session.cpp \
-	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/js_data.cpp $(ROOT)/src/runtime/i18n.cpp $(ROOT)/src/runtime/markup.cpp $(ROOT)/src/runtime/ttfstyles.cpp $(ROOT)/src/runtime/wheel.cpp \
-	    $(ROOT)/src/runtime/keylayout.cpp \
+	    $(ROOT)/src/runtime/js_session.cpp $(ROOT)/src/runtime/js_data.cpp $(ROOT)/src/runtime/i18n.cpp $(ROOT)/src/runtime/markup.cpp $(ROOT)/src/runtime/fontcache.cpp $(ROOT)/src/runtime/wheel.cpp \
+	    $(ROOT)/src/runtime/keylayout.cpp $(ROOT)/src/runtime/epd.cpp $(ROOT)/src/runtime/epaper.cpp \
 	    $(ROOT)/src/runtime/usb.cpp $(ROOT)/src/runtime/usbdesc.c $(ROOT)/src/runtime/js_usb.cpp \
 	    $(ROOT)/src/crypto/sha1.c $(ROOT)/src/crypto/sha256.c $(ROOT)/src/crypto/sha512.c \
 	    $(ROOT)/src/crypto/hmac.c $(ROOT)/src/crypto/hwrng.cpp \
 	    $(ROOT)/src/crypto/ripemd160.c $(ROOT)/src/crypto/pbkdf2.c $(ROOT)/src/crypto/secp.c \
-	    $(ROOT)/src/crypto/wipe.c \
+	    $(ROOT)/src/crypto/wipe.c $(ROOT)/src/crypto/s2k.c $(ROOT)/src/crypto/aes.c \
+	    $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/x25519.c $(ROOT)/src/crypto/seipd.c \
+	    $(ROOT)/src/crypto/ocb.c $(ROOT)/src/crypto/eax.c $(ROOT)/src/crypto/gcm.c $(ROOT)/src/crypto/aead.c $(ROOT)/src/crypto/argon2.c \
 	    $(ROOT)/src/kbdindev.cpp \
 	    $(wildcard $(ROOT)/src/runtime/fonts/gk_*.c)
-SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c
+SIM      := src/platform.cpp src/sim.cpp src/png.c src/ff_host.c src/hostdir.c src/epaper_sim.cpp \
+	    src/epd/panels.c src/epd/panel_ssd1680.c src/epd/epbwr.c src/epd/epaper.c
 # libsecp256k1, configured as for the kernel (lib/secp256k1/secp256k1.mk)
 include $(ROOT)/lib/secp256k1/secp256k1.mk
 SECPSRC  := $(addprefix $(SECP_DIR)/,$(SECP_SOURCES))
+# Mbed TLS (bignum, RSA, AES) and Monocypher (Ed25519), as for the kernel
+# (lib/mbedtls/mbedtls.mk, lib/monocypher/monocypher.mk)
+include $(ROOT)/lib/mbedtls/mbedtls.mk
+MBEDSRC  := $(addprefix $(MBEDTLS_DIR)/library/,$(MBEDTLS_SOURCES))
+include $(ROOT)/lib/monocypher/monocypher.mk
+MONOSRC  := $(addprefix $(MONO_DIR)/,$(MONO_SOURCES))
+# zlib's inflate (lib/zlib/zlib.mk)
+include $(ROOT)/lib/zlib/zlib.mk
+ZLIBSRC  := $(addprefix $(ZLIB_DIR)/,$(ZLIB_SOURCES))
 # colorqr, the experimental colour QR layer (lib/colorqr/colorqr.mk)
 include $(ROOT)/lib/colorqr/colorqr.mk
 CQSRC    := $(addprefix $(CQ_DIR)/,$(CQ_SOURCES))
@@ -112,30 +139,38 @@ endif
 
 # every source to an object under OBJDIR, by its path
 obj = $(addprefix $(OBJDIR)/,$(addsuffix .o,$(subst ../,up/,$(1))))
-OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC)) $(OBJDIR)/apps_bundle.c.o $(OBJDIR)/i18n_js.c.o
+OBJS     := $(call obj,$(RUNTIME) $(SIM) $(FRONT) $(QJSSRC) $(LVGLSRC) $(ZXSRC) $(SECPSRC) $(CQSRC) $(MBEDSRC) $(MONOSRC) $(ZLIBSRC)) \
+	    $(OBJDIR)/apps_bundle.c.o $(OBJDIR)/i18n_js.c.o
 ZXOBJS   := $(call obj,$(ZXSRC) $(ROOT)/src/runtime/qrdecode.cpp)
 $(ZXOBJS): CXXFLAGS := $(ZXFLAGS)
 SECPOBJS := $(call obj,$(SECPSRC) $(ROOT)/src/crypto/secp.c)
 $(SECPOBJS): CFLAGS += $(SECP_DEFINES) $(SECP_INCLUDE) -I $(SECP_DIR) -Wno-unused-function
+MBEDOBJS := $(call obj,$(MBEDSRC) $(ROOT)/src/crypto/aes.c $(ROOT)/src/crypto/rsa.c $(ROOT)/src/crypto/seipd.c \
+	    $(ROOT)/src/crypto/ocb.c $(ROOT)/src/crypto/eax.c $(ROOT)/src/crypto/gcm.c)
+$(MBEDOBJS): CFLAGS += $(MBEDTLS_DEFINES) $(MBEDTLS_INCLUDE) -I $(MBEDTLS_DIR)/library
+MONOOBJS := $(call obj,$(MONOSRC) $(ROOT)/src/crypto/ed25519.c $(ROOT)/src/crypto/x25519.c $(ROOT)/src/crypto/argon2.c)
+$(MONOOBJS): CFLAGS += $(MONO_INCLUDE)
+ZLIBOBJS := $(call obj,$(ZLIBSRC) $(ROOT)/src/runtime/inflate.c)
+$(ZLIBOBJS): CFLAGS += $(ZLIB_DEFINES) $(ZLIB_INCLUDE)
 CQOBJS   := $(call obj,$(CQSRC))
 $(CQOBJS): CFLAGS += -std=gnu99 -I $(CQ_DIR)/src $(CQ_DEFINES)
 
 .PHONY: all web clean FORCE
-all: build/gksim$(if $(filter test,$(MODE)),-test)
+all: build/gksim$(if $(filter test%,$(MODE)),-test)$(EPSUFFIX)
 
-build/gksim build/gksim-test: $(OBJS)
+build/gksim build/gksim-test build/gksim-epaper build/gksim-test-epaper: $(OBJS)
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) -o $@ $(OBJS) -lm
 
-web: build/web/gksim$(if $(filter test,$(MODE)),-test).js
+web: build/web/gksim$(if $(filter test%,$(MODE)),-test)$(EPSUFFIX).js
 
 WEBFLAGS := -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=2MB \
 	    -sMODULARIZE=1 -sEXPORT_NAME=createGapkeep -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node \
 	    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAPU16,UTF8ToString,stringToNewUTF8 \
-	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height \
+	    -sEXPORTED_FUNCTIONS=_malloc,_free,_gk_sim_boot,_gk_sim_set_builtin_dir,_gk_sim_key_down_qemu,_gk_sim_key_down_dom,_gk_sim_key_up,_gk_sim_pointer,_gk_sim_wheel,_gk_sim_launch,_gk_sim_frame_serial,_gk_sim_camera,_gk_sim_camera_qr,_gk_sim_camera_picture,_gk_sim_camera_push,_gk_sim_camera_picture_rgb,_gk_sim_camera_push_rgb,_gk_sim_camera_in_use,_gk_web_run,_gk_web_frame,_gk_web_width,_gk_web_height,_gk_sim_set_epaper,_gk_sim_epaper_plug,_gk_sim_epaper_unplug,_gk_sim_epaper_serial,_gk_sim_epaper_progress,_gk_sim_epaper_plugged,_gk_sim_epaper_refresh_ms,_gk_web_epaper_width,_gk_web_epaper_height,_gk_web_epaper_frame \
 	    -sFORCE_FILESYSTEM=1 --no-entry -sEXIT_RUNTIME=0
 
-build/web/gksim.js build/web/gksim-test.js: $(OBJS)
+build/web/gksim.js build/web/gksim-test.js build/web/gksim-epaper.js build/web/gksim-test-epaper.js: $(OBJS)
 	@mkdir -p build/web
 	@echo "  LINK  $@"
 	@$(CXX) $(OPT) $(WEBFLAGS) -o $@ $(OBJS)
@@ -166,22 +201,22 @@ $(call obj,$(QJS)/quickjs.c): Makefile		# flags above: rebuild when they change
 $(OBJDIR)/up/%.c.o: ../%.c
 	@mkdir -p $(dir $@)
 	@echo "  CC    $<"
-	@$(CC) $(CFLAGS) -std=gnu11 -MMD -c -o $@ $<
+	@$(CC) $(CFLAGS) -std=gnu11 -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/up/%.cpp.o: ../%.cpp
 	@mkdir -p $(dir $@)
 	@echo "  CXX   $<"
-	@$(CXX) $(CXXFLAGS) -MMD -c -o $@ $<
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/%.c.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "  CC    $<"
-	@$(CC) $(CFLAGS) -std=gnu11 -MMD -c -o $@ $<
+	@$(CC) $(CFLAGS) -std=gnu11 -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/%.cpp.o: %.cpp
 	@mkdir -p $(dir $@)
 	@echo "  CXX   $<"
-	@$(CXX) $(CXXFLAGS) -MMD -c -o $@ $<
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
 FORCE:
 
@@ -189,3 +224,7 @@ clean:
 	rm -rf build
 
 -include $(shell find $(OBJDIR) -name '*.d' 2>/dev/null)
+
+# Headers named by old .d files but since removed must not stop the build
+# (gcc -MP, above, covers .d files made from now on).
+%.h: ;

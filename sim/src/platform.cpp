@@ -80,6 +80,11 @@ boolean CTimer::GetUniversalTime (unsigned *pSeconds, unsigned *pMicroSeconds)
 	return FALSE;
 }
 
+void CTimer::SimpleusDelay (unsigned nMicroSeconds)
+{
+	usleep (nMicroSeconds);
+}
+
 void CTimer::SimpleMsDelay (unsigned nMilliSeconds)
 {
 	usleep (nMilliSeconds * 1000);

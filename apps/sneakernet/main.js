@@ -61,8 +61,9 @@ function buttons(parent, list) {
 function showMenu() {
   page();
   screen = "menu";
-  new ui.Label({ text: "Sneakernet", font: wide ? 40 : 32, color: COLORS.amber });
-  new ui.Label({ text: t("Carry the shares of a secret across an air-gapped office."), font: wide ? 20 : 14, color: COLORS.muted });
+  new ui.Label({ text: t("Sneakernet"), font: wide ? 40 : 32, color: COLORS.amber });
+  new ui.Label({ text: t("Carry the shares of a secret across an air-gapped office."), font: wide ? 20 : 14, color: COLORS.muted,
+    width: "90%", overflow: "wrap", textAlign: "center" });
   const col = new ui.Container({ layout: "column", gap: wide ? 12 : 8, alignItems: "center" });
   buttons(col, [
     [ui.symbols.play + "  " + t("New game"), () => newGame(1, randomSeed())],
@@ -88,7 +89,7 @@ function showHelp() {
   screen = "help";
   new ui.Label({ text: t("How to play"), font: wide ? 32 : 22, color: COLORS.amber });
   const rows = [
-    [ui.symbols.file, COLORS.share, t("Shares of the secret. Walk over one to pick it up.")],
+    [ui.symbols.save, COLORS.share, t("Shares of the secret. Walk over one to pick it up.")],
     [ui.symbols.drive, COLORS.teal, t("The vault. Any k of the n shares open it: the level says how many.")],
     [ui.symbols.wifi, COLORS.amber, t("Access points. Their radio seeps through the corridors, never through walls.")],
     ["", COLORS.radio[1], t("Radio. Caught in it, you leak a share; a share it reaches on the floor is lost.")],

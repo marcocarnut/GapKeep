@@ -1,0 +1,7 @@
+{
+  "id": "epapernoperm",
+  "name": "E-paper refused",
+  "version": "1.0.0",
+  "description": "Test builds only: ui.epaper without the \"epaper\" permission (tests/epaper.txt).",
+  "hidden": true
+}

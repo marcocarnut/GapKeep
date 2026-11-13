@@ -17,5 +17,6 @@ public:
 	boolean GetUptime (unsigned *pSeconds, unsigned *pMicroSeconds);
 	boolean GetUniversalTime (unsigned *pSeconds, unsigned *pMicroSeconds);
 	static void SimpleMsDelay (unsigned nMilliSeconds);
+	static void SimpleusDelay (unsigned nMicroSeconds);
 };
 #endif

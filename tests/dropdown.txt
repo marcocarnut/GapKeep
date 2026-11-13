@@ -1,0 +1,41 @@
+# A Dropdown at the right of the screen (the REPL's "Examples…", 260 px
+# wide, its options wider): its open list stays on the screen,
+# right-aligned with the control, with a scrollbar that shows there are
+# more options. Opened from the keyboard and with the mouse.
+# tests/dropdown/check_list.py checks the pictures (tools/run_sim_tests.sh).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect launcher ready 60
+tile repl
+expect repl ready
+key shift-tab
+key ret
+wait 0.5
+shot 01-open-keys
+# to the last options: the list scrolls
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 0.5
+shot 02-scrolled
+key esc
+wait 0.3
+moveto 80% 37
+click
+wait 0.5
+shot 03-open-mouse
+key esc
+# the list is gone, the REPL still runs code
+key tab
+type 6*7
+key ret
+expect repl: ran 3 characters: number

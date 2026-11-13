@@ -52,6 +52,8 @@ struct TGkApp
 	struct TGkI18nState *pI18n;	// its translations (i18n.h), from its start
 	struct TGkUSBState *pUSB;	// gk:usb: its handlers, devices and transfers,
 					// 0 until it imports it (js_usb.cpp)
+	struct TGkJobsState *pJobs;	// long native work, as promises (jobs.h),
+					// 0 until the first
 
 	unsigned nCallStartTicks;	// for the runaway-script watchdog
 	unsigned nCallDepth;
@@ -101,7 +103,7 @@ public:
 
 	// For long native work done for the running app (gk:crypto's pbkdf2):
 	// whether to give up now, as QuickJS's interrupt handler would (Home,
-	// or the watchdog: more than 10 s in one call). TRUE: the caller
+	// Ctrl+C, or the watchdog: more than 10 s in one call). TRUE: the caller
 	// throws with ThrowInterrupted() and returns.
 	static boolean ShouldInterrupt (JSContext *pContext);
 	static JSValue ThrowInterrupted (JSContext *pContext);
@@ -110,6 +112,12 @@ public:
 
 	// A JS runtime with the zeroing allocator, no memory limit
 	static JSRuntime *NewRuntime (void);
+
+	// Where keys don't come by interrupt while a script runs (the
+	// simulator: its main loop is the one running the script), a function
+	// that delivers what came meanwhile, as interrupts would: called at
+	// each of QuickJS's interrupt checks, so it must be cheap.
+	static void SetInputPoll (void (*pPoll) (void))	{ s_pInputPoll = pPoll; }
 
 private:
 	boolean StartApp (const gk_app_t *pApp);
@@ -122,6 +130,7 @@ private:
 
 	static boolean KeyHook (const TGkKey &rKey, void *pParam);
 	static void HomeHandler (void *pParam);
+	static boolean StopHandler (void *pParam);
 	static int InterruptHandler (JSRuntime *pRuntime, void *pParam);
 
 	static JSModuleDef *ModuleLoader (JSContext *pContext, const char *pName, void *pParam);
@@ -136,9 +145,12 @@ private:
 
 	const gk_app_t *m_pPendingLaunch;
 	volatile boolean m_bHomeRequested;	// set from IRQ context
+	volatile boolean m_bStopRequested;	// Ctrl+C, set from IRQ context
 	boolean m_bInterrupted;			// the pending exception is our interrupt
+	boolean m_bCancelJobs;			// the watchdog stopped a script: end its jobs
 
 	static CAppHost *s_pThis;
+	static void (*s_pInputPoll) (void);
 };
 
 // --- shared with the JS modules (js_ui.cpp, js_sys.cpp) ---
@@ -153,8 +165,11 @@ void GkClockFree (TGkApp *pApp);		// js_clock.cpp: the app's alarms
 JSModuleDef *GkInitSessionModule (JSContext *pContext, const char *pName);	// js_session.cpp
 JSModuleDef *GkInitDataModule (JSContext *pContext, const char *pName);	// js_data.cpp
 JSModuleDef *GkInitUSBModule (JSContext *pContext, const char *pName);	// js_usb.cpp
+JSModuleDef *GkInitZlibModule (JSContext *pContext, const char *pName);	// js_zlib.cpp
 void GkUSBUpdate (TGkApp *pApp);	// js_usb.cpp: events and a transfer, from Update()
 void GkUSBFree (TGkApp *pApp);		// the app's devices, handlers and transfers
+void GkCryptoAppStopped (TGkApp *pApp);	// js_crypto.cpp: its Argon2 memory
+void GkCryptoSetBoardMemory (unsigned nMB);	// at boot: Argon2 gets a quarter
 
 // Globals: console, setTimeout, setInterval, clearTimeout, clearInterval.
 void GkInitGlobals (JSContext *pContext);

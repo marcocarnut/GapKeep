@@ -1,0 +1,45 @@
+# Needs a test build (make TEST=1) and the test SD card. Ctrl+C stops a
+# script that has been running for a while (half a second or more): the app
+# keeps running, the log and a banner say so (src/runtime/apphost.cpp,
+# src/kbdindev.h). Otherwise Ctrl+C is an ordinary key, the app's.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect launcher ready 60
+# nothing running: Ctrl+C reaches the app (tests/apps/typetest logs the
+# keys ui.onKey sees: "c", with Ctrl) and stops nothing
+tile typetest
+expect typetest ready 10
+mark
+type ab
+key ctrl-c
+expect typetest: key U\+0063 10
+key ret
+expect typetest: typed U\+0061 U\+0062 10
+reject stopped with Ctrl\+C
+# the REPL: a loop that never ends, stopped with Ctrl+C long before the
+# watchdog's 10 s; the REPL's output says it was stopped
+key meta_l
+expect launcher ready 30
+tile repl
+expect repl ready 10
+type while (true) {}
+key ret
+wait 1.5
+key ctrl-c
+expect apphost: repl: script stopped with Ctrl\+C 5
+wait 0.5
+shot 01-stopped
+reject script ran for more than
+# the REPL still runs code: clear the box, then 6*7
+key backspace@2500
+type 6*7
+key ret
+expect repl: ran 3 characters: number 10
+wait 0.5
+shot 02-runs-again
+# and a run that waited for btc to load
+key backspace@1000
+type btc.help()
+key ret
+expect repl: ran 10 characters: object 30

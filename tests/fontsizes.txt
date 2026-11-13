@@ -1,0 +1,46 @@
+# Needs a test build (make TEST=1): text at any size of ui.fontRange, drawn
+# from outlines (src/runtime/fontcache.h), with tests/apps/ttftest: sizes
+# without a bitmap font side by side with those with one, the errors, and
+# every size in every style one after another, which must keep LVGL's memory
+# under the glyphs' cap, and give it all back when the app exits: the next
+# start has the memory of the first. QEMU and the simulator alike (no
+# serial commands: tests/ttf.txt has those).
+expect Keyboard attached 60
+expect launcher ready 60
+tile ttftest
+expect ttftest ready, ui \d+ bytes 30
+key q
+expect ttftest side by side: ui 10
+wait 1
+shot 01-side-by-side
+key f
+expect ttftest screen 50: ui 10
+wait 1
+shot 02-screen-50
+key shift-f
+expect ttftest screen 120: ui 20
+wait 1
+shot 03-screen-120
+key e
+expect ttftest error: font 7: RangeError: font: a whole number of pixels from 8 to 120 expected \(ui.fontRange\) 10
+expect ttftest error: font 121: RangeError 10
+expect ttftest error: font 0: RangeError 10
+expect ttftest error: font -16: RangeError 10
+expect ttftest error: font 16.5: RangeError 10
+expect ttftest error: font NaN: RangeError 10
+expect ttftest error: font Infinity: RangeError 10
+expect ttftest error: font 16: TypeError: font: a size in pixels expected 10
+expect ttftest error: font null: TypeError 10
+expect ttftest error: markup <span size='7'>x</span>: TypeError: text: markup: bad attribute size="7": a whole number of pixels from 8 to 120 expected 10
+expect ttftest error: markup <span size='121'>x</span>: TypeError 10
+expect ttftest error: markup <tt><b>x</b></tt>: TypeError: .*there is no bold monospaced font 10
+expect ttftest error: mono bold: TypeError: .*there is no bold monospaced font 10
+mark
+key c
+expect ttftest cycle: 113 sizes x 5 styles, peak \+\d+ bytes, after \+\d+ bytes, within the cap 600
+# out and back: every font freed, the memory as at the first start
+key meta_l
+expect fonts: \d+ freed, \d+ bytes 10
+expect launcher ready 10
+tile ttftest
+expect ttftest ready, ui \d+ bytes, as the last start 30

@@ -8,7 +8,10 @@
 #include "runtime/settings.h"
 #include "runtime/i18n.h"
 #include "runtime/keylayout.h"
-#include "runtime/ttfstyles.h"
+#include "runtime/epd.h"
+#include "runtime/apphost.h"
+#include "kbdindev.h"
+#include "runtime/fontcache.h"
 #include "testcrash.h"
 #include <circle/bcmframebuffer.h>
 #include <circle/logger.h>
@@ -57,7 +60,18 @@ void CTestShot::Update (void)
 				}
 				else if (strcmp (m_Line, "#fonts") == 0)
 				{
-					GkStyledFontStats ();
+					GkFontStats ();
+				}
+				else if (strcmp (m_Line, "#fonts drop") == 0)
+				{
+					GkFontsDropGlyphs ();
+					CLogger::Get ()->Write ("testshot", LogNotice, "fonts: glyphs dropped");
+				}
+				else if (strncmp (m_Line, "#fonts outlines ", 16) == 0)
+				{
+					GkFontsPreferOutlines (strcmp (m_Line + 16, "on") == 0);
+					CLogger::Get ()->Write ("testshot", LogNotice, "fonts: outlines %s",
+								m_Line + 16);
 				}
 				else if (strcmp (m_Line, "#redraw") == 0)
 				{
@@ -67,6 +81,29 @@ void CTestShot::Update (void)
 					lv_refr_now (0);
 					CLogger::Get ()->Write ("testshot", LogNotice, "redraw: %u us",
 								CTimer::GetClockTicks () - nStart);
+				}
+				else if (strncmp (m_Line, "#launch ", 8) == 0)
+				{
+					// as the launcher would (no USB keyboard needed)
+					if (!CAppHost::Get ()->RequestLaunch (m_Line + 8))
+					{
+						CLogger::Get ()->Write ("testshot", LogWarning, "#launch: no app %s",
+									m_Line + 8);
+					}
+				}
+				else if (strncmp (m_Line, "#key ", 5) == 0 && m_Line[5] != '\0')
+				{
+					// a key press, as a USB keyboard's: the string its keymap
+					// gives ("1", "r", "\n" as "ret")
+					const char *pKey = strcmp (m_Line + 5, "ret") == 0 ? "\n" : m_Line + 5;
+					CKeyboardIndev::TestKey (pKey);
+				}
+				else if (strncmp (m_Line, "#epaper ", 8) == 0)
+				{
+					if (!CGkEPD::ConfigureLine (m_Line + 8, "serial line, test build"))
+					{
+						CLogger::Get ()->Write ("testshot", LogWarning, "#epaper: refused");
+					}
 				}
 				else if (strncmp (m_Line, "#keyboard ", 10) == 0)
 				{

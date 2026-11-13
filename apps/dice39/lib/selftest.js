@@ -16,6 +16,7 @@ import {
 } from "../vendor/dice.js";
 import { entropyBitsTarget, newPad, addPadSample } from "./entropypad.js";
 import { pubkeySelfTest } from "./pubkey.js";
+import { fullMnemonic } from "./fullphrase.js";
 
 // Hand the CPU back to the UI between steps. On the Pi Zero the whole test
 // takes about two seconds of QuickJS; run in one go it would hold the app's
@@ -133,6 +134,38 @@ export async function runDice39SelfTest() {
         const back = await importMnemonic(BIP39_WORDS, r.finalWords);
         eq(bytesToHex(back.entropyBytes), bytesToHex(r.entropyBytes), "round trip");
       }
+    }
+  });
+
+  // all the words from the dice: a valid phrase is kept as it is; otherwise
+  // only the last word's checksum bits change
+  await test("all words typed", async () => {
+    for (const [hex, phrase] of BIP39_VECTORS) {
+      await yieldToUI();
+      const words = phrase.split(" ");
+      const r = await fullMnemonic(BIP39_WORDS, words);
+      eq(r.corrected, false, "valid phrase kept");
+      eq(r.finalWords.join(" "), phrase, "words");
+      eq(bytesToHex(r.entropyBytes), hex, "entropy");
+      eq(r.deviceBits, 0, "device bits");
+    }
+    const T = 24;
+    const r = await fullMnemonic(BIP39_WORDS, new Array(T).fill("abandon"));
+    eq(r.corrected, true, "corrected");
+    eq(r.finalWords[T - 1], "art", "last word");
+    eq(r.sourceTags[T - 1], "checksum", "tag");
+    eq(r.patternSuspected, "identical", "detector");
+    for (const total of [12, 15, 18, 24]) {
+      const cs = PHRASE_SIZES[total].checksumBits;
+      const user = [];
+      for (let i = 0; i < total; i++) user.push(BIP39_WORDS[(i * 389 + total * 11) % 2048]);
+      const r = await fullMnemonic(BIP39_WORDS, user);
+      for (let i = 0; i < total - 1; i++) eq(r.finalWords[i], user[i], "verbatim word " + (i + 1));
+      const was = BIP39_WORDS.indexOf(user[total - 1]), now = BIP39_WORDS.indexOf(r.finalWords[total - 1]);
+      eq(now >>> cs, was >>> cs, "the last word's entropy bits");
+      eq(r.corrected, was !== now, "corrected flag");
+      const back = await importMnemonic(BIP39_WORDS, r.finalWords);
+      eq(bytesToHex(back.entropyBytes), bytesToHex(r.entropyBytes), "round trip");
     }
   });
 

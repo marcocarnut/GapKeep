@@ -48,12 +48,30 @@ baseline as Montserrat of the same size, so the two mix on a row, and
 falls back to it (LVGL's font fallback) for everything else: the icons,
 Latin Extended-A, € and ₿.
 
-Bold, italic and bold italic (markup's <b> and <i>): Montserrat Bold,
-Medium Italic and Bold Italic, from the same zip, as TrueType files for
-LVGL's TinyTTF, which draws them at run time, at any size, when a label
-first uses them (src/runtime/ttfstyles.cpp): gk_ttf_<style>.c, one C array
-each. The same characters as the bitmap fonts, the kerning unwrapped as
-above, and no hinting, which TinyTTF's rasterizer (stb_truetype) ignores.
+Outlines, for every other size and style: LVGL's TinyTTF draws text from
+TrueType files at run time, at any size, when a label first uses them
+(src/runtime/fontcache.cpp): gk_ttf_<name>.c, one C array each, the same
+characters as the bitmap fonts, the kerning unwrapped as above, and no
+hinting, which TinyTTF's rasterizer (stb_truetype) ignores:
+
+- regular: Montserrat Medium, the bitmap fonts' text, for the sizes they
+  don't have;
+- mono: JetBrains Mono Medium, MONO_RANGES, for the monospaced sizes
+  the bitmap ones don't have;
+- bold, italic, bolditalic (markup's <b> and <i>): Montserrat Bold, Medium
+  Italic and Bold Italic, at every size;
+- icons: the same Font Awesome icons as the bitmap fonts, Solid and Brands
+  in one font, their cubic (CFF) outlines turned into TrueType's
+  quadratic ones (fontTools' cu2qu, within ICON_MAX_ERR units of 512 to
+  the em, a hundredth of a pixel at 120 px), named "GapKeep Icons" (Font
+  Awesome is a Reserved Font Name of its licence), with its copyright
+  notice.
+
+The rasterized sizes have no line metrics of their own made by
+lv_font_conv, so the line's top, bottom and underline are written into
+gk_ttf_regular.c as fractions of the em (1/65536), measured the same way
+as the bitmap fonts' (above), from the outlines: rounded up at a size,
+they give the bitmap fonts' line height within a pixel.
 
 The fonts' licences are copied next to them (LICENCE.montserrat, the
 SIL OFL 1.1; LICENCE.fontawesome, Font Awesome Free's, whose fonts are
@@ -64,7 +82,7 @@ lv_font_conv: the command line is written at the top of every file.
 
 SPDX-License-Identifier: GPL-3.0-or-later
 """
-import argparse, hashlib, os, re, shutil, subprocess, sys, tempfile, zipfile
+import argparse, hashlib, math, os, re, shutil, subprocess, sys, tempfile, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "src", "runtime", "fonts")
@@ -101,8 +119,9 @@ MONO_LICENCE = ("OFL.txt",
                 "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad")
 MONO_RANGES = ["0x20-0x7E", "0xA0-0xFF"]
 
-# markup's bold and italic, for TinyTTF (see above): (style, member, sha256)
+# for TinyTTF (see above): (name, member of the Montserrat zip, sha256)
 STYLE_TTFS = [
+    ("regular", MONTSERRAT_TTF[0], MONTSERRAT_TTF[1]),
     ("bold", "static/Montserrat-Bold.ttf",
      "7fa93d7daa5c2f881a6727229c211782de6b76008fbd6346b3d7664e8fc83f43"),
     ("italic", "static/Montserrat-MediumItalic.ttf",
@@ -110,6 +129,9 @@ STYLE_TTFS = [
     ("bolditalic", "static/Montserrat-BoldItalic.ttf",
      "001a59b0f2c541080033b83ca6dfacce03095d99caa3594835f51b7c6d9ce758"),
 ]
+
+ICON_MAX_ERR = 0.25        # font units (512 to the em): cubic to quadratic
+EM_FRACTION = 65536         # the line metrics' unit in gk_ttf_regular.c
 
 TEXT_RANGES = ["0x20-0x7E", "0xA0-0xAC", "0xAE-0xFF", "0x100-0x17F"]
 TEXT_EXTRA = [0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D,  # – — ‘ ’ “ ”
@@ -179,15 +201,127 @@ def unwrap_kerning(ttf, out, codepoints, hinting=True):
     sub = subset.Subsetter(opts)
     sub.populate(unicodes=codepoints)
     sub.subset(font)
-    for lookup in font["GPOS"].table.LookupList.Lookup:
-        if lookup.LookupType == 9:
-            lookup.SubTable = [ext.ExtSubTable for ext in lookup.SubTable]
-            lookup.LookupType = lookup.SubTable[0].LookupType
-            lookup.SubTableCount = len(lookup.SubTable)
+    if "GPOS" in font:			# JetBrains Mono's has no kerning left
+        for lookup in font["GPOS"].table.LookupList.Lookup:
+            if lookup.LookupType == 9:
+                lookup.SubTable = [ext.ExtSubTable for ext in lookup.SubTable]
+                lookup.LookupType = lookup.SubTable[0].LookupType
+                lookup.SubTableCount = len(lookup.SubTable)
     font.save(out)
     check = TTFont(out)
-    if any(l.LookupType == 9 for l in check["GPOS"].table.LookupList.Lookup):
+    if "GPOS" in check and any(l.LookupType == 9 for l in check["GPOS"].table.LookupList.Lookup):
         sys.exit("make_fonts: GPOS still has Extension lookups after subsetting")
+
+
+def build_icons(solid, brands, out):
+    """The icons as one TrueType font (see above): Solid's, Brands' for
+    BRANDS, REMAP's stand-ins under the codepoints they stand in for."""
+    from fontTools.ttLib import TTFont
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+    from fontTools.pens.cu2quPen import Cu2QuPen
+    from fontTools.pens.boundsPen import BoundsPen
+    sources = {path: TTFont(path) for path in (solid, brands)}
+    upem = sources[solid]["head"].unitsPerEm
+    if sources[brands]["head"].unitsPerEm != upem:
+        sys.exit("make_fonts: Font Awesome's Solid and Brands differ in units per em")
+    order, cmap = [".notdef"], {}
+    glyphs, advances = {".notdef": TTGlyphPen(None).glyph()}, {".notdef": (upem // 2, 0)}
+    for cp in symbols():
+        src = sources[brands if cp in BRANDS else solid]
+        gs = src.getGlyphSet()
+        name = src.getBestCmap().get(REMAP.get(cp, cp))
+        if name is None:
+            sys.exit(f"make_fonts: no icon U+{REMAP.get(cp, cp):04X} in Font Awesome")
+        gname = f"uni{cp:04X}"
+        pen = TTGlyphPen(None)
+        gs[name].draw(Cu2QuPen(pen, ICON_MAX_ERR, reverse_direction=True))
+        glyphs[gname] = pen.glyph()
+        order.append(gname)
+        cmap[cp] = gname
+        bp = BoundsPen(gs)
+        gs[name].draw(bp)
+        advances[gname] = (src["hmtx"][name][0], int(bp.bounds[0]) if bp.bounds else 0)
+    hhea = sources[solid]["hhea"]
+    fb = FontBuilder(upem, isTTF=True)
+    fb.font.recalcTimestamp = False
+    fb.setupGlyphOrder(order)
+    fb.setupCharacterMap(cmap)
+    fb.setupGlyf(glyphs)
+    fb.setupHorizontalMetrics(advances)
+    fb.setupHorizontalHeader(ascent=hhea.ascent, descent=hhea.descent)
+    fb.setupNameTable({"copyright": sources[solid]["name"].getDebugName(0),
+                       "familyName": "GapKeep Icons", "styleName": "Regular",
+                       "psName": "GapKeepIcons-Regular"})
+    fb.setupOS2(sTypoAscender=hhea.ascent, sTypoDescender=hhea.descent, usWinAscent=hhea.ascent,
+                usWinDescent=-hhea.descent)
+    fb.setupPost()
+    head = sources[solid]["head"]
+    fb.setupHead(unitsPerEm=upem, created=head.created, modified=head.modified)
+    fb.save(out)
+
+
+def line_metrics(regular, solid, brands):
+    """The line's top and bottom, the underline's position and thickness,
+    in 1/EM_FRACTION em, measured as the bitmap fonts' are (see above)."""
+    from fontTools.ttLib import TTFont
+    from fontTools.pens.boundsPen import BoundsPen
+    def extent(path, cps):		# (highest top, lowest bottom), in em
+        font = TTFont(path)
+        gs, cmap, upem = font.getGlyphSet(), font.getBestCmap(), font["head"].unitsPerEm
+        top, bottom = 0, 0
+        for cp in cps:
+            if cp in cmap:
+                pen = BoundsPen(gs)
+                gs[cmap[cp]].draw(pen)
+                if pen.bounds:
+                    top, bottom = max(top, pen.bounds[3] / upem), min(bottom, pen.bounds[1] / upem)
+        return top, bottom
+    icons = symbols()
+    ascii_ = extent(regular, codepoints(TEXT_RANGES[:1]))
+    latin1 = extent(regular, codepoints(TEXT_RANGES[:3]))
+    icon_s = extent(solid, [REMAP.get(c, c) for c in icons if c not in BRANDS])
+    icon_b = extent(brands, [c for c in icons if c in BRANDS])
+    top = max(ascii_[0], icon_s[0], icon_b[0])
+    bottom = -min(latin1[1], icon_s[1], icon_b[1])
+    font = TTFont(regular)
+    upem = font["head"].unitsPerEm
+    return {"line_top": math.ceil(top * EM_FRACTION),
+            "line_bottom": math.ceil(bottom * EM_FRACTION),
+            "underline_position": round(font["post"].underlinePosition * EM_FRACTION / upem),
+            "underline_thickness": round(font["post"].underlineThickness * EM_FRACTION / upem)}
+
+
+def write_ttf(name, data, header, extra=None):
+    """src/runtime/fonts/<name>.c: data as a C array; header: its comment"""
+    lines_c = [", ".join(f"0x{b:02x}" for b in data[i:i + 16]) + "," for i in range(0, len(data), 16)]
+    with open(os.path.join(OUT, name + ".c"), "w") as f:
+        f.write(f"/* {header}, for TinyTTF: {len(data)} bytes. */\n"
+                f"#include <stddef.h>\n\n"
+                f"const unsigned char {name}[] __attribute__ ((aligned (4))) =\n{{\n")
+        f.write("\n".join("\t" + l for l in lines_c))
+        f.write(f"\n}};\nconst size_t {name}_size = sizeof {name};\n")
+        # the characters it has, as ranges (first, last), for
+        # fontcache.cpp: TinyTTF isn't asked for others (it would log an
+        # error for each), they go to the fallback font at once
+        import io
+        from fontTools.ttLib import TTFont
+        cps, ranges = sorted(TTFont(io.BytesIO(data)).getBestCmap()), []
+        for cp in cps:
+            if ranges and ranges[-1][1] == cp - 1:
+                ranges[-1][1] = cp
+            else:
+                ranges.append([cp, cp])
+        f.write(f"\n/* The characters it has: first, last, ... */\n"
+                f"const unsigned {name}_ranges[] =\n{{\n")
+        f.write("\n".join(f"\t0x{a:04X}, 0x{b:04X}," for a, b in ranges))
+        f.write(f"\n}};\nconst unsigned {name}_range_count = {len(ranges)};\n")
+        if extra:
+            f.write(f"\n/* The line of the sizes without a bitmap font, in 1/{EM_FRACTION} em\n"
+                    f" * (tools/make_fonts.py, line_metrics) */\n")
+            for key, value in extra.items():
+                f.write(f"const int {name}_{key} = {value};\n")
+    print(f"make_fonts: {name}.c ({len(data)} bytes)")
 
 
 def codepoints(ranges):
@@ -305,23 +439,27 @@ def main():
                 sys.exit(f"make_fonts: {name}: line_height or base_line not found")
             open(os.path.join(OUT, name + ".c"), "w").write(src)
             print(f"make_fonts: {name}.c")
-        # markup's bold and italic: subset TTFs as C arrays
+        # for TinyTTF: subset TTFs as C arrays (see above)
+        regular = os.path.join(tmp, os.path.basename(MONTSERRAT_TTF[0]))	# extracted above
         for style, member, want in STYLE_TTFS:
             path = extract(mzip, member, tmp)
             check(path, want)
             out = os.path.join(tmp, f"{style}.ttf")
             unwrap_kerning(path, out, codepoints(text_r), hinting=False)
-            data = open(out, "rb").read()
-            name = f"gk_ttf_{style}"
-            lines_c = [", ".join(f"0x{b:02x}" for b in data[i:i + 16]) + "," for i in range(0, len(data), 16)]
-            with open(os.path.join(OUT, name + ".c"), "w") as f:
-                f.write(f"/* {os.path.basename(member)}, subset by tools/make_fonts.py (sha256 of the\n"
-                        f" * original {want[:16]}...), for TinyTTF: {len(data)} bytes. */\n"
-                        f"#include <stddef.h>\n\n"
-                        f"const unsigned char {name}[] __attribute__ ((aligned (4))) =\n{{\n")
-                f.write("\n".join("\t" + l for l in lines_c))
-                f.write(f"\n}};\nconst size_t {name}_size = sizeof {name};\n")
-            print(f"make_fonts: {name}.c ({len(data)} bytes)")
+            write_ttf(f"gk_ttf_{style}", open(out, "rb").read(),
+                      f"{os.path.basename(member)}, subset by tools/make_fonts.py (sha256 of the\n"
+                      f" * original {want[:16]}...)",
+                      line_metrics(regular, solid, brands) if style == "regular" else None)
+        out = os.path.join(tmp, "mono.ttf")
+        unwrap_kerning(mono, out, codepoints(MONO_RANGES), hinting=False)
+        write_ttf("gk_ttf_mono", open(out, "rb").read(),
+                  f"{os.path.basename(MONO_TTF[0])}, subset by tools/make_fonts.py (sha256 of the\n"
+                  f" * original {MONO_TTF[1][:16]}...)")
+        out = os.path.join(tmp, "icons.ttf")
+        build_icons(solid, brands, out)
+        write_ttf("gk_ttf_icons", open(out, "rb").read(),
+                  f"Font Awesome Free 5.15.4's icons (Solid, sha256 {FA_SOLID[1][:16]}...,\n"
+                  f" * and Brands, {FA_BRANDS[1][:16]}...), as TrueType by tools/make_fonts.py")
 
         # tools/make_sdcard.sh puts these on the cards, with kernel.img
         for path, name in licences:

@@ -7,6 +7,7 @@
 #include "apphost.h"
 #include "clock.h"
 #include "settings.h"
+#include "epd.h"
 #include "i18n.h"
 #include "textcheck.h"
 #include "../crypto/sha256.h"
@@ -1113,6 +1114,10 @@ static boolean ParseManifest (const gk_file_t *pManifest, const char *pFolder,
 				{
 					pApp->permissions |= GK_PERM_SETTINGS;
 				}
+				else if (p != 0 && strcmp (p, "epaper") == 0)
+				{
+					pApp->permissions |= GK_PERM_EPAPER;
+				}
 				else
 				{
 					bPermsOK = FALSE;
@@ -1651,6 +1656,7 @@ void CAppStore::Initialize (boolean bCardPresent)
 	CGkI18n::Initialize ();		// the build's language (it needs the launcher's catalogs)
 
 	AddBuiltinData ();		// sealed builds with DATA=dir
+	CGkEPD::ConfigureBuiltIn ();	// sealed builds with EPAPER=model
 
 #ifndef GK_SEALED
 	if (!bCardPresent)

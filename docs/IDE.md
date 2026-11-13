@@ -103,6 +103,9 @@ of the hidden textarea is taken as GapKeep's Backspace.
   whole steps when it fits. **Run** saves everything, boots a fresh machine
   with the card and starts the app whose file is open (if it doesn't start,
   the log says why and you stay on the launcher). **Stop** halts the machine.
+  A script that runs on holds the page until the watchdog stops it (10 s):
+  the browser hands over no keys meanwhile, so Ctrl+C, which stops it on
+  the device and in `tools/gksim`, can't here.
   **Home** goes back to the launcher. **Restart** boots again into the
   launcher, as switching the device on does. The menu sets the screen size
   (640x480, 800x480, 800x600, 1024x600, 1024x768, 1280x720, 1824x984),
@@ -175,25 +178,43 @@ For scripts and agents, the page exposes `window.gkide`: `run(id)`,
 Under the screen, **Camera** sets what GapKeep's camera films, for apps
 with `ui.Scanner` ([CAMERA.md](CAMERA.md)):
 
-- **Empty scene**: nothing in particular.
+- **Webcam** (the default): your computer's camera, 15 frames a second, at
+  up to 1920×1080. Hold a code up to it. The IDE asks the browser for it
+  only when an app opens the camera (a `ui.Scanner` starts), and lets it go
+  a few seconds after the app closes it: opening the IDE asks for nothing,
+  and the camera's light is off while no app films. With several cameras
+  (a phone's front and back), a second list picks one; the front one by
+  default. As on the Pi, the scanner sees the middle 640×480 at full
+  detail by default (a narrow view: hold the code in the middle), or the
+  whole picture with `field: "full"`. Without a webcam, or if the browser
+  refuses, the console says so and the camera films an empty scene.
 - **QR code**: a code of the text you type. With **one per line**, each line
   is a code, shown in turn twice a second: an animated code, for apps that
   read data in parts.
-- **Webcam**: your computer's camera (the browser asks first), 15 frames a
-  second, at up to 1920×1080. Hold a code up to it. As on the Pi, the
-  scanner sees the middle 640×480 at full detail by default (a narrow
-  view: hold the code in the middle), or the whole picture with
-  `field: "full"`.
 - **Picture...**: an image file, in any format the browser reads.
+- **Empty scene**: nothing in particular.
 - **No camera**: as a Pi without one.
 
 Example apps you already have in the IDE stay as they were when it first
 added them: to get a newer version of one (say `qrscan`, which now has a
 **Wide view** button), delete it and click **Examples**.
 
-The setting stays across reboots and reloads (the webcam and the picture
-are asked for again). GapKeep decodes the codes itself, with the decoder it
-has on the Pi; the IDE only supplies pictures.
+The setting, and the camera chosen, stay across reboots and reloads (a
+picture is asked for again). GapKeep decodes the codes itself, with the
+decoder it has on the Pi; the IDE only supplies pictures.
+
+## The e-paper panel
+
+Below the camera, **E-paper** picks the e-paper panel GapKeep has
+([EPAPER.md](EPAPER.md)), for apps with `ui.epaper`: None, or one of the
+WeAct modules; the card's `gapkeep.txt` then names it (choosing reboots).
+The panel shows under it, twice its size, as its pigments look: a refresh
+plays as on the real panel, about 18 s on the 2.9" B/W/R (it flashes, the
+picture comes, the red last), with its progress beside the buttons.
+**Unplug** pulls the panel out (a refresh then fails: no panel answers)
+and **Plug in** puts it back, showing what it showed; **New panel** plugs
+in another one, white, as when writing one share a panel. The choice stays
+across reboots and reloads.
 
 ## Changing the launcher
 

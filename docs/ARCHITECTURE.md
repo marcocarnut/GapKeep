@@ -61,7 +61,7 @@ flag; all JavaScript runs from the main loop.
 Runs one app at a time. Starting an app:
 
 1. A new **QuickJS runtime** with a 96 MB heap limit, a 512 KB stack limit, a
-   module loader and an interrupt handler (watchdog and Home key).
+   module loader and an interrupt handler (watchdog, Ctrl+C and Home key).
 2. A new **LVGL screen** and **focus group**; the keyboard is pointed at it.
 3. The app's entry module is evaluated. It imports `gk:*` modules (created
    on demand, permission-checked) and its own files (from memory).
@@ -144,6 +144,13 @@ control transfers, one per pass of the main loop, each waiting for the
 device as Circle's control transfers do (they can't be asynchronous on the
 Zero's host controller) and settling a promise. See [API.md](API.md#gkusb).
 
+`ui.epaper` (`epaper.cpp`) is a second LVGL display, off screen, the size
+of the e-paper panel `gapkeep.txt` configures: the app's widgets go on its
+screen, and a refresh renders it, turns it into the panel's planes and
+hands them to the driver (`epd.cpp`) as a job (below). The driver uses
+Circle's SPI master and GPIO pins; in the simulator they lead to a
+simulated panel, so the same code runs in both. See [EPAPER.md](EPAPER.md).
+
 `ui.Scanner` is driven by `scanner.cpp` (camera frames, decoding with
 `qrdecode.cpp`, the preview), polled by an LVGL timer; the camera is an
 interface (`camera.h`) with a synthetic implementation (`synthcam.cpp`) for
@@ -158,8 +165,10 @@ SHA-1, SHA-256 and SHA-512 written from FIPS 180-4, and HMAC from RFC 2104
 also builds on the development machine: `tests/native/test_sha256.c`, and
 `tools/check_hashes.py`, which runs every self-test and compares thousands
 of random inputs with Python's `hashlib`. SHA-256's self-test runs at boot;
-HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1 and
-SHA-512) run before their first use, and disable them if they fail. Every
+HMAC's test vectors (RFC 2202, RFC 4231, which also check SHA-1, SHA-224,
+SHA-384 and SHA-512; SHA-224 and SHA-384 are SHA-256 and SHA-512 with
+other starting values) run before their first use, and disable them if
+they fail. Every
 context and buffer that held key material is overwritten after use. The
 hardware RNG wrapper (`hwrng.*`) applies NIST SP 800-90B health tests to
 every raw byte and conditions output through SHA-256; see `gk:crypto` in
@@ -184,6 +193,77 @@ built as for the Zero (32-bit arithmetic); that suite also passes compiled
 for ARMv6 under `qemu-arm`. RIPEMD-160, PBKDF2 and secp256k1 run their
 self-tests before their first use. BIP-32, addresses and transactions are
 left to apps, in JavaScript on these primitives.
+
+OpenPGP's primitives: Ed25519 (`ed25519.*`) is Monocypher's
+(`third_party/monocypher`, 4.0.3, its optional RFC 8032 code with
+SHA-512), with a stricter point decoding (RFC 8032, 5.1.3, step 4) and each
+signature verified before it is returned. RSA PKCS #1 v1.5 signatures
+(`rsa.*`) and AES-CFB (`aes.*`) run on a crypto-only subset of Mbed TLS
+3.6 LTS (`third_party/mbedtls`: only the files `lib/mbedtls/mbedtls.mk`
+builds, configured by `lib/mbedtls/gk_mbedtls_config.h`; its wipes are
+`gk_wipe`): its constant-time bignum, and its private operation's steps
+(base and exponent blinding, the CRT, its check against glitches),
+run one by one by `rsa.c` (`gk_rsa_sign_step`: Mbed TLS's
+`mbedtls_rsa_private` does them in one call, too long for the main loop)
+on the context's own numbers; then the signature is checked again against
+the public key. `rsa.c` also does the PKCS #1 encoding (DigestInfo), and
+verifies (1024 to 4096 bits; signing keys from 2048) by encoding and
+comparing. Imported keys are checked for consistency (n = pq,
+de = 1 mod p-1 and q-1, OpenPGP's u) and their CRT values derived, in
+memory from Circle's heap (zeroed when freed), at most 64 at a time.
+Decryption: RSAES-PKCS1-v1_5 (`gk_rsa_decrypt*`) is the same private
+operation, then the padding is checked with implicit rejection
+(draft-irtf-cfrg-rsa-guidance-10, 7.2, as written: on bad padding a
+message derived from d and the ciphertext, every check made and both
+candidates read, so nothing tells them apart; checked against the draft's
+vectors). X25519 (`x25519.*`) is Monocypher's, refusing an all-zero
+shared secret. AES key wrap (RFC 3394) is written in `aes.c` over Mbed
+TLS's AES block. SEIPD v1 (`seipd.*`, RFC 9580, 5.13.1) decrypts a copy
+of the message in steps, hashing as it goes, and gives the plaintext only
+if the MDC matches, the prefix's quick-check bytes ignored; there is no
+code for the old unprotected packet.
+OpenPGP's AEAD packets (`aead.*`: RFC 9580's SEIPD v2, and GnuPG 2.4's
+own OCB packet, tag 20, from LibrePGP) are decrypted in steps with
+HKDF-SHA256 (`hmac.*`) and one of three modes behind one interface (a
+table in `aead.c`), each written here over Mbed TLS's AES block and
+streaming: OCB (`ocb.*`, RFC 7253), EAX (`eax.*`, the EAX paper: CTR and
+CMAC) and GCM (`gcm.*`, SP 800-38D, its GHASH multiplying bit by bit
+without tables: constant-time, slower). SEIPD v2 takes all three; tag 20
+OCB and EAX, as LibrePGP allows (no GCM). Every chunk's tag and the
+final tag (over the total length) are checked before the plaintext,
+decrypted in place in a copy of the message, is given. The same modes encrypt and decrypt one small
+message at once (`gk_aead_encrypt`, `gk_aead_decrypt`: an AEAD-protected
+secret key, RFC 9580, 5.5.3), synchronously, up to 256 KiB. Decompression (`runtime/inflate.*`, gk:zlib) is
+zlib's inflate (`third_party/zlib`, decompression only, no gzip, the
+caller's allocator, which wipes), in steps, its output limited as it
+grows; `tools/fuzz_inflate.sh` fuzzes it with sanitizers.
+OpenPGP's S2K (`s2k.*`, RFC 9580) is written here, over `gk_hash_t`, and
+hashes the repeated salt and passphrase from a 1 KiB buffer, in steps (a
+job, below). Argon2id (`argon2.*`, RFC 9106; S2K type 4) is Monocypher's
+`crypto_argon2`, restructured to stop and resume at any block (pass,
+slice, lane, block), the lanes done one after the other in the RFC's
+order; its work area, up to a quarter of the board's memory (from its
+revision, at boot: 128 MiB on a 512 MB Pi Zero), comes from Circle's heap (outside
+the JS heap) as a job starts, one step per slice (wiping what a stopped
+job left, freeing a smaller area, allocating), is kept for the app's next
+call, wiped as each job ends, and wiped and freed when the app stops.
+Circle's heap never reused a freed block over 512 KiB and panicked when a
+large one could not be had; `patches/circle/0017` reuses them (best fit,
+at most twice the size) and has a request of 1 MiB or more that does not
+fit return 0, so a second large Argon2 run, or a big inflate after one,
+works, and running out is an error, not a halt. Both
+libraries are vendored unchanged, pinned to a release (source and SHA-256
+in their `.mk`). `tools/check_pgp.py` builds these files for the host and
+compares them with Python's cryptography (OpenSSL) on random keys and
+inputs, runs Wycheproof's Ed25519, RSA, X25519, key wrap, AES-GCM and
+AES-EAX vectors, NIST CAVP's CFB128 files, RFC 9580's S2K examples and
+sample AEAD packets (A.9 to A.11), Argon2 against the reference
+implementation (`--argon2-ref`, and RFC 9580 A.12.1's 2 GiB with `--a12`)
+(`tests/native`), and the negative cases;
+`tests/apps/pgpcrypto` runs known answers through the JavaScript API on
+every target, and `tests/pgp/run_gpg_interop.sh` has GnuPG verify
+signatures the simulator made with keys GnuPG exported. The libraries add
+about 150 KB to the kernel (no `--gc-sections`).
 
 ### C runtime
 
@@ -220,7 +300,9 @@ for them to leave, other than what a person reads off the screen.
 | USB host controller + HID parsing (Circle) | The only input from outside. Only the hub, keyboard (boot protocol; with Circle's variant for the 8BitDo Retro Keyboard, picked by its vendor and product ids) and mouse drivers are in the image; every other class driver is left out at build time (`EXCLUDE_USB_*` in `tools/build.sh`), including the generic-HID path and its report descriptor parser. The mouse driver keeps its own, smaller one: it uses the report protocol (for the wheel), so it parses the report descriptor the mouse sends. That parser is bounded, every length, index and offset checked, and a malformed descriptor gets the mouse refused (`patches/circle/0009`); it is fuzzed under AddressSanitizer and UBSan against random, mutated and crafted descriptors (`tools/fuzz_usbmouse.sh`). IN transfers receive whole packets into a bounce buffer, as Linux does, so that a device sending more than was asked for cannot have the controller write past the buffer (`0008`; on the rig, without it, a keyboard declaring 1024-byte packets had 1016 bytes written past its 8-byte report buffer, on every report); keyboards and mice declaring packets over 64 bytes are refused. Control transfers time out after 3 s (`0003`); a device whose control transfers time out twice gets no more until it is replugged, and long timeouts are budgeted across devices (3, then one a minute; beyond that 250 ms); keyboard LED requests get 100 ms, and none after a failure. So a device that never answers, or keeps reconnecting, cannot hang the system nor freeze it for long (`0010`). |
 | USB devices claimed for apps (`gk:usb`) | One more path, for the devices an app lists by vendor and product id in its manifest (`"usb"`), and only while an available app lists them: [APPS.md](APPS.md#usb-devices). Circle's device factory asks GapKeep first about each new device (`patches/circle/0014`); a listed one is **claimed whole** by `src/usbclaim.cpp`, and none of its interfaces gets another driver, so a keyboard or mouse in it is ignored and can't type into the system. What is reached: endpoint 0 only, by control transfers of at most 64 bytes, through Circle's (bounded by `0003`, `0008`, `0010`: what a device sends beyond what was asked for stays in the bounce buffer); no interrupt, bulk or isochronous endpoint is opened. Apps may send class and vendor requests, to the device or one of its interfaces, and standard requests that only read (GET_STATUS, GET_DESCRIPTOR, GET_CONFIGURATION, GET_INTERFACE); never SET_ADDRESS, SET_CONFIGURATION, SET_INTERFACE or SET_FEATURE. Each stage gets 1 s; after two timeouts a device gets no more transfers until replugged; at most 4 devices and 16 waiting transfers an app. What GapKeep parses of what the device sends is its device, configuration and string descriptors (`src/runtime/usbdesc.c`: every length checked, names turned to text that may be shown, without control, bidi or invisible characters), fuzzed under AddressSanitizer and UBSan (`tools/fuzz_usbdesc.sh`); everything else goes to the app as bytes, unparsed. The log has ids, names, lengths and request numbers, never the data. The simulator reaches devices over USB/IP instead (`sim/src/usbip.cpp`), with the same code above the port (`src/runtime/usb.cpp`). |
 | Camera ([CAMERA.md](CAMERA.md)) | Input only: pictures of QR codes, from the Pi Camera (IMX219, `src/camera/`) or, in test builds and the simulator, a synthetic camera. Decoded in the kernel by zxing-cpp's QR code reader (C++20, about 195 KiB, `patches/zxing-cpp/`), built without exceptions: malformed codes are not read, and what zxing-cpp would throw on an internal error stops the system (a fatal error, as a failed assertion). Fuzzed under AddressSanitizer and UBSan with damaged and crafted codes that reach the payload decoder ([CAMERA.md](CAMERA.md#the-qr-decoder)). Apps get the decoded bytes, never pixels, and only with the `"camera"` permission. |
+| Fonts | Not a surface: fonts are a known attack vector (their parsers and hinting interpreters), so apps cannot supply any. Text is drawn from GapKeep's own fonts only: bitmap fonts compiled into the image, and TrueType outlines also compiled in (`src/runtime/fonts/gk_ttf_*.c`, made by `tools/make_fonts.py` from pinned, hashed font packages) that LVGL's TinyTTF (stb_truetype) rasterizes for other sizes and styles (`src/runtime/fontcache.cpp`). Its file loading is compiled out (`LV_TINY_TTF_FILE_SUPPORT 0`), `gk:ui` takes sizes and styles, never font data, and nothing an app, the card or a device sends reaches the TrueType parser. What rasterized glyphs may hold in memory is capped (4 MB for all fonts, freed when the app exits). |
 | HDMI output | Output only. CEC is ignored (`hdmi_ignore_cec` in `config.txt`). |
+| E-paper panel (SPI0 and three GPIOs, [EPAPER.md](EPAPER.md)) | Output, to a panel `gapkeep.txt` names, only when an app with the `"epaper"` permission asks for a refresh (`ui.epaper`); boot and opening a panel send nothing, and between refreshes every line is an input. What comes back is one bit, BUSY, read for timing (a missing panel, a refresh done). The driver (`src/runtime/epd.cpp`, from EPDPages) runs in slices of the main loop, as a job; there is no GPIO or SPI access for apps. What a panel shows is never logged; its buffers are wiped. |
 | Serial port (GPIO 14/15) | Production builds for the Pi contain no serial driver: the UART is never set up, its pins are made inputs, and the firmware's is off (`enable_uart=0`); the log goes nowhere. Test builds log to it and take test commands from it (`src/testshot.*`). |
 | SD card | Read by the firmware at power-on (`kernel.img` comes from it, so it must be in then), then by GapKeep, once, at boot: `/apps`, `gapkeep.txt`, and the data folders (`/data/<name>`) the apps list (FAT, read-only driver). Then unmounted; any later FatFs call is refused and logged as an error. Never written; removable once the launcher is up. Sealed builds don't contain the SD code (their data, if any, is built in). A card can be tampered with while the kernel on it is still the genuine one (checked on another computer), so everything the genuine kernel parses from it must be memory-safe on any input: the FAT file system (FatFs), manifests, `suite.json` and catalogs (QuickJS's JSON parser, then GapKeep's checks), icons, `gapkeep.txt`. What it reads is capped: per file, per app, 64 MB for all the apps on a card and 48 MB for all data folders, refused ones included. Names, versions and descriptions shown by the launcher may not hold line breaks, control, bidi or invisible characters (`src/runtime/textcheck.h`); folder names from the card are shown with such characters as `?`. |
 | Boot files: `config.txt`, `cmdline.txt` | Read by the closed firmware, outside any hash GapKeep shows. `config.txt` decides what the firmware loads and how the screen is set up (it could even name another kernel file), so the defence against a changed one is the same as against a changed `kernel.img`: check the card's boot files on a trusted computer, against the `SHA256SUMS` `tools/make_sdcard.sh` printed when the card was made (not the copy on the card, which whoever changed the card could change too). The firmware passes `cmdline.txt` to the kernel as its command line; Circle would honour some of its options (`usbignore` turns a USB device off, `width` and `height` change the screen, `keymap`, `loglevel`, USB timing, CPU temperature limits), so GapKeep ignores it: Circle's options parser never reads it (`patches/circle/0013`), and every setting has its default. GapKeep's own settings are in `gapkeep.txt`. |
@@ -259,19 +341,54 @@ are read whole, hashed and kept in memory at boot (`appstore.cpp`), so
 what an app reads is what was hashed, and swapping or removing the card
 afterwards changes nothing. A sealed kernel can carry its data instead
 (`SEALED=1 DATA=dir`): then the kernel's hash covers it and is per person,
-and the data folder's hash lets the keyring be checked on its own. Nothing in the data is executed; what parses it is FatFs and the
+and the data folder's hash lets the keyring be checked on its own. Its e-paper panel, if it
+has one, is built in the same way (`SEALED=1 EPAPER=weact-2.9-bwr`, with
+the wiring's keys: [EPAPER.md](EPAPER.md#sealed-kernels)), covered by the
+kernel's hash too. Nothing in the data is executed; what parses it is FatFs and the
 apps' own JavaScript. Apps in a suite share data this way but never code,
 so each app's hash still covers every line it runs.
 
 **Runaway apps:** QuickJS calls the app host's interrupt handler as it
-runs JavaScript, which stops a call after 10 seconds (the watchdog) or when
-the Windows key is pressed. Native work inside one call is not
+runs JavaScript, which stops a call after 10 seconds (the watchdog), on
+Ctrl+C, or when the Windows key is pressed. Ctrl+C is taken from the
+keyboard in interrupt context, as the Windows key is (`kbdindev.h`), but
+only while a call or a run of promise jobs has been under way for half a
+second or more; the app keeps running, as after the watchdog (its jobs are
+rejected, a banner says it was stopped). Otherwise Ctrl+C is an ordinary
+key, delivered to the app. Native work inside one call is not
 interrupted: a built-in like `Array.prototype.sort` on a large array,
 `JSON.parse` of a long text or BigInt arithmetic on huge numbers runs to
 its end (bounded by the 96 MB heap: seconds on a Pi Zero, not minutes),
 then the handler stops the app at its next check. GapKeep's own long
 native work asks too: `gk:crypto`'s `pbkdf2` checks every 256 iterations
-and throws the same uncatchable "interrupted" error.
+and the AES-CFB functions every 64 KiB, and throw the same uncatchable
+"interrupted" error.
+
+**Long native work** (`runtime/jobs.*`): what can take more than a quarter
+of a second on a Pi Zero is a *job*, and its call returns a promise
+(S2K, Argon2id, PBKDF2, RSA signatures and decryption, SEIPD v1 and AEAD
+decryption, decompression). A job is native
+state with a step function: the app host's `Update()` gives the first job
+of the running app one slice of about 20 ms per pass of the main loop,
+after LVGL has read input and drawn, so the screen and the keyboard stay
+alive. Jobs run one at a time, in order (16 may wait per app); the promise
+is settled from the main loop, as gk:usb's transfers are, and progress is
+reported between slices (`onProgress`). When the app stops, its jobs are
+dropped (wiped, never settled); when the watchdog (or Ctrl+C) stops one of its
+scripts, they are rejected. An app cancels one with an `AbortSignal` (`{ signal }`;
+`AbortController` is a small global written in JavaScript in
+`js_sys.cpp`, as QuickJS has none): the job adds an "abort" listener, a
+native function, so the abort is noticed when JavaScript calls
+`abort()`, between slices, and no JavaScript runs from the main loop to
+poll for it; a waiting job is dropped, a running one too unless it has an
+Abort op (Argon2id: its next slices wipe its memory), and the promise is
+rejected with the signal's reason as a promise job, after the running
+script. A slice ends at its deadline, overrunning it by at most
+one unit of the job's work: 64 KiB of hashing for S2K (a slice lasts 22 ms
+on a Pi Zero), one modular exponentiation of the CRT for RSA (220 ms with
+4096 bits: `crypto/rsa.c` runs the steps of Mbed TLS's private operation
+one by one, blinding and checks included). The same code runs in the
+simulator, natively and in WebAssembly.
 
 **Isolation between apps:** each app has its own JS runtime, so apps cannot
 reach each other's objects. They share an address space (everything runs
@@ -347,10 +464,12 @@ genuine kernel they say exactly what code an app runs.
 | `third_party/quickjs/` | QuickJS (submodule, unmodified). |
 | `third_party/zxing-cpp/` | zxing-cpp, the QR decoder (submodule), plus the fixes in `patches/zxing-cpp/`. |
 | `third_party/secp256k1/` | Bitcoin Core's libsecp256k1 (submodule, unmodified). |
+| `third_party/mbedtls/`, `third_party/monocypher/` | A crypto-only subset of Mbed TLS (bignum, RSA, AES) and Monocypher (Ed25519), vendored unmodified from their releases. |
+| `third_party/zlib/` | zlib's inflate (decompression only), vendored unmodified from its signed release. |
 | `lib/lvgl/` | Builds LVGL with `gk_lv_conf.h`. |
 | `lib/quickjs/` | Builds the QuickJS engine; compat headers. |
 | `lib/fatfs/` | Builds Circle's FatFs read-only (`ffconf.h`). |
-| `lib/zxing/`, `lib/secp256k1/` | Build the QR decoder and libsecp256k1 for the kernel. |
+| `lib/zxing/`, `lib/secp256k1/`, `lib/mbedtls/`, `lib/monocypher/`, `lib/zlib/` | Build the QR decoder, the crypto libraries and zlib's inflate for the kernel. |
 | `lib/colorqr/` | The experimental colour QR decoder, vendored ([EXPERIMENTAL.md](EXPERIMENTAL.md)). |
 | `lib/js/` | JavaScript libraries that apps carry copies of (`tools/share_libs.py`). |
 | `patches/` | GapKeep's changes to Circle and zxing-cpp, applied at build time by `tools/apply_patches.sh`. |

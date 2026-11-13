@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compares src/crypto's SHA-1, SHA-256, SHA-512, HMAC, RIPEMD-160, HASH160
+"""Compares src/crypto's SHA-1, SHA-224, SHA-256, SHA-384, SHA-512, HMAC, RIPEMD-160, HASH160
 and PBKDF2 with Python's hashlib on random inputs (keys 0-299 bytes,
 messages 0-599: across the block and padding boundaries). Run from the top of the tree:
 
@@ -10,7 +10,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 import hashlib, hmac, os, subprocess, sys, tempfile
 
 cases = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
-names = {"SHA-1": "sha1", "SHA-256": "sha256", "SHA-512": "sha512"}
+names = {"SHA-1": "sha1", "SHA-224": "sha224", "SHA-256": "sha256", "SHA-384": "sha384", "SHA-512": "sha512"}
 
 with tempfile.TemporaryDirectory() as tmp:
     exe = os.path.join(tmp, "hmactest")

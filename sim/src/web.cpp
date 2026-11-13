@@ -21,6 +21,7 @@
 #include "sim.h"
 #include <circle/timer.h>
 #include <emscripten.h>
+#include <stdlib.h>
 
 EM_JS (void, JsLog, (const char *pLine), {
 	if (Module.onLog) Module.onLog (UTF8ToString (pLine));
@@ -68,6 +69,42 @@ EMSCRIPTEN_KEEPALIVE int gk_web_height (void)
 	int w, h;
 	gk_sim_frame (&w, &h);
 	return h;
+}
+
+// The e-paper panel plugged in (sim.h): its size (0 if none), and what it
+// shows as RGB, w * h * 3 bytes, its pigments' physics where the model has
+// them (the refresh as it happens), in a buffer that stays until the next
+// call.
+EMSCRIPTEN_KEEPALIVE int gk_web_epaper_width (void)
+{
+	int w, h;
+	return gk_sim_epaper_size (&w, &h) == 0 ? w : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int gk_web_epaper_height (void)
+{
+	int w, h;
+	return gk_sim_epaper_size (&w, &h) == 0 ? h : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE const uint8_t *gk_web_epaper_frame (void)
+{
+	static uint8_t *s_pRGB;
+	static size_t s_nSize;
+	int w, h;
+	if (gk_sim_epaper_size (&w, &h) != 0)
+	{
+		return 0;
+	}
+	size_t nSize = (size_t) w * h * 3;
+	if (nSize > s_nSize)
+	{
+		free (s_pRGB);
+		s_pRGB = (uint8_t *) malloc (nSize);
+		s_nSize = nSize;
+	}
+	gk_sim_epaper_rgb (s_pRGB, 1);
+	return s_pRGB;
 }
 
 }

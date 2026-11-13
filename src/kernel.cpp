@@ -208,6 +208,7 @@ boolean CKernel::Initialize (void)
 		}
 #endif
 
+		GkCryptoSetBoardMemory (CMachineInfo::Get ()->GetRAMSize ());	// the board's, GPU's share included
 		bOK = m_AppHost.Initialize ();
 	}
 

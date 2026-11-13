@@ -149,6 +149,8 @@ int gk_sim_boot (int width, int height, const char *card)
 	CAppStore::Initialize (FALSE);
 #endif
 
+	GkSimEPaperBoot ();		// --epaper over gapkeep.txt; its panel plugged in
+
 	InitGUI ();
 
 	s_pKeyboard = new CKeyboardIndev;
@@ -166,6 +168,7 @@ int gk_sim_boot (int width, int height, const char *card)
 	}
 
 	s_pAppHost = new CAppHost (s_pKeyboard);
+	GkCryptoSetBoardMemory (512);		// the emulated Pi Zero's
 	return s_pAppHost->Initialize () ? 0 : -1;
 }
 
@@ -467,6 +470,11 @@ int gk_sim_key_down_dom (const char *pKey, int nMods)
 	return -1;		// Shift, Control, Alt alone, dead keys, beyond Latin-1
 }
 
+void gk_sim_set_input_poll (void (*pPoll) (void))
+{
+	CAppHost::SetInputPoll (pPoll);
+}
+
 int gk_sim_launch (const char *pID)
 {
 	return s_pAppHost->RequestLaunch (pID) ? 0 : -1;
@@ -589,4 +597,9 @@ int gk_sim_camera_picture_rgb (const uint8_t *rgb, unsigned width, unsigned heig
 int gk_sim_camera_push_rgb (const uint8_t *rgb, unsigned width, unsigned height)
 {
 	return s_pCamera != 0 && s_pCamera->PushFrameRGB (rgb, width, height) ? 0 : -1;
+}
+
+int gk_sim_camera_in_use (void)
+{
+	return s_pCamera != 0 && s_pCamera->IsStreaming () ? 1 : 0;
 }

@@ -1,0 +1,18 @@
+# Needs a test build (make TEST=1). QEMU only: its raspi0 has no SPI
+# controller, so the e-paper panel the test card's gapkeep.txt configures
+# isn't there, and ui.epaper says so cleanly: info() is null, open()
+# throws an Error, nothing hangs. (tests/epaper.txt: the simulator's panel.)
+# QEMU only
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect epaper: WeAct 2.9" B/W/R \(128x296, red\) on SPI0 CE0 \(GPIO 8\), DC GPIO 25, RST GPIO 17, BUSY GPIO 24, 4000 kHz
+expect launcher ready 60
+tile epapertest
+expect epapertest info: null 30
+expect epapertest open failed: Error: no e-paper panel: this machine has no SPI controller
+expect epapertest ready
+# the keys do nothing without a panel
+key 1
+wait 1
+reject epaper: .*refresh

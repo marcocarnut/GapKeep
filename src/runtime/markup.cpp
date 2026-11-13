@@ -169,17 +169,19 @@ void SkipSpace (TParser &r)
 	}
 }
 
-int SizeIndex (const TParser &r, int nSize)
+// <big>: the next of the given sizes above nSize; <small>: the next below.
+// None there: nSize.
+int SizeStep (const TParser &r, int nSize, boolean bUp)
 {
-	int nIndex = 0;
+	int nStep = nSize;
 	for (unsigned i = 0; i < r.nSizes; i++)
 	{
-		if (r.pSizes[i] <= nSize)
+		if (bUp ? r.pSizes[i] > nSize && nStep == nSize : r.pSizes[i] < nSize)
 		{
-			nIndex = i;
+			nStep = r.pSizes[i];
 		}
 	}
-	return nIndex;
+	return nStep;
 }
 
 boolean ParseColor (const char *p, u32 *pColor)
@@ -233,15 +235,13 @@ boolean SpanAttribute (TParser &r, unsigned nPos, const char *pName, const char 
 		{
 			n = n * 10 + (*q++ - '0');
 		}
-		for (unsigned i = 0; *pValue != '\0' && *q == '\0' && i < r.nSizes; i++)
+		if (*pValue != '\0' && *q == '\0' && n >= GK_FONT_MIN_SIZE && n <= GK_FONT_MAX_SIZE)
 		{
-			if (r.pSizes[i] == n)
-			{
-				pStyle->nSize = n;
-				return TRUE;
-			}
+			pStyle->nSize = n;
+			return TRUE;
 		}
-		Detail.Format (" size=\"%.16s\": one of the sizes in ui.fonts expected", pValue);
+		Detail.Format (" size=\"%.16s\": a whole number of pixels from %d to %d expected",
+			       pValue, GK_FONT_MIN_SIZE, GK_FONT_MAX_SIZE);
 		return Fail (r, nPos, "bad attribute", Detail);
 	}
 	if (strcmp (pName, "font_family") == 0 || strcmp (pName, "face") == 0)
@@ -486,12 +486,11 @@ boolean Tag (TParser &r)
 		Normal.Append (Attributes[i]);
 	}
 
-	int nIndex = SizeIndex (r, Style.nSize);
 	if (strcmp (Name, "tt") == 0)		Style.bMono = TRUE;
 	else if (strcmp (Name, "b") == 0)	Style.bBold = TRUE;
 	else if (strcmp (Name, "i") == 0)	Style.bItalic = TRUE;
-	else if (strcmp (Name, "big") == 0)	Style.nSize = r.pSizes[nIndex + 1 < (int) r.nSizes ? nIndex + 1 : nIndex];
-	else if (strcmp (Name, "small") == 0)	Style.nSize = r.pSizes[nIndex > 0 ? nIndex - 1 : 0];
+	else if (strcmp (Name, "big") == 0)	Style.nSize = SizeStep (r, Style.nSize, TRUE);
+	else if (strcmp (Name, "small") == 0)	Style.nSize = SizeStep (r, Style.nSize, FALSE);
 	else if (strcmp (Name, "u") == 0)	Style.nDecor |= GK_MARKUP_UNDERLINE;
 	else if (strcmp (Name, "s") == 0)	Style.nDecor |= GK_MARKUP_STRIKE;
 

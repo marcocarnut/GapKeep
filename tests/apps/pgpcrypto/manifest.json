@@ -1,0 +1,7 @@
+{
+  "id": "pgpcrypto",
+  "name": "PGP crypto test",
+  "version": "1.0.0",
+  "description": "Test builds only: gk:crypto's OpenPGP primitives, known answers, errors and timings (tests/pgpcrypto.txt).",
+  "icon": "settings"
+}

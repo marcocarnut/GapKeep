@@ -7,14 +7,15 @@ modules below, imported by name:
 
 | Module | Available to | Purpose |
 | --- | --- | --- |
-| [`gk:ui`](#gkui) | every app | Widgets, layout, input, alerts |
+| [`gk:ui`](#gkui) | every app (the e-paper panel: `"epaper"`) | Widgets, layout, input, alerts; an e-paper panel |
 | [`gk:sys`](#gksys) | every app | App info, versions, uptime, memory, exit |
-| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), hardware random bytes |
+| [`gk:crypto`](#gkcrypto) | every app | Hashes, HMAC, PBKDF2, secp256k1 (ECDSA, Schnorr, BIP-32 and Taproot tweaks), OpenPGP's Ed25519, X25519, RSA signatures and decryption, AES-CFB, key wrap, S2K and message decryption, hardware random bytes |
 | [`gk:clock`](#gkclock) | every app (setting it: `"rtc"`) | The wall clock, alarms on its marks |
 | [`gk:session`](#gksession) | every app | Values kept across the app's runs, in RAM, until power-off |
 | [`gk:i18n`](#gki18n) | every app (changing the settings: `"settings"`) | Translations, numbers, amounts and dates in the person's language |
 | [`gk:data`](#gkdata) | every app (only the folders its manifest lists in `"data"`) | Read-only files from the card's data folders, shared by name |
 | [`gk:usb`](#gkusb) | apps that list devices in `"usb"` (only those) | Control transfers to USB devices claimed for them |
+| [`gk:zlib`](#gkzlib) | every app | Decompression (DEFLATE, zlib), with a limit on the output |
 | [`gk:apps`](#gkapps) | apps with the `"apps"` permission | List and launch apps (the launcher) |
 
 Plus the [globals](#globals) `console`, `setTimeout`, `setInterval`,
@@ -40,13 +41,16 @@ import * as ui from "gk:ui";
 | `Container`, `Panel`, `Label`, `Button`, `TextArea`, `Checkbox`, `Switch`, `Dropdown`, `Slider`, `Bar`, `Table`, `QRCode`, `Image`, `Scanner`, `TabView` | classes | [Widgets](#widgets) |
 | `screen` | Container | The app's root widget. A column with 16 px padding and 12 px gap. |
 | `width`, `height` | number | Display size in pixels. |
-| `fonts` | number[] | Available font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40. Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. |
-| `monoFonts` | number[] | Sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. |
+| `fonts` | number[] | The fastest font sizes: 12, 14, 16, 18, 20, 22, 24, 28, 32, 40, built in as bitmaps. Any other size of `ui.fontRange` works too, drawn from the font's outlines when first used ([Font sizes](APPS.md#font-sizes)). Every size has Montserrat's Basic Latin, Latin-1 and Latin Extended-A letters, the dashes, quotes, bullet and ellipsis (– — ‘ ’ “ ” • …), € and ₿, and the `ui.symbols` icons. Other characters are drawn as an empty box. |
+| `monoFonts` | number[] | The fastest sizes of the monospaced font (`mono: true`): 12, 14, 16, 18, 20, 24, 28, built in as bitmaps; any other size of `ui.fontRange` is drawn from outlines. Basic Latin and Latin-1 in JetBrains Mono; other characters (icons, Latin Extended-A, € and ₿) from the normal font of the same size. |
+| `fontRange` | { min: number; max: number } | `{ min: 8, max: 120 }`: the sizes `font` and markup's `<span size>` take, in whole pixels, for the normal and the monospaced font (not for `family: "epdmono"`, a pixel font with its own sizes). Sizes not in `ui.fonts` (or `ui.monoFonts`) are drawn from outlines, each glyph when first drawn: a little slower the first time, and soft under about 12 px. [Font sizes](APPS.md#font-sizes). |
+| `epdmonoFonts` | number[] | Sizes of the pixel font (`family: "epdmono"`): 10 (X11's misc-fixed 6x10), 14, 16, 20, 24 and 32 (Terminus Font's bold, 8x14 to 16x32). One bit a pixel, Basic Latin and Latin-1, for e-paper panels ([EPAPER.md](EPAPER.md#text-on-a-panel)). |
 | `symbols` | object | Icon glyphs usable in any text, e.g. `ui.symbols.ok`. [List](#symbols). |
 | `alert(message, options?)` | function | Modal message. [Details](#uialert). |
 | `onKey(handler)` | function | App-wide key handler. [Details](#uionkey). |
 | `theme(options)` | function | Change colors. [Details](#uitheme). |
 | `escapeMarkup(text)` | function | The text, for a Label with `markup: true`, shown as it is: `&`, `<`, `>`, `"` and `'` as entities. Use it for anything not written by the app (a name, an address, a scanned code), or use `gk:i18n`'s `tm()`. |
+| `epaper` | object | An e-paper panel on the GPIO header, as a second, off-screen display: `open()`, `info()`. Needs `"permissions": ["epaper"]`. [Details](#uiepaper). |
 
 ### Creating widgets
 
@@ -118,8 +122,9 @@ A **size** is a number of pixels, a percentage of the parent as a string
 | --- | --- | --- |
 | `bg` | color | Background color (makes the background opaque). |
 | `color` | color | Text color. |
-| `font` | number | Font size, one of `ui.fonts`. |
-| `mono` | boolean | *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. Its sizes are `ui.monoFonts`; with `font` too, in any order, that size must be one of them, without it the size the widget would have (or the next smaller mono size). Same line height and baseline as the normal font of the same size, so the two mix on a row. Set on a container, its children inherit it. |
+| `font` | number | Font size in pixels, a whole number of `ui.fontRange` (8 to 120; `ui.fonts` are the fastest); else a `RangeError`. With `family: "epdmono"`, one of `ui.epdmonoFonts`. |
+| `mono` | boolean | *Readable*. The monospaced font (JetBrains Mono), for addresses, keys, hex and code: 0/O and 1/l/I differ. At the size of `font`, or, without it, the size the widget would have: any of `ui.fontRange` (`ui.monoFonts` are the fastest). Same line height and baseline as the normal font of the same size, so the two mix on a row. There is no bold or italic monospaced font. Set on a container, its children inherit it. |
+| `family` | `"default"`, `"epdmono"` | *Readable*. `"epdmono"`: the pixel font, one bit a pixel (misc-fixed 6x10 at 10, Terminus Font's bold above), for e-paper panels, where anti-aliased text loses its grey edges; `font` is then one of `ui.epdmonoFonts` (10, 14, 16, 20, 24, 32; 20 if not given), whatever the order of the two. `"default"` (the default): the fonts above, at any size of `ui.fontRange`. epdmono is a bitmap font: it has only its own sizes, never drawn from outlines. Set on a container, its children inherit it. |
 | `textAlign` | `"left"`, `"center"`, `"right"` |  |
 | `radius` | number | Corner radius, px. |
 | `borderWidth` | number | px. |
@@ -198,7 +203,7 @@ Text: one line or wrapped; with `markup: true`, in several styles.
 | --- | --- | --- |
 | `text` | string | *Readable*. May contain `\n` and `ui.symbols`. With `markup`, it is markup (below), and reads back as it was set. |
 | `overflow` | `"wrap"`, `"clip"`, `"dots"`, `"scroll"`, `"scroll-circular"` | What happens when text is wider than the label (set a `width` for this to matter). With `markup`: `"wrap"`, `"clip"` (the first line) or `"dots"` (set a `maxHeight` too). |
-| `markup` | boolean | *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the size or the next smaller), `<big>` and `<small>` (a step in `ui.fonts`), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (one of `ui.fonts`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). |
+| `markup` | boolean | *Readable*. Set when the Label is created (`new ui.Label({ markup: true, text })`; changing it later throws). Then `text` is Pango-style markup: `<b>` and `<i>` (bold, italic, and both: at every size, drawn from outlines when first used), `<tt>` (the monospaced font, at the same size), `<big>` and `<small>` (the next size of `ui.fonts` up or down), `<u>`, `<s>`, `<span>` with `color` (`"#RRGGBB"` or `"#RGB"`), `size` (whole pixels, 8 to 120: `ui.fontRange`), `font_family="monospace"`, `weight="bold"`, `style="italic"`, `underline="single"`, `strikethrough="true"`; entities `&lt; &gt; &amp; &quot; &apos; &#N; &#xN;`. Anything else throws a `TypeError` that says what and at which character: an unknown tag, bold or italic monospaced text (there is no such font), `bgcolor`, tags left open or crossed, a bad value, a `&` that starts no entity. Escape data with `ui.escapeMarkup`, or build the text with `gk:i18n`'s `tm()`. [Markup](APPS.md#markup). |
 
 #### Button
 
@@ -242,7 +247,7 @@ An on/off switch.
 
 #### Dropdown
 
-Picks one of several options from a list that opens.
+Picks one of several options from a list that opens below the control (above it if there is more room there). The list is as wide as its longest option and stays on the screen: near the right edge it lines up with the control's right side; a list too tall to fit scrolls, with a scrollbar.
 
 | Property | Value | Notes |
 | --- | --- | --- |
@@ -388,6 +393,45 @@ Shift+PageUp and Shift+PageDown are the system's too: they scroll the
 focused widget's nearest scrollable ancestor by a page, as the mouse
 wheel scrolls what is under the pointer, and never reach `ui.onKey`.
 
+### ui.epaper
+
+An e-paper panel wired to the GPIO header (a WeAct 2.9" black, white
+and red one, say), which keeps its picture without power, for years:
+a secret share written on it can be unplugged and put away, never
+photographed. The panel is a second display, off screen: build what
+it shows with the same widgets as the screen, then `refresh()` writes
+it. Needs `"permissions": ["epaper"]` in the manifest (otherwise both
+functions throw a `TypeError`). The card's `gapkeep.txt` says which
+panel is there and on which pins ([EPAPER.md](EPAPER.md)).
+
+```js
+const panel = ui.epaper.open();             // landscape; throws if there is none
+new ui.Label(panel, { text: "Share A", font: 20, color: 0xff0000 });
+new ui.QRCode(panel, { data: share, size: panel.height - 8 });
+await panel.refresh({ onProgress: (f) => (bar.value = f * 100) });
+status.text = "Done: you can unplug the panel.";
+```
+
+| Member | Description |
+| --- | --- |
+| `ui.epaper.info()` | The configured panel, `{ model, width, height, colors }` (landscape), or `null` if there is none (none in `gapkeep.txt`, or no SPI controller, as on QEMU). |
+| `ui.epaper.open(options?)` | Opens it: an **EPaperPanel**. `options`: `orientation` `"landscape"` (the default: wider than tall) or `"portrait"`, as the person looking at the panel sees it, mounted (`gapkeep.txt`'s `epaper_rotate`: an app needn't know how it is mounted); `flip: true` (a half turn more). Throws an `Error` if there is no panel, a `TypeError` if it is open already. Opening sends nothing to the panel. |
+| `panel` | A `Container`, the panel's whole area (`width`, `height` readable), white, a column with 4 px padding and gap: put widgets on it as on `ui.screen`. They are not keyboard targets. |
+| `panel.colors` | `["black", "white"]`, or with `"red"`. |
+| `panel.model` | The module, for people: `"WeAct 2.9\" B/W/R"`. |
+| `panel.refresh(options?)` | Writes what the widgets show onto the panel: a promise, a [long operation](#long-operations) (`onProgress`). Every refresh resets the panel and sets it up again (it may be another panel than last time), writes the picture, plays the panel's own full waveform (18 s on the 2.9" B/W/R: it flashes, then shows the picture, red last) and puts it into deep sleep; then it resolves, and the panel may be unplugged. It rejects with an `Error` if no panel answers (unplugged), or one stops answering. The picture is taken when `refresh()` is called. `options.signal`, an `AbortSignal`, cancels it: already aborted, the promise rejects at once and nothing is sent; aborted before the refresh command (during the reset, the set-up or the planes), the panel is put into deep sleep (or given a reset, if it was busy) with its picture untouched, and the promise rejects with the signal's reason; aborted after it, the waveform can't be stopped without leaving the pigments part way and its DC balance broken, so it runs to its end and deep sleep, and then the promise rejects. |
+| `panel.close()` | Deletes the panel's widgets and gives the panel back (`delete()` does the same); what the panel shows stays. A refresh asked for goes on. The panel is closed when the app stops, too. |
+
+The panel's widgets are drawn in black on white. Colours become
+the panel's: red (`0xff0000`, and colours near it: red at least
+128, green and blue under 96) where the panel has red, black where
+it hasn't; other colours black if darker than a middle grey, white
+if lighter. Text is drawn without its grey edges: prefer sizes of 16
+and up, and the monospaced font for codes.
+
+GapKeep never refreshes or clears a panel unless an app asks. What
+a panel shows is never logged.
+
 ### ui.theme
 
 ```js
@@ -445,10 +489,14 @@ import * as crypto from "gk:crypto";
 | `sha1(data)` | SHA-1, a `Uint8Array(20)`. Broken for collisions: for HMAC-SHA1 (TOTP) and protocols that require it, not to identify data. |
 | `sha256(data)` | SHA-256 of a typed array (its bytes), an `ArrayBuffer`, or a string (as UTF-8). Returns a `Uint8Array(32)`. Synchronous. |
 | `sha512(data)` | SHA-512, a `Uint8Array(64)`. |
-| `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto: a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
+| `sha224(data)` | SHA-224, a `Uint8Array(28)`. |
+| `sha384(data)` | SHA-384, a `Uint8Array(48)`. |
+| `createHash(hash)` | A hash to feed in pieces: `update(data)` (returns the hash, so calls chain), `digest()` (the result; the hash is then finished, and using it again throws a `TypeError`), `copy()` (a new hash in the same state: hash what is common once, then each copy's own end), `destroy()` (wipes the state now, rather than when the object is collected) and `algorithm` (its name). `hash` as for `hmac`. For data too big for one array, or that arrives in parts. Like the one-shot hashes, each `update` blocks while it hashes ([how long](#hashing-big-data)). |
+| `hmac(hash, key, data)` | HMAC (RFC 2104) of `data` under `key`, with the hash named as in WebCrypto (`"SHA-1"`, `"SHA-224"`, `"SHA-256"`, `"SHA-384"` or `"SHA-512"`): a `Uint8Array` of the hash's size. Keys of any length (longer than a block are hashed first, as the RFC says). |
 | `ripemd160(data)` | RIPEMD-160, a `Uint8Array(20)`. |
 | `hash160(data)` | RIPEMD-160 of SHA-256 (Bitcoin's HASH160: P2PKH and P2WPKH addresses, BIP-32 key identifiers; a fingerprint is its first 4 bytes), a `Uint8Array(20)`. |
-| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s) and the Windows key: millions of iterations take minutes. |
+| `pbkdf2(hash, password, salt, iterations, length)` | PBKDF2 (RFC 8018) with HMAC over `hash`: a `Uint8Array(length)`. `iterations` 1 to 10,000,000, `length` 1 to 1024. A BIP-39 seed is `pbkdf2("SHA-512", mnemonic, "mnemonic" + passphrase, 2048, 64)` (both NFKD-normalised first: `.normalize("NFKD")`), about 0.1 s on a Pi Zero. Blocks until done, but, like JavaScript, is stopped by the watchdog (10 s), Ctrl+C and the Windows key: millions of iterations take minutes. Over a few thousand iterations, use `pbkdf2Async`. |
+| `pbkdf2Async(hash, password, salt, iterations, length, options?)` | The same as a [long operation](#long-operations): a promise, the work done in slices while the screen keeps being drawn (about 30,000 SHA-512 iterations a second on a Pi Zero). Arguments as `pbkdf2`'s, checked at once. |
 | `isPrivateKey(key)` | Whether `key` is 32 bytes from 1 to n-1 (n: the curve's order). |
 | `isPublicKey(key)` | Whether `key` is a point on the curve, SEC 1 encoded (33 or 65 bytes). |
 | `publicKey(privateKey, compressed = true)` | The public key, 33 bytes (compressed) or 65. |
@@ -462,14 +510,34 @@ import * as crypto from "gk:crypto";
 | `schnorrVerify(signature, message, publicKey)` | Checks a BIP-340 signature against an x-only public key; the message may have any length. |
 | `taprootTweakPublicKey(publicKey, tweak)` | Taproot's output key Q = P + tweak·G for the x-only internal key P (BIP-341): `key` is Q's X, `parity` its Y's (a script path's control block needs it). The tweak is the app's: the `TapTweak` tagged hash of P (and the script tree's root, if any). |
 | `taprootTweakPrivateKey(privateKey, tweak)` | The private key for that Q (BIP-341's `taproot_tweak_seckey`: negated if its point's Y is odd, then plus the tweak), to sign a key-path spend with `schnorrSign`. |
+| `ed25519PrivateKey(seed)` | An Ed25519 signing key (RFC 8032) from its 32-byte private key (the seed), held natively: `publicKey` (the `Uint8Array(32)` public key), `sign(message)` and `destroy()`. `sign` returns the 64-byte signature of `message`, any length, as it is: pure Ed25519, not Ed25519ph; for OpenPGP, the message is the signature's digest. Ed25519 hashes the message itself (SHA-512, twice when signing), at about 9 MB/s on a Pi Zero: a digest takes no time, a big message would block (sign a digest). Deterministic (the same message gives the same signature), and checked against the public key before it is returned. `destroy()` wipes the key (`publicKey` stays); `sign` then throws a `TypeError`. |
+| `ed25519Verify(signature, message, publicKey)` | Checks an Ed25519 signature (64 bytes) of `message` against a 32-byte public key. Refuses non-canonical encodings and S not below the group order (RFC 8032, 5.1.7); accepts small-order keys, as RFC 8032 does. Hashes the message (SHA-512, about 9 MB/s on a Pi Zero). |
+| `rsaPrivateKey({ n, e, d, p, q, u })` | An RSA signing key from its numbers, unsigned big-endian bytes (an OpenPGP MPI's, without the bit count; leading zeros allowed): the modulus `n` (2048 to 4096 bits, else a `RangeError`), `e`, `d`, the primes `p` and `q`, and optionally `u`, which is OpenPGP's p⁻¹ mod q (RFC 9580, 5.5.5.1; not PKCS #1's q⁻¹ mod p). The numbers must be one key: n = pq, de ≡ 1 mod p−1 and q−1, u if given; else a `RangeError` (p and q are not tested for being prime). The CRT values are derived natively. At most 64 keys at a time: `destroy()` those done with. Returns `{ bits, publicKey: { n, e }, sign(hash, digest, options?), decrypt(ciphertext, options?), destroy() }`. `sign` returns a promise of the RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-224 to SHA-512; SHA-1 throws a `TypeError`), as many bytes as `n`: a [long operation](#long-operations), about 90 ms with 2048 bits on a Pi Zero, 460 ms with 4096. Wrong arguments throw at once; a fault caught by the checks rejects with an `InternalError`, and `destroy()` before the signature is made rejects it with a `TypeError`. `decrypt` returns a promise of the message in an RSAES-PKCS1-v1_5 ciphertext (RFC 8017, 7.2.2), a long operation like `sign` (460 ms with 4096 bits): `ciphertext` exactly as long as `n` (pad an OpenPGP MPI with zeros on the left) and below `n`, else a `RangeError` at once. **Bad padding is not an error**: with *implicit rejection* (draft-irtf-cfrg-rsa-guidance, 7.2, as written), it decrypts to a message derived from the key and the ciphertext, the same each time, unpredictable without the key, 0 to `n`'s length − 11 bytes, so neither the app nor an attacker can tell. Check what comes out: for OpenPGP, the session key's algorithm, length and checksum, and then the message's integrity, will fail. `destroy()` wipes the key; `sign` and `decrypt` then throw a `TypeError`. |
+| `rsaVerify(signature, hash, digest, publicKey)` | Checks an RSASSA-PKCS1-v1_5 signature (RFC 8017) of a digest made with `hash` (SHA-1 too, for old signatures), under `{ n, e }`: 1024 to 4096 bits, else `false`. **Keys under 2048 bits are weak** (1024-bit RSA is within reach of a well-funded attacker): they verify for old signatures only, and the app should say so (the size is that of `n`, which the app has); they can't be imported to sign. `signature` is exactly as long as `n`: pad an OpenPGP MPI with zeros on the left. The expected encoding is built and compared, never parsed from the signature (DigestInfo with its NULL parameters, as RFC 9580 lists it). A `RangeError` if `digest` is not the hash's size. |
+| `aesCfbEncrypt(key, iv, data)` | AES in CFB mode with 128-bit feedback (NIST SP 800-38A; OpenPGP's, RFC 9580, for protected secret keys and its encrypted data): `key` 16, 24 or 32 bytes (AES-128, -192, -256), `iv` 16 bytes, `data` any length up to 2 MiB (about 0.2 s on a Pi Zero), no padding. Returns as many bytes. To go on in another call, cut on whole blocks and pass the last 16 bytes of ciphertext as the next `iv`. Not authenticated: what it decrypts may have been changed. For OpenPGP's encrypted messages, use `seipdV1Decrypt`, which checks them, and has no such limit. |
+| `aesCfbDecrypt(key, iv, data)` | The other way, as `aesCfbEncrypt`. |
+| `openpgpS2k(type, hash, passphrase, salt, count, length, options?)` | OpenPGP's string-to-key (RFC 9580, 3.7.1): a promise of the `length`-byte key (1 to 64) a passphrase (at most 64 KiB) gives. `type` 0 (simple: `salt` and `count` `null`), 1 (salted: `salt` 8 bytes, `count` `null`) or 3 (iterated and salted: `salt`, and `count` the coded count octet as the packet has it, 0 to 255, which hashes (16 + (c & 15)) << ((c >> 4) + 6) bytes: 1024 to 65,011,712). A key longer than the hash runs more hashes, preloaded with zeros, as the RFC says. Not PBKDF2. A [long operation](#long-operations), every type (one API): on a Pi Zero, the largest count takes 3.8 s with SHA-256 and 3.6 s with SHA-1 (what GnuPG exports keys with), twice that when the key is longer than the hash (AES-256 from SHA-1). The passphrase is copied when the call is made. Wrong arguments throw at once. |
+| `aeadEncrypt(mode, key, nonce, associatedData, plaintext)` | One AEAD message all at once, for keys and small blobs: the ciphertext followed by the 16-byte tag. AES-128, -192 or -256 (`key` 16, 24 or 32 bytes); `nonce` as long as RFC 9580 has it for the mode (OCB 15, EAX 16, GCM 12 bytes), else a `RangeError`; `associatedData` any bytes (empty: `new Uint8Array(0)`), up to 64 KiB. For an AEAD-protected secret key (RFC 9580, 5.5.3: S2K usage 253): the key from `hkdf("SHA-256", s2kOutput, null, [packetTag, version, cipher, mode], keyLength)`, a random nonce stored in the packet, the associated data the packet tag octet (0xC5 or 0xC7) and the public key packet's body. Synchronous, at most 256 KiB (about 0.15 s with GCM, the slowest, on a Pi Zero); **messages** go through `seipdV2Decrypt` and `ocbedDecrypt`, which are long operations. Never use a nonce twice with the same key. |
+| `aeadDecrypt(mode, key, nonce, associatedData, data)` | The other way: `data` is the ciphertext followed by the tag; the plaintext is returned **only if the tag matches**, checked before anything is given. Otherwise it throws an `Error`, the same one whatever went wrong (a wrong key, nonce or associated data, changed or cut data). Arguments as `aeadEncrypt`'s. |
+| `hkdf(hash, ikm, salt, info, length)` | HKDF (RFC 5869) with HMAC over `hash`: `length` bytes (at most 255 digests) from the input keying material, a salt (`null`: none, which is zeros) and info. What RFC 9580 uses for SEIPD v2 and for AEAD-protected keys. |
+| `argon2id(password, salt, { passes, lanes, memoryKiB, length, onProgress?, signal? })` | Argon2id (RFC 9106, version 1.3), without a secret or associated data: a promise of the `length`-byte tag (4 to 1024). `passes` (t) 1 to 255, `lanes` (p) 1 to 255, `memoryKiB` (m) at least 8 per lane and **at most a quarter of the board's memory** (128 MiB on a 512 MB Pi Zero; `limits().argon2MemoryKiB` says how much): more is a `RangeError`, never quietly less. `password` at most 64 KiB, `salt` 8 to 1024 bytes (16 random ones are usual). A [long operation](#long-operations): the lanes are computed one after the other, a segment at a time in RFC 9106's order, in slices of about 20 ms, so the screen keeps being drawn (the longest wait between updates on a Pi Zero: 30 ms; longer once, when a larger area replaces a smaller one, as the kernel zeroes the old one). On a Pi Zero: 5.4 s for 64 MiB with t = 3, p = 4; 3.8 s for 128 MiB with t = 1. The memory is taken outside the JavaScript heap, when the operation starts (its first slices), and kept for the next call; it is wiped when an operation ends, and wiped and given back when the app stops. If the kernel cannot give it then, the promise rejects with a `RangeError`. Checks itself (RFC 9106's sample and an S2K one) in the slices of its first call. Arguments are checked, and the password and salt copied, when the call is made. |
+| `openpgpS2kArgon2(passphrase, salt, passes, parallelism, memoryExponent, length, options?)` | OpenPGP's Argon2 S2K (type 4, RFC 9580, 3.7.1.4), the four fields as the packet has them: `salt` 16 bytes, `passes` and `parallelism` 1 to 255, `memoryExponent` the encoded m (the memory is 2^m KiB) from 3 + ⌈log2 p⌉ to 31, `length` the session or key-encryption key's (4 to 64). Argon2id as `argon2id`, with its limit: **more than `argon2id` may use (a quarter of the board's memory: an exponent above 17 on a 512 MB Pi Zero) is a `RangeError`**, so RFC 9580's first recommended option (2 GiB) cannot be opened on GapKeep; its second (t = 3, p = 4, m = 16: 64 MiB) can, in 5.4 s on a Pi Zero. A [long operation](#long-operations). |
+| `x25519PrivateKey(secret)` | An X25519 key (RFC 7748) from its 32-byte secret, held natively: `publicKey` (32 bytes), `sharedSecret(peerPublic)` (the 32-byte shared secret with a peer's 32-byte public key) and `destroy()` (wipes the secret; `publicKey` stays, `sharedSecret` then throws a `TypeError`). Byte order and clamping are RFC 7748's: the secret and public keys are little-endian, the secret is clamped where it is used (any 32 bytes are a secret), a public key's top bit is ignored. **An all-zero shared secret is refused** (a `RangeError`: the peer's key is of small order). OpenPGP's legacy Curve25519 keys (ECDH, RFC 9580, 5.5.5.6) store the secret as a big-endian MPI: reverse its 32 bytes; their public key and ephemeral key have a 0x40 byte in front: drop it. RFC 9580's X25519 keys (algorithm 25) are native: as they are. The KDF (RFC 6637's, or RFC 9580's HKDF) is the app's, with the hashes here; then `aesKeyUnwrap`. About 2 ms on a Pi Zero. |
+| `aesKeyWrap(kek, key)` | AES key wrap (RFC 3394, its default IV): `kek` 16, 24 or 32 bytes, `key` a multiple of 8 bytes, 16 to 4096; returns 8 bytes more. |
+| `aesKeyUnwrap(kek, wrapped)` | The other way (RFC 3394), for OpenPGP's ECDH (RFC 9580, 11.5): `wrapped` a multiple of 8 bytes, 24 to 4096; returns 8 bytes fewer. Its integrity check is compared without a shortcut; if it fails (a wrong key, or changed data), an `Error` (not a `TypeError` or `RangeError`) and nothing else. |
+| `seipdV1Decrypt(sessionKey, data, options?)` | Decrypts OpenPGP's Symmetrically Encrypted Integrity Protected Data, version 1 (RFC 9580, 5.13.1; GnuPG's usual encryption): `data` is the packet's body after its version octet (1), at least 40 bytes and at most 8 MiB, `sessionKey` 16, 24 or 32 bytes (AES-128, -192, -256: the session key's algorithm 7, 8 or 9). AES-CFB with a zero IV over the random prefix, the plaintext and the MDC packet (0xD3 0x14 and SHA-1 of everything before it); a promise of the plaintext (the packets inside: literal data, compressed data, signatures...) **only if the MDC matches**. Otherwise the promise rejects with an `Error`, the same one whatever went wrong (a wrong key, a changed or cut message): nothing decrypted reaches JavaScript, and the prefix's repeated bytes (the "quick check") play no part. A [long operation](#long-operations): about 6.5 MB/s on a Pi Zero (1 MiB in 0.16 s, in slices of at most 28 ms). The data is copied when the call is made. There is no function for the old Symmetrically Encrypted Data packet (tag 9, no integrity): refuse it. For AEAD packets: `seipdV2Decrypt`, `ocbedDecrypt`. |
+| `seipdV2Decrypt(sessionKey, data, options?)` | Decrypts a version 2 SEIPD packet (RFC 9580, 5.13.2: OpenPGP's AEAD, what RFC 9580 implementations write): `data` is the packet's body after its version octet (2): cipher, AEAD mode, chunk size octet (0 to 16), 32-byte salt, the chunks with their tags, the final tag; at most 8 MiB. `sessionKey` as long as the cipher's key (AES-128, -192, -256: 16, 24, 32 bytes; else a `RangeError`). The message key and IV come from HKDF-SHA256; each chunk is decrypted and its tag checked, and then the final tag, over the total length, so a message cut after a chunk fails too: a promise of the plaintext **only if every tag matched**, else an `Error`, the same one whatever went wrong. AEAD modes: EAX (1), OCB (2) and GCM (3), all three in GapKeep's code over the AES block (another mode is a `RangeError`). A [long operation](#long-operations): on a Pi Zero, about 6 MB/s with OCB, 6 with EAX and 2 with GCM (whose GHASH multiplies bit by bit, constant-time). The data is copied when the call is made. |
+| `ocbedDecrypt(sessionKey, data, options?)` | Decrypts GnuPG's OCB Encrypted Data packet (tag 20, version 1: LibrePGP, draft-koch-librepgp, 5.16): **what GnuPG 2.4 writes by default** (to its own keys, which announce AEAD). Not RFC 9580's: the session key is the key itself (no HKDF), a chunk's nonce is the packet's IV xor the chunk's index, and its associated data has the index too. AEAD mode OCB (2, a 15-byte IV: what GnuPG writes) or EAX (1, a 16-byte IV, which LibrePGP allows to be read); LibrePGP has no GCM there (a `RangeError`). `data` is the body after its version octet (1); otherwise as `seipdV2Decrypt`: every chunk's tag and the final tag checked before anything is given, one `Error` for every failure, at most 8 MiB. About 6 MB/s on a Pi Zero. |
+| `limits()` | What this board allows: `argon2MemoryKiB`, the most memory `argon2id` and `openpgpS2kArgon2` may use, a quarter of the board's memory (131,072 on a 512 MB Pi Zero, 65,536 on a 256 MB board), for apps to explain a refusal. |
 | `randomBytes(n)` | `Uint8Array(n)` of random bytes, `n` ≤ 65536. |
 | `getRandomValues(array)` | Fills a typed array in place and returns it, like WebCrypto's. ≤ 65536 bytes. |
 | `rngStatus()` | `{ healthy, failure, rawBytes }`. |
 
-`data`, `key`, `password` and `salt` are typed arrays (their bytes: a
-`subarray` hashes just its part), `ArrayBuffer`s, or strings, taken as
-UTF-8. Hashes, HMAC and PBKDF2 run in the kernel (src/crypto, written from
-FIPS 180-4, the RIPEMD-160 paper, RFC 2104 and RFC 8018, checked against
+The hashes' `data`, and `hmac`'s and `pbkdf2`'s `key`, `password` and
+`salt`, are typed arrays (their bytes: a `subarray` hashes just its
+part), `ArrayBuffer`s, or strings, taken as UTF-8. Hashes, HMAC, PBKDF2
+and OpenPGP's S2K run in the kernel (src/crypto, written from FIPS 180-4,
+the RIPEMD-160 paper, RFC 2104, RFC 8018 and RFC 9580, checked against
 their test vectors): microseconds per block on a Pi Zero, where the same
 in JavaScript takes about a millisecond. The copies made of keys and data
 are overwritten after use.
@@ -487,9 +555,125 @@ on these: e.g. a child key is `privateKeyTweakAdd(k, I.slice(0, 32))` with
 `I = hmac("SHA-512", chainCode, data)`. On a Pi Zero, an ECDSA signature
 takes about 9 ms, a BIP-32 derivation step under 2 ms, a BIP-39 seed 93 ms.
 
-Each group (RIPEMD-160, PBKDF2, secp256k1) checks itself against known
-answers before its first use; if that fails, it throws an `InternalError`
-until reboot.
+**OpenPGP's primitives**: what an OpenPGP app needs natively to make
+signatures with imported Ed25519 and RSA keys and to unlock protected
+secret keys; packets, armor, keyrings and the signed data's digest are
+the app's, in JavaScript. Ed25519 is
+[Monocypher](https://monocypher.org)'s (4.0.3, CC0 or BSD-2-Clause,
+constant-time); RSA and AES are [Mbed TLS](https://www.trustedfirmware.org/projects/mbed-tls/)'s
+(3.6 LTS, Apache-2.0: its constant-time bignum, with the private
+operation blinded and its result checked). Keys, digests, signatures,
+salts and IVs are typed arrays or `ArrayBuffer`s, never strings (a
+passphrase may be one, as UTF-8). Wrong types throw a `TypeError`,
+wrong sizes and numbers that aren't keys a `RangeError`, unknown hash
+names a `TypeError`; the `verify` functions return `false` for
+signatures and public keys that don't check out.
+
+Private keys are objects (`Ed25519PrivateKey`, `RsaPrivateKey`) that
+keep the key in native memory, out of reach of JavaScript, until
+`destroy()` wipes it; else it is wiped when the object is collected,
+and at the latest when the app exits. **The key's bytes do pass through
+JavaScript once**, to make the object (the app decrypts and parses its
+secret-key packet itself): overwrite those arrays (`.fill(0)`) once the
+key is made. Copies JavaScript made on the way (a `slice`, a string)
+stay in memory until the collector frees them (the heap is wiped as it
+frees), so handle key material in as few arrays as you can.
+
+Signing checks its own result: an RSA signature against the public key
+(twice: Mbed TLS, then GapKeep), an Ed25519 one by verifying it. A
+wrong result, which a hardware fault could cause and which could reveal
+the key, is never returned: `sign` throws an `InternalError`.
+
+AES runs from lookup tables, which is not constant-time against code
+sharing the processor's cache; on GapKeep, one app runs at a time, and
+the key is the app's. On a Pi Zero: an Ed25519 signature takes about
+4 ms, its verification 3 ms; an RSA signature 90 ms with 2048 bits, 220
+ms with 3072 and 460 ms with 4096 (checks included; the first with a
+key up to 170 ms more, as its blinding values are made), a
+verification under 20 ms; importing an RSA key 30 to 90 ms; AES-CFB about 10 MB/s,
+SHA-256 16 MB/s.
+
+<a id="long-operations"></a>**Long operations.** What can take more
+than a quarter of a second on a Pi Zero returns a promise:
+`openpgpS2k`, `openpgpS2kArgon2`, `argon2id`, `pbkdf2Async`,
+`seipdV1Decrypt`, `seipdV2Decrypt`, `ocbedDecrypt`, an RSA key's
+`sign` and `decrypt`, and
+[`gk:zlib`](#gkzlib)'s `inflate`. The work is done natively in
+slices of about 20 ms, one each time round the main loop, between the
+screen being drawn and keys being read: the app stays responsive (it
+can show a progress bar, from `onProgress`; the longest wait between
+screen updates was 30 ms during the largest S2K and 220 ms
+during an RSA-4096 signature, whose two halves are one slice each).
+They run one at a time, in the order they were asked for; at most 16
+may wait (a 17th throws a `RangeError`). Arguments are checked when the
+call is made (errors are thrown, not rejected). When the app stops (it
+exits, or the Windows key takes the person home) its operations are
+dropped and wiped, their promises never settled; when the watchdog
+(or Ctrl+C) stops one of its scripts, they are rejected with an `InternalError`.
+The last argument may be `{ onProgress, signal }`. `onProgress`: a
+function called after each slice that moved the work on, with a
+fraction (more than 0, at most 1). `signal`: an `AbortSignal`, to cancel
+it as on the web (`const ac = new AbortController(); crypto.argon2id(...,
+{ signal: ac.signal }); ac.abort();`): an operation still waiting is
+dropped, a running one stops at the end of its slice (Argon2id wipes
+its memory first, over its next slices), and its state is wiped; the
+promise rejects with `signal.reason`, an `Error` named `"AbortError"`
+unless `abort(reason)` gave another. A signal aborted already rejects
+at once, nothing started; aborting after the promise settled does
+nothing. (An e-paper panel's `refresh()` takes a signal too, but
+once the panel's waveform has begun it runs to its end, and only then
+does the promise reject: `panel.refresh`, above.)
+`pbkdf2` stays synchronous, and so do Ed25519, X25519, verification,
+key wrap, AES-CFB (at most 2 MiB a call) and importing keys, which are
+fast at the sizes apps use; and the hashes (below).
+
+<a id="hashing-big-data"></a>**Hashing big data.** The hashes
+(`sha256(data)`, ..., `hmac`, and each `update` of `createHash`) take
+any amount, and block while they hash: on a Pi Zero, about 16 MB/s
+with SHA-1 and SHA-256, 9 MB/s with SHA-384 and SHA-512 (a 4 MB file:
+a quarter and half a second). For more than a megabyte or two, feed a
+hash in pieces of 1 to 2 MiB and let the main loop run between them,
+so the screen stays alive and the watchdog (10 s per call) is never
+near:
+
+```js
+async function sha256Of(bytes, onProgress) {
+  const h = crypto.createHash("SHA-256"), piece = 1 << 20;
+  for (let at = 0; at < bytes.length; at += piece) {
+    h.update(bytes.subarray(at, at + piece));
+    onProgress?.(Math.min(1, (at + piece) / bytes.length));
+    await new Promise((resolve) => setTimeout(resolve, 0));	// let the screen be drawn
+  }
+  return h.digest();
+}
+```
+
+**Decrypting OpenPGP messages** (RFC 9580; what GnuPG makes with its
+usual settings): the app parses the packets; the public-key encrypted
+session key packet gives the session key, with an RSA key's `decrypt`
+(implicit rejection: always some bytes) or, for ECDH, with
+`x25519PrivateKey`, the KDF and `aesKeyUnwrap`; the app checks the
+session key's algorithm and checksum, then `seipdV1Decrypt`,
+`seipdV2Decrypt` or `ocbedDecrypt` (by the packet) decrypts the message
+and checks its integrity before anything of it is given; a compressed
+data packet inside goes to [`gk:zlib`](#gkzlib).
+**The session key does pass through JavaScript** (the app reads its
+algorithm octet and checksum), as the private key does on import:
+wipe it (`.fill(0)`) once used. Keeping it native would need the
+session key packet parsed natively too (its RSA and ECDH forms,
+the KDF, the checksum), returning a handle that `seipdV1Decrypt`
+takes instead of bytes. GnuPG 2.4 writes its own OCB packet (tag 20,
+`ocbedDecrypt`) to keys that announce AEAD, as its own new keys do,
+and SEIPD v1 to others; RFC 9580 implementations write SEIPD v2
+(EAX, OCB or GCM). A passphrase-protected message or key may use
+Argon2 (S2K type 4): `openpgpS2kArgon2`, up to a quarter of the board's
+memory (128 MiB on a Pi Zero).
+
+Each group (RIPEMD-160, PBKDF2, secp256k1, Ed25519, X25519, RSA, AES,
+S2K, SEIPD, OCB, EAX, GCM, AEAD packets, Argon2id) checks itself
+against known answers before its first use (RSA's and Argon2id's, in
+the slices of their first long operation, not at import); if that
+fails, it throws an `InternalError` until reboot.
 
 **Where the randomness comes from.** The BCM2835's hardware random number
 generator, treated as a noise source of unknown quality. Every raw byte
@@ -511,6 +695,7 @@ import * as gkcrypto from "gk:crypto";
 globalThis.crypto = {
   getRandomValues: gkcrypto.getRandomValues,
   subtle: { digest: async (alg, data) => ({ "SHA-1": gkcrypto.sha1, "SHA-256": gkcrypto.sha256,
+                                             "SHA-384": gkcrypto.sha384,
                                              "SHA-512": gkcrypto.sha512 })[alg](data).buffer },
 };
 ```
@@ -761,6 +946,35 @@ has none.
 
 ---
 
+## gk:zlib
+
+```js
+import * as zlib from "gk:zlib";
+```
+
+Decompression of DEFLATE data (RFC 1951), raw or in zlib's format (RFC
+1950): what OpenPGP's compressed data packets hold (their algorithm 1,
+ZIP, is raw DEFLATE; 2, ZLIB, zlib's format; BZip2, 3, isn't here), and
+what other formats use. zlib's own inflate ([zlib](https://zlib.net)
+1.3.2, zlib License), checked against known answers before its first
+use and fuzzed (tools/fuzz_inflate.sh).
+
+**You must say how big the result may be** (`maxOutput`, at most 32
+MiB): a few hundred bytes can decompress to gigabytes, and the limit
+is checked as the output grows, so such data is refused (a
+`RangeError`) with nothing more allocated than the limit allows.
+Decompression is a [long operation](#long-operations) (gk:crypto's): a
+promise, the work done in slices while the screen keeps being drawn,
+about 1 MiB in 0.1 s on a Pi Zero. Data that isn't valid in the
+format, is cut short, or has more after its end rejects with an
+`Error`. What it decompresses is wiped from native memory when done.
+
+| Name | Description |
+| --- | --- |
+| `inflate(data, { format, maxOutput, onProgress, signal })` | A promise of `data` (at most 8 MiB, copied when the call is made) decompressed: `format` `"raw"` (DEFLATE) or `"zlib"`, `maxOutput` the most bytes it may decompress to, 1 to 33,554,432 (32 MiB). Missing or wrong options throw at once (a `TypeError` or `RangeError`). |
+
+---
+
 ## gk:apps
 
 Requires `"permissions": ["apps"]` in the manifest; importing it otherwise
@@ -783,6 +997,7 @@ throws a `ReferenceError`. Used by the launcher.
 | `console.log`, `info`, `warn`, `error`, `debug` | Write to the serial log as `app:<id>`. Strings are printed as-is, errors with their stack, other objects as JSON. |
 | `setTimeout(fn, ms)`, `setInterval(fn, ms)` | Return a numeric id. Extra arguments are not passed on; use a closure. Interval minimum 1 ms. |
 | `clearTimeout(id)`, `clearInterval(id)` | Unknown ids are ignored. |
+| `AbortController`, `AbortSignal` | As on the web, a subset: `new AbortController()`, its `signal` and `abort(reason?)`; a signal's `aborted`, `reason`, `onabort`, `throwIfAborted()`, `addEventListener("abort", fn)` and `removeEventListener`; `AbortSignal.abort(reason?)` and `AbortSignal.timeout(ms)`. To cancel [long operations](#long-operations). |
 
 Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage` (see
 [`gk:session`](#gksession)),
@@ -797,5 +1012,5 @@ Not available: `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage` (see
 | --- | --- |
 | JS heap per app | 96 MB |
 | JS stack | 512 KB |
-| One handler, timer or job | 10 s, then interrupted (the app keeps running) |
+| One handler, timer or job | 10 s, then interrupted (the app keeps running); Ctrl+C interrupts it after 0.5 s |
 | Display | Whatever the HDMI output negotiates (640×480 in QEMU and, by default, the simulator) |

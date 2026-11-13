@@ -25,8 +25,10 @@
 //
 #include "apphost.h"
 #include "markup.h"
-#include "ttfstyles.h"
+#include "fontcache.h"
 #include "scanner.h"
+#include "epaper.h"
+#include "jobs.h"
 #include "lv_mem_limit.h"
 #include "../crypto/wipe.h"
 #include <lvgl/lvgl/src/themes/lv_theme_private.h>
@@ -130,6 +132,7 @@ struct TGkNode
 	lv_point_t LastDrag;		// pointer position of the last "drag" event
 	int nFontSize;			// "font", 0 if not set
 	boolean bMono;			// "mono"
+	int nFamily;			// "family": FamilyDefault, FamilyEPDMono...
 	boolean bMarkup;		// Label with "markup": an LVGL spangroup
 	char *pMarkup;			// its text as set (the markup)
 };
@@ -172,6 +175,9 @@ struct TGkUIState
 	JSValue BaseProto;
 	boolean bStopping;
 	TGkAlert *pAlerts;		// open alerts, innermost first
+	JSValue EPaperProto;		// ui.epaper's panels: a Container's, and more
+	CGkEPaperDisplay *pEPaper;	// the open panel, or 0
+	boolean bEPaperClose;		// panel.close() called: deleted in GkUIProcessDeferred
 };
 
 struct TGkAlert
@@ -663,73 +669,18 @@ static int ToEnum (JSContext *ctx, JSValueConst v, const char *pProp,
 	return -1;
 }
 
-static const int FontSizes[] = {12, 14, 16, 18, 20, 22, 24, 28, 32, 40};
-static const lv_font_t *Fonts[] =
-{
-	&gk_montserrat_12, &gk_montserrat_14, &gk_montserrat_16,
-	&gk_montserrat_18, &gk_montserrat_20, &gk_montserrat_22,
-	&gk_montserrat_24, &gk_montserrat_28, &gk_montserrat_32,
-	&gk_montserrat_40
-};
-static const unsigned FontCount = sizeof FontSizes / sizeof FontSizes[0];
-
-// "mono": JetBrains Mono, with Montserrat's line at the same size
-// (tools/make_fonts.py), falling back to it for icons and the rest
-static const int MonoSizes[] = {12, 14, 16, 18, 20, 24, 28};
-static const lv_font_t *MonoFonts[] =
-{
-	&gk_mono_12, &gk_mono_14, &gk_mono_16, &gk_mono_18, &gk_mono_20,
-	&gk_mono_24, &gk_mono_28
-};
-static const unsigned MonoCount = sizeof MonoSizes / sizeof MonoSizes[0];
-
-// The monospaced font of a size, or the next smaller one there is
-static const lv_font_t *MonoFont (int nSize)
-{
-	unsigned nChosen = 0;
-	for (unsigned i = 0; i < MonoCount; i++)
-	{
-		if (MonoSizes[i] <= nSize)
-		{
-			nChosen = i;
-		}
-	}
-	return MonoFonts[nChosen];
-}
-
-static const lv_font_t *NormalFont (int nSize)
-{
-	for (unsigned i = 0; i < FontCount; i++)
-	{
-		if (FontSizes[i] == nSize)
-		{
-			return Fonts[i];
-		}
-	}
-	return Fonts[2];
-}
-
-// The size and kind of a font of ours (16, not mono, if it isn't one)
-static void FontInfo (const lv_font_t *pFont, int *pSize, boolean *pMono)
-{
-	*pSize = 16;
-	*pMono = FALSE;
-	for (unsigned i = 0; i < FontCount; i++)
-	{
-		if (Fonts[i] == pFont)
-		{
-			*pSize = FontSizes[i];
-		}
-	}
-	for (unsigned i = 0; i < MonoCount; i++)
-	{
-		if (MonoFonts[i] == pFont)
-		{
-			*pSize = MonoSizes[i];
-			*pMono = TRUE;
-		}
-	}
-}
+// "family": "epdmono", 1-bit bitmap fonts at their own sizes: X11 misc-fixed
+// 6x10 at 10, Terminus Font's bold above (tools/make_epdmono.py): for e-paper panels, where anti-aliased text
+// loses its grey edges.
+enum { FamilyDefault, FamilyEPDMono, FamilyCount };
+static const char *const FamilyNames[FamilyCount] = {"default", "epdmono"};
+extern "C" const lv_font_t gk_epdmono_10, gk_epdmono_14, gk_epdmono_16, gk_epdmono_20, gk_epdmono_24,
+	gk_epdmono_32;
+static const int EPDMonoSizes[] = {10, 14, 16, 20, 24, 32};
+static const lv_font_t *EPDMonoFonts[] = {&gk_epdmono_10, &gk_epdmono_14, &gk_epdmono_16, &gk_epdmono_20,
+					   &gk_epdmono_24, &gk_epdmono_32};
+static const int EPDMonoDefault = 20;
+static const unsigned EPDMonoCount = sizeof EPDMonoSizes / sizeof EPDMonoSizes[0];
 
 // --- properties -------------------------------------------------------------
 
@@ -909,11 +860,12 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 {
 	int nSize;
 	boolean bMono;
-	FontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
+	GkFontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
 
 	static TGkMarkup Markup;	// big for the stack (one at a time)
 	char Error[200];
-	if (!GkMarkupParse (pSource, nLength, FontSizes, FontCount, nSize, bMono, &Markup, Error, sizeof Error))
+	if (!GkMarkupParse (pSource, nLength, GkFontSizes, GkFontSizeCount, nSize, bMono, &Markup, Error,
+			    sizeof Error))
 	{
 		GkMarkupFree (&Markup);
 		JS_ThrowTypeError (ctx, "%s: %s", pProp, Error);
@@ -935,15 +887,11 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 		*pEnd = cSaved;
 
 		lv_style_t *pStyle = lv_span_get_style (pSpan);
-		if (Run.Style.bBold || Run.Style.bItalic)	// never mono (markup.h)
+		if (   Run.Style.bBold || Run.Style.bItalic	// never mono (markup.h)
+		    || Run.Style.nSize != nSize || Run.Style.bMono != bMono)
 		{
-			lv_style_set_text_font (pStyle, GkStyledFont (NormalFont (Run.Style.nSize), Run.Style.nSize,
-								      Run.Style.bBold, Run.Style.bItalic));
-		}
-		else if (Run.Style.nSize != nSize || Run.Style.bMono != bMono)
-		{
-			lv_style_set_text_font (pStyle, Run.Style.bMono ? MonoFont (Run.Style.nSize)
-									: NormalFont (Run.Style.nSize));
+			lv_style_set_text_font (pStyle, GkFont (Run.Style.nSize, Run.Style.bMono,
+								Run.Style.bBold, Run.Style.bItalic));
 		}
 		if (Run.Style.bColor)
 		{
@@ -971,75 +919,39 @@ static int RenderMarkup (JSContext *ctx, TGkNode *pNode, const char *pSource, si
 }
 
 // The font from "font" and "mono", whichever came first: the size is
-// "font", else the one the widget has (inherited); mono takes the mono
-// font of that size, or, for an inherited size it lacks, the next smaller.
+// "font", else the one the widget has (inherited, the theme's 16 if not
+// one of ours); mono or not is "mono", else the inherited one's.
 static int ApplyFontOnly (JSContext *ctx, TGkNode *pNode, const char *pProp)
 {
-	if (!pNode->bMono)
+	if (pNode->nFamily != FamilyDefault)
 	{
-		for (unsigned i = 0; i < FontCount; i++)
+		// "epdmono": its sizes only (the default: 20)
+		int nSize = pNode->nFontSize != 0 ? pNode->nFontSize : EPDMonoDefault;
+		for (unsigned i = 0; i < EPDMonoCount; i++)
 		{
-			if (FontSizes[i] == pNode->nFontSize)
+			if (EPDMonoSizes[i] == nSize)
 			{
-				lv_obj_set_style_text_font (OBJ, Fonts[i], 0);
+				lv_obj_set_style_text_font (OBJ, EPDMonoFonts[i], 0);
 				return 0;
 			}
 		}
-		// mono: false: the inherited font, or the normal one of its size if
-		// that is mono (inside a mono container)
-		lv_obj_remove_local_style_prop (OBJ, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
-		const lv_font_t *pFont = lv_obj_get_style_text_font (OBJ, LV_PART_MAIN);
-		for (unsigned i = 0; i < MonoCount; i++)
-		{
-			if (MonoFonts[i] == pFont)
-			{
-				lv_obj_set_style_text_font (OBJ, pFont->fallback, 0);
-			}
-		}
-		return 0;
+		JS_ThrowRangeError (ctx, "%s: \"epdmono\" has no size %d: one of ui.epdmonoFonts (10 14 16 20 24 32)",
+				    pProp, nSize);
+		return -1;
 	}
-
 	int nSize = pNode->nFontSize;
 	if (nSize == 0)
 	{
 		lv_obj_remove_local_style_prop (OBJ, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
-		const lv_font_t *pFont = lv_obj_get_style_text_font (OBJ, LV_PART_MAIN);
-		nSize = 16;			// the theme's
-		for (unsigned i = 0; i < FontCount; i++)
+		boolean bMono;
+		GkFontInfo (lv_obj_get_style_text_font (OBJ, LV_PART_MAIN), &nSize, &bMono);
+		if (!pNode->bMono && !bMono)
 		{
-			if (Fonts[i] == pFont)
-			{
-				nSize = FontSizes[i];
-			}
+			return 0;		// the inherited font as it is
 		}
-		for (unsigned i = 0; i < MonoCount; i++)	// inside a mono container
-		{
-			if (MonoFonts[i] == pFont)
-			{
-				nSize = MonoSizes[i];
-			}
-		}
+		// mono: false inside a mono container: the normal font of its size
 	}
-	int nChosen = -1;
-	for (unsigned i = 0; i < MonoCount; i++)
-	{
-		if (   MonoSizes[i] == nSize
-		    || (pNode->nFontSize == 0 && MonoSizes[i] < nSize))
-		{
-			nChosen = (int) i;
-		}
-	}
-	if (nChosen < 0 && pNode->nFontSize == 0)
-	{
-		nChosen = 0;
-	}
-	if (nChosen < 0)
-	{
-		JS_ThrowRangeError (ctx, "%s: no monospaced font of size %d: one of ui.monoFonts (12 14 16 18 20 24 28)",
-				    pProp, nSize);
-		return -1;
-	}
-	lv_obj_set_style_text_font (OBJ, MonoFonts[nChosen], 0);
+	lv_obj_set_style_text_font (OBJ, GkFont (nSize, pNode->bMono), 0);
 	return 0;
 }
 
@@ -1055,21 +967,55 @@ static int ApplyFont (JSContext *ctx, TGkNode *pNode, const char *pProp)
 
 SETTER (SetFont)
 {
-	int32_t n;
-	if (JS_IsNumber (v) && ToInt (ctx, v, pProp, &n) == 0)
+	if (!JS_IsNumber (v))
 	{
-		for (unsigned i = 0; i < FontCount; i++)
+		JS_ThrowTypeError (ctx, "%s: a size in pixels expected (a number, %d to %d)", pProp,
+				   GK_FONT_MIN_SIZE, GK_FONT_MAX_SIZE);
+		return -1;
+	}
+	double d;
+	JS_ToFloat64 (ctx, &d, v);
+	boolean bWhole = d >= 0 && d <= 1000 && d == (double) (int) d;
+	if (pNode->nFamily != FamilyDefault)
+	{
+		pNode->nFontSize = bWhole ? (int) d : -1;	// (its family's sizes: ApplyFont checks)
+		return ApplyFont (ctx, pNode, pProp);
+	}
+	if (!bWhole || d < GK_FONT_MIN_SIZE || d > GK_FONT_MAX_SIZE)
+	{
+		JS_ThrowRangeError (ctx, "%s: a whole number of pixels from %d to %d expected (ui.fontRange)",
+				    pProp, GK_FONT_MIN_SIZE, GK_FONT_MAX_SIZE);
+		return -1;
+	}
+	pNode->nFontSize = (int) d;
+	return ApplyFont (ctx, pNode, pProp);
+}
+
+SETTER (SetFamily)
+{
+	const char *p = JS_IsString (v) ? JS_ToCString (ctx, v) : 0;
+	int nFamily = -1;
+	for (int i = 0; p != 0 && i < FamilyCount; i++)
+	{
+		if (strcmp (p, FamilyNames[i]) == 0)
 		{
-			if (FontSizes[i] == n)
-			{
-				pNode->nFontSize = n;
-				return ApplyFont (ctx, pNode, pProp);
-			}
+			nFamily = i;
 		}
 	}
-	JS_ThrowTypeError (ctx, "%s: one of the sizes in ui.fonts expected (12 14 16 18 20 22 24 28 32 40)", pProp);
-	return -1;
+	JS_FreeCString (ctx, p);
+	if (nFamily < 0)
+	{
+		JS_ThrowTypeError (ctx, "%s: \"default\" or \"epdmono\" expected", pProp);
+		return -1;
+	}
+	if (nFamily == FamilyDefault && pNode->nFamily != FamilyDefault)
+	{
+		pNode->nFontSize = 0;		// (its sizes aren't the default's)
+	}
+	pNode->nFamily = nFamily;
+	return ApplyFont (ctx, pNode, pProp);
 }
+GETTER (GetFamily)	{ return JS_NewString (ctx, FamilyNames[pNode->nFamily]); }
 
 SETTER (SetMono)
 {
@@ -1435,6 +1381,64 @@ SETTER (SetChecked)
 GETTER (GetChecked) { return JS_NewBool (ctx, lv_obj_has_state (OBJ, LV_STATE_CHECKED)); }
 
 // Dropdown
+// LVGL opens the list under the control, left-aligned with it and as wide
+// as its longest option: a dropdown at the right of the screen had its list
+// run past the edge, its scrollbar with it, and nothing showed there were
+// more options. After LVGL has opened and placed it (our callback runs
+// after the class's handler, for each event that may open it), the list is
+// kept on the screen: at most as wide as the screen, right-aligned with the
+// control if it would pass the right edge, then clamped to the screen's
+// edges; and its scrollbar shows whenever it scrolls.
+static void DropdownPlaceList (lv_event_t *e)
+{
+	lv_event_code_t Code = lv_event_get_code (e);
+	if (   Code != LV_EVENT_RELEASED && Code != LV_EVENT_KEY
+	    && Code != LV_EVENT_FOCUSED && Code != LV_EVENT_ROTARY)
+	{
+		return;
+	}
+	lv_obj_t *pDropdown = (lv_obj_t *) lv_event_get_current_target (e);
+	if (!lv_dropdown_is_open (pDropdown))
+	{
+		return;
+	}
+	lv_obj_t *pList = lv_dropdown_get_list (pDropdown);
+	lv_obj_t *pScreen = pList != 0 ? lv_obj_get_parent (pList) : 0;
+	if (pScreen == 0)
+	{
+		return;
+	}
+	lv_obj_update_layout (pList);
+	int32_t nScreenW = lv_obj_get_width (pScreen);
+	int32_t nScreenH = lv_obj_get_height (pScreen);
+	if (lv_obj_get_width (pList) > nScreenW)
+	{
+		lv_obj_set_width (pList, nScreenW);
+		lv_obj_update_layout (pList);
+	}
+
+	lv_area_t List, Control, Screen;
+	lv_obj_get_coords (pList, &List);
+	lv_obj_get_coords (pDropdown, &Control);
+	lv_obj_get_coords (pScreen, &Screen);
+	int32_t w = lv_area_get_width (&List);
+	int32_t h = lv_area_get_height (&List);
+	int32_t x = List.x1, y = List.y1;
+	if (x + w > Screen.x1 + nScreenW)
+	{
+		x = Control.x2 + 1 - w;			// right-aligned with the control
+	}
+	if (x + w > Screen.x1 + nScreenW) x = Screen.x1 + nScreenW - w;
+	if (x < Screen.x1) x = Screen.x1;
+	if (y + h > Screen.y1 + nScreenH) y = Screen.y1 + nScreenH - h;
+	if (y < Screen.y1) y = Screen.y1;
+	if (x != List.x1 || y != List.y1)
+	{
+		lv_obj_set_pos (pList, lv_obj_get_x_aligned (pList) + (x - List.x1),
+				lv_obj_get_y_aligned (pList) + (y - List.y1));
+	}
+}
+
 SETTER (SetOptions)
 {
 	if (!JS_IsArray (ctx, v))
@@ -1998,6 +2002,7 @@ static const TProp Props[] =
 	{"color",       ALL, SetColor, 0},
 	{"font",        ALL, SetFont, 0},
 	{"mono",        ALL, SetMono, GetMono},
+	{"family",      ALL, SetFamily, GetFamily},
 	{"textAlign",   ALL, SetTextAlign, 0},
 	{"radius",      ALL, SetRadius, 0},
 	{"borderWidth", ALL, SetBorderWidth, 0},
@@ -2062,7 +2067,8 @@ static JSValue GetValueProp (JSContext *ctx, TGkNode *pNode)
 // allocation inside LVGL.
 static int CheckUIMemory (JSContext *ctx, size_t nMore)
 {
-	size_t nUsed = gk_lv_mem_used () + s_nImageBytes;
+	// the fonts' glyphs are capped on their own (fontcache.h)
+	size_t nUsed = gk_lv_mem_used () - GkFontMemory () + s_nImageBytes;
 	if (nUsed > GK_LV_MEM_SOFT_LIMIT || nMore > GK_LV_MEM_SOFT_LIMIT - nUsed)
 	{
 		JS_ThrowRangeError (ctx, "the app's widgets would use more than "
@@ -2141,9 +2147,24 @@ static int ApplyProps (JSContext *ctx, TGkNode *pNode, JSValueConst Obj)
 		return -1;
 	}
 
+	// "family" first: it says which sizes "font" may have
 	int nRes = 0;
+	JSAtom Family = JS_NewAtom (ctx, "family");
 	for (uint32_t i = 0; i < nLen && nRes == 0; i++)
 	{
+		if (pTab[i].atom == Family)
+		{
+			JSValue v = JS_GetProperty (ctx, Obj, Family);
+			nRes = JS_IsException (v) ? -1 : ApplyProp (ctx, pNode, "family", v);
+			JS_FreeValue (ctx, v);
+		}
+	}
+	for (uint32_t i = 0; i < nLen && nRes == 0; i++)
+	{
+		if (pTab[i].atom == Family)
+		{
+			continue;
+		}
 		const char *pName = JS_AtomToCString (ctx, pTab[i].atom);
 		JSValue v = JS_GetProperty (ctx, Obj, pTab[i].atom);
 		if (pName == 0 || JS_IsException (v))
@@ -2164,6 +2185,7 @@ static int ApplyProps (JSContext *ctx, TGkNode *pNode, JSValueConst Obj)
 	}
 
 	JS_FreePropertyEnum (ctx, pTab, nLen);
+	JS_FreeAtom (ctx, Family);
 
 	return nRes;
 }
@@ -2832,7 +2854,12 @@ static lv_obj_t *CreateObject (TWidgetType Type, lv_obj_t *pParent, boolean bMar
 	case WTextArea:	p = lv_textarea_create (pParent);		break;
 	case WCheckbox:	p = lv_checkbox_create (pParent); lv_checkbox_set_text (p, "");	break;
 	case WSwitch:	p = lv_switch_create (pParent);			break;
-	case WDropdown:	p = lv_dropdown_create (pParent); lv_dropdown_set_options (p, "");	break;
+	case WDropdown:
+		p = lv_dropdown_create (pParent);
+		lv_dropdown_set_options (p, "");
+		lv_obj_set_scrollbar_mode (lv_dropdown_get_list (p), LV_SCROLLBAR_MODE_AUTO);
+		lv_obj_add_event_cb (p, DropdownPlaceList, LV_EVENT_ALL, 0);
+		break;
 	case WSlider:	p = lv_slider_create (pParent);			break;
 	case WBar:	p = lv_bar_create (pParent);			break;
 	case WTable:	p = lv_table_create (pParent);			break;
@@ -2917,6 +2944,10 @@ static JSValue js_widget_ctor (JSContext *ctx, JSValueConst new_target, int argc
 	}
 
 	lv_obj_t *pObj = CreateObject (Type, pParent, bMarkup);
+	if (pApp->pUI->pEPaper != 0 && lv_obj_get_screen (pObj) == pApp->pUI->pEPaper->GetScreen ())
+	{
+		lv_group_remove_obj (pObj);	// on the e-paper panel: not a keyboard target
+	}
 	JSValue Obj = Wrap (ctx, pObj, Type, JS_IsObject (Proto) ? (JSValueConst) Proto : JS_UNDEFINED);
 	JS_FreeValue (ctx, Proto);
 	if (JS_IsException (Obj))
@@ -3284,12 +3315,252 @@ const char *GkSymbolByName (const char *pName)
 	return 0;
 }
 
+// --- ui.epaper -----------------------------------------------------------------
+//
+// The e-paper panel gapkeep.txt configures, as a second display, off screen
+// (epaper.h): ui.epaper.open() gives its screen, a Container with
+// refresh(), close(), colors and model; widgets go on it as on any other.
+
+static boolean EPaperAllowed (JSContext *ctx, const char *pFunction)
+{
+	if (!(CAppHost::GetApp (ctx)->pBundle->permissions & GK_PERM_EPAPER))
+	{
+		JS_ThrowTypeError (ctx, "ui.epaper.%s needs \"permissions\": [\"epaper\"] in manifest.json", pFunction);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static JSValue EPaperColors (JSContext *ctx, const TGkEPDModel *pModel)
+{
+	JSValue Colors = JS_NewArray (ctx);
+	JS_SetPropertyUint32 (ctx, Colors, 0, JS_NewString (ctx, "black"));
+	JS_SetPropertyUint32 (ctx, Colors, 1, JS_NewString (ctx, "white"));
+	if (pModel->bRed)
+	{
+		JS_SetPropertyUint32 (ctx, Colors, 2, JS_NewString (ctx, "red"));
+	}
+	return Colors;
+}
+
+static JSValue ThrowError (JSContext *ctx, const char *pMessage)
+{
+	JSValue Error = JS_NewError (ctx);
+	JS_DefinePropertyValueStr (ctx, Error, "message", JS_NewString (ctx, pMessage),
+				   JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+	return JS_Throw (ctx, Error);
+}
+
+// ui.epaper.info(): the configured panel, as open() would give it, or null
+static JSValue js_epaper_info (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!EPaperAllowed (ctx, "info"))
+	{
+		return JS_EXCEPTION;
+	}
+	const TGkSPIDevice *pPanel = CGkEPD::GetPanel ();
+	if (pPanel == 0 || !GkSPIControllerPresent ())
+	{
+		return JS_NULL;
+	}
+	const TGkEPDModel *pModel = pPanel->pModel;
+	boolean bTurned = CGkEPaperDisplay::Rotation (FALSE, FALSE) & 1;	// landscape, as mounted
+	JSValue Info = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Info, "model", JS_NewString (ctx, pModel->pModule));
+	JS_SetPropertyStr (ctx, Info, "width", JS_NewInt32 (ctx, bTurned ? pModel->nHeight : pModel->nWidth));
+	JS_SetPropertyStr (ctx, Info, "height", JS_NewInt32 (ctx, bTurned ? pModel->nWidth : pModel->nHeight));
+	JS_SetPropertyStr (ctx, Info, "colors", EPaperColors (ctx, pModel));
+	return Info;
+}
+
+// ui.epaper.open({ orientation, flip })
+static JSValue js_epaper_open (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (!EPaperAllowed (ctx, "open"))
+	{
+		return JS_EXCEPTION;
+	}
+	TGkApp *pApp = CAppHost::GetApp (ctx);
+	TGkUIState *pUI = pApp->pUI;
+
+	boolean bPortrait = FALSE, bFlip = FALSE;
+	JSValueConst Options = argc > 0 ? argv[0] : JS_UNDEFINED;
+	if (!JS_IsUndefined (Options))
+	{
+		if (!JS_IsObject (Options))
+		{
+			return JS_ThrowTypeError (ctx, "ui.epaper.open: options must be an object ({ orientation, flip })");
+		}
+		JSPropertyEnum *pProps;
+		uint32_t nProps;
+		if (JS_GetOwnPropertyNames (ctx, &pProps, &nProps, Options, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) < 0)
+		{
+			return JS_EXCEPTION;
+		}
+		int nError = 0;
+		for (uint32_t i = 0; i < nProps && nError == 0; i++)
+		{
+			const char *pName = JS_AtomToCString (ctx, pProps[i].atom);
+			JSValue v = JS_GetProperty (ctx, Options, pProps[i].atom);
+			if (pName == 0 || JS_IsException (v))
+			{
+				nError = -1;
+			}
+			else if (strcmp (pName, "orientation") == 0)
+			{
+				const char *p = JS_IsString (v) ? JS_ToCString (ctx, v) : 0;
+				if (p != 0 && (strcmp (p, "landscape") == 0 || strcmp (p, "portrait") == 0))
+				{
+					bPortrait = p[0] == 'p';
+				}
+				else
+				{
+					JS_ThrowTypeError (ctx, "ui.epaper.open: orientation: \"landscape\" or \"portrait\" expected");
+					nError = -1;
+				}
+				JS_FreeCString (ctx, p);
+			}
+			else if (strcmp (pName, "flip") == 0)
+			{
+				nError = ToBool (ctx, v, "flip", &bFlip);
+			}
+			else
+			{
+				JS_ThrowTypeError (ctx, "ui.epaper.open: unknown option \"%s\"", pName);
+				nError = -1;
+			}
+			JS_FreeCString (ctx, pName);
+			JS_FreeValue (ctx, v);
+		}
+		for (uint32_t i = 0; i < nProps; i++)
+		{
+			JS_FreeAtom (ctx, pProps[i].atom);
+		}
+		js_free (ctx, pProps);
+		if (nError)
+		{
+			return JS_EXCEPTION;
+		}
+	}
+
+	if (pUI->pEPaper != 0 && !pUI->bEPaperClose)
+	{
+		return JS_ThrowTypeError (ctx, "ui.epaper.open: the panel is open already (close() it first)");
+	}
+	if (CheckUIMemory (ctx, 0))
+	{
+		return JS_EXCEPTION;
+	}
+	if (pUI->pEPaper != 0)
+	{
+		delete pUI->pEPaper;		// closed, not yet deleted: now
+		pUI->pEPaper = 0;
+		pUI->bEPaperClose = FALSE;
+	}
+
+	// landscape: the model's own rotation for it; portrait: a quarter turn
+	// from that (0 or 1); flip: a half turn more
+	unsigned nRotation = CGkEPaperDisplay::Rotation (bPortrait, bFlip);
+	const char *pError = 0;
+	CGkEPaperDisplay *pEPaper = CGkEPaperDisplay::Open (nRotation, &pError);
+	if (pEPaper == 0)
+	{
+		return ThrowError (ctx, pError);
+	}
+	pUI->pEPaper = pEPaper;
+
+	lv_obj_t *pScreen = pEPaper->GetScreen ();
+	lv_obj_set_flex_flow (pScreen, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_style_pad_all (pScreen, 4, 0);
+	lv_obj_set_style_pad_row (pScreen, 4, 0);
+	lv_obj_set_style_pad_column (pScreen, 4, 0);
+	return Wrap (ctx, pScreen, WContainer, pUI->EPaperProto);
+}
+
+// this: the open panel's screen; 0 (TypeError thrown) if not
+static CGkEPaperDisplay *GetEPaper (JSContext *ctx, JSValueConst this_val)
+{
+	TGkNode *pNode = GetNode (ctx, this_val);
+	if (pNode == 0)
+	{
+		return 0;
+	}
+	TGkUIState *pUI = pNode->pApp->pUI;
+	if (pUI->pEPaper == 0 || pUI->bEPaperClose || pNode->pObj != pUI->pEPaper->GetScreen ())
+	{
+		JS_ThrowTypeError (ctx, "not an open e-paper panel");
+		return 0;
+	}
+	return pUI->pEPaper;
+}
+
+// panel.refresh({ onProgress, signal })
+static JSValue js_epaper_refresh (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
+	if (pEPaper == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	TGkJobOptions Options;
+	if (!GkJobOnProgress (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "refresh", &Options))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValue Promise = pEPaper->Refresh (ctx, Options);
+	GkJobOptionsFree (ctx, &Options);
+	return Promise;
+}
+
+// panel.close(), panel.delete(): the display goes, with its widgets, after
+// the handler that called it (GkUIProcessDeferred). A refresh already asked
+// for goes on: it has its picture.
+static JSValue js_epaper_close (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	TGkNode *pNode = GetNode (ctx, this_val, FALSE);
+	if (pNode == 0)
+	{
+		return JS_EXCEPTION;
+	}
+	TGkUIState *pUI = pNode->pApp->pUI;
+	if (   pNode->pObj == 0 || pNode->bDeleting || pUI->pEPaper == 0
+	    || pNode->pObj != pUI->pEPaper->GetScreen ())
+	{
+		return JS_UNDEFINED;		// closed already
+	}
+	pNode->bDeleting = TRUE;		// (any use throws from now on)
+	pUI->bEPaperClose = TRUE;
+	return JS_UNDEFINED;
+}
+
+static JSValue js_epaper_get_colors (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
+	return pEPaper != 0 ? EPaperColors (ctx, pEPaper->GetModel ()) : JS_EXCEPTION;
+}
+
+static JSValue js_epaper_get_model (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	CGkEPaperDisplay *pEPaper = GetEPaper (ctx, this_val);
+	return pEPaper != 0 ? JS_NewString (ctx, pEPaper->GetModel ()->pModule) : JS_EXCEPTION;
+}
+
+static void EPaperFree (TGkUIState *pUI)
+{
+	if (pUI->pEPaper != 0)
+	{
+		delete pUI->pEPaper;		// its widgets release their JS as they go
+		pUI->pEPaper = 0;
+	}
+	pUI->bEPaperClose = FALSE;
+}
+
 static const char *ModuleExports[] =
 {
 	"Widget", "Container", "Panel", "Label", "Button", "TextArea", "Checkbox", "Switch",
 	"Dropdown", "Slider", "Bar", "Table", "QRCode", "TabView", "Image", "Scanner",
-	"screen", "width", "height", "fonts", "monoFonts", "symbols", "alert", "onKey", "theme",
-	"escapeMarkup"
+	"screen", "width", "height", "fonts", "monoFonts", "fontRange", "symbols", "alert", "onKey", "theme",
+	"escapeMarkup", "epaper", "epdmonoFonts"
 };
 
 static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
@@ -3400,17 +3671,27 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 	JS_SetModuleExport (ctx, m, "height", JS_NewInt32 (ctx, lv_display_get_vertical_resolution (pDisplay)));
 
 	JSValue FontList = JS_NewArray (ctx);
-	for (unsigned i = 0; i < FontCount; i++)
+	for (unsigned i = 0; i < GkFontSizeCount; i++)
 	{
-		JS_SetPropertyUint32 (ctx, FontList, i, JS_NewInt32 (ctx, FontSizes[i]));
+		JS_SetPropertyUint32 (ctx, FontList, i, JS_NewInt32 (ctx, GkFontSizes[i]));
 	}
 	JS_SetModuleExport (ctx, m, "fonts", FontList);
 	JSValue MonoList = JS_NewArray (ctx);
-	for (unsigned i = 0; i < MonoCount; i++)
+	for (unsigned i = 0; i < GkMonoSizeCount; i++)
 	{
-		JS_SetPropertyUint32 (ctx, MonoList, i, JS_NewInt32 (ctx, MonoSizes[i]));
+		JS_SetPropertyUint32 (ctx, MonoList, i, JS_NewInt32 (ctx, GkMonoSizes[i]));
 	}
 	JS_SetModuleExport (ctx, m, "monoFonts", MonoList);
+	JSValue Range = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Range, "min", JS_NewInt32 (ctx, GK_FONT_MIN_SIZE));
+	JS_SetPropertyStr (ctx, Range, "max", JS_NewInt32 (ctx, GK_FONT_MAX_SIZE));
+	JS_SetModuleExport (ctx, m, "fontRange", Range);
+	JSValue EPDList = JS_NewArray (ctx);
+	for (unsigned i = 0; i < EPDMonoCount; i++)
+	{
+		JS_SetPropertyUint32 (ctx, EPDList, i, JS_NewInt32 (ctx, EPDMonoSizes[i]));
+	}
+	JS_SetModuleExport (ctx, m, "epdmonoFonts", EPDList);
 
 	JSValue SymbolObj = JS_NewObject (ctx);
 	for (unsigned i = 0; i < sizeof Symbols / sizeof Symbols[0]; i++)
@@ -3423,6 +3704,18 @@ static int UIModuleInit (JSContext *ctx, JSModuleDef *m)
 	JS_SetModuleExport (ctx, m, "onKey", JS_NewCFunction (ctx, js_ui_on_key, "onKey", 1));
 	JS_SetModuleExport (ctx, m, "escapeMarkup", JS_NewCFunction (ctx, js_ui_escape_markup, "escapeMarkup", 1));
 	JS_SetModuleExport (ctx, m, "theme", JS_NewCFunction (ctx, js_ui_theme, "theme", 1));
+
+	// ui.epaper, and its panels' prototype: a Container's, and more
+	JSValue EPaper = JS_NewObject (ctx);
+	DefineMethod (ctx, EPaper, "open", js_epaper_open, 1);
+	DefineMethod (ctx, EPaper, "info", js_epaper_info, 0);
+	JS_SetModuleExport (ctx, m, "epaper", EPaper);
+	pUI->EPaperProto = JS_NewObjectProto (ctx, pUI->Protos[WContainer]);
+	DefineMethod (ctx, pUI->EPaperProto, "refresh", js_epaper_refresh, 1);
+	DefineMethod (ctx, pUI->EPaperProto, "close", js_epaper_close, 0);
+	DefineMethod (ctx, pUI->EPaperProto, "delete", js_epaper_close, 0);
+	DefineGetter (ctx, pUI->EPaperProto, "colors", js_epaper_get_colors);
+	DefineGetter (ctx, pUI->EPaperProto, "model", js_epaper_get_model);
 
 	return 0;
 }
@@ -3494,6 +3787,11 @@ void GkUIProcessDeferred (TGkApp *pApp)
 		return;
 	}
 
+	if (pUI->bEPaperClose)
+	{
+		EPaperFree (pUI);	// panel.close()
+	}
+
 	// close alerts that were answered, innermost first
 	for (TGkAlert **pp = &pUI->pAlerts; *pp != 0; )
 	{
@@ -3533,11 +3831,14 @@ void GkUIAppStopping (TGkApp *pApp)
 		AlertFree (pAlert, FALSE);
 	}
 
+	EPaperFree (pUI);		// while its widgets' JS can be released
+
 	for (unsigned t = 0; t < WTypeCount; t++)
 	{
 		JS_FreeValue (ctx, pUI->Protos[t]);
 	}
 	JS_FreeValue (ctx, pUI->BaseProto);
+	JS_FreeValue (ctx, pUI->EPaperProto);
 
 	// pUI itself stays until the screen is deleted (NodeEventCallback checks
 	// bStopping); the host frees it after the screen with GkUIFree().
@@ -3547,4 +3848,6 @@ void GkUIFree (TGkApp *pApp)
 {
 	delete pApp->pUI;
 	pApp->pUI = 0;
+
+	GkFontsFree ();			// no widget is left to use them
 }

@@ -1,0 +1,23 @@
+# Needs a test build (make TEST=1), and the simulator built with a panel
+# of its own, as a sealed kernel's: make -C sim TEST=1 EPAPER=weact-2.13-bw
+# EPAPER_BUSY=23 (tools/run_sim_tests.sh does, for the line below). The
+# build's panel is the one; the test card's gapkeep.txt (a 2.9" B/W/R) is
+# ignored, and says so. docs/EPAPER.md, "Sealed kernels".
+# Built with: EPAPER=weact-2.13-bw EPAPER_BUSY=23
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Keyboard attached 60
+expect epaper: WeAct 2.13" B/W \(122x250\) on SPI0 CE0 \(GPIO 8\), DC GPIO 25, RST GPIO 17, BUSY GPIO 23, 4000 kHz
+expect epaper: the panel is built in \(EPAPER=weact-2.13-bw\)
+expect epaper: gapkeep.txt:\d+: epaper: ignored: the panel is built into this kernel \(EPAPER=weact-2.13-bw\)
+expect epaper: gapkeep.txt:\d+: epaper_busy: ignored
+reject epaper: WeAct 2.9
+expect launcher ready 60
+epaper refresh-ms 500
+launch epapertest
+expect epapertest info: \{"model":"WeAct 2.13\\" B/W","width":250,"height":122,"colors":\["black","white"\]\}
+expect epapertest open: WeAct 2.13" B/W, 250x122, black white
+mark
+key 1
+expect epapertest wrote 1 10
+epaper shot 01-panel
