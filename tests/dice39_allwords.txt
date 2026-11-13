@@ -1,0 +1,68 @@
+# dice39: all 24 words from the dice. Every word "abandon": the checksum
+# does not match, so only the last word changes, to "art" (BIP-39's
+# all-zero test vector, never a real seed); no entropy pad needed.
+# The start page has the dice tables' address as a QR code
+# (decoded by tools/run_sim_tests.sh: sim:dice39_tables_qr).
+expect Keyboard attached 60
+expect launcher ready 60
+tile dice39
+expect dice39 selftest: \d+ passed, 0 failed 60
+wait 1
+shot 01-start
+key ret
+wait 1
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+type abandon
+key ret
+wait 1
+shot 02-entry
+key ret
+expect dice39: all 24 words typed, the last word's checksum recomputed 10
+expect dice39: verbatim check ok 10
+wait 1
+shot 03-results

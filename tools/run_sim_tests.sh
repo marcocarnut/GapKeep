@@ -113,6 +113,15 @@ if [ -f "$OUT/repl_epaper/panel.png" ]; then
 	fi
 fi
 
+# dice39's start page: the QR code of the dice tables' page
+if [ -f "$OUT/dice39_allwords/01-start.png" ]; then
+	if [ "$(zbarimg -q --raw "$OUT/dice39_allwords/01-start.png" 2>&1)" = "https://gapkeep.org/dice39.html" ]; then
+		echo "PASS  sim:dice39_tables_qr"
+	else
+		echo "FAIL  sim:dice39_tables_qr   (the start page's QR code: $OUT/dice39_allwords/01-start.png)"; FAILED=1
+	fi
+fi
+
 if [ -f "$OUT/epaper_shares/codex32-seedqr.png" ]; then
 	if python3 tests/epaper/check_shares.py "$OUT/epaper_shares" > "$OUT/epaper_shares_check.log" 2>&1; then
 		echo "PASS  sim:epaper_shares_check"
