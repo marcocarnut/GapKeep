@@ -171,9 +171,13 @@ export class Macros {
 
   // Each row encoded (bytes or error), the total, and whether it all fits
   state() {
+    // a secret is sealed as the board's table would have it (same length),
+    // with the fixed sequence: without the key, an opened {secret} would
+    // not encode at all ("needs the key")
+    const seal = this.sealer();
     const each = this.rows.map((r) => {
       try {
-        return { bytes: T.encodeMacro(this.full(r)), error: null };
+        return { bytes: T.encodeMacro(this.full(r), seal), error: null };
       } catch (e) {
         return { bytes: null, error: e };
       }
@@ -212,12 +216,20 @@ export class Macros {
     const rows = this.rows.map((r) => ({ code: r.code, text: this.full(r) }));
     if (!this.key) return T.encodeTable(rows);
     if (forBoard) return T.encodeTable(rows, { key: this.key, check: T.keyCheck(this.key) });
+    const seal = this.sealer();
+    return T.packTable(rows.map((r) => [r.code, T.encodeMacro(r.text, seal)]));
+  }
+
+  // What seals a {secret} with the key and a fixed sequence of nonces (the
+  // same bytes for the same macros), or null without a key
+  sealer() {
+    if (!this.key) return null;
     let x = 0x9e3779b9;
     const fixed = (n) => Uint8Array.from({ length: n }, () => {
       x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
       return (x >>> 0) % 255 + 1;       // never zero, as sealSecret wants
     });
-    return T.packTable(rows.map((r) => [r.code, T.encodeMacro(r.text, (plain) => T.sealSecret(this.key, plain, fixed))]));
+    return (plain) => T.sealSecret(this.key, plain, fixed);
   }
 
   // To tell what is on screen from what is on the board: the bytes

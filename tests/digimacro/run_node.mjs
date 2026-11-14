@@ -153,6 +153,28 @@ V.setLayout("us");
   s.rows[0].text = "user{secret}x";
   check(/needs the board's key/.test(s.state().each[0].error.message), "{secret} without the key is refused");
   check(s.nextCode() === "-", "the next free code");
+  // secrets read without the key, then the key given (its QR code): they
+  // open, and the table can be written (each row checked with the key)
+  const t2 = V.packTable([[".", V.encodeMacro("user{secret}pw", (plain) => V.sealSecret(KEY, plain, random))],
+                          ["-", V.encodeMacro("a{secret}b{Enter}", (plain) => V.sealSecret(KEY, plain, random))]]);
+  const ee3 = new Uint8Array(512).fill(0xff);
+  ee3.set(t2, 0);
+  const o = new Macros();
+  o.load(ee3);
+  check(o.hasSealed(), "secrets sealed before the key");
+  check(o.setKey(KEY) === 2 && !o.hasSealed(), "the key opens both");
+  o.rows.push({ code: "..", text: "new {secret}x" });
+  const ost = o.state();
+  check(ost.ok && ost.each.every((e) => !e.error), "with the key, rows with {secret} can be written");
+  const out = o.table();
+  check(out.length === ost.total, "what each row was counted as is what is written");
+  const back = new Macros();
+  back.setKey(KEY);
+  const ee4 = new Uint8Array(512).fill(0xff);
+  ee4.set(out, 0);
+  ee4.set(V.keyCheck(KEY), V.CHECK_ADDR);     // written apart from the table
+  back.load(ee4);
+  check(same(back.rows.map((r) => r.text), ["user{secret}pw", "a{secret}b\\n", "new {secret}x"]), "and read back, opened");
 }
 
 // --- 3. lib/board.js against the fake board ----------------------------------
