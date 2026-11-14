@@ -92,6 +92,51 @@ export class Macros {
     return got.length;
   }
 
+  // The keyboard layout changes from `from` to `to` (table.js's names): the
+  // keystrokes stay, and the text says what they type on the new one. A
+  // board's "vários", written for US International, reads as "v'arios" on
+  // US, and back. The table.js layout is left at `to`. Tokens ({totp #N},
+  // {totp ~N}, an {IR} with no button) and a part still sealed stay as they
+  // are, and so does any stretch the layout change does not alter (as typed,
+  // not as the decoder would write it). A row that would not encode is left
+  // alone. Returns how many rows changed.
+  relayout(from, to) {
+    const PROTECT = new RegExp(`${TOKEN.source}|${EMPTY_IR.source}`, "gi");
+    const seal = this.key ? (plain) => T.sealSecret(this.key, plain) : null;
+    const open = this.key ? (blob) => T.openSecret(this.key, blob) : null;
+    const again = (piece) => {
+      if (piece === "") return piece;
+      T.setLayout(from);
+      const bytes = T.encodeMacro(piece, seal);
+      const before = T.decodeMacro(bytes, open);
+      T.setLayout(to);
+      const after = T.decodeMacro(bytes, open);
+      return after === before ? piece : after;
+    };
+    let changed = 0;
+    this.rows = this.rows.map((r) => {
+      try {
+        const out = [];
+        let at = 0;
+        for (const m of r.text.matchAll(PROTECT)) {
+          out.push(again(r.text.slice(at, m.index)), m[0]);
+          at = m.index + m[0].length;
+        }
+        out.push(again(r.text.slice(at)));
+        const text = out.join("");
+        if (text === r.text) return r;
+        changed++;
+        return { ...r, text };
+      } catch (e) {
+        return r;
+      } finally {
+        T.setLayout(to);
+      }
+    });
+    T.setLayout(to);
+    return changed;
+  }
+
   // {totp @hex} as {totp ~N}
   hide(text) {
     return text.replace(BLOB, (m, h) => {

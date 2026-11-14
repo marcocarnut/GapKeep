@@ -434,5 +434,27 @@ V.setLayout("us");
   check(K.keyFromFile("nothing here", "7DD5DC7E").error === "key-not-in-file", "key file: none");
 }
 
+// 7. The keyboard layout changed: the same keystrokes, read on the new one
+{
+  const m = new Macros();
+  V.setLayout("us-intl");
+  const bytes = V.encodeMacro("vários são");
+  V.setLayout("us");
+  m.rows = [{ code: ".", text: V.decodeMacro(bytes) }, { code: "-", text: "plain{Enter}{IR}x" },
+            { code: "..", text: "a'b{totp #1}c" }];
+  check(m.rows[0].text === "v'arios s~ao", "relayout: read on US first");
+  m.relayout("us", "us-intl");
+  check(V.getLayout() === "us-intl", "relayout: the layout left at the new one");
+  check(m.rows[0].text === "vários são", "relayout: US International reads the accents");
+  check(m.rows[1].text === "plain{Enter}{IR}x", "relayout: unaltered text as typed, {IR} kept");
+  check(m.rows[2].text === "a{'}b{totp #1}c", "relayout: a lone mark, and the token kept");
+  check(hex(V.encodeMacro(m.rows[0].text)) === hex(bytes), "relayout: the same keystrokes");
+  m.relayout("us-intl", "us");
+  check(m.rows[0].text === "v'arios s~ao" && m.rows[2].text === "a'b{totp #1}c", "relayout: and back");
+  m.relayout("us", "abnt2");
+  check(m.rows[0].text === "vãrios s\"ao", "relayout: ABNT2's keys differ");
+  V.setLayout("us");
+}
+
 console.log(`digimacro node tests: ${checks - fails} of ${checks} passed`);
 process.exit(fails ? 1 : 0);

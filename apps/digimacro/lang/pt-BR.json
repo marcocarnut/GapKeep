@@ -279,6 +279,8 @@
     "Replace everything on this board with board {serial}'s backup?": "Substituir tudo nesta placa pela cópia da placa {serial}?",
     "Restored, and read back. Unplug the board and plug it back in, so that the restored serial number takes effect.": "Restaurada, e lida de volta. Desconecte a placa e conecte de novo, para que o número de série restaurado passe a valer.",
     "Restored, and read back. The board is restarting, to come back with its restored serial number...": "Restaurada, e lida de volta. A placa está reiniciando, para voltar com o número de série restaurado...",
-    "{{secret}} needs the board's key: make one, or scan its QR code, in Secrets' key": "{{secret}} precisa da chave da placa: crie uma, ou leia o QR code dela, em Chave dos segredos"
+    "{{secret}} needs the board's key: make one, or scan its QR code, in Secrets' key": "{{secret}} precisa da chave da placa: crie uma, ou leia o QR code dela, em Chave dos segredos",
+    "DigiMacro is a programmable USB keyboard and mouse: learn all about it at the address in the QR code:": "O DigiMacro é um teclado e mouse USB programável: saiba tudo sobre ele no endereço do código QR:",
+    "This app configures it, and is especially useful with GapKeep: the secrets you put in your macros stay out of reach of the online world.": "Este app o configura, e é especialmente útil com o GapKeep: os segredos que você põe nas suas macros ficam fora do alcance do mundo online."
   }
 }
