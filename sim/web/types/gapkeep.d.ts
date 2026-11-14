@@ -80,6 +80,9 @@ type UsbDevice = {
   readonly serial: string | null;
   readonly speed: "low" | "full" | "high" | "super";
   readonly interfaces: { number: number; class: number; subclass: number; protocol: number }[];
+  readonly endpoints: { address: number; interface: number; direction: "in" | "out";
+                        type: "interrupt" | "bulk" | "isochronous"; maxPacketSize: number;
+                        interval: number }[];
 };
 
 type UsbSetup = {
@@ -100,6 +103,9 @@ type UsbHandle = {
   getFeatureReport(id: number, length: number, iface?: number): Promise<Uint8Array>;
   /** HID SET_REPORT (feature): the id (unless 0), then data; 64 bytes in all at most */
   setFeatureReport(id: number, data: Uint8Array | ArrayBuffer | number[], iface?: number): Promise<void>;
+  /** the next packet from an interrupt IN endpoint (0x81...); reading goes on, and what comes is kept, until stopInterruptIn() or close() */
+  interruptIn(endpoint: number): Promise<Uint8Array>;
+  stopInterruptIn(): void;
   close(): void;
 };
 
@@ -872,9 +878,9 @@ declare module "gk:data" {
 }
 
 declare module "gk:usb" {
-  /** The devices plugged in that the manifest lists: `{ id, vid, pid, manufacturer, product, serial, speed, interfaces }`. `id` is new each time a device is plugged in; `manufacturer` and `product` are what the device says (`""` if nothing), with characters that could change how text reads (control, bidi, invisible) as `?`; `serial` likewise, or `null`; `speed` `"low"`, `"full"`, `"high"` or `"super"`; `interfaces` `[{ number, class, subclass, protocol }]` (alternate setting 0 of each). */
+  /** The devices plugged in that the manifest lists: `{ id, vid, pid, manufacturer, product, serial, speed, interfaces, endpoints }`. `id` is new each time a device is plugged in; `manufacturer` and `product` are what the device says (`""` if nothing), with characters that could change how text reads (control, bidi, invisible) as `?`; `serial` likewise, or `null`; `speed` `"low"`, `"full"`, `"high"` or `"super"`; `interfaces` `[{ number, class, subclass, protocol }]` (alternate setting 0 of each); `endpoints` `[{ address, interface, direction, type, maxPacketSize, interval }]`, those of these interfaces (`direction` `"in"` or `"out"`, `type` `"interrupt"`, `"bulk"` or `"isochronous"`; at most 16). */
   export function list(): UsbDevice[];
-  /** A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first). */
+  /** A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, interruptIn, stopInterruptIn, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first). */
   export function open(device: UsbDevice | number): UsbHandle;
   /** Calls `fn` with each listed device plugged in while the app runs. Returns a function that removes it. */
   export function onAttach(fn: (device: UsbDevice) => void): () => void;

@@ -19,6 +19,10 @@ extern "C" {
 /* interfaces of a device gk:usb keeps (alternate setting 0 of each) */
 #define GK_USB_MAX_INTERFACES	16
 
+/* endpoints of a device gk:usb keeps (those of alternate setting 0 of its
+   interfaces; more are ignored) */
+#define GK_USB_MAX_ENDPOINTS	16
+
 /* a configuration descriptor is read whole, up to this many bytes */
 #define GK_USB_MAX_CONFIG_SIZE	1024
 
@@ -46,9 +50,25 @@ gk_usb_interface_t;
 
 typedef struct
 {
+	uint8_t interface;		/* its interface's number */
+	uint8_t address;		/* bEndpointAddress: bit 7 IN, number in bits 0-3 */
+	uint8_t attributes;		/* bmAttributes: transfer type in bits 0-1 */
+	uint8_t interval;		/* bInterval */
+	uint16_t max_packet;		/* wMaxPacketSize, bits 0-10 (one transaction) */
+}
+gk_usb_endpoint_t;
+
+#define GK_USB_EP_IN		0x80
+#define GK_USB_EP_TYPE_MASK	0x03
+#define GK_USB_EP_INTERRUPT	0x03
+
+typedef struct
+{
 	uint8_t value;			/* bConfigurationValue */
 	unsigned interface_count;
 	gk_usb_interface_t interfaces[GK_USB_MAX_INTERFACES];	/* in the order found */
+	unsigned endpoint_count;
+	gk_usb_endpoint_t endpoints[GK_USB_MAX_ENDPOINTS];	/* in the order found */
 }
 gk_usb_config_t;
 
@@ -63,9 +83,11 @@ int gk_usb_config_total (const uint8_t *p, size_t n);
 
 /* A whole configuration descriptor, n bytes with its interfaces, endpoints
    and class descriptors: every descriptor in it must fit, be 2 bytes or
-   more, and an interface's 9 or more. Alternate settings other than 0 are
-   skipped; an interface number twice, or more than GK_USB_MAX_INTERFACES
-   interfaces, is refused. 0 if it is good, -1 otherwise. */
+   more, an interface's 9 or more and an endpoint's 7 or more. Alternate
+   settings other than 0 are skipped, with their endpoints; an interface
+   number twice, or more than GK_USB_MAX_INTERFACES interfaces, is refused,
+   and so is an endpoint before any interface. Endpoints past
+   GK_USB_MAX_ENDPOINTS, and endpoint 0, are ignored. 0 if it is good, -1 otherwise. */
 int gk_usb_parse_config (const uint8_t *p, size_t n, gk_usb_config_t *pConfig);
 
 /* String descriptor 0, n bytes: the first language it lists, in *pLangID.

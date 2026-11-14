@@ -198,7 +198,8 @@ public:
 			}
 			return;
 		}
-		// between transfers: late answers to unlinked ones, or a close
+		// between transfers: late answers to unlinked ones, the interrupt
+		// endpoint's packets, or a close
 		struct pollfd Poll = {m_fd, POLLIN, 0};
 		while (m_fd >= 0 && poll (&Poll, 1, 0) == 1)
 		{
@@ -206,7 +207,61 @@ public:
 			{
 				Unplug (TRUE);
 			}
+			InterruptAgain ();
 		}
+		InterruptAgain ();
+	}
+
+	boolean StartInterrupt (const gk_usb_endpoint_t &rEndpoint)
+	{
+		if (m_fd < 0)
+		{
+			return FALSE;
+		}
+		if (m_nInterruptSeq != 0 && m_ucInterrupt != rEndpoint.address)
+		{
+			Unlink (m_nInterruptSeq, TRUE);
+			m_nInterruptSeq = 0;
+		}
+		m_ucInterrupt = rEndpoint.address;
+		m_usInterruptSize = rEndpoint.max_packet;
+		m_Packets.Clear ();
+		m_bInterruptFailed = FALSE;
+		m_nInterruptErrors = 0;
+		m_bReading = TRUE;
+		return m_nInterruptSeq != 0 || SubmitInterrupt ();
+	}
+
+	void StopInterrupt (void)
+	{
+		m_bReading = FALSE;
+		m_bInterruptAgain = FALSE;
+		if (m_nInterruptSeq != 0 && m_fd >= 0)
+		{
+			Unlink (m_nInterruptSeq, TRUE);
+		}
+		m_nInterruptSeq = 0;
+		unsigned nDropped = m_Packets.Clear ();
+		if (nDropped > 0)
+		{
+			CLogger::Get ()->Write (From, LogWarning, "%s: endpoint 0x%02x: %u packet(s)"
+						" dropped: not taken in time", m_BusID, m_ucInterrupt,
+						nDropped);
+		}
+	}
+
+	int TakeInterrupt (u8 *pData, unsigned nSize)
+	{
+		if (m_fd >= 0)
+		{
+			Poll ();		// what has come since the last pass
+		}
+		int nResult = m_Packets.Take (pData, nSize);
+		if (nResult == GkUSBNone && (m_bInterruptFailed || m_fd < 0))
+		{
+			nResult = GkUSBError;
+		}
+		return nResult;
 	}
 
 	int Control (u8 ucRequestType, u8 ucRequest, u16 usValue, u16 usIndex,
@@ -285,6 +340,41 @@ public:
 	TGkUSBSpeed GetSpeed (void) const	{ return m_Speed; }
 
 private:
+	// An interrupt IN transfer on m_ucInterrupt, answered when the device
+	// has a packet: TakeReply() keeps it
+	boolean SubmitInterrupt (void)
+	{
+		u8 Header[USBIP_HEADER_SIZE];
+		memset (Header, 0, sizeof Header);
+		u32 nSeq = ++m_nSeq;
+		Put32 (Header + 0, USBIP_CMD_SUBMIT);
+		Put32 (Header + 4, nSeq);
+		Put32 (Header + 8, m_nDevID);
+		Put32 (Header + 12, 1);				// IN
+		Put32 (Header + 16, m_ucInterrupt & 0x0F);
+		Put32 (Header + 24, m_usInterruptSize);
+		Put32 (Header + 36, 1);				// interval: as the endpoint says
+		if (!SendAll (m_fd, Header, sizeof Header))
+		{
+			Unplug (TRUE);
+			return FALSE;
+		}
+		m_nInterruptSeq = nSeq;
+		return TRUE;
+	}
+
+	void InterruptAgain (void)
+	{
+		if (m_bInterruptAgain && m_fd >= 0 && m_nInterruptSeq == 0)
+		{
+			m_bInterruptAgain = FALSE;
+			if (!SubmitInterrupt ())
+			{
+				m_bInterruptFailed = TRUE;
+			}
+		}
+	}
+
 	// Reads one reply: the one Control() waits for (m_nWaitSeq), into
 	// pData, or a late one, dropped. FALSE: the connection is no good.
 	boolean TakeReply (u8 *pData, u16 usLength, int *pResult, unsigned nDeadline)
@@ -314,10 +404,11 @@ private:
 		u32 nActual = Get32 (Header + 24);
 
 		boolean bMine = m_nWaitSeq != 0 && nSeq == m_nWaitSeq;
+		boolean bInterrupt = m_nInterruptSeq != 0 && nSeq == m_nInterruptSeq;
 		boolean bIn;
-		if (bMine)
+		if (bMine || bInterrupt)
 		{
-			bIn = m_bWaitIn;
+			bIn = bMine ? m_bWaitIn : TRUE;
 		}
 		else if (!TakeStale (nSeq, &bIn))
 		{
@@ -335,7 +426,27 @@ private:
 		{
 			return FALSE;
 		}
-		if (bMine)
+		if (bInterrupt)
+		{
+			// a packet from the interrupt endpoint: kept, and the next asked
+			// for (after this reply, by Poll() or Control())
+			m_nInterruptSeq = 0;
+			if (nStatus == 0 && nActual <= m_usInterruptSize)
+			{
+				m_nInterruptErrors = 0;
+				m_Packets.Put (Data, nData);
+				m_bInterruptAgain = m_bReading;
+			}
+			else if (++m_nInterruptErrors >= MaxInterruptErrors)
+			{
+				m_bInterruptFailed = TRUE;
+			}
+			else
+			{
+				m_bInterruptAgain = m_bReading;
+			}
+		}
+		else if (bMine)
 		{
 			m_bAnswered = TRUE;
 			if (nStatus == EPIPE_STATUS)
@@ -484,6 +595,7 @@ private:
 		m_fd = fd;
 		m_nSeq = 0;
 		m_nStale = 0;
+		m_nInterruptSeq = 0;
 		m_nDevID = Get32 (Device + 288) << 16 | (Get32 (Device + 292) & 0xFFFF);
 		u32 nSpeed = Get32 (Device + 296);
 		m_Speed =   nSpeed == 1 ? GkUSBSpeedLow : nSpeed == 3 ? GkUSBSpeedHigh
@@ -538,13 +650,17 @@ private:
 		{
 			return;
 		}
+		m_nInterruptSeq = 0;		// nothing to unlink: the connection goes
 		if (m_bClaimed)
 		{
-			CGkUSB::Detach (this);
 			m_bClaimed = FALSE;
+			CGkUSB::Detach (this);
 		}
 		close (m_fd);
 		m_fd = -1;
+		m_nInterruptSeq = 0;
+		m_bReading = m_bInterruptAgain = FALSE;
+		m_Packets.Clear ();
 		m_nNextTry = Now () + RetryMs * (CLOCKHZ / 1000);
 		if (bLog)
 		{
@@ -569,6 +685,17 @@ private:
 	u32 m_nDevID;
 	TGkUSBSpeed m_Speed;
 	u32 m_nSeq;
+
+	// the interrupt endpoint
+	static const unsigned MaxInterruptErrors = 3;
+	u32 m_nInterruptSeq = 0;	// its transfer waiting, or 0
+	u8 m_ucInterrupt = 0;
+	u16 m_usInterruptSize = 0;
+	boolean m_bReading = FALSE;
+	boolean m_bInterruptAgain = FALSE;
+	boolean m_bInterruptFailed = FALSE;
+	unsigned m_nInterruptErrors = 0;
+	CGkUSBPackets m_Packets;
 
 	u32 m_nWaitSeq = 0;		// the transfer Control() waits for
 	boolean m_bWaitIn = FALSE;

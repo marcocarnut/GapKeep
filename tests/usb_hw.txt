@@ -17,6 +17,8 @@ tile usbprobe
 expect usbprobe ready 20
 expect usbprobe: device descriptor: 18 bytes 20
 expect usbprobe: feature report 2: sent 37 bytes, got \d+; the answer echoes INFO \(0x40\): true 20
+expect usb: device \d+: usbprobe reads endpoint 0x81 20
+expect usbprobe: endpoint 0x81: read for 1 s, 0 packet\(s\) 20
 expect usbprobe: device \d+ probed 20
 serialshot 01-probe
 mark

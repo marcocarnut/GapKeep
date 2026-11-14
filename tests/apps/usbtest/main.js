@@ -78,6 +78,8 @@ async function run(info) {
        [0x1209, 1, "GapKeep tests", "USB test device", "TEST-0001", "full"], "info");
     eq(info.interfaces, [{ number: 0, class: 3, subclass: 1, protocol: 1 },
                          { number: 1, class: 255, subclass: 0, protocol: 0 }], "interfaces");
+    eq(info.endpoints, [{ address: 0x81, interface: 0, direction: "in", type: "interrupt",
+                          maxPacketSize: 8, interval: 10 }], "endpoints");
   });
 
   const dev = usb.open(info);
@@ -135,9 +137,39 @@ async function run(info) {
     eq((await Promise.all(waiting)).length, 16, "all done");
   });
 
+  // the interrupt endpoint: what it sends while nothing awaits it is kept
+  const packets = (n, from = 0) => Array.from({ length: n * 8 }, (_, i) => (from * 8 + i) & 0xff);
+  const send = (n, from) => dev.controlOut({ type: "vendor", recipient: "device", request: 7 }, packets(n, from));
+  await check("interruptIn: not an interrupt IN endpoint", () =>
+    throws(() => dev.interruptIn(0x01), RangeError, /not an interrupt IN endpoint/, "0x01"));
+  await check("interruptIn: a packet, then those kept", async () => {
+    const first = dev.interruptIn(0x81);
+    throws(() => dev.interruptIn(0x81), TypeError, /awaited already/, "two at once");
+    await send(3, 0);
+    eq(Array.from(await first), packets(1, 0), "1st");
+    eq(Array.from(await dev.interruptIn(0x81)), packets(1, 1), "2nd");
+    eq(Array.from(await dev.interruptIn(0x81)), packets(1, 2), "3rd");
+  });
+  await check("interruptIn: a burst while none awaits", async () => {
+    await send(8, 3);                // 64 bytes: as many as a transfer carries
+    await send(2, 11);
+    for (let i = 3; i < 13; i++) eq(Array.from(await dev.interruptIn(0x81)), packets(1, i), `packet ${i}`);
+  });
+  await check("stopInterruptIn: the one waiting rejects", async () => {
+    const p = dev.interruptIn(0x81);
+    dev.stopInterruptIn();
+    await rejects(p, "closed", "stopped");
+  });
+  await check("interruptIn again, after a stop", async () => {
+    const p = dev.interruptIn(0x81);
+    await send(1, 20);
+    eq(Array.from(await p), packets(1, 20), "after");
+  });
+
   // closing
   await check("a handle", () => {
-    eq(Object.keys(dev).sort(), ["close", "controlIn", "controlOut", "device", "getFeatureReport", "setFeatureReport"], "keys");
+    eq(Object.keys(dev).sort(), ["close", "controlIn", "controlOut", "device", "getFeatureReport",
+                                 "interruptIn", "setFeatureReport", "stopInterruptIn"], "keys");
     eq(dev.device.id, info.id, "its device");
   });
   dev.close();
@@ -145,6 +177,12 @@ async function run(info) {
   await check("a transfer waiting when closed", async () => {
     const d3 = usb.open(info);
     const p = d3.controlIn(vendorIn(1), 4);
+    d3.close();
+    await rejects(p, "closed", "closed");
+  });
+  await check("a packet awaited when closed", async () => {
+    const d3 = usb.open(info);
+    const p = d3.interruptIn(0x81);
     d3.close();
     await rejects(p, "closed", "closed");
   });

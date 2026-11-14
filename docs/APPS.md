@@ -383,9 +383,11 @@ product id:
 ```
 
 and uses [`gk:usb`](API.md#gkusb): control transfers on endpoint 0, at most
-64 bytes each, with HID feature reports as helpers. Nothing else: no
-interrupt, bulk or isochronous endpoints, and no standard requests but
-those that read (descriptors, status). What the device sends is data like
+64 bytes each, with HID feature reports as helpers, and reading one
+interrupt IN endpoint at a time (what a keyboard in the device types comes
+to the app as its reports). Nothing else: no interrupt OUT, bulk or
+isochronous endpoints, and no standard requests but those that read
+(descriptors, status). What the device sends is data like
 anything typed: check it before using it, and don't log it.
 
 A low-speed device (most macro keyboards, anything built on V-USB) works

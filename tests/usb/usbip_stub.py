@@ -17,6 +17,9 @@ Control requests on endpoint 0:
                0x03: never answered (until the client unlinks it)
                IN 0x04: answers with 8 bytes more than asked for
                OUT 0x05: keeps the data; IN 0x06 gives it back
+               OUT 0x07: the data, in packets of 8 bytes, is what the
+               interrupt IN endpoint (0x81) sends next, a packet a transfer
+               (an interrupt transfer waits until there is one)
 
 Usage: usbip_stub.py [--port N] [--busid ID]
   Prints "usbip_stub: listening on <port>" (with --port 0, the port the
@@ -73,6 +76,7 @@ class Device:
         self.feature = bytes([1]) + bytes(32)
         self.vendor = b''
         self.count = 0
+        self.packets = []       # what endpoint 0x81 sends next
 
     def control(self, setup, data):
         """(status, data) or None: no answer"""
@@ -121,6 +125,9 @@ class Device:
                 return 0, b''
             if req == 0x06:
                 return 0, self.vendor[:length]
+            if req == 0x07:
+                self.packets += [bytes(data[i:i + 8]) for i in range(0, len(data), 8)]
+                return 0, b''
         return EPIPE, b''
 
 
@@ -185,6 +192,8 @@ def serve(args):
                         conn.sendall(struct.pack('>HHI', 0x0111, 3, 0) + device_record(args.busid))
                         client = conn
                         dev = Device()
+                        interrupts.clear()
+                        pending.clear()
                 else:
                     conn.close()
             except (EOFError, OSError):
@@ -199,6 +208,15 @@ def serve(args):
 
 
 pending = {}        # seqnum -> (direction) of transfers never answered
+interrupts = []     # seqnums of interrupt IN transfers waiting for a packet
+
+
+def answer_interrupts(conn, dev):
+    while interrupts and dev.packets:
+        seq = interrupts.pop(0)
+        pending.pop(seq, None)
+        body = dev.packets.pop(0)
+        conn.sendall(struct.pack('>IIIIIii', 3, seq, 0, 0, 0, 0, len(body)) + bytes(20) + body)
 
 
 def urb(conn, dev):
@@ -207,6 +225,8 @@ def urb(conn, dev):
     if cmd == 2:                                         # CMD_UNLINK
         victim = struct.unpack('>I', h[20:24])[0]
         status = ECONNRESET if pending.pop(victim, None) is not None else 0
+        if victim in interrupts:
+            interrupts.remove(victim)
         log('unlink of %d: %d' % (victim, status))
         conn.sendall(struct.pack('>IIIIIii', 4, seq, devid, 0, 0, status, 0) + bytes(20))
         return
@@ -215,6 +235,12 @@ def urb(conn, dev):
     length = struct.unpack('>i', h[24:28])[0]
     setup = h[40:48]
     data = recv_all(conn, length) if direction == 0 and length > 0 else b''
+    if ep == 1 and direction == 1:
+        log('interrupt IN, %d bytes' % length)
+        pending[seq] = direction
+        interrupts.append(seq)
+        answer_interrupts(conn, dev)
+        return
     if ep != 0:
         conn.sendall(struct.pack('>IIIIIii', 3, seq, devid, 0, 0, EPIPE, 0) + bytes(20))
         return
@@ -230,6 +256,7 @@ def urb(conn, dev):
         actual = len(body)
     conn.sendall(struct.pack('>IIIIIii', 3, seq, devid, 0, 0, status, actual)
                  + bytes(20) + body)
+    answer_interrupts(conn, dev)
 
 
 def main():

@@ -5,6 +5,9 @@
 // DigiMacro, 16c0:27db, through a hub: docs/RIG.md) and in the simulator
 // against tests/usb/usbip_stub.py's device (1209:0001).
 //
+// Then it reads the first interrupt IN endpoint for a second: what the
+// device sends there unasked (a keyboard's keys), counted.
+//
 // The screen shows what the device answered, in hex; the log has lengths
 // only, never the bytes (a report may hold anything).
 //
@@ -80,6 +83,22 @@ async function probe(d) {
       const good = p.expect(a);
       console.log(`usbprobe: feature report ${p.id}: sent ${p.send.length + 1} bytes, got ${a.length}; ${p.what}: ${good}`);
       lines.push(`feature report ${p.id} (${a.length}): ${hex(a)}`, `${p.what}: ${good ? "yes" : "NO"}`);
+    }
+    const ep = d.endpoints.find((e) => e.type === "interrupt" && e.direction === "in");
+    if (ep) {
+      let packets = 0, listening = true;
+      const timer = new Promise((res) => setTimeout(res, 1000));
+      (async () => {
+        try {
+          while (listening) { await dev.interruptIn(ep.address); packets++; }
+        } catch (e) { /* stopped */ }
+      })();
+      await timer;
+      listening = false;
+      dev.stopInterruptIn();
+      const a = ep.address.toString(16).padStart(2, "0");
+      console.log(`usbprobe: endpoint 0x${a}: read for 1 s, ${packets} packet(s)`);
+      lines.push(`endpoint 0x${a} (interrupt IN, ${ep.maxPacketSize} bytes): ${packets} packet(s) in 1 s`);
     }
     console.log(`usbprobe: device ${d.id} probed`);
   } catch (e) {

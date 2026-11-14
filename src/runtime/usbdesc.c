@@ -11,6 +11,7 @@
 #define DESC_CONFIGURATION	2
 #define DESC_STRING		3
 #define DESC_INTERFACE		4
+#define DESC_ENDPOINT		5
 
 static uint16_t Get16 (const uint8_t *p)
 {
@@ -66,6 +67,8 @@ int gk_usb_parse_config (const uint8_t *p, size_t n, gk_usb_config_t *pConfig)
 	pConfig->value = p[5];
 
 	size_t i = p[0];
+	int nInterface = -1;		/* the alternate setting 0 endpoints belong to, if any */
+	int bSeenInterface = 0;
 	while (i < n)
 	{
 		if (n - i < 2)
@@ -84,6 +87,8 @@ int gk_usb_parse_config (const uint8_t *p, size_t n, gk_usb_config_t *pConfig)
 				return -1;
 			}
 			const uint8_t *q = p + i;
+			bSeenInterface = 1;
+			nInterface = q[3] == 0 ? q[2] : -1;
 			if (q[3] == 0)				/* bAlternateSetting */
 			{
 				for (unsigned k = 0; k < pConfig->interface_count; k++)
@@ -103,6 +108,25 @@ int gk_usb_parse_config (const uint8_t *p, size_t n, gk_usb_config_t *pConfig)
 				pIf->cls = q[5];
 				pIf->subclass = q[6];
 				pIf->protocol = q[7];
+			}
+		}
+		else if (nType == DESC_ENDPOINT)
+		{
+			const uint8_t *q = p + i;
+			if (nLength < 7 || !bSeenInterface)
+			{
+				return -1;
+			}
+			if (   nInterface >= 0
+			    && (q[2] & 0x0F) != 0
+			    && pConfig->endpoint_count < GK_USB_MAX_ENDPOINTS)
+			{
+				gk_usb_endpoint_t *pEp = &pConfig->endpoints[pConfig->endpoint_count++];
+				pEp->interface = (uint8_t) nInterface;
+				pEp->address = q[2];
+				pEp->attributes = q[3];
+				pEp->max_packet = (uint16_t) (Get16 (q + 4) & 0x7FF);
+				pEp->interval = q[6];
 			}
 		}
 		else if (nType == DESC_CONFIGURATION || nType == DESC_DEVICE)
