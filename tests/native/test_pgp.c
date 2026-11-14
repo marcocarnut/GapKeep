@@ -14,6 +14,7 @@
  *   wrap KEK KEY, unwrap KEK WRAPPED         -> result | error code
  *   seipd KEY DATA BUDGET                    -> plaintext | error code
  *   argon2 T P M PASS SALT KEY AD LEN BUDGET -> tag | error code (Argon2id)
+ *   scrypt N R P PASS SALT LEN BUDGET        -> key | error code (scrypt)
  *
  * ("-" is an empty hex string; HASH as gk_hash_find names it.)
  *
@@ -32,6 +33,7 @@
 #include "eax.h"
 #include "gcm.h"
 #include "argon2.h"
+#include "scrypt.h"
 
 static size_t unhex (const char *s, uint8_t *out)
 {
@@ -86,6 +88,17 @@ int main (void)
 		int a;
 		while ((a = gk_argon2_selftest_step (&st, work, 7)) > 0) ;
 		if (a < 0) r = 12000 - a;
+	}
+	if (r == 0)
+	{
+		gk_scrypt_selftest_t st;
+		static uint32_t work[GK_SCRYPT_SELFTEST_BYTES / 4];
+		memset (&st, 0, sizeof st);
+		int a;
+		while ((a = gk_scrypt_selftest_step (&st, work, 7)) > 0) ;
+		if (a < 0) r = 15000 - a;
+		for (size_t i = 0; i < sizeof work / 4 && r == 0; i++)
+			if (work[i] != 0) r = 15100;
 	}
 	printf ("pgp selftests: %s (%d)\n", r == 0 ? "PASS" : "FAIL", r);
 	fflush (stdout);
@@ -353,6 +366,40 @@ int main (void)
 						if (work[i].a[k] != 0) rc = -11;
 				if (rc != 0) printf ("error %d", rc); else hex (job.out, len);
 				gk_argon2_end (&job);
+			}
+			free (work);
+		}
+		else if (strcmp (w[0], "scrypt") == 0 && n == 8)
+		{
+			/* scrypt N R P PASS SALT LEN BUDGET */
+			uint32_t sn = (uint32_t) strtoul (w[1], 0, 10), sr = (uint32_t) atoi (w[2]), sp = (uint32_t) atoi (w[3]);
+			size_t pl = unhex (w[4], a), sl = unhex (w[5], b);
+			uint32_t len = (uint32_t) atoi (w[6]);
+			size_t bytes = gk_scrypt_memory (sn, sr);
+			uint32_t *work = malloc (bytes ? bytes : 4);
+			gk_scrypt_job_t job;
+			int rc = work ? gk_scrypt_begin (&job, work, sn, sr, sp, a, pl, b, sl, len) : -3;
+			if (rc != 0) { printf ("error %d", rc); }
+			else
+			{
+				memset (a, 0x55, pl);	/* the password changed after begin */
+				uint32_t budget = (uint32_t) atoi (w[7]);
+				double last = -1;
+				while (gk_scrypt_step (&job, budget))
+				{
+					double p = gk_scrypt_progress (&job);
+					if (p < last || p > 1) rc = -10;
+					last = p;
+				}
+				/* the work area must be wiped, and B, X, Y */
+				for (size_t i = 0; i < bytes / 4 && rc == 0; i++)
+					if (work[i] != 0) rc = -11;
+				for (size_t i = 0; i < (size_t) sp * 128 * sr && rc == 0; i++)
+					if (job.b[i] != 0) rc = -12;
+				for (size_t i = 0; i < 2 * 32 * sr + 16 && rc == 0; i++)
+					if (job.xy[i] != 0) rc = -12;
+				if (rc != 0) printf ("error %d", rc); else hex (job.out, len);
+				gk_scrypt_end (&job);
 			}
 			free (work);
 		}
