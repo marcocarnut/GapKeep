@@ -114,7 +114,7 @@ def build():
                          open("lib/mbedtls/mbedtls.mk").read()).group(1).replace("\\", " ").split()
     src = ["tests/native/test_pgp.c"] + [f"src/crypto/{f}.c" for f in
                                           ("sha1", "sha256", "sha512", "hmac", "s2k", "aes", "ed25519", "rsa", "x25519",
-                                           "seipd", "ocb", "eax", "gcm", "aead", "argon2", "wipe")]
+                                           "seipd", "ocb", "eax", "gcm", "aead", "argon2", "scrypt", "pbkdf2", "wipe")]
     src += [mbed + f for f in mbed_src]
     src += ["third_party/monocypher/src/monocypher.c", "third_party/monocypher/src/optional/monocypher-ed25519.c"]
     subprocess.run(["cc", "-O2", "-Wall", "-I", "src/crypto", "-I", "lib/mbedtls", "-I", "third_party/mbedtls/include",
@@ -741,6 +741,45 @@ def check_argon2(native, rnd, cases, ref, a12=False):
     check(native("argon2", 1, 1, 64, "-", "00" * 16, "-", "-", 3, 10) == "error -4", "Argon2id 3-byte tag")
 
 
+# --- scrypt ------------------------------------------------------------------
+
+def check_scrypt(native, rnd, cases):
+    """RFC 7914, 12 (but its N = 2^20 one), BIP38's parameters (N 16384,
+    r 8, p 8: 16 MiB), and random ones, against Python's hashlib.scrypt."""
+    known = [
+        (b"", b"", 16, 1, 1, 64, "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442"
+                                "fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906"),
+        (b"password", b"NaCl", 1024, 8, 16, 64, "fdbabe1c9d3472007856e7190d01e9fe7c6ad7cbc8237830e77376634b373162"
+                                                "2eaf30d92e22a3886ff109279d9830dac727afb94a83ee6d8360cbdfa2cc0640"),
+        (b"pleaseletmein", b"SodiumChloride", 16384, 8, 1, 64,
+         "7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2"
+         "d5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887"),
+        (b"pleaseletmein", b"SodiumChloride", 16384, 8, 8, 32,
+         "1b4aa0ab8054fa630974f1c343948068211b00a701c9d61e0af92ee8cf85d649"),
+    ]
+    for pw, salt, n, r, p, length, want in known:
+        check(hashlib.scrypt(pw, salt=salt, n=n, r=r, p=p, dklen=length, maxmem=1 << 26).hex() == want,
+              f"hashlib.scrypt N={n} r={r} p={p}")
+        got = native("scrypt", n, r, p, h(pw) or "-", h(salt) or "-", length, rnd.choice((1, 3, 17, 1000)))
+        check(got == want, f"scrypt N={n} r={r} p={p}")
+    print(f"  scrypt: {len(known)} known answers")
+    for c in range(cases):
+        r = rnd.choice((1, 1, 2, 3, 8))
+        n = 1 << rnd.randrange(1, 11)
+        p = rnd.choice((1, 1, 2, 3, 5))
+        pw, salt = rnd.randbytes(rnd.randrange(70)), rnd.randbytes(rnd.choice((0, 8, 16, 33)))
+        length = rnd.choice((1, 16, 32, 33, 64))
+        want = hashlib.scrypt(pw, salt=salt, n=n, r=r, p=p, dklen=length, maxmem=1 << 26).hex()
+        got = native("scrypt", n, r, p, h(pw) or "-", h(salt) or "-", length, rnd.choice((1, 5, 100, 5000)))
+        check(got == want, f"scrypt N={n} r={r} p={p} len={length}")
+    print(f"  scrypt: {cases} random cases against hashlib")
+    for args, what in (((1, 1, 1), "N=1"), ((24, 1, 1), "N not a power of two"), ((65536, 1, 1), "N=2^16 with r=1"),
+                       ((16, 0, 1), "r=0"), ((16, 1, 0), "p=0"), ((16, 16, 17), "r*p > 256")):
+        check(native("scrypt", *args, "-", "-", 32, 10) == "error -4", f"scrypt {what}")
+    check(native("scrypt", 16, 1, 1, "-", "-", 0, 10) == "error -4", "scrypt length 0")
+    check(native("scrypt", 16, 1, 1, "-", "-", 65, 10) == "error -4", "scrypt length 65")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=200)
@@ -775,6 +814,8 @@ def main():
     print("AEAD packets done")
     check_argon2(native, rnd, args.cases, args.argon2_ref, args.a12)
     print("Argon2id done")
+    check_scrypt(native, rnd, max(20, args.cases // 4))
+    print("scrypt done")
     print(f"check_pgp: {len(failures)} failures")
     sys.exit(1 if failures else 0)
 

@@ -689,6 +689,7 @@ group("AbortController: cancelling long operations", async () => {
   const key = crypto.rsaPrivateKey(keyOf(V.rsaKeys[0].key));
   const all = [
     ["openpgpS2kArgon2", () => crypto.openpgpS2kArgon2("p", salt, 1, 4, 10, 16, { signal: sig })],
+    ["scrypt", () => crypto.scrypt("p", salt, { N: 16, r: 1, p: 1, length: 16, signal: sig })],
     ["seipdV1Decrypt", () => crypto.seipdV1Decrypt(new Uint8Array(16), new Uint8Array(64), { signal: sig })],
     ["seipdV2Decrypt", () => crypto.seipdV2Decrypt(new Uint8Array(16), unhex("070206" + "00".repeat(48)), { signal: sig })],
     ["ocbedDecrypt", () => crypto.ocbedDecrypt(new Uint8Array(16), unhex("070206" + "00".repeat(48)), { signal: sig })],
@@ -769,6 +770,64 @@ group("Argon2id", async () => {
       crypto.argon2id("password", salt, { passes: 1, lanes: 4, memoryKiB: cap, length: 32, onProgress }));
     ok(k.length === 32, `Argon2id 128 MiB (${round}: the memory again)`);
   }
+});
+
+group("scrypt", async () => {
+  const S = (pw, salt, N, r, p, length, more) => crypto.scrypt(pw, salt, { N, r, p, length, ...more });
+  // the first call is aborted while its self-test (1 MiB, in its slices)
+  // is under way: the next call's self-test starts again, and passes
+  const ac0 = new AbortController();
+  const first = S("p", new Uint8Array(0), 16, 1, 1, 16, { signal: ac0.signal });
+  await tick();		// a slice: the self-test takes more than one
+  ac0.abort();
+  try { await first; console.log("pgpcrypto: scrypt: the first call ended before the abort"); }
+  catch (e) { ok(e && e.name === "AbortError", `scrypt aborted in its self-test (${e && e.name})`);
+              console.log("pgpcrypto: scrypt: the first call aborted in its self-test"); }
+  // RFC 7914, 12 (but its N = 2^20 one), and BIP38's parameters (Python's hashlib.scrypt)
+  const known = [
+    ["", "", 16, 1, 1, 64, "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442" +
+                           "fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906"],
+    ["password", "NaCl", 1024, 8, 16, 64, "fdbabe1c9d3472007856e7190d01e9fe7c6ad7cbc8237830e77376634b373162" +
+                                          "2eaf30d92e22a3886ff109279d9830dac727afb94a83ee6d8360cbdfa2cc0640"],
+  ];
+  for (const [pw, salt, N, r, p, length, want] of known) {
+    const got = await timeJob(`scrypt N=${N} r=${r} p=${p}`, (onProgress) => S(pw, utf8(salt), N, r, p, length, { onProgress }));
+    ok(hex(got) === want, `scrypt N=${N} r=${r} p=${p}`);
+  }
+  ok(hex(await S(utf8("pleaseletmein"), utf8("SodiumChloride"), 16384, 8, 1, 64)) ===
+     "7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2" +
+     "d5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887", "scrypt N=16384 r=8 p=1 (RFC 7914)");
+  const bip38 = await timeJob("scrypt N=16384 r=8 p=8 (BIP38, 16 MiB)", (onProgress) =>
+    S("pleaseletmein", utf8("SodiumChloride"), 16384, 8, 8, 32, { onProgress }));
+  ok(hex(bip38) === "1b4aa0ab8054fa630974f1c343948068211b00a701c9d61e0af92ee8cf85d649", "scrypt N=16384 r=8 p=8");
+  // aborted part-way (its memory wiped in its next slices); the next one still right
+  const ac = new AbortController();
+  let progress = 0;
+  try {
+    await S("p", new Uint8Array(16), 16384, 8, 8, 32, { signal: ac.signal,
+      onProgress: (f) => { progress = f; if (f > 0.3) ac.abort(); } });
+    ok(false, "scrypt aborted (resolved)");
+  } catch (e) { ok(e && e.name === "AbortError" && progress > 0.3 && progress < 1, `scrypt aborted at ${Math.round(progress * 100)}%`); }
+  ok(hex(await S("", new Uint8Array(0), 16, 1, 1, 64)) === known[0][6], "scrypt after an abort");
+  // the limits: N a power of two, r * p <= 256, 128 r N <= argon2MemoryKiB, N r p <= 2^24, length 1 to 64
+  const salt = new Uint8Array(16), cap = crypto.limits().argon2MemoryKiB;
+  throws(() => S("p", salt, 24, 1, 1, 32), RangeError, "scrypt N not a power of two");
+  throws(() => S("p", salt, 1, 1, 1, 32), RangeError, "scrypt N = 1");
+  throws(() => S("p", salt, 65536, 1, 1, 32), RangeError, "scrypt N = 2^16 with r = 1");
+  throws(() => S("p", salt, 16, 0, 1, 32), RangeError, "scrypt r = 0");
+  throws(() => S("p", salt, 16, 1, 0, 32), RangeError, "scrypt p = 0");
+  throws(() => S("p", salt, 16, 16, 17, 32), RangeError, "scrypt r * p = 272");
+  throws(() => S("p", salt, 2 * cap, 8, 1, 32), RangeError, `scrypt 128 r N = ${2 * cap} KiB`);
+  throws(() => S("p", salt, 1 << 17, 8, 32, 32), RangeError, "scrypt N r p = 2^25");
+  throws(() => S("p", salt, 16, 1, 1, 0), RangeError, "scrypt length 0");
+  throws(() => S("p", salt, 16, 1, 1, 65), RangeError, "scrypt length 65");
+  throws(() => crypto.scrypt("p", salt, { r: 8, p: 1, length: 32 }), TypeError, "scrypt without N");
+  throws(() => crypto.scrypt("p", salt), TypeError, "scrypt without options");
+  throws(() => crypto.scrypt("p", "salt", { N: 16, r: 1, p: 1, length: 16 }), TypeError, "scrypt salt as a string");
+  // the most: 128 MiB (N = 2^17, r = 8, p = 1: 128 r N bytes = cap KiB)
+  const most = await timeJob(`scrypt N=2^17 r=8 p=1 (${cap / 1024} MiB)`, (onProgress) =>
+    S("p", salt, cap, 8, 1, 32, { onProgress }));
+  ok(most.length === 32, "scrypt at the memory limit");
 });
 
 group("AES-CFB limit", () => {
