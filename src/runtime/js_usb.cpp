@@ -38,7 +38,8 @@
 
 static const char FromUSB[] = "usb";
 
-static const unsigned MaxHandlers = 16;		// onAttach, onDetach: each
+static const unsigned MaxHandlers = 16;		// onAttach, onDetach, onRefused: each
+static const unsigned HandlerKinds = 3;
 static const unsigned MaxHandles = GK_USB_MAX_DEVICES;
 static const unsigned MaxQueued = 16;
 
@@ -81,7 +82,7 @@ struct TGkUSBStopped
 
 struct TGkUSBState
 {
-	JSValue Handlers[2][MaxHandlers];	// [0] attach, [1] detach; JS_UNDEFINED: free
+	JSValue Handlers[HandlerKinds][MaxHandlers];	// [GkUSBAttached] ... [GkUSBRefused]; JS_UNDEFINED: free
 	TGkUSBHandle Handles[MaxHandles];
 	unsigned nNextHandle;
 	TGkUSBRequest Queue[MaxQueued];
@@ -96,7 +97,7 @@ static TGkUSBState *GetState (JSContext *ctx)
 	{
 		TGkUSBState *pState = new TGkUSBState;
 		memset (pState, 0, sizeof *pState);
-		for (unsigned k = 0; k < 2; k++)
+		for (unsigned k = 0; k < HandlerKinds; k++)
 		{
 			for (unsigned i = 0; i < MaxHandlers; i++)
 			{
@@ -836,7 +837,7 @@ static JSValue js_usb_open (JSContext *ctx, JSValueConst this_val, int argc, JSV
 	return Handle;
 }
 
-// onAttach(fn), onDetach(fn) -> a function that removes it
+// onAttach(fn), onDetach(fn), onRefused(fn) -> a function that removes it
 static JSValue js_usb_off (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv,
 			   int magic, JSValue *func_data)
 {
@@ -874,12 +875,30 @@ static JSValue OnEvent (JSContext *ctx, int argc, JSValueConst *argv, int nKind,
 
 static JSValue js_usb_on_attach (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return OnEvent (ctx, argc, argv, 0, "onAttach");
+	return OnEvent (ctx, argc, argv, GkUSBAttached, "onAttach");
 }
 
 static JSValue js_usb_on_detach (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-	return OnEvent (ctx, argc, argv, 1, "onDetach");
+	return OnEvent (ctx, argc, argv, GkUSBDetached, "onDetach");
+}
+
+static JSValue js_usb_on_refused (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return OnEvent (ctx, argc, argv, GkUSBRefused, "onRefused");
+}
+
+// what onRefused's handlers get
+static JSValue NewRefusal (JSContext *ctx, const TGkUSBRefusal &rRefusal)
+{
+	JSValue Obj = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Obj, "reason", JS_NewString (ctx, "low-speed-behind-full-speed-hub"));
+	JSValue Hub = JS_NewObject (ctx);
+	JS_SetPropertyStr (ctx, Hub, "vid", JS_NewUint32 (ctx, rRefusal.usHubVendor));
+	JS_SetPropertyStr (ctx, Hub, "pid", JS_NewUint32 (ctx, rRefusal.usHubProduct));
+	JS_SetPropertyStr (ctx, Obj, "hub", Hub);
+	JS_SetPropertyStr (ctx, Obj, "port", JS_NewUint32 (ctx, rRefusal.nPort));
+	return Obj;
 }
 
 // --- the main loop's part -----------------------------------------------------
@@ -949,18 +968,24 @@ void GkUSBUpdate (TGkApp *pApp)
 {
 	TGkUSBState *pState = pApp != 0 && pApp->pBundle != 0 ? pApp->pUSB : 0;
 
-	// attaches and detaches, to the handlers of an app that lists the device
+	// attaches and detaches, to the handlers of an app that lists the device;
+	// refusals, to those of any app that lists devices
 	TGkUSBEvent Event;
 	while (CGkUSB::TakeEvent (&Event))
 	{
+		// a refused device's ids are not known: every app that lists
+		// devices hears of it
 		if (   pState == 0
-		    || !CGkUSB::Lists (pApp->pBundle, Event.Info.usVendor, Event.Info.usProduct))
+		    || (Event.Kind == GkUSBRefused
+			? pApp->pBundle->usb_count == 0
+			: !CGkUSB::Lists (pApp->pBundle, Event.Info.usVendor, Event.Info.usProduct)))
 		{
 			continue;
 		}
 		JSContext *ctx = pApp->pContext;
-		unsigned nKind = Event.bAttached ? 0 : 1;
-		JSValue Info = NewInfo (ctx, Event.Info);
+		unsigned nKind = Event.Kind;
+		JSValue Info = Event.Kind == GkUSBRefused ? NewRefusal (ctx, Event.Refusal)
+							  : NewInfo (ctx, Event.Info);
 		for (unsigned i = 0; i < MaxHandlers; i++)
 		{
 			// a handler may remove itself or another
@@ -1065,7 +1090,7 @@ void GkUSBFree (TGkApp *pApp)
 		return;
 	}
 	JSContext *ctx = pApp->pContext;
-	for (unsigned k = 0; k < 2; k++)
+	for (unsigned k = 0; k < HandlerKinds; k++)
 	{
 		for (unsigned i = 0; i < MaxHandlers; i++)
 		{
@@ -1109,6 +1134,7 @@ static const JSCFunctionListEntry USBFunctions[] =
 	JS_CFUNC_DEF ("open", 1, js_usb_open),
 	JS_CFUNC_DEF ("onAttach", 1, js_usb_on_attach),
 	JS_CFUNC_DEF ("onDetach", 1, js_usb_on_detach),
+	JS_CFUNC_DEF ("onRefused", 1, js_usb_on_refused),
 };
 
 static int USBModuleInit (JSContext *ctx, JSModuleDef *m)

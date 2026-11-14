@@ -10,6 +10,17 @@
 expect launcher ready 30
 launch usbtest
 expect usbtest ready 10
+# a low-speed device plugged into a full-speed hub, as on the Pi (patches/
+# circle/0018, 0020): left alone, an onRefused for the app, and the
+# system's notice, which a key dismisses (and does nothing else)
+usbip refuse 0a05:7211 2
+expect usb: hub 0a05:7211, port 2: a low-speed device behind a full-speed hub can't be used \(a USB 2.0 hub can\) 10
+expect usbtest: refused: low-speed-behind-full-speed-hub, hub 0a05:7211, port 2 10
+expect apphost: USB notice shown: hub 0a05:7211, port 2 10
+wait 0.5
+shot 00-usb-notice
+key esc
+expect apphost: USB notice dismissed 10
 usbip stub
 expect usbip: 127.0.0.1:\d+ stub-1: imported 1209:0001 10
 # usbtest and usbprobe list it: the first available app claims it

@@ -46,6 +46,7 @@ on stdin, one per line:
 | `eject` | Take the SD card out: its folder is no longer read (GapKeep must not need it after boot; `tests/card_removal.txt`). |
 | `usbip attach <host>:<port> [<busid>]` | Plug in the USB device a USB/IP server offers: see [USB devices](#usb-devices). |
 | `usbip detach [<busid>]` | Unplug it, for good (none given: every one). |
+| `usbip refuse <vid>:<pid> <port>` | As the Pi when a low-speed device is plugged into port `<port>` of a full-speed hub with those ids: refused, with the system's notice and gk:usb's `onRefused`: see [USB devices](#usb-devices). |
 | `quit` | Exit. |
 
 Answers to commands start with `#`; everything else on stdout is the log,
@@ -109,6 +110,14 @@ device (`tests/usb.txt`). `tests/usb_usbip_device.txt` probes a real or
 simulated DigiMacro (16c0:27db) at `GK_TEST_USBIP` (default
 `127.0.0.1:3241`); `tools/run_sim_tests.sh` skips it when nothing answers
 there.
+
+On the Pi Zero, a low-speed device (a DigiMacro, many keyboards and
+mice) behind a hub that only runs at full speed (USB 1.1) can't be
+reached: the USB controller takes its own port down at the first packet
+(`patches/circle/0018`). The system leaves such a device alone, shows a
+notice saying why, and tells apps that list devices (`onRefused`).
+`usbip refuse 0a05:7211 2` does the same in the simulator, for an app to
+be tried with it.
 
 The browser IDE has no USB devices: a web page can't open TCP
 connections, so its build has no USB/IP client, and `gk:usb.list()` is

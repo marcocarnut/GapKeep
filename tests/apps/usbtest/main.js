@@ -56,6 +56,12 @@ usb.onAttach((d) => {
   if (finished) replugged(d);
 });
 usb.onDetach((d) => console.log(`usbtest: detached device ${d.id}`));
+// a device the system can't reach (its ids unknown): every app that lists
+// devices hears of it
+usb.onRefused((r) => console.log(`usbtest: refused: ${r.reason}, hub ${r.hub.vid.toString(16).padStart(4, "0")}:`
+                                 + `${r.hub.pid.toString(16).padStart(4, "0")}, port ${r.port}`));
+const off = usb.onRefused(() => console.log("usbtest: FAIL a handler removed still called"));
+off();
 
 let started = false, finished = false;
 function start() {

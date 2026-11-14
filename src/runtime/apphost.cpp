@@ -117,6 +117,8 @@ CAppHost::CAppHost (CKeyboardIndev *pKeyboard)
 :	m_pKeyboard (pKeyboard),
 	m_pIdleScreen (0),
 	m_pErrorBanner (0),
+	m_pUSBNotice (0),
+	m_pUSBNoticeTimer (0),
 	m_pPendingLaunch (0),
 	m_bHomeRequested (FALSE),
 	m_bStopRequested (FALSE),
@@ -224,6 +226,11 @@ void CAppHost::Update (void)
 	// USB attaches and detaches (dropped without an app that takes them),
 	// and the app's next control transfer
 	GkUSBUpdate (&m_App);
+	TGkUSBRefusal Refusal;
+	if (CGkUSB::TakeNotice (&Refusal))
+	{
+		ShowUSBNotice (Refusal);
+	}
 
 	// a slice of the app's long native work (jobs.h): about 20 ms, between
 	// LVGL's passes, so the screen keeps being drawn; none left if the
@@ -592,9 +599,118 @@ void CAppHost::ErrorBannerEvent (lv_event_t *e)
 	}
 }
 
+// --- the USB notice ------------------------------------------------------------
+
+static const unsigned UsbNoticeMs = 60000;
+
+void CAppHost::ShowUSBNotice (const TGkUSBRefusal &rRefusal)
+{
+	ClearUSBNotice ();
+
+	// the system's own text, in the languages it has (the launcher's
+	// catalogs: English and Brazilian Portuguese)
+	boolean bPT = strcmp (CGkI18n::GetLanguage (), "pt-BR") == 0;
+	CString Hub;
+	if (rRefusal.usHubVendor != 0 || rRefusal.usHubProduct != 0)
+	{
+		Hub.Format ("%04x:%04x", rRefusal.usHubVendor, rRefusal.usHubProduct);
+	}
+	else
+	{
+		Hub = "?";
+	}
+	CString Title, Text;
+	if (bPT)
+	{
+		Title = LV_SYMBOL_USB "  Um dispositivo USB não pode ser usado";
+		Text.Format ("O que foi conectado na porta %u do hub %s precisa de um hub USB 2.0: este hub"
+			     " funciona em USB 1.1 (velocidade total), e o controlador USB do Pi não alcança"
+			     " por ele um dispositivo de baixa velocidade (um DigiMacro, muitos teclados e"
+			     " mouses). Conecte-o a um hub USB 2.0, ou direto no Pi.",
+			     rRefusal.nPort, (const char *) Hub);
+	}
+	else
+	{
+		Title = LV_SYMBOL_USB "  A USB device can't be used";
+		Text.Format ("What is plugged into port %u of the hub %s needs a USB 2.0 hub: this hub runs"
+			     " at USB 1.1 (full) speed, and the Pi's USB controller can't reach a low-speed"
+			     " device (a DigiMacro, many keyboards and mice) through it. Plug it into a"
+			     " USB 2.0 hub, or straight into the Pi.",
+			     rRefusal.nPort, (const char *) Hub);
+	}
+
+	lv_obj_t *pBanner = lv_obj_create (lv_layer_top ());
+	lv_obj_set_size (pBanner, lv_pct (100), LV_SIZE_CONTENT);
+	lv_obj_align (pBanner, LV_ALIGN_TOP_MID, 0, 0);
+	lv_obj_set_style_bg_color (pBanner, lv_palette_darken (LV_PALETTE_ORANGE, 4), 0);
+	lv_obj_set_style_bg_opa (pBanner, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius (pBanner, 0, 0);
+	lv_obj_set_style_border_width (pBanner, 0, 0);
+	lv_obj_set_style_pad_all (pBanner, 10, 0);
+	lv_obj_set_style_pad_row (pBanner, 6, 0);
+	lv_obj_set_flex_flow (pBanner, LV_FLEX_FLOW_COLUMN);
+	lv_obj_add_flag (pBanner, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_add_event_cb (pBanner, USBNoticeEvent, LV_EVENT_CLICKED, this);
+
+	lv_obj_t *pLabel = lv_label_create (pBanner);
+	lv_label_set_text (pLabel, Title);
+	lv_obj_set_style_text_color (pLabel, lv_color_white (), 0);
+
+	pLabel = lv_label_create (pBanner);
+	lv_label_set_text (pLabel, Text);
+	lv_label_set_long_mode (pLabel, LV_LABEL_LONG_MODE_WRAP);
+	lv_obj_set_width (pLabel, lv_pct (100));
+	lv_obj_set_style_text_color (pLabel, lv_color_white (), 0);
+
+	pLabel = lv_label_create (pBanner);
+	lv_label_set_text (pLabel, bPT ? "Clique ou tecle algo para fechar."
+				       : "Click or press a key to dismiss.");
+	lv_obj_set_style_text_font (pLabel, &gk_montserrat_14, 0);
+	lv_obj_set_style_text_color (pLabel, lv_color_white (), 0);
+	lv_obj_set_style_text_opa (pLabel, LV_OPA_80, 0);
+
+	m_pUSBNotice = pBanner;
+	m_pUSBNoticeTimer = lv_timer_create (USBNoticeTimer, UsbNoticeMs, this);
+	lv_timer_set_repeat_count (m_pUSBNoticeTimer, 1);
+	lv_timer_set_auto_delete (m_pUSBNoticeTimer, false);
+
+	CLogger::Get ()->Write (FromHost, LogNotice, "USB notice shown: hub %s, port %u",
+				(const char *) Hub, rRefusal.nPort);
+}
+
+void CAppHost::ClearUSBNotice (void)
+{
+	if (m_pUSBNoticeTimer != 0)
+	{
+		lv_timer_delete (m_pUSBNoticeTimer);
+		m_pUSBNoticeTimer = 0;
+	}
+	if (m_pUSBNotice != 0)
+	{
+		lv_obj_delete_async (m_pUSBNotice);	// maybe inside its own event
+		m_pUSBNotice = 0;
+		CLogger::Get ()->Write (FromHost, LogNotice, "USB notice dismissed");
+	}
+}
+
+void CAppHost::USBNoticeEvent (lv_event_t *e)
+{
+	((CAppHost *) lv_event_get_user_data (e))->ClearUSBNotice ();
+}
+
+void CAppHost::USBNoticeTimer (lv_timer_t *pTimer)
+{
+	((CAppHost *) lv_timer_get_user_data (pTimer))->ClearUSBNotice ();
+}
+
 boolean CAppHost::KeyHook (const TGkKey &rKey, void *pParam)
 {
 	CAppHost *pThis = (CAppHost *) pParam;
+	if (pThis->m_pUSBNotice != 0)
+	{
+		pThis->ClearUSBNotice ();	// the key dismisses it, and does nothing else
+		return TRUE;
+	}
 	if (pThis->m_App.pBundle == 0)
 	{
 		return TRUE;		// no app: swallow
