@@ -85,6 +85,10 @@ Scenario file: one command per line, '#' starts a comment.
                                 the simulator's own commands (docs/SIMULATOR.md)
     usbip refuse <vid>:<pid> <port>   as a low-speed device plugged into a
                                 full-speed hub with those ids, on the Pi
+    pad <command>               simulator only: a line to the touch pad of a
+                                simulated DigiMacro (simavr-softusb's bridge:
+                                "pad hold", "pad tap", "pad .-"), through the
+                                FIFO named by $GK_TEST_PAD
     epaper plug <name> [<model>]
     epaper unplug               simulator only: the simulated e-paper panel
     epaper shot <name>          (docs/EPAPER.md): plug a panel in by name (a
@@ -758,6 +762,13 @@ def run_scenario(m, path, outdir):
                     raise SystemExit('%s: usbip is for the simulator' % where)
                 m.usbip(rest.strip())
                 print('[%s] usbip %s' % (where, rest.strip()))
+            elif cmd == 'pad':
+                fifo = os.environ.get('GK_TEST_PAD')
+                if not fifo:
+                    raise SystemExit('%s: pad needs GK_TEST_PAD (the simulated board\'s pad FIFO)' % where)
+                with open(fifo, 'w') as f:
+                    f.write(rest.strip() + '\n')
+                print('[%s] pad %s' % (where, rest.strip()))
             elif cmd == 'epaper':
                 if not hasattr(m, 'epaper'):
                     raise SystemExit('%s: epaper is for the simulator (its simulated panel)' % where)

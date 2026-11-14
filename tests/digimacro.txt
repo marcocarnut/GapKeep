@@ -1,0 +1,225 @@
+# Needs a test build (make TEST=1) and the test SD card (tests/sdcard).
+# Needs a simulated DigiMacro: tests/digimacro/run_softusb.sh starts one
+# (simavr-softusb's bridge, the real firmware 18 on a simulated Digispark,
+# served over USB/IP), runs this with GK_TEST_USBIP and GK_TEST_PAD, then
+# checks with tests/digimacro/check_board.py that the board types what was
+# written: a TOTP code included, for the time this set on its clock.
+#
+# The DigiMacro app (apps/digimacro), from the keyboard alone: the gate (the
+# pad held), the board's clock refused while GapKeep's is not set, the
+# hardened-mode checklist, a macro written, a TOTP key imported from a QR
+# code and put in a macro, the clock set after a confirmation, a password
+# and the lockout, then unplugged and plugged in again through the password.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect launcher ready 30
+launch digimacro
+expect digimacro ready 10
+usbip attach ${GK_TEST_USBIP:-127.0.0.1:3241}
+expect usb: device 1: 16c0:27db ".*" "DigiMacro", .* low speed, 2 interface\(s\), for digimacro 15
+expect digimacro: connected: firmware 18, protocol 3 15
+wait 1
+shot 01-gate
+pad hold 4500
+expect digimacro: read \d+ macro\(s\), \d+ \{totp\} key\(s\), serial of 8 digits 20
+wait 1
+shot 02-home
+# the clock: GapKeep's is not set yet, so the board's isn't either
+key tab
+key tab
+key tab
+key ret
+wait 0.5
+mark
+key ret
+expect digimacro: the board's clock not set: GapKeep's is not set 10
+shot 03-clock-refused
+# the hardened-mode checklist
+key esc
+key tab
+key tab
+key tab
+key tab
+key ret
+expect digimacro: hardened-mode checklist: \d of 6 10
+wait 0.5
+shot 04-hardening
+# GapKeep's clock set (tests/apps/clockset: 2033-05-18 03:33:03 UTC)
+key meta_l
+expect launcher ready 10
+launch clockset
+expect clockset ready 10
+mark
+launch digimacro
+expect digimacro: connected: firmware 18 15
+pad hold 4500
+expect digimacro: read \d+ macro\(s\) 20
+# a macro: "." types hello
+key ret
+wait 0.5
+type hello
+wait 0.5
+shot 05-macro
+key tab
+key tab
+key tab
+mark
+key ret
+expect digimacro: wrote the table, \d+ bytes, read back the same 20
+# a TOTP key from a QR code (RFC 6238's SHA-1 seed), and Google
+# Authenticator's export of two accounts the board can't type (8 digits)
+key esc
+key tab
+key ret
+wait 0.5
+key ret
+mark
+camera qr otpauth://totp/Example:alice@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Example
+expect digimacro: imported 1 account\(s\), 1 the board can type, 0 refused, 0 there already 10
+camera scene
+wait 2.5
+mark
+camera qr otpauth-migration://offline?data=CjgKFDEyMzQ1Njc4OTAxMjM0NTY3ODkwEhFhbGljZUBleGFtcGxlLmNvbRoHRXhhbXBsZSABKAIwAgo3CiAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMhILQUNNRSBDbzpib2IaACACKAIwAhABGAEgACi5YA%3D%3D
+expect digimacro: imported 2 account\(s\), 0 the board can type, 0 refused, 0 there already 10
+camera scene
+key ret
+wait 0.5
+shot 06-accounts
+# account 1 into macro "."
+key tab
+key tab
+key tab
+key tab
+mark
+key ret
+expect digimacro: account 1 added to a macro 10
+key esc
+key ret
+wait 0.5
+shot 07-macro-totp
+key tab
+key tab
+key tab
+pad hold 4500
+mark
+key ret
+expect digimacro: wrote the table, \d+ bytes, read back the same; 1 imported key\(s\) wiped from memory 30
+wait 0.5
+shot 08-written
+# the board's clock, from GapKeep's, after a confirmation
+key esc
+key tab
+key tab
+key tab
+key ret
+wait 0.5
+key ret
+wait 0.5
+shot 09-clock-confirm
+mark
+key ret
+expect digimacro: the board's clock set to \d{10} 20
+# a remote's button: {IR} in macro ".", then Learn; the simulated board
+# has no IR receiver, so nothing is heard in ten seconds, but its keyboard
+# endpoint is read meanwhile
+key esc
+key ret
+wait 0.5
+key end
+type {IR}
+wait 0.5
+# past the row's remove button, Add a macro and Read again (Write is
+# disabled: the {IR} has no button yet, and disabled buttons take no focus)
+key tab
+key tab
+key tab
+key tab
+mark
+key ret
+expect usb: device 1: digimacro reads endpoint 0x81 10
+expect digimacro: listening for a remote's button \(macro 1\) 10
+wait 1
+shot 10-learning
+expect digimacro: no remote's button heard \(0 character\(s\) typed\) 15
+# the secrets' key: made here, shown as a QR code
+key esc
+key tab
+key tab
+key tab
+key tab
+key tab
+key ret
+wait 0.5
+pad hold 4500
+mark
+key ret
+expect digimacro: a new key for secrets 20
+wait 0.5
+shot 11-key
+key esc
+wait 0.5
+key esc
+# a password, then the lockout
+key tab
+key tab
+key ret
+wait 0.5
+type pw-test-1
+mark
+key ret
+expect digimacro: password set 20
+wait 0.5
+key tab
+key tab
+key tab
+key spc
+key tab
+key tab
+key tab
+key tab
+mark
+key ret
+expect digimacro: lockout on 20
+wait 0.5
+shot 12-security
+# a backup, encrypted with the password: a QR code
+key esc
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key ret
+wait 0.5
+pad hold 4500
+mark
+key ret
+expect digimacro: a backup made, \d+ characters, encrypted 60
+wait 0.5
+shot 13-backup
+key esc
+wait 0.5
+key esc
+# unplugged and plugged in again: the password at the gate
+mark
+usbip detach
+expect digimacro: device 1 unplugged 10
+usbip attach ${GK_TEST_USBIP:-127.0.0.1:3241}
+expect digimacro: connected: firmware 18, protocol 3, state 0x0[2-7] 15
+wait 1
+type pw-test-1
+key ret
+wait 0.5
+shot 14-gate-password
+pad hold 4500
+expect digimacro: unlocked 20
+expect digimacro: read 1 macro\(s\), 1 \{totp\} key\(s\) 20
+wait 0.5
+key ret
+wait 0.5
+shot 15-read-back
+# the board for check_board.py
+usbip detach
+expect digimacro: device 2 unplugged 10
+reject digimacro: .* failed

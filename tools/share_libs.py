@@ -54,6 +54,8 @@ COPIES = (
                        "psbt/basen.js", "psbt/bech32.js", "psbt/bytes.js", "psbt/hashes.js", "psbt/script.js"])
     + [("apps/codex32/vendor/wordlist.js", "apps/repl/vendor/wordlist.js"),
        ("apps/codex32/LICENSE-dice39.txt", "apps/repl/LICENSE-dice39.txt")]
+    # the DigiMacro app imports authenticator keys as the Authenticator does
+    + [("apps/totp/lib/parse.js", "apps/digimacro/lib/parse.js")]
     # writing to an e-paper panel: dice39's shares, and both apps' seed QR codes
     + [("apps/dice39/lib/epaper.js", "apps/codex32/lib/epaper.js"),
        ("apps/dice39/lib/epaperlayout.js", "apps/codex32/lib/epaperlayout.js")]
