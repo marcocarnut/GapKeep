@@ -2,8 +2,14 @@
 // DigiMacroAsm's encoder, vendor/table.js).
 //
 // A row is { code, text, sealed }: text is the macro as typed, sealed a
-// {secret <hex>} read from the board that GapKeep cannot open (it has no
-// key), kept apart and written back as it came, as the page does.
+// {secret <hex>} read from the board that GapKeep cannot open (it has not
+// got the key), kept apart and written back as it came, as the page does.
+//
+// With the board's key (setKey(): made here, or scanned from its QR code)
+// secrets are text, {secret} and what follows it, sealed afresh each time
+// the table is written. Sealing takes a random nonce, so the table's bytes
+// differ each time: what tells the screen from the board (snapshot()) seals
+// with a fixed sequence instead, and is the same for the same macros.
 //
 // TOTP keys never show as text. In a row's text:
 //   {totp #N}  account N imported in this session (lib/parse.js): its key
@@ -35,6 +41,7 @@ const TOKEN = /\{\s*totp\s+([#~])(\d+)\s*\}/gi;
 const BLOB = /\{\s*totp\s+@([0-9a-fA-F]{80})\s*\}/g;
 const SEALED = /^([^]*)(\{secret!? [0-9a-f]+\})$/;
 const PLAIN_SECRET = /\{\s*secret/i;
+const EMPTY_IR = /\{\s*IR\s*\}/i;
 
 const hexOf = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -46,12 +53,36 @@ export class Macros {
     this.rows = [{ code: ".", text: "" }];
     this.blobs = [];            // {totp ~N}: blobs[N - 1], 80 hex digits
     this.accounts = new Map();  // {totp #N}: imported accounts, by number
+    this.key = null;            // the board's key for secrets, if given
   }
 
-  // The table from the board's EEPROM (bytes from 0 through the check value)
+  // The key secrets are sealed and opened with (16 bytes), or null. Rows
+  // sealed without it are opened, those it opens.
+  setKey(key) {
+    if (this.key) this.key.fill(0);
+    this.key = key ? Uint8Array.from(key) : null;
+    if (!this.key) return 0;
+    let opened = 0;
+    const open = (blob) => T.openSecret(this.key, blob);
+    this.rows = this.rows.map((r) => {
+      if (!r.sealed) return r;
+      try {
+        const text = this.hide(T.decodeMacro(T.encodeMacro(this.full(r)), open));
+        if (SEALED.test(text)) return r;        // not this key's: still sealed
+        opened++;
+        return { code: r.code, text };
+      } catch (e) {
+        return r;               // not this key's: it stays sealed
+      }
+    });
+    return opened;
+  }
+
+  // The table from the board's EEPROM (bytes from 0 through the check value).
+  // With a key, its secrets open (a wrong key: secret-wrong-key).
   load(ee) {
     this.blobs = [];
-    const got = T.decodeTable(ee).map(({ code, text }) => {
+    const got = T.decodeTable(ee, this.key).map(({ code, text }) => {
       const m = SEALED.exec(text);
       const row = m ? { code, text: m[1], sealed: m[2] } : { code, text };
       row.text = this.hide(row.text);
@@ -73,8 +104,8 @@ export class Macros {
 
   // The text as table.js reads it: the tokens expanded, the sealed part back
   full(row) {
-    if (PLAIN_SECRET.test(row.text)) {
-      throw new MacroError(N_("{{secret}} needs the board's key, which GapKeep has not got: write it with DigiMacro's own page"));
+    if (PLAIN_SECRET.test(row.text) && !this.key) {
+      throw new MacroError(N_("{{secret}} needs the board's key: make one, or scan its QR code, in Secrets' key"));
     }
     const text = row.text.replace(TOKEN, (m, kind, digits) => {
       const n = Number(digits);
@@ -119,7 +150,7 @@ export class Macros {
     let table = null;
     if (!error && each.every((e) => !e.error)) {
       try {
-        table = this.table();
+        table = this.table(false);
       } catch (e) {
         error = e;
       }
@@ -129,18 +160,47 @@ export class Macros {
     return { each, total, error, ok: !error && each.every((e) => !e.error), snapshot };
   }
 
-  // The table's bytes, as written to the board (from address 0)
-  table() {
-    return T.encodeTable(this.rows.map((r) => ({ code: r.code, text: this.full(r) })));
+  // The table's bytes, as written to the board (from address 0). Secrets are
+  // sealed with fresh nonces, unless forBoard is false: then with a fixed
+  // sequence, for snapshot().
+  table(forBoard = true) {
+    const rows = this.rows.map((r) => ({ code: r.code, text: this.full(r) }));
+    if (!this.key) return T.encodeTable(rows);
+    if (forBoard) return T.encodeTable(rows, { key: this.key, check: T.keyCheck(this.key) });
+    let x = 0x9e3779b9;
+    const fixed = (n) => Uint8Array.from({ length: n }, () => {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+      return (x >>> 0) % 255 + 1;       // never zero, as sealSecret wants
+    });
+    return T.packTable(rows.map((r) => [r.code, T.encodeMacro(r.text, (plain) => T.sealSecret(this.key, plain, fixed))]));
   }
 
   // To tell what is on screen from what is on the board: the bytes
   snapshot() {
     try {
-      return Array.from(this.table()).join(",");
+      return Array.from(this.table(false)).join(",");
     } catch (e) {
       return null;
     }
+  }
+
+  // Rows with a secret this session can't open
+  hasSealed() {
+    return this.rows.some((r) => r.sealed);
+  }
+
+  // The first {IR} with no button: [row, the {IR}'s text], or null
+  emptyIR() {
+    for (let i = 0; i < this.rows.length; i++) {
+      const m = EMPTY_IR.exec(this.rows[i].text);
+      if (m) return [i, m[0]];
+    }
+    return null;
+  }
+
+  // Fills that {IR} with a button ("{IR aa cc}")
+  fillIR(i, ir) {
+    this.rows[i].text = this.rows[i].text.replace(EMPTY_IR, ir);
   }
 
   // After a write: the imported accounts written are on the board now, so
@@ -204,4 +264,6 @@ export const setLayout = T.setLayout;
 export const getLayout = T.getLayout;
 export const setMessages = T.setMessages;
 export const CHECK_ADDR = T.CHECK_ADDR;
+export const keyCheck = (key) => T.keyCheck(key);
+export const irHeard = (text) => T.irHeard(text);
 export const FW_TOTP = T.FW_TOTP;

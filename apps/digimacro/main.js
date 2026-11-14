@@ -1,8 +1,14 @@
 // DigiMacro: configures a DigiMacro board (a morse-tapped macro keyboard on
 // a Digispark) plugged into GapKeep, as its web page does: the macros, the
 // power-on macro, the password, the lockout, the board's clock for {totp},
-// and the hardened-mode checklist. TOTP keys come from QR codes: an
-// authenticator's otpauth://totp/... or Google Authenticator's export.
+// the secrets' key, backups, and the hardened-mode checklist. TOTP keys come
+// from QR codes: an authenticator's otpauth://totp/... or Google
+// Authenticator's export. What the page puts in files (the secrets' key, a
+// backup) goes out and comes back as QR codes, with the same text.
+//
+// A remote's button: {IR} with no button in a macro, then Learn: the board
+// types the button it hears on its keyboard, which GapKeep reads for this
+// app alone (gk:usb's interruptIn()), and it fills that {IR}.
 //
 // Experimental (docs/EXPERIMENTAL.md): GapKeep claims the board whole while
 // this app is installed (gk:usb, docs/APPS.md "USB devices"), so its
@@ -12,9 +18,10 @@
 // (vendor/, copied by tools/extract_digimacro.py); lib/board.js and
 // lib/macros.js build on them. See README.md.
 //
-// Secrets: the password, imported TOTP keys and the {totp} keys read from
-// the board are in RAM only, never on screen (a key shows as {totp #N} or
-// {totp ~N}) and never in the log. Imported keys are wiped once written to
+// Secrets: the password, imported TOTP keys, the {totp} keys read from the
+// board and the secrets' key are in RAM only, never on screen as text (a
+// TOTP key shows as {totp #N} or {totp ~N}; the secrets' key only as the QR
+// code asked for) and never in the log. Imported keys are wiped once written to
 // the board, the password when the board is unplugged; everything when the
 // app ends (GapKeep zeroes freed memory). The log says what happened by
 // counts and lengths.
@@ -25,18 +32,36 @@ import * as ui from "gk:ui";
 import * as usb from "gk:usb";
 import * as clock from "gk:clock";
 import * as session from "gk:session";
+import * as gkcrypto from "gk:crypto";
 import { t, plural, formatDateTime, keyboard } from "gk:i18n";
 import {
-  Board, Refused, usbIo, wantsPassword, hardening, parseLock, lockBytes, serialText, utf8Bytes,
-  ST_OPEN, ST_PASSWORD, ST_SOFTLOCK, ST_HARDLOCK, ST_KEY, FW_TOTP, PASSWORD_MAX,
+  Board, Refused, KeyReader, usbIo, wantsPassword, hardening, parseLock, lockBytes, serialText, utf8Bytes,
+  ST_OPEN, ST_PASSWORD, ST_SOFTLOCK, ST_HARDLOCK, ST_KEY, FW_TOTP, PASSWORD_MAX, FW_FIRST_RESTART,
   CHECK_ADDR, SERIAL_ADDR, LOCK_ADDR, LOCK_LEN, KEY_WAIT_ADDR, AUTO_ADDR, AUTO_NONE,
 } from "./lib/board.js";
-import { Macros, MacroError, totpFits, TABLE_TOP, LAYOUTS, layoutLabel, setLayout, getLayout, setMessages } from "./lib/macros.js";
+import { Macros, MacroError, totpFits, TABLE_TOP, LAYOUTS, layoutLabel, setLayout, getLayout, setMessages, keyCheck, irHeard } from "./lib/macros.js";
+import { makeBackup, readBackupHeader, openBackup, passwordFits, keyFileText, keyFromFile,
+         IMAGE_LEN, PASS_ADDR, LOCK_COUNT_ADDRS } from "./lib/backup.js";
 import { encoderMessage, hardeningLine } from "./lib/messages.js";
 import { parseCode, ParseError, Message } from "./lib/parse.js";
 
 setMessages(encoderMessage);
 
+// vendor/table.js seals secrets with globalThis.crypto's random bytes, as in
+// a browser: GapKeep's are gk:crypto's
+if (!globalThis.crypto) globalThis.crypto = { getRandomValues: (a) => gkcrypto.getRandomValues(a) };
+
+// lib/backup.js's cryptography
+const BACKUP_CRYPTO = {
+  scrypt: (password, salt, { N, r, p, length }) => gkcrypto.scrypt(password, salt, { N, r, p, length }),
+  gcmEncrypt: (key, iv, ad, plain) => gkcrypto.aeadEncrypt("GCM", key, iv, ad, plain),
+  gcmDecrypt: (key, iv, ad, data) => gkcrypto.aeadDecrypt("GCM", key, iv, ad, data),
+  random: (n) => gkcrypto.randomBytes(n),
+};
+const F_FIRST_SECRET = 16;      // the firmware that opens {secret}
+const KEY_LEN = 16;
+const hexOf = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+const keySet = () => !!S.check && S.check.some((b) => b !== 0xff);
 const MUTED = "#8a9199", RED = "#ef5350", AMBER = "#ffb300", GREEN = "#66bb6a";
 const wide = ui.width >= 1000;
 const N_ = (s) => s;
@@ -131,6 +156,7 @@ function disconnected() {
   S.password = null;            // the next plug-in asks again
   S.stage = "none";
   S.saved = null;
+  S.macros.setKey(null);        // the secrets' key too: it is this board's
   S.macros = new Macros();
   S.macros.accounts = importedKeys;
   showWaiting();
@@ -142,7 +168,10 @@ usb.onAttach((d) => {
 usb.onDetach((d) => {
   if (d.id !== S.device) return;
   console.log(`digimacro: device ${d.id} unplugged`);
-  notice(t("The board was unplugged. What was not written to it is lost."), AMBER);
+  const restarted = S.restarting && Date.now() - S.restarting < 10000;
+  S.restarting = 0;
+  notice(restarted ? t("Restored. The board is restarting with its restored serial number: when it is back, hold the pad to go on.")
+                   : t("The board was unplugged. What was not written to it is lost."), restarted ? GREEN : AMBER);
   disconnected();
 });
 
@@ -209,9 +238,21 @@ async function readAll() {
   ee.set(await b.read(0, TABLE_TOP), 0);
   ee.set(S.check, CHECK_ADDR);
   const accounts = S.macros.accounts;
+  // the secrets' key, given this session: kept if it is still the board's
+  let key = S.macros.key && hexOf(keyCheck(S.macros.key)) === hexOf(S.check) ? Uint8Array.from(S.macros.key) : null;
+  S.macros.setKey(null);
   S.macros = new Macros();
   S.macros.accounts = accounts;
-  const n = S.macros.load(ee);
+  S.macros.setKey(key);
+  let n;
+  try {
+    n = S.macros.load(ee);
+  } catch (e) {
+    console.log("digimacro: the key given doesn't open the board's secrets: dropped");
+    S.macros.setKey(null);
+    n = S.macros.load(ee);
+  }
+  if (key) key.fill(0);
   ee.fill(0);
   S.auto = S.savedAuto = (await b.read(AUTO_ADDR, 1))[0];
   S.lock = parseLock(await b.read(LOCK_ADDR, LOCK_LEN));
@@ -308,6 +349,8 @@ function redraw() {
   else if (S.page === "security") showSecurity();
   else if (S.page === "clock") showClock();
   else if (S.page === "accounts") showAccounts();
+  else if (S.page === "secrets") showSecrets();
+  else if (S.page === "backup") showBackup();
 }
 
 function backButton(parent) {
@@ -315,12 +358,13 @@ function backButton(parent) {
 }
 
 ui.onKey((ev) => {
-  if (ev.key === "Escape" && S.stage === "board" && S.page !== "home" && S.page !== "scan") {
-    showHome();
+  if (ev.key !== "Escape") return false;
+  if (page.back) {                      // a page with a page to go back to
+    page.back();
     return true;
   }
-  if (ev.key === "Escape" && S.page === "scan") {
-    showAccounts();
+  if (S.stage === "board" && S.page !== "home") {
+    showHome();
     return true;
   }
   return false;
@@ -410,6 +454,8 @@ function showHome() {
     [t("Password and lockout"), () => showSecurity()],
     [t("The board's clock"), () => showClock()],
     [t("Hardened mode"), () => showHardening()],
+    [t("Secrets' key"), () => showSecrets()],
+    [t("Backup and restore"), () => showBackup()],
   ];
   page.actions = [];
   let first = null;
@@ -489,6 +535,7 @@ function showMacros(focusRow = null) {
   });
   page.write = new ui.Button(bar, { text: t("Write to the board"), onClick: () => writeTable() });
   page.reload = new ui.Button(bar, { text: t("Read again from the board"), onClick: () => reloadTable() });
+  page.learn = new ui.Button(bar, { text: t("Learn a remote's button"), onClick: () => learnIR() });
   backButton(bar);
 
   // the power-on macro
@@ -507,9 +554,9 @@ function showMacros(focusRow = null) {
   page.autoSave = new ui.Button(auto, { text: t("Save"), onClick: () => saveAuto() });
   new ui.Label({
     width: "100%", color: MUTED, font: 14,
-    text: t("Keys: {{Enter}}, {{Tab}}, {{Ctrl+c}}, {{pause 1.5}}, {{x3}}... as on DigiMacro's page; \\n is Enter. A TOTP key goes in from Authenticator keys."),
+    text: t("Keys: {{Enter}}, {{Tab}}, {{Ctrl+c}}, {{pause 1.5}}, {{x3}}... as on DigiMacro's page; \\n is Enter. A TOTP key goes in from Authenticator keys. A remote's button: type {{IR}} where it goes, then Learn a remote's button."),
   });
-  page.actions = [page.write, page.reload, page.autoSave, add];
+  page.actions = [page.write, page.reload, page.autoSave, page.learn, add];
   drawRowState();
   const f = focusRow !== null && page.rows[focusRow] ? page.rows[focusRow].text : page.rows.length ? page.rows[0].text : add;
   f.focus();
@@ -554,6 +601,10 @@ function writeTable() {
     notice(explain(e), RED);
     return;
   }
+  if (m.hasSecret() && S.info.firmware < F_FIRST_SECRET) {
+    notice(t("This board's firmware ({fw}) can't keep {{secret}}: it needs firmware {need}.", { fw: S.info.firmware, need: F_FIRST_SECRET }), RED);
+    return;
+  }
   if (/\{totp/i.test(m.rows.map((r) => r.text).join("")) && S.info.firmware < FW_TOTP) {
     notice(t("This board's firmware ({fw}) can't type {{totp}}: it needs firmware {need}.", { fw: S.info.firmware, need: FW_TOTP }), RED);
     return;
@@ -561,6 +612,8 @@ function writeTable() {
   run("write", async () => {
     notice(t("Writing..."), MUTED);
     await S.board.write(0, bytes);
+    // what sealed the secrets is what the board checks keys against
+    if (m.key && m.hasSecret()) await writeCheck(keyCheck(m.key));
     const keys = m.settle();
     S.saved = m.snapshot();
     // a power-on macro whose code went away would wait for the next macro
@@ -573,6 +626,13 @@ function writeTable() {
     bytes.fill(0);
     notice(t("Written: {n} bytes, read back and checked.", { n: bytes.length }), GREEN);
   });
+}
+
+// The secrets' key's check value, written and read back
+async function writeCheck(check) {
+  if (S.check && hexOf(check) === hexOf(S.check)) return;
+  await S.board.write(CHECK_ADDR, check);
+  S.check = await S.board.read(CHECK_ADDR, 8);
 }
 
 function reloadTable() {
@@ -589,6 +649,76 @@ function saveAuto() {
     console.log(`digimacro: power-on macro ${want === AUTO_NONE ? "none" : "saved"}`);
     notice(want === AUTO_NONE ? t("No macro types itself at power-on.") : t("Saved: that macro types itself when the board is plugged in."), GREEN);
   });
+}
+
+// --- a remote's button ----------------------------------------------------------------
+
+// LEARN: the first {IR} with no button gets the one the board hears. The
+// board types it ("aa cc", hex) on its keyboard, which is this app's while
+// it reads it (gk:usb interruptIn()); no clipboard needed, nothing typed
+// anywhere else. No hold, no password: LEARN reads nothing.
+const LEARN_MS = 10000;
+
+async function learnIR() {
+  if (S.busy || !S.board) return;
+  const m = S.macros;
+  const at = m.emptyIR();
+  if (!at) {
+    notice(t("Type {{IR}} in a macro, where the remote's button goes, and then learn it."), AMBER);
+    return;
+  }
+  const [row] = at;
+  const ep = S.handle.device.endpoints.find((e) => e.type === "interrupt" && e.direction === "in");
+  if (!ep) {
+    notice(t("This board has no keyboard endpoint to read."), RED);
+    return;
+  }
+  S.busy = true;
+  drawBusy();
+  const h = S.handle;
+  const reader = new KeyReader();
+  let typed = "", heard = null;
+  try {
+    // reading first, so that nothing the board types is missed
+    let next = h.interruptIn(ep.address);
+    next.catch(() => {});
+    await S.board.learn();
+    console.log(`digimacro: listening for a remote's button (macro ${row + 1})`);
+    notice(t("Point the remote at the board and press the button, within ten seconds."), AMBER);
+    const until = Date.now() + LEARN_MS;
+    while (!heard) {
+      const left = until - Date.now();
+      if (left <= 0) break;
+      let timer;
+      const report = await Promise.race([next, new Promise((res) => { timer = setTimeout(() => res(null), left); })]);
+      clearTimeout(timer);
+      if (!report) break;
+      typed += reader.feed(report);
+      report.fill(0);
+      heard = irHeard(typed);
+      if (!heard) {
+        next = h.interruptIn(ep.address);
+        next.catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.log(`digimacro: learn failed: ${e instanceof Refused ? "refused" : e.code || "error"}`);
+    notice(e instanceof Refused ? t("The board did not take it: its firmware has no remote.") : explain(e), RED);
+    return;
+  } finally {
+    try { h.stopInterruptIn(); } catch (e) { /* unplugged */ }
+    S.busy = false;
+    if (S.page === "macros") showMacros(row);
+  }
+  if (!heard) {
+    console.log(`digimacro: no remote's button heard (${typed.length} character(s) typed)`);
+    notice(t("Nothing heard. The board may have no IR receiver (on P2), the remote may be too far, or not one the board knows (NEC)."), RED);
+    return;
+  }
+  m.fillIR(row, heard);
+  console.log(`digimacro: a remote's button learned into macro ${row + 1}`);
+  notice(t("Heard {ir}: it is in macro \"{code}\". Write the macros to the board to keep it.", { ir: heard, code: m.rows[row].code }), GREEN);
+  if (S.page === "macros") showMacros(row);
 }
 
 // --- authenticator keys -------------------------------------------------------------
@@ -653,17 +783,39 @@ function forgetImported() {
   showAccounts();
 }
 
-function showScan() {
+// The camera, for a QR code: onText(text) with each one read; back() for
+// Done and Escape
+function showScan(onText = scanned, back = showAccounts, what = null) {
   newPage("scan");
-  page.msg = new ui.Label({ text: t("Show the QR code to the camera."), width: "100%" });
+  page.back = back;
+  page.msg = new ui.Label({ text: what || t("Show the QR code to the camera."), width: "100%" });
   const side = Math.min(ui.width - 64, wide ? 640 : 400);
   page.scanner = new ui.Scanner({
     detect: ["qr"], width: side, height: Math.round(side * 0.75),
-    onDetect: ({ text }) => scanned(text),
+    onDetect: ({ text }) => onText(text),
     onError: ({ reason }) => notice(t("The camera: {reason}", { reason }), RED),
   });
-  const back = new ui.Button({ text: t("Done"), onClick: () => showAccounts() });
-  back.focus();
+  const done = new ui.Button({ text: t("Done"), onClick: () => back() });
+  done.focus();
+}
+
+// A QR code to read with a phone or a computer's camera: as large as the
+// screen allows, what it is beside it. data is wiped from the page when it
+// goes (the widget's own copy goes with the screen).
+function showQR(title, data, lines, back) {
+  newPage("qr");
+  page.back = back;
+  const row = new ui.Container({ layout: "row", gap: wide ? 16 : 10, width: "100%", alignItems: "start" });
+  const side = Math.min(ui.height - (wide ? 140 : 80), ui.width * 0.6);
+  try {
+    new ui.QRCode(row, { data, ecc: "L", size: Math.floor(side) });
+  } catch (e) {
+    new ui.Label(row, { text: t("It does not fit in a QR code: {why}", { why: e.message }), color: RED });
+  }
+  const text = new ui.Container(row, { layout: "column", gap: 8, grow: 1 });
+  new ui.Label(text, { text: title, font: 22, width: "100%" });
+  for (const [line, color] of lines) new ui.Label(text, { text: line, color: color || MUTED, width: "100%", font: wide ? 16 : 14 });
+  new ui.Button(text, { text: t("Done"), onClick: () => back() }).focus();
 }
 
 function scanned(text) {
@@ -755,11 +907,6 @@ function showSecurity() {
       text: t("Wrong codes now: {misses}. Pauses: {softs}. Hard locks lifted with the password, ever: {cleared}.", S.lock),
     });
   }
-  new ui.Label({ text: t("Secrets"), font: 22 });
-  new ui.Label({
-    width: "100%", color: MUTED,
-    text: t("A {{secret}} in a macro is sealed with a key the board's computer keeps. GapKeep keeps macros with sealed secrets as they are, but can't make, load or use that key: use DigiMacro's own page for secrets."),
-  });
   backButton();
   page.actions = [set, save].concat(clear ? [clear] : []);
   page.newPass.focus();
@@ -812,6 +959,304 @@ function saveLock() {
     S.info = await S.board.info();
     console.log(`digimacro: lockout ${on ? "on" : "off"}`);
     notice(on ? t("The lockout is saved, its counts back to zero.") : t("The lockout is off."), GREEN);
+  });
+}
+
+// --- the secrets' key -----------------------------------------------------------------
+//
+// {secret} in a macro keeps the rest of it encrypted on the board: it plays
+// only while a program on the computer (DigiMacro's tools/hostauth) has
+// sent the board the key lately. The key is sixteen random bytes made here
+// (gk:crypto's generator), never written to the board: only its check
+// value is. DigiMacro's page downloads it as a file, a line for the
+// computer's host.key; here it is shown as a QR code holding that file's
+// text, for a phone or the computer's camera to take there. Scanned back,
+// it opens the board's secrets in this app, until the board is unplugged.
+
+const keyComment = () => t("DigiMacro key for board {serial}: add this line to ~/.config/digimacro/host.key, or on Windows to %APPDATA%\\digimacro\\host.key", { serial: S.serial });
+
+function showSecrets() {
+  newPage("secrets");
+  const m = S.macros, has = keySet(), loaded = !!m.key, secrets = m.hasSecret();
+  new ui.Label({ text: t("Secrets' key"), font: 22 });
+  new ui.Label({
+    width: "100%", color: MUTED,
+    text: t("What follows {{secret}} in a macro is kept encrypted on the board, and the key is not kept there at all: the macro plays it only while a small program on the computer (DigiMacro's tools/hostauth) has sent the key lately. Plugged in anywhere else, or stolen, the board holds only scrambled bytes. {{secret!}} stops the macro as if the code were not there."),
+  });
+  const lines = [!has ? (secrets ? t("Some macros have secrets, but this board has no key for them: make one, and they are encrypted when the macros are written.") : t("This board has no key for secrets."))
+                      : S.info.state & ST_KEY ? t("This board has a key for secrets, and a computer sent it lately: secrets play for now.")
+                      : t("This board has a key for secrets. No computer has sent it lately.")];
+  if (loaded) lines.push(t("The key is here, in this app: secrets show as text, and are encrypted again when written."));
+  else if (m.hasSealed()) lines.push(t("Scan the key's QR code to see or change the secrets."));
+  new ui.Label({ text: lines.join(" "), width: "100%", ...(!has && secrets ? { color: RED } : {}) });
+  const bar = new ui.Container({ layout: "row-wrap", gap: 8, width: "100%" });
+  const make = new ui.Button(bar, { text: has ? t("Make a new key") : t("Make a key"), onClick: () => newKey() });
+  const actions = [make];
+  if (has && !loaded) actions.push(new ui.Button(bar, { text: t("Scan the key's QR code"), onClick: () => showScan(loadKey, showSecrets, t("Show the camera the key's QR code (the one this app showed when it made the key).")) }));
+  if (loaded) actions.push(new ui.Button(bar, { text: t("Show the key's QR code again"), onClick: () => showKey(false) }));
+  if (has) actions.push(new ui.Button(bar, { text: t("Remove the key"), onClick: () => removeKey() }));
+  backButton(bar);
+  page.actions = actions;
+  make.focus();
+}
+
+// A new key, written as its check value. Secrets already on the board were
+// sealed with the old one, and are sealed again with the new: which needs
+// the old one, and nothing on screen not yet written, as the table goes
+// with them (DigiMacro's page does the same).
+async function newKey() {
+  const m = S.macros;
+  if (m.hasSealed()) {
+    notice(t("Some secrets were encrypted with the board's key, and this app has not got it. Scan the key's QR code first, so they can be encrypted again with the new one, or remove them."), RED);
+    return;
+  }
+  const secrets = m.hasSecret();
+  if (secrets && m.snapshot() !== S.saved) {
+    notice(t("Write the macros first: a new key encrypts the secrets again, and writes them with it."), RED);
+    return;
+  }
+  if (keySet()) {
+    const i = await ui.alert(t("Make a new key? Every computer with the old one will need the new one."), { buttons: [t("Make a new key"), t("Cancel")] });
+    if (i !== 0) return;
+  }
+  run("new key", async () => {
+    const was = m.key ? Uint8Array.from(m.key) : null;
+    const key = gkcrypto.randomBytes(KEY_LEN);
+    try {
+      if (!(S.keyWait >= 1 && S.keyWait <= 240)) {
+        await S.board.write(KEY_WAIT_ADDR, Uint8Array.from([6]));      // a minute, as the page's default
+        S.keyWait = 6;
+      }
+      m.setKey(key);
+      if (secrets) {
+        const bytes = m.table();
+        await S.board.write(0, bytes);
+        bytes.fill(0);
+      }
+      await writeCheck(keyCheck(key));
+    } catch (e) {
+      m.setKey(was);
+      throw e;
+    } finally {
+      key.fill(0);
+      if (was) was.fill(0);
+    }
+    if (secrets) S.saved = m.snapshot();
+    S.info = await S.board.info();
+    console.log(`digimacro: a new key for secrets${secrets ? ", the secrets sealed again with it" : ""}`);
+    showKey(true);
+  });
+}
+
+function showKey(made) {
+  const key = S.macros.key;
+  if (!key) return;
+  const text = keyFileText(S.serial, key, keyComment());
+  showQR(t("The key for board {serial}", { serial: S.serial }), text, [
+    [made ? t("A new key is in use. Take this QR code to each computer the secrets should play for, and add its text to ~/.config/digimacro/host.key there (on Windows, %APPDATA%\\digimacro\\host.key); any that had the old key needs this one.")
+          : t("Add its text to ~/.config/digimacro/host.key on each computer the secrets should play for (on Windows, %APPDATA%\\digimacro\\host.key)."), null],
+    [t("Keep it: without it, the secrets can't be read or changed again. Anyone who photographs it can play them, with the board."), AMBER],
+  ], showSecrets);
+}
+
+function loadKey(text) {
+  const got = keyFromFile(text, S.serial);
+  if (got.error) {
+    notice(got.error === "key-v2-host" ? t("That is a v2 host key, which firmware 16 no longer uses. Make a key instead.")
+                                       : t("That QR code has no key for board {serial}.", { serial: S.serial }), RED);
+    return;
+  }
+  const key = got.key;
+  if (hexOf(keyCheck(key)) !== hexOf(S.check)) {
+    key.fill(0);
+    notice(t("That key is not this board's: it opens none of its secrets."), RED);
+    return;
+  }
+  const unchanged = S.macros.snapshot() === S.saved;
+  const n = S.macros.setKey(key);
+  key.fill(0);
+  if (unchanged) S.saved = S.macros.snapshot();     // opened, it is still what the board holds
+  console.log(`digimacro: the key for secrets given; ${n} secret(s) opened`);
+  notice(t("The key fits: the secrets are open in this app."), GREEN);
+  showSecrets();
+}
+
+// Removing it leaves any secret on the board for good: not while there are any
+function removeKey() {
+  if (S.macros.hasSecret()) {
+    notice(t("Some macros have secrets, which nothing could read again without the key. Take them out first."), RED);
+    return;
+  }
+  run("remove key", async () => {
+    await writeCheck(new Uint8Array(8).fill(0xff));
+    S.macros.setKey(null);
+    S.info = await S.board.info();
+    console.log("digimacro: the key for secrets removed");
+    notice(t("The key is gone from the board."), GREEN);
+  });
+}
+
+// --- backup ---------------------------------------------------------------------------
+//
+// The whole EEPROM, as DigiMacro's page saves it to a file (lib/backup.js):
+// here as a QR code of the same text. A board with a password has it
+// encrypted with that password; without one it is in the clear. A restore
+// writes everything, serial number included, so a board erased to update
+// its firmware comes back as itself; the password goes last.
+
+let restore = null;             // { text, head } of a backup scanned, until written or dropped
+
+function showBackup() {
+  newPage("backup");
+  const has = !!(S.info.state & ST_PASSWORD);
+  new ui.Label({ text: t("Backup"), font: 22 });
+  new ui.Label({
+    width: "100%", color: MUTED,
+    text: t("Everything on the board (macros, power-on macro, lockout, key check, password, serial number) as one QR code: photograph it, or read it with a phone, and keep it. Its text, saved as a file, is also what DigiMacro's page restores."),
+  });
+  new ui.Label({ width: "100%", color: has ? MUTED : AMBER,
+                 text: has ? t("It is encrypted with the board's password.") : t("This board has no password, so the backup holds every macro in the clear.") });
+  const bar = new ui.Container({ layout: "row-wrap", gap: 8, width: "100%" });
+  const save = new ui.Button(bar, { text: t("Save a backup as a QR code"), onClick: () => saveBackup() });
+  new ui.Label({ text: t("Restore"), font: 22 });
+  const actions = [save];
+  if (!restore) {
+    new ui.Label({ width: "100%", color: MUTED, text: t("Show the camera a backup's QR code: one this app showed, or one made from a file DigiMacro's page saved.") });
+    actions.push(new ui.Button({ text: t("Scan a backup"), onClick: () => showScan(scannedBackup, showBackup, t("Show the camera the backup's QR code.")) }));
+  } else {
+    const h = restore.head;
+    new ui.Label({ width: "100%", text: h.encrypted ? t("A backup of board {serial}, firmware {firmware}, saved on {saved}. It is encrypted: type the password it was saved with.", h)
+                                                    : t("A backup of board {serial}, firmware {firmware}, saved on {saved}. It is not encrypted.", h) });
+    new ui.Label({ width: "100%", color: AMBER, text: t("This replaces everything on this board with board {serial}'s backup: macros, power-on macro, lockout, key check, password and serial number. A restore installs whatever the backup holds, so only restore backups you made.", h) });
+    const row = new ui.Container({ layout: "row-wrap", gap: 8, alignItems: "center", width: "100%" });
+    if (h.encrypted) {
+      page.bkPass = new ui.TextArea(row, { oneLine: true, password: true, width: 280, placeholder: t("the password it was saved with"),
+                                           onSubmit: () => restoreBackup() });
+    }
+    actions.push(new ui.Button(row, { text: t("Restore it"), onClick: () => restoreBackup() }));
+    new ui.Button(row, { text: t("Drop it"), onClick: () => { restore = null; showBackup(); } });
+  }
+  backButton();
+  page.actions = actions;
+  (page.bkPass || save).focus();
+}
+
+async function saveBackup() {
+  const has = !!(S.info.state & ST_PASSWORD);
+  if (has && S.password === null) {       // never in the clear for a board with one
+    notice(t("Give the board's password first."), RED);
+    return;
+  }
+  const warn = !has ? t("This board has no password, so the backup would hold every macro in the clear. Save it anyway?")
+             : utf8Bytes(S.password).length < 8 ? t("The password is shorter than eight characters. A copied backup can be guessed at offline, far faster than the board allows, and a short password will not hold for long. Save it anyway?")
+             : null;
+  if (warn && (await ui.alert(warn, { buttons: [t("Save it"), t("Cancel")] })) !== 0) return;
+  run("backup", async () => {
+    notice(t("Reading the board..."), MUTED);
+    const image = await S.board.read(0, IMAGE_LEN);
+    if (has) notice(t("Working out the encryption from the password: a few seconds, on purpose..."), MUTED);
+    const saved = clock.status().set ? new Date().toISOString().slice(0, 10) : "unknown";
+    let text;
+    try {
+      text = await makeBackup(image, has ? S.password : null, { serial: S.serial, firmware: S.info.firmware, saved }, BACKUP_CRYPTO);
+    } finally {
+      image.fill(0);
+    }
+    console.log(`digimacro: a backup made, ${text.length} characters, ${has ? "encrypted" : "in the clear"}`);
+    showQR(t("Backup of board {serial}", { serial: S.serial }), text, [
+      [has ? t("Encrypted with the board's password.") : t("In the clear: keep it where you would keep the macros themselves."), has ? null : AMBER],
+      [t("Saved as a file, its text is digimacro-{serial}-{saved}.backup for DigiMacro's page.", { serial: S.serial, saved }), null],
+    ], showBackup);
+  });
+}
+
+function scannedBackup(text) {
+  let head;
+  try {
+    head = readBackupHeader(text);
+  } catch (e) {
+    notice(backupError(e), RED);
+    return;
+  }
+  restore = { text, head };
+  console.log(`digimacro: a backup scanned (${head.encrypted ? "encrypted" : "in the clear"}, ${text.length} characters)`);
+  notice("", MUTED);
+  showBackup();
+}
+
+function backupError(e) {
+  switch (e.message) {
+    case "backup-not-one": return t("That is not a DigiMacro backup.");
+    case "backup-other-map": return t("That backup was made by a different version of DigiMacro, and this app can't read it.");
+    case "backup-wrong-password": return t("That is not the password this backup was saved with.");
+    case "backup-bad-password": return t("That backup holds a password other than the one it was opened with: restored, it would lock the board for good.");
+    default: return explain(e);
+  }
+}
+
+async function restoreBackup() {
+  if (!restore || S.busy) return;
+  const { text, head } = restore;
+  const pw = head.encrypted ? (page.bkPass ? page.bkPass.text : "") : null;
+  if (head.encrypted && !pw) {
+    notice(t("Type the password the backup was saved with."), RED);
+    return;
+  }
+  // opened before anything else: a wrong password costs nobody a hold
+  let image;
+  S.busy = true;
+  drawBusy();
+  try {
+    notice(head.encrypted ? t("Working out the encryption from the password: a few seconds, on purpose...") : t("Reading the backup..."), MUTED);
+    image = await openBackup(text, pw, BACKUP_CRYPTO);
+    if (!passwordFits(image, pw)) throw new Error("backup-bad-password");
+  } catch (e) {
+    if (image) image.fill(0);
+    console.log(`digimacro: a backup not opened: ${e.message.startsWith("backup-") ? e.message : "error"}`);
+    notice(backupError(e), RED);
+    return;
+  } finally {
+    S.busy = false;
+    redraw();
+  }
+  const i = await ui.alert(t("Replace everything on this board with board {serial}'s backup?", head), { buttons: [t("Restore it"), t("Cancel")] });
+  if (i !== 0) {
+    image.fill(0);
+    return;
+  }
+  for (const a of LOCK_COUNT_ADDRS) image[a] = 0xff;     // the lockout's counts start again
+  run("restore", async () => {
+    try {
+      const secrets = (() => {
+        const m = new Macros();
+        try {
+          m.load(image.slice(0, CHECK_ADDR + 8));
+        } catch (e) { /* sealed, read without the key */ }
+        return m.hasSecret();
+      })();
+      if (secrets && S.info.firmware < F_FIRST_SECRET) {
+        throw new Error(t("This board's firmware ({fw}) can't keep {{secret}}: it needs firmware {need}.", { fw: S.info.firmware, need: F_FIRST_SECRET }));
+      }
+      notice(t("Writing..."), MUTED);
+      await S.board.write(0, image.slice(0, PASS_ADDR));          // read back by write()
+      await S.board.write(PASS_ADDR, image.slice(PASS_ADDR));     // last: it may lock the board
+      S.password = image[PASS_ADDR] === 0xff ? null : pw;
+      S.info = await S.board.info();
+      if (S.password !== null && wantsPassword(S.info.state)) await tryUnlock();
+    } finally {
+      image.fill(0);
+    }
+    restore = null;
+    console.log("digimacro: a backup restored, and read back");
+    S.macros.setKey(null);
+    if (S.info.firmware < FW_FIRST_RESTART) {
+      await readAll();
+      notice(t("Restored, and read back. Unplug the board and plug it back in, so that the restored serial number takes effect."), GREEN);
+      return;
+    }
+    notice(t("Restored, and read back. The board is restarting, to come back with its restored serial number..."), GREEN);
+    S.restarting = Date.now();
+    await S.board.restart();
   });
 }
 

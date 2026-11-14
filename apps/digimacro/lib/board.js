@@ -25,6 +25,9 @@ export const CHUNK = VND_LEN - DATA_AT;
 
 export const F_INFO = 0x40, F_READ = 0x60, F_WRITE = 0x61;
 export const F_UNLOCK = 0x62, F_SETPASS = 0x63, F_CLOCK = 0x6c, F_REFUSED = 0xee;
+export const F_RESTART = 0x42;          // leave the bus and come back (firmware 8 on)
+export const F_LEARN = 0x69;            // type the remote's next button, as hex
+export const FW_FIRST_RESTART = 8;
 
 export const ST_OPEN = 0x01, ST_PASSWORD = 0x02, ST_UNLOCKED = 0x04;
 export const ST_SOFTLOCK = 0x08, ST_HARDLOCK = 0x10, ST_KEY = 0x80, ST_NOBOOT = 0x80;
@@ -223,9 +226,54 @@ export class Board {
     bytes.fill(0);
   }
 
+  // LEARN: the board types the next button a remote sends it (within ten
+  // seconds), as "aa cc" in hex, on its keyboard. No hold, no password: it
+  // reads nothing. Refused by a board without the remote.
+  async learn() {
+    await this.ask(F_LEARN);
+  }
+
+  // RESTART: the board leaves the bus and comes back, as if replugged (its
+  // serial number read again). Its answer may never come.
+  async restart() {
+    try {
+      await this.ask(F_RESTART);
+    } catch (e) {
+      if (e instanceof Refused) throw e;
+    }
+  }
+
   // Firmware 18's clock: seconds since 1970, UTC, four bytes little-endian
   async setClock(seconds) {
     const s = Math.floor(seconds);
     await this.ask(F_CLOCK, 0, 4, Uint8Array.from([s & 255, (s >>> 8) & 255, (s >>> 16) & 255, (s >>> 24) & 255]));
+  }
+}
+
+// What the board types, from its keyboard's reports (interrupt endpoint
+// 0x81: the report id 1, the modifiers, a reserved byte and three keys):
+// the keys pressed, as characters, for LEARN's hex digits and the space.
+// By usage, so whatever the computer's layout, as the page reads them by
+// position (table.js's irKeyChar). Other keys and other reports (the mouse,
+// id 3) are none of LEARN's.
+export const HID_REPORT_KBD = 1;
+const LEARN_CHARS = { 0x04: "a", 0x05: "b", 0x06: "c", 0x07: "d", 0x08: "e", 0x09: "f", 0x27: "0", 0x2c: " " };
+for (let u = 0x1e; u <= 0x26; u++) LEARN_CHARS[u] = String(u - 0x1d);
+
+export class KeyReader {
+  constructor() {
+    this.down = new Set();
+  }
+
+  // The characters pressed in this report (keys not down in the last one)
+  feed(report) {
+    if (report.length < 4 || report[0] !== HID_REPORT_KBD) return "";
+    const now = new Set(Array.from(report.slice(3)).filter((k) => k !== 0));
+    let out = "";
+    for (const k of now) {
+      if (!this.down.has(k) && k in LEARN_CHARS) out += LEARN_CHARS[k];
+    }
+    this.down = now;
+    return out;
   }
 }

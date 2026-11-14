@@ -15,6 +15,12 @@
 // 4. lib/parse.js (Google Authenticator's export): edge cases, and random
 //    and mutated exports, which must parse or be refused with a ParseError,
 //    never anything else.
+// 5. Secrets with the board's key: sealed and opened as the page does, the
+//    snapshot the same for the same macros; {IR} filled by LEARN, the
+//    board's typing read from its keyboard reports.
+// 6. lib/backup.js against DigiMacroAsm's web/backup.js: each opens the
+//    other's backups (encrypted and not), wrong passwords and broken files
+//    refused, the key file's text read as the page reads it.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { createRequire } from "node:module";
@@ -24,6 +30,12 @@ import * as V from "../../apps/digimacro/vendor/table.js";
 import { Macros, MacroError, totpFits } from "../../apps/digimacro/lib/macros.js";
 import * as B from "../../apps/digimacro/lib/board.js";
 import { parseCode, parseMigration, ParseError } from "../../apps/digimacro/lib/parse.js";
+import * as K from "../../apps/digimacro/lib/backup.js";
+import { scryptSync, createCipheriv, createDecipheriv, randomBytes as nodeRandom, webcrypto } from "node:crypto";
+
+// as a browser has it (table.js seals with it; the page's backup.js uses
+// its subtle), which Node 18 has only under a flag
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import { FakeBoard } from "./fakeboard.mjs";
 
 let fails = 0, checks = 0;
@@ -282,6 +294,144 @@ V.setLayout("us");
     if (fails > 20) break;
   }
   console.log(`parse.js: 20000 random and mutated exports, ${parsedCount} handled as they should`);
+}
+
+// --- 5. secrets with a key; {IR} learned ---------------------------------------
+{
+  const key = Uint8Array.from({ length: 16 }, (_, i) => i * 17 + 3);
+  const m = new Macros();
+  m.setKey(key);
+  m.rows = [{ code: ".", text: "user\\t{secret}hunter2{Enter}" }, { code: "-", text: "plain" }];
+  check(m.snapshot() !== null && m.snapshot() === m.snapshot(), "secrets: the snapshot is the same each time");
+  const t1 = m.table(), t2 = m.table();
+  check(hex(t1) !== hex(t2), "secrets: written, sealed with fresh nonces");
+  // the board's EEPROM, as readAll() builds it: the table, then the check value
+  const ee = new Uint8Array(V.CHECK_ADDR + 8).fill(0xff);
+  ee.set(t1, 0);
+  ee.set(V.keyCheck(key), V.CHECK_ADDR);
+  const plain = new Macros();
+  plain.load(ee);
+  check(plain.rows[0].sealed && !/hunter2/.test(JSON.stringify(plain.rows)), "secrets: without the key, sealed");
+  check(plain.hasSealed() && plain.hasSecret(), "secrets: hasSealed");
+  let threw = false;
+  try { plain.table(); } catch (e) { threw = true; }
+  check(!threw, "secrets: sealed rows written back as they are, without the key");
+  const OPENED = "user\\t{secret}hunter2\\n";         // as decodeMacro() writes it back
+  check(plain.setKey(key) === 1 && plain.rows[0].text === OPENED && !plain.hasSealed(),
+        "secrets: the key opens them: " + JSON.stringify(plain.rows[0]));
+  const other = new Macros();
+  other.load(ee);
+  check(other.setKey(Uint8Array.from({ length: 16 }, () => 9)) === 0 && other.hasSealed(), "secrets: another key opens none");
+  const withKey = new Macros();
+  withKey.setKey(key);
+  withKey.load(ee);
+  check(withKey.rows[0].text === OPENED, "secrets: loaded with the key, open");
+  // what the page reads of it: the same macros
+  if (existsSync(tree + "/web/table.js")) {
+    const O = createRequire(import.meta.url)(tree + "/web/table.js");
+    const got = O.decodeTable(ee, key);
+    check(got.length === 2 && got[0].text === OPENED, "secrets: the page opens what the app sealed");
+  }
+  const nokey = new Macros();
+  nokey.rows = [{ code: ".", text: "{secret}x" }];
+  threw = false;
+  try { nokey.table(); } catch (e) { threw = e instanceof MacroError; }
+  check(threw, "secrets: {secret} without a key refused");
+
+  // {IR}: the first without a button
+  const ir = new Macros();
+  ir.rows = [{ code: ".", text: "tv{IR 00 45}" }, { code: "-", text: "vol{ IR }up{IR}" }];
+  const at = ir.emptyIR();
+  check(at && at[0] === 1, "IR: the first empty {IR}");
+  ir.fillIR(1, "{IR 80 c5}");
+  check(ir.rows[1].text === "vol{IR 80 c5}up{IR}" && ir.emptyIR()[0] === 1, "IR: filled, the next one left");
+  // the board types "80 c5" (LEARN), press and release each, as usages
+  const usage = { "8": 0x25, "0": 0x27, " ": 0x2c, c: 0x06, "5": 0x22 };
+  const r = new B.KeyReader();
+  let typed = "";
+  for (const ch of "80 c5") {
+    typed += r.feed(Uint8Array.from([1, 0, 0, usage[ch], 0, 0]));
+    typed += r.feed(Uint8Array.from([1, 0, 0, 0, 0, 0]));
+  }
+  typed += r.feed(Uint8Array.from([3, 0, 5, 5]));       // the mouse: none of LEARN's
+  check(typed === "80 c5" && V.irHeard(typed) === "{IR 80 c5}", "IR: the typing read: " + JSON.stringify(typed));
+  const r2 = new B.KeyReader();
+  check(r2.feed(Uint8Array.from([1, 0, 0, 0x04, 0, 0])) + r2.feed(Uint8Array.from([1, 0, 0, 0x04, 0, 0])) === "a",
+        "IR: a key held is one press");
+}
+
+// --- 6. backups, against the page's ---------------------------------------------
+{
+  const C = {
+    scrypt: async (pass, salt, { N, r, p, length }) =>
+      Uint8Array.from(scryptSync(Buffer.from(pass), Buffer.from(salt), length, { N, r, p, maxmem: 256 * 1024 * 1024 })),
+    gcmEncrypt: (key, iv, ad, plain) => {
+      const c = createCipheriv("aes-256-gcm", key, iv);
+      c.setAAD(ad);
+      return Uint8Array.from(Buffer.concat([c.update(plain), c.final(), c.getAuthTag()]));
+    },
+    gcmDecrypt: (key, iv, ad, data) => {
+      const d = createDecipheriv("aes-256-gcm", key, iv);
+      d.setAAD(ad);
+      d.setAuthTag(data.slice(-16));
+      return Uint8Array.from(Buffer.concat([d.update(data.slice(0, -16)), d.final()]));
+    },
+    random: (n) => Uint8Array.from(nodeRandom(n)),
+  };
+  const image = randomBytes(512);
+  image.set(new Uint8Array(12).fill(0xff), K.PASS_ADDR);
+  const meta = { serial: "7DD5DC7E", firmware: 18, saved: "2026-11-14" };
+  const rejects = async (p, msg) => { try { await p; return false; } catch (e) { return e.message === msg; } };
+
+  // base64, against Node's
+  for (let n = 0; n < 8; n++) {
+    const b = randomBytes(n);
+    check(K.base64(b) === Buffer.from(b).toString("base64") && hex(K.unbase64(K.base64(b))) === hex(b), `base64 of ${n} bytes`);
+  }
+  check(K.unbase64("abc") === null && K.unbase64("a=bc") === null && K.unbase64("ab==ab==") === null && K.unbase64("a!==") === null,
+        "unbase64: broken text refused");
+
+  const plain = await K.makeBackup(image, null, meta, C);
+  check(K.readBackupHeader(plain).encrypted === false && hex(await K.openBackup(plain, null, C)) === hex(image), "backup: in the clear, both ways");
+  const pw = "correct horse";
+  const enc = await K.makeBackup(image, pw, meta, C);
+  check(K.readBackupHeader(enc).encrypted === true && hex(await K.openBackup(enc, pw, C)) === hex(image), "backup: encrypted, both ways");
+  check(await rejects(K.openBackup(enc, "wrong", C), "backup-wrong-password"), "backup: a wrong password");
+  const f = JSON.parse(enc);
+  f.serial = "00000000";
+  check(await rejects(K.openBackup(JSON.stringify(f), pw, C), "backup-wrong-password"), "backup: the header is bound in");
+  const dear = JSON.parse(enc);
+  dear.kdf.N = 1 << 20;
+  check(await rejects(K.openBackup(JSON.stringify(dear), pw, C), "backup-not-one"), "backup: no dearer than the page's");
+  check(await rejects(K.openBackup("{", null, C), "backup-not-one") && await rejects(K.openBackup('{"format":"x"}', null, C), "backup-not-one"),
+        "backup: not one");
+  check(await rejects(K.openBackup(JSON.stringify({ ...JSON.parse(plain), version: 2 }), null, C), "backup-other-map"), "backup: another version");
+  const pimg = Uint8Array.from(image);
+  pimg.set(Uint8Array.from([...Buffer.from(pw).subarray(0, 12)]), K.PASS_ADDR);
+  check(K.passwordFits(image, null) && K.passwordFits(pimg, pw) && !K.passwordFits(pimg, "other") && !K.passwordFits(pimg, null),
+        "backup: the password inside");
+
+  if (existsSync(tree + "/web/backup.js") && globalThis.crypto && globalThis.crypto.subtle) {
+    const P = createRequire(import.meta.url)(tree + "/web/backup.js");
+    // the page's, opened here; ours, opened by the page
+    const pageEnc = await P.makeBackup(image, pw, meta);
+    const pagePlain = await P.makeBackup(image, null, meta);
+    check(hex(await K.openBackup(pageEnc, pw, C)) === hex(image), "backup: the page's encrypted one opens here");
+    check(hex(await K.openBackup(pagePlain, null, C)) === hex(image), "backup: the page's plain one opens here");
+    check(hex(await P.openBackup(enc, pw)) === hex(image), "backup: ours opens on the page (encrypted)");
+    check(hex(await P.openBackup(plain, null)) === hex(image), "backup: ours opens on the page (plain)");
+    check(same(P.readBackupHeader(enc), K.readBackupHeader(enc)), "backup: the same header read");
+  } else {
+    console.log("backup.js: DigiMacroAsm's web/backup.js (or WebCrypto) not here: the page's side skipped");
+  }
+
+  // the key file
+  const key = randomBytes(16);
+  const text = K.keyFileText("7DD5DC7E", key, "DigiMacro key for board 7DD5DC7E");
+  check(hex(K.keyFromFile(text, "7DD5DC7E").key) === hex(key), "key file: read back");
+  check(hex(K.keyFromFile("# x\n11111111 " + hex(randomBytes(16)) + "\n7dd5dc7e " + hex(key), "7DD5DC7E").key) === hex(key), "key file: this board's line");
+  check(K.keyFromFile("7DD5DC7E 0123456789abcdef", "7DD5DC7E").error === "key-v2-host", "key file: a v2 host key");
+  check(K.keyFromFile("nothing here", "7DD5DC7E").error === "key-not-in-file", "key file: none");
 }
 
 console.log(`digimacro node tests: ${checks - fails} of ${checks} passed`);

@@ -163,8 +163,9 @@ tests: `tests/scan_digest.txt`).
 
 `apps/digimacro` configures a DigiMacro board, a morse-tapped macro keyboard
 on a Digispark, over [gk:usb](API.md#gkusb): its macros (TOTP codes among
-them, with keys imported from QR codes), its password, lockout and clock
-(its README says how).
+them, with keys imported from QR codes; a remote's buttons, learned from
+what the board types), its password, lockout and clock, the key to its
+secrets and backups of it, both as QR codes (its README says how).
 
 ### Why it is experimental
 
@@ -177,7 +178,9 @@ them, with keys imported from QR codes), its password, lockout and clock
   codes: that is the point, and also the opposite of what GapKeep is for. The
   keys pass through GapKeep only in RAM, never on screen, and are wiped once
   written; how well the board keeps them is the board's (DigiMacro's
-  HARDENED_MODE.md; the app shows its checklist).
+  HARDENED_MODE.md; the app shows its checklist). The secrets' key and a
+  backup leave as QR codes on the screen, for a camera: on purpose, when
+  asked for, with what they let a copy do said beside them.
 - **Its protocol and encoder are DigiMacro's own code**, from a project not
   yet published (`tools/extract_digimacro.py`), on a branch of its own until
   it is.

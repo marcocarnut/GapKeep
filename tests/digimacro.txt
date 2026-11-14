@@ -119,8 +119,47 @@ shot 09-clock-confirm
 mark
 key ret
 expect digimacro: the board's clock set to \d{10} 20
-# a password, then the lockout
+# a remote's button: {IR} in macro ".", then Learn; the simulated board
+# has no IR receiver, so nothing is heard in ten seconds, but its keyboard
+# endpoint is read meanwhile
 key esc
+key ret
+wait 0.5
+key end
+type {IR}
+wait 0.5
+# past the row's remove button, Add a macro and Read again (Write is
+# disabled: the {IR} has no button yet, and disabled buttons take no focus)
+key tab
+key tab
+key tab
+key tab
+mark
+key ret
+expect usb: device 1: digimacro reads endpoint 0x81 10
+expect digimacro: listening for a remote's button \(macro 1\) 10
+wait 1
+shot 10-learning
+expect digimacro: no remote's button heard \(0 character\(s\) typed\) 15
+# the secrets' key: made here, shown as a QR code
+key esc
+key tab
+key tab
+key tab
+key tab
+key tab
+key ret
+wait 0.5
+pad hold 4500
+mark
+key ret
+expect digimacro: a new key for secrets 20
+wait 0.5
+shot 11-key
+key esc
+wait 0.5
+key esc
+# a password, then the lockout
 key tab
 key tab
 key ret
@@ -142,7 +181,26 @@ mark
 key ret
 expect digimacro: lockout on 20
 wait 0.5
-shot 10-security
+shot 12-security
+# a backup, encrypted with the password: a QR code
+key esc
+key tab
+key tab
+key tab
+key tab
+key tab
+key tab
+key ret
+wait 0.5
+pad hold 4500
+mark
+key ret
+expect digimacro: a backup made, \d+ characters, encrypted 60
+wait 0.5
+shot 13-backup
+key esc
+wait 0.5
+key esc
 # unplugged and plugged in again: the password at the gate
 mark
 usbip detach
@@ -153,14 +211,14 @@ wait 1
 type pw-test-1
 key ret
 wait 0.5
-shot 11-gate-password
+shot 14-gate-password
 pad hold 4500
 expect digimacro: unlocked 20
 expect digimacro: read 1 macro\(s\), 1 \{totp\} key\(s\) 20
 wait 0.5
 key ret
 wait 0.5
-shot 12-read-back
+shot 15-read-back
 # the board for check_board.py
 usbip detach
 expect digimacro: device 2 unplugged 10
