@@ -376,7 +376,7 @@ function showWaiting() {
   new ui.Label({ text: t("Plug in your DigiMacro."), font: 22 });
   new ui.Label({
     width: "100%", color: MUTED,
-    text: t("Use a USB hub if the keyboard needs the only port. While this app is installed, GapKeep keeps the board to itself: its keys type nothing here."),
+    text: t("Use a USB 2.0 (or newer) hub if the keyboard needs the only port: behind a USB 1.1 hub the board is not seen. While this app is installed, GapKeep keeps the board to itself: its keys type nothing here."),
   });
   page.actions = [];
   const keys = new ui.Button({ text: t("Authenticator keys ({n} imported)", { n: S.imported.length }), onClick: () => showAccounts() });

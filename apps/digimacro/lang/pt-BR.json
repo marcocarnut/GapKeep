@@ -23,7 +23,7 @@
     "serial {serial}": "número de série {serial}",
     "Back": "Voltar",
     "Plug in your DigiMacro.": "Conecte o seu DigiMacro.",
-    "Use a USB hub if the keyboard needs the only port. While this app is installed, GapKeep keeps the board to itself: its keys type nothing here.": "Use um hub USB se o teclado ocupar a única porta. Enquanto este app estiver instalado, o GapKeep fica com a placa para si: as teclas dela não digitam nada aqui.",
+    "Use a USB 2.0 (or newer) hub if the keyboard needs the only port: behind a USB 1.1 hub the board is not seen. While this app is installed, GapKeep keeps the board to itself: its keys type nothing here.": "Use um hub USB 2.0 (ou mais novo) se o teclado ocupar a única porta: atrás de um hub USB 1.1 a placa não é vista. Enquanto este app estiver instalado, o GapKeep fica com a placa para si: as teclas dela não digitam nada aqui.",
     "Authenticator keys ({n} imported)": "Chaves do autenticador ({n} importadas)",
     "Password:": "Senha:",
     "the board's password": "a senha da placa",
