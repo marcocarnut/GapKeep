@@ -19,6 +19,8 @@ CGkUSB::TSlot CGkUSB::s_Slots[GK_USB_MAX_DEVICES];
 unsigned CGkUSB::s_nNextID = 1;
 TGkUSBEvent CGkUSB::s_Events[CGkUSB::MaxEvents];
 unsigned CGkUSB::s_nEventIn = 0;
+boolean CGkUSB::s_bNotice = FALSE;
+TGkUSBRefusal CGkUSB::s_Notice;
 unsigned CGkUSB::s_nEventCount = 0;
 
 static const char *SpeedName (TGkUSBSpeed Speed)
@@ -189,7 +191,7 @@ boolean CGkUSB::Attach (CGkUSBPort *pPort)
 				SpeedName (Info.Speed), Info.Config.interface_count,
 				Info.pClaimant->id);
 
-	QueueEvent (TRUE, Info);
+	QueueEvent (GkUSBAttached)->Info = Info;
 
 	return TRUE;
 }
@@ -207,7 +209,7 @@ void CGkUSB::Detach (CGkUSBPort *pPort)
 				pPort->StopInterrupt ();
 				pSlot->ucInterrupt = 0;
 			}
-			QueueEvent (FALSE, pSlot->Info);
+			QueueEvent (GkUSBDetached)->Info = pSlot->Info;
 			pSlot->pPort = 0;
 			return;
 		}
@@ -424,7 +426,7 @@ unsigned CGkUSBPackets::Clear (void)
 	return nDropped;
 }
 
-void CGkUSB::QueueEvent (boolean bAttached, const TGkUSBInfo &rInfo)
+TGkUSBEvent *CGkUSB::QueueEvent (TGkUSBEventKind Kind)
 {
 	if (s_nEventCount == MaxEvents)
 	{
@@ -433,9 +435,10 @@ void CGkUSB::QueueEvent (boolean bAttached, const TGkUSBInfo &rInfo)
 		s_nEventCount--;
 	}
 	TGkUSBEvent *pEvent = &s_Events[(s_nEventIn + s_nEventCount) % MaxEvents];
-	pEvent->bAttached = bAttached;
-	pEvent->Info = rInfo;
+	memset (pEvent, 0, sizeof *pEvent);
+	pEvent->Kind = Kind;
 	s_nEventCount++;
+	return pEvent;
 }
 
 boolean CGkUSB::TakeEvent (TGkUSBEvent *pEvent)
@@ -447,5 +450,27 @@ boolean CGkUSB::TakeEvent (TGkUSBEvent *pEvent)
 	*pEvent = s_Events[s_nEventIn];
 	s_nEventIn = (s_nEventIn + 1) % MaxEvents;
 	s_nEventCount--;
+	return TRUE;
+}
+
+void CGkUSB::Refused (u16 usHubVendor, u16 usHubProduct, unsigned nPort)
+{
+	CLogger::Get ()->Write (FromUSB, LogWarning, "hub %04x:%04x, port %u: a low-speed device behind"
+				" a full-speed hub can't be used (a USB 2.0 hub can)",
+				usHubVendor, usHubProduct, nPort);
+	TGkUSBRefusal Refusal = {usHubVendor, usHubProduct, nPort};
+	QueueEvent (GkUSBRefused)->Refusal = Refusal;
+	s_Notice = Refusal;
+	s_bNotice = TRUE;
+}
+
+boolean CGkUSB::TakeNotice (TGkUSBRefusal *pRefusal)
+{
+	if (!s_bNotice)
+	{
+		return FALSE;
+	}
+	*pRefusal = s_Notice;
+	s_bNotice = FALSE;
 	return TRUE;
 }

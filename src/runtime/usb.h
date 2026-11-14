@@ -131,10 +131,28 @@ struct TGkUSBInfo
 	const gk_app_t *pClaimant;	// the first available app that lists it
 };
 
+// A device left alone because the USB controller can't reach it: a
+// low-speed device behind a full-speed hub (patches/circle/0018, 0020).
+// Its own ids are not known (reading them is what would take the bus
+// down): the hub's are, and the port.
+struct TGkUSBRefusal
+{
+	u16 usHubVendor, usHubProduct;	// 0 if not known
+	unsigned nPort;			// on the hub, from 1
+};
+
+enum TGkUSBEventKind
+{
+	GkUSBAttached,
+	GkUSBDetached,
+	GkUSBRefused
+};
+
 struct TGkUSBEvent
 {
-	boolean bAttached;		// FALSE: detached
-	TGkUSBInfo Info;
+	TGkUSBEventKind Kind;
+	TGkUSBInfo Info;		// GkUSBAttached, GkUSBDetached
+	TGkUSBRefusal Refusal;		// GkUSBRefused
 };
 
 class CGkUSB
@@ -177,14 +195,23 @@ public:
 	// as CGkUSBPort::TakeInterrupt(); GkUSBGone if the device has gone
 	static int TakeInterrupt (unsigned nID, u8 *pData, unsigned nSize);
 
-	// Attaches and detaches since the last call, oldest first: TRUE and
-	// *pEvent while there is one. Called by gk:usb, from the main loop.
+	// Attaches, detaches and refusals since the last call, oldest first:
+	// TRUE and *pEvent while there is one. Called by gk:usb, from the main
+	// loop.
 	static boolean TakeEvent (TGkUSBEvent *pEvent);
+
+	// A device was left alone (TGkUSBRefusal): logged, an event for apps,
+	// and a notice for the system to show. On the Pi, Circle's hook
+	// (CUSBDevice::SetRefusedHook), called while devices are enumerated,
+	// in the main loop; in the simulator, the "usb refuse" command.
+	static void Refused (u16 usHubVendor, u16 usHubProduct, unsigned nPort);
+	// The notice to show, once: the latest refusal not yet shown
+	static boolean TakeNotice (TGkUSBRefusal *pRefusal);
 
 private:
 	static boolean ReadInfo (CGkUSBPort *pPort, TGkUSBInfo *pInfo);
 	static void ReadString (CGkUSBPort *pPort, u8 ucIndex, u16 usLangID, char *pOut);
-	static void QueueEvent (boolean bAttached, const TGkUSBInfo &rInfo);
+	static TGkUSBEvent *QueueEvent (TGkUSBEventKind Kind);
 
 	struct TSlot
 	{
@@ -199,6 +226,8 @@ private:
 	static const unsigned MaxEvents = 16;
 	static TGkUSBEvent s_Events[MaxEvents];
 	static unsigned s_nEventIn, s_nEventCount;
+	static boolean s_bNotice;
+	static TGkUSBRefusal s_Notice;
 };
 
 #endif

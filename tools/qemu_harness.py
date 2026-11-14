@@ -83,6 +83,8 @@ Scenario file: one command per line, '#' starts a comment.
                                 offers it again 0.5 s later
     usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]
                                 the simulator's own commands (docs/SIMULATOR.md)
+    usbip refuse <vid>:<pid> <port>   as a low-speed device plugged into a
+                                full-speed hub with those ids, on the Pi
     epaper plug <name> [<model>]
     epaper unplug               simulator only: the simulated e-paper panel
     epaper shot <name>          (docs/EPAPER.md): plug a panel in by name (a

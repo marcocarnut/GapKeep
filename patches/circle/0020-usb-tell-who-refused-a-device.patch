@@ -1,0 +1,74 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: usb: say when a device is left alone, so the system can tell its user
+
+0018 leaves a low-speed device behind a full-speed hub alone, and says so
+in the log only. Whoever plugged it in sees nothing happen: a DigiMacro
+never turns up, a cheap low-speed keyboard types nothing, and nothing on
+the screen says why (seen on the rig, 2026-11-14).
+
+CUSBDevice::SetRefusedHook() sets a hook that is called when that
+happens, with the hub's vendor and product ids and the port (1-based) the
+device is on: the device's own ids can't be known, since reading its
+descriptor is what takes the root port down. GapKeep shows a notice and
+tells its apps (gk:usb's onRefused).
+
+--- a/include/circle/usb/usbdevice.h
++++ b/include/circle/usb/usbdevice.h
+@@ -42,6 +42,12 @@
+ class CUSBStandardHub;
+ class CUSBEndpoint;
+ 
++// gapkeep: a device left alone because this USB controller can't reach it
++// (a low-speed one behind a full-speed hub): the hub's ids and the port
++// (1-based) it is on. Called from CUSBDevice::Initialize(), in the task
++// that enumerates devices, never in an interrupt handler.
++typedef void TUSBDeviceRefusedHook (u16 usHubVendor, u16 usHubProduct, unsigned nHubPort);
++
+ class CUSBDevice
+ {
+ public:
+@@ -88,6 +94,9 @@
+ 	void ControlTimedOut (void)			{ m_nControlTimeouts++; }
+ 	unsigned GetControlTimeouts (void) const	{ return m_nControlTimeouts; }
+ 
++	// gapkeep: see TUSBDeviceRefusedHook
++	static void SetRefusedHook (TUSBDeviceRefusedHook *pHook)	{ s_pRefusedHook = pHook; }
++
+ #if RASPPI >= 4
+ 	virtual boolean EnableHubFunction (void) = 0;
+ 
+@@ -141,6 +150,8 @@
+ #if RASPPI <= 3
+ 	static CNumberPool s_DeviceAddressPool;
+ #endif
++
++	static TUSBDeviceRefusedHook *s_pRefusedHook;	// gapkeep
+ };
+ 
+ #endif
+--- a/lib/usb/usbdevice.cpp
++++ b/lib/usb/usbdevice.cpp
+@@ -38,6 +38,8 @@
+ CNumberPool CUSBDevice::s_DeviceAddressPool (USB_FIRST_DEDICATED_ADDRESS, USB_MAX_ADDRESS);
+ #endif
+ 
++TUSBDeviceRefusedHook *CUSBDevice::s_pRefusedHook = 0;	// gapkeep
++
+ CUSBDevice::CUSBDevice (CUSBHostController *pHost, TUSBSpeed Speed, CUSBHCIRootPort *pRootPort)
+ :	m_pHost (pHost),
+ 	m_pRootPort (pRootPort),
+@@ -191,6 +193,14 @@
+ 		LogWrite (LogError, "Low-speed device behind a full-speed hub: not supported"
+ 				    " by this USB controller (use a USB 2.0 hub, or plug it in directly)");
+ 
++		if (s_pRefusedHook != 0)
++		{
++			const TUSBDeviceDescriptor *pHubDesc = m_pHub->GetDevice ()->GetDeviceDescriptor ();
++			(*s_pRefusedHook) (pHubDesc != 0 ? pHubDesc->idVendor : 0,
++					   pHubDesc != 0 ? pHubDesc->idProduct : 0,
++					   m_nHubPortIndex + 1);
++		}
++
+ 		return FALSE;
+ 	}
+ #endif
