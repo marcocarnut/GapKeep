@@ -380,6 +380,17 @@ function showWaiting() {
   });
   page.actions = [];
   const keys = new ui.Button({ text: t("Authenticator keys ({n} imported)", { n: S.imported.length }), onClick: () => showAccounts() });
+  // here, where somebody who has never seen one reads it: what DigiMacro is,
+  // with its page as a QR code
+  const about = new ui.Panel({ layout: "row", gap: wide ? 24 : 12, width: "100%", alignItems: "center" });
+  new ui.QRCode(about, { data: DIGIMACRO_URL, size: wide ? 260 : 170 });
+  const text = new ui.Container(about, { layout: "column", gap: 8, grow: 1 });
+  const font = wide ? 18 : 14;
+  new ui.Label(text, { text: t("DigiMacro is a programmable USB keyboard and mouse: learn all about it at the address in the QR code:"),
+                       width: "100%", font });
+  new ui.Label(text, { text: DIGIMACRO_URL, width: "100%", font, color: MUTED });
+  new ui.Label(text, { text: t("This app configures it, and is especially useful with GapKeep: the secrets you put in your macros stay out of reach of the online world."),
+                       width: "100%", font });
   keys.focus();
 }
 
@@ -458,22 +469,11 @@ function showHome() {
     [t("Backup and restore"), () => showBackup()],
   ];
   page.actions = [];
-  // the menu, and beside it what DigiMacro is, with its page as a QR code
-  const row = new ui.Container({ layout: "row", width: "100%", gap: wide ? 24 : 12, alignItems: "start" });
-  const menu = new ui.Container(row, { layout: "column", gap: wide ? 12 : 8, grow: 1 });
   let first = null;
   for (const [text, fn] of items) {
-    const b = new ui.Button(menu, { text, width: "100%", onClick: fn });
+    const b = new ui.Button({ text, width: wide ? 520 : "100%", onClick: fn });
     first = first || b;
   }
-  const about = new ui.Panel(row, { layout: "column", gap: 6, width: wide ? 400 : 230, alignItems: "center" });
-  const small = wide ? 16 : 12;
-  new ui.Label(about, { text: t("DigiMacro is a programmable USB keyboard and mouse: learn all about it at the address in the QR code:"),
-                        width: "100%", font: small });
-  new ui.QRCode(about, { data: DIGIMACRO_URL, size: wide ? 220 : 130 });
-  new ui.Label(about, { text: DIGIMACRO_URL, width: "100%", font: small, color: MUTED });
-  new ui.Label(about, { text: t("This app configures it, and is especially useful with GapKeep: the secrets you put in your macros stay out of reach of the online world."),
-                        width: "100%", font: small });
   first.focus();
 }
 
