@@ -24,6 +24,7 @@
 #include "../crypto/seipd.h"
 #include "../crypto/aead.h"
 #include "../crypto/argon2.h"
+#include "../crypto/scrypt.h"
 #include "../crypto/hwrng.h"
 #include "../crypto/wipe.h"
 #include <circle/util.h>
@@ -2711,8 +2712,9 @@ static JSValue js_crypto_hkdf (JSContext *ctx, JSValueConst this_val, int argc, 
 
 // --- Argon2id ---------------------------------------------------------------
 //
-// The memory is native (outside the JS heap), one area per app: allocated
-// by the first Argon2 job's first slice (not at the call: a queued job
+// The memory is native (outside the JS heap), one area per app, shared by
+// Argon2id and scrypt (their jobs run one at a time): allocated
+// by the first Argon2 or scrypt job's first slice (not at the call: a queued job
 // takes nothing), grown when a job needs more, wiped by each job's last
 // slices, and wiped and freed when the app stops. At most a quarter of the
 // board's memory (GkCryptoSetBoardMemory, at boot): 128 MiB on a 512 MB Pi
@@ -2754,10 +2756,32 @@ static int s_nArgon2SelfTest = -1;	// -1: not run; 0: passed; > 0: failed
 static gk_argon2_selftest_t s_Argon2SelfTest;
 static unsigned s_nArgon2SelfTestWork;
 
+static int s_nScryptSelfTest = -1;	// the same for scrypt
+static gk_scrypt_selftest_t s_ScryptSelfTest;
+static unsigned s_nScryptSelfTestWork;
+
+// A self-test under way (a job stopped in the middle of it) starts again
+// when the area it works in is wiped or freed
+static void KdfSelfTestsRestart (void)
+{
+	if (s_nArgon2SelfTest < 0)
+	{
+		gk_wipe (&s_Argon2SelfTest, sizeof s_Argon2SelfTest);
+		s_nArgon2SelfTestWork = 0;
+	}
+	if (s_nScryptSelfTest < 0)
+	{
+		gk_scrypt_end (&s_ScryptSelfTest.job);		// its buffers freed
+		gk_wipe (&s_ScryptSelfTest, sizeof s_ScryptSelfTest);
+		s_nScryptSelfTestWork = 0;
+	}
+}
+
 // Frees the area (wiped first if a job left it unwiped; the kernel's heap
 // zeroes it again as it frees: patches/circle/0011)
 static void Argon2FreeArea (void)
 {
+	KdfSelfTestsRestart ();
 	if (s_pArgon2Area != 0)
 	{
 		if (s_bArgon2Dirty)
@@ -2774,12 +2798,7 @@ static void Argon2FreeArea (void)
 // From the app host when an app stops: its Argon2 memory goes.
 void GkCryptoAppStopped (TGkApp *pApp)
 {
-	Argon2FreeArea ();
-	if (s_nArgon2SelfTest < 0)
-	{
-		gk_wipe (&s_Argon2SelfTest, sizeof s_Argon2SelfTest);	// under way: again next time
-		s_nArgon2SelfTestWork = 0;
-	}
+	Argon2FreeArea ();		// a self-test under way: again next time
 }
 
 // At least nBlocks blocks, a step per slice: wiping what a stopped job
@@ -2794,6 +2813,7 @@ static int Argon2Area (size_t nBlocks)
 	}
 	if (s_bArgon2Dirty && s_pArgon2Area != 0)
 	{
+		KdfSelfTestsRestart ();
 		gk_wipe (s_pArgon2Area, s_nArgon2Blocks * sizeof (gk_argon2_block_t));
 		s_bArgon2Dirty = FALSE;
 		return 0;
@@ -2821,6 +2841,7 @@ struct TGkArgon2Job
 {
 	gk_argon2_job_t Job;
 	boolean bStarted, bNoMemory, bSelfTestFailed;
+	boolean bSelfTesting;		// the self-test under way in the area: leave it be
 	uint32_t nPasses, nLanes, nMemory, nLength;
 	u8 *pPassword;			// copies (wiped), until the job starts
 	size_t nPassword;
@@ -2833,7 +2854,7 @@ static boolean Argon2Step (void *pParam, unsigned nDeadline)
 	TGkArgon2Job *pState = (TGkArgon2Job *) pParam;
 	if (!pState->bStarted)
 	{
-		int nArea = Argon2Area (gk_argon2_blocks (pState->nMemory, pState->nLanes));
+		int nArea = pState->bSelfTesting ? 1 : Argon2Area (gk_argon2_blocks (pState->nMemory, pState->nLanes));
 		if (nArea < 0)
 		{
 			pState->bNoMemory = TRUE;
@@ -2846,6 +2867,7 @@ static boolean Argon2Step (void *pParam, unsigned nDeadline)
 		// the self-test first, the first time, in the same area
 		if (s_nArgon2SelfTest < 0)
 		{
+			pState->bSelfTesting = TRUE;
 			unsigned nStart = CTimer::Get ()->GetClockTicks ();
 			int nResult;
 			do
@@ -2859,6 +2881,7 @@ static boolean Argon2Step (void *pParam, unsigned nDeadline)
 				s_bArgon2Dirty = TRUE;
 				return TRUE;
 			}
+			pState->bSelfTesting = FALSE;
 			s_nArgon2SelfTest = -nResult;
 			CLogger::Get ()->Write ("crypto", s_nArgon2SelfTest == 0 ? LogNotice : LogError,
 						s_nArgon2SelfTest == 0 ? "Argon2id self-test passed (%u us of work, in a job's slices)"
@@ -3127,6 +3150,286 @@ static JSValue js_crypto_openpgp_s2k_argon2 (JSContext *ctx, JSValueConst this_v
 			    Args[6], 16, "openpgpS2kArgon2");
 }
 
+// --- scrypt -----------------------------------------------------------------
+//
+// RFC 7914, in the Argon2 area (above: native, one per app, wiped by each
+// job's last slices, freed when the app stops), under the same limit: V,
+// 128 * r * N bytes, at most a quarter of the board's memory
+// (crypto.limits().argon2MemoryKiB). B is p * 128 * r bytes (r * p at most
+// 256: 32 KiB), on the heap; the work, N * r * p, at most 2^24 (16 times
+// BIP38's N = 16384, r = 8, p = 8).
+
+static const uint32_t MaxScryptN = 1u << 24;
+static const double MaxScryptWork = (double) (1u << 24);
+static const size_t MaxScryptSalt = 1024;
+static const size_t MaxScryptPassword = 65536;
+
+struct TGkScryptJob
+{
+	gk_scrypt_job_t Job;
+	boolean bStarted, bNoMemory, bSelfTestFailed, bSelfTesting;
+	uint32_t nN, nR, nP, nLength;
+	u8 *pPassword;			// copies (wiped), until the job starts
+	size_t nPassword;
+	u8 *pSalt;
+	size_t nSalt;
+};
+
+static void ScryptDropInputs (TGkScryptJob *pState)
+{
+	if (pState->pPassword != 0)
+	{
+		gk_wipe (pState->pPassword, pState->nPassword);
+		free (pState->pPassword);
+		pState->pPassword = 0;
+	}
+	if (pState->pSalt != 0)
+	{
+		gk_wipe (pState->pSalt, pState->nSalt);
+		free (pState->pSalt);
+		pState->pSalt = 0;
+	}
+}
+
+// BlockMix calls per step: about 2 KiB of Salsa20/8 input, whatever r
+static uint32_t ScryptBudget (uint32_t nR)
+{
+	return 16 / nR + 1;
+}
+
+static boolean ScryptStep (void *pParam, unsigned nDeadline)
+{
+	TGkScryptJob *pState = (TGkScryptJob *) pParam;
+	if (!pState->bStarted)
+	{
+		size_t nBytes = gk_scrypt_memory (pState->nN, pState->nR);
+		if (nBytes < GK_SCRYPT_SELFTEST_BYTES)
+		{
+			nBytes = GK_SCRYPT_SELFTEST_BYTES;
+		}
+		int nArea = pState->bSelfTesting ? 1 : Argon2Area ((nBytes + GK_ARGON2_BLOCK - 1) / GK_ARGON2_BLOCK);
+		if (nArea < 0)
+		{
+			pState->bNoMemory = TRUE;
+			return FALSE;
+		}
+		if (nArea == 0)
+		{
+			return TRUE;		// more of it in the next slice
+		}
+		// the self-test first, the first time, in the same area
+		if (s_nScryptSelfTest < 0)
+		{
+			pState->bSelfTesting = TRUE;
+			unsigned nStart = CTimer::Get ()->GetClockTicks ();
+			int nResult;
+			do
+			{
+				nResult = gk_scrypt_selftest_step (&s_ScryptSelfTest, s_pArgon2Area, 16);
+			}
+			while (nResult > 0 && Before (nDeadline));
+			s_nScryptSelfTestWork += CTimer::Get ()->GetClockTicks () - nStart;
+			if (nResult > 0)
+			{
+				s_bArgon2Dirty = TRUE;
+				return TRUE;
+			}
+			pState->bSelfTesting = FALSE;
+			s_nScryptSelfTest = -nResult;
+			CLogger::Get ()->Write ("crypto", s_nScryptSelfTest == 0 ? LogNotice : LogError,
+						s_nScryptSelfTest == 0 ? "scrypt self-test passed (%u us of work, in a job's slices)"
+								       : "scrypt self-test FAILED (%u)",
+						s_nScryptSelfTest == 0 ? s_nScryptSelfTestWork : (unsigned) s_nScryptSelfTest);
+			gk_scrypt_end (&s_ScryptSelfTest.job);
+			gk_wipe (&s_ScryptSelfTest, sizeof s_ScryptSelfTest);
+			if (s_nScryptSelfTest != 0)
+			{
+				pState->bSelfTestFailed = TRUE;
+				return FALSE;
+			}
+			if (!Before (nDeadline))
+			{
+				return TRUE;
+			}
+		}
+		if (s_nScryptSelfTest > 0)
+		{
+			pState->bSelfTestFailed = TRUE;
+			return FALSE;
+		}
+		int nResult = gk_scrypt_begin (&pState->Job, s_pArgon2Area, pState->nN, pState->nR, pState->nP,
+					       pState->pPassword, pState->nPassword, pState->pSalt, pState->nSalt,
+					       pState->nLength);
+		ScryptDropInputs (pState);
+		if (nResult != 0)
+		{
+			pState->bNoMemory = TRUE;	// -3 (the parameters were checked)
+			return FALSE;
+		}
+		pState->bStarted = TRUE;
+		s_bArgon2Dirty = TRUE;
+		if (!Before (nDeadline))
+		{
+			return TRUE;
+		}
+	}
+	boolean bMore;
+	uint32_t nBudget = ScryptBudget (pState->nR);
+	do
+	{
+		bMore = gk_scrypt_step (&pState->Job, nBudget);
+	}
+	while (bMore && Before (nDeadline));
+	if (!bMore)
+	{
+		s_bArgon2Dirty = FALSE;		// the job's last steps wiped it
+	}
+	return bMore;
+}
+
+static double ScryptProgress (void *pParam)
+{
+	TGkScryptJob *pState = (TGkScryptJob *) pParam;
+	return pState->bStarted ? gk_scrypt_progress (&pState->Job) : 0;
+}
+
+static JSValue ScryptFinish (JSContext *ctx, void *pParam)
+{
+	TGkScryptJob *pState = (TGkScryptJob *) pParam;
+	if (pState->bSelfTestFailed)
+	{
+		return JS_ThrowInternalError (ctx, "scrypt is disabled: its self-test failed");
+	}
+	if (pState->bNoMemory)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: %u KiB of memory are not available now",
+					   (unsigned) (gk_scrypt_memory (pState->nN, pState->nR) / 1024));
+	}
+	return NewUint8Array (ctx, pState->Job.out, pState->Job.outlen);
+}
+
+static void ScryptFree (JSContext *ctx, void *pParam)
+{
+	TGkScryptJob *pState = (TGkScryptJob *) pParam;
+	ScryptDropInputs (pState);
+	gk_scrypt_end (&pState->Job);
+	gk_wipe (pState, sizeof *pState);
+	delete pState;
+	// a job dropped half-way leaves the area dirty: wiped before reuse,
+	// or when the app stops (GkCryptoAppStopped)
+}
+
+// Aborted while running: once begun, the job's next slices wipe the area
+// (the job then rejects); before that, dropped
+static boolean ScryptAbort (void *pParam)
+{
+	TGkScryptJob *pState = (TGkScryptJob *) pParam;
+	if (!pState->bStarted)
+	{
+		return FALSE;
+	}
+	gk_scrypt_abort (&pState->Job);
+	return TRUE;
+}
+
+static const TGkJobOps s_ScryptJob = { "scrypt", ScryptStep, ScryptProgress, ScryptFinish, ScryptFree, ScryptAbort };
+
+// scrypt(password, salt, { N, r, p, length, onProgress, signal }) -> Promise<Uint8Array>
+static JSValue js_crypto_scrypt (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (s_nScryptSelfTest > 0)
+	{
+		return JS_ThrowInternalError (ctx, "scrypt is disabled: its self-test failed");
+	}
+	if (!HashesOK (ctx) || !Pbkdf2OK (ctx))
+	{
+		return JS_EXCEPTION;
+	}
+	JSValueConst Options = argc > 2 ? argv[2] : JS_UNDEFINED;
+	if (!JS_IsObject (Options))
+	{
+		return JS_ThrowTypeError (ctx, "scrypt: options { N, r, p, length } expected");
+	}
+	uint32_t nN, nR, nP, nLength;
+	if (   !GetWhole (ctx, Options, "N", 2, MaxScryptN, &nN, "scrypt")
+	    || !GetWhole (ctx, Options, "r", 1, GK_SCRYPT_MAX_RP, &nR, "scrypt")
+	    || !GetWhole (ctx, Options, "p", 1, GK_SCRYPT_MAX_RP, &nP, "scrypt")
+	    || !GetWhole (ctx, Options, "length", 1, GK_SCRYPT_MAX_OUT, &nLength, "scrypt"))
+	{
+		return JS_EXCEPTION;
+	}
+	if ((nN & (nN - 1)) != 0)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: N must be a power of two (2 to 2^24)");
+	}
+	if (nR == 1 && nN >= 65536)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: N must be below 2^16 when r is 1 (RFC 7914, 6)");
+	}
+	if (nR * nP > GK_SCRYPT_MAX_RP)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: r * p must be at most %u", (unsigned) GK_SCRYPT_MAX_RP);
+	}
+	double fKiB = 128.0 * nR * nN / 1024;
+	if (fKiB > s_nArgon2MaxKiB)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: 128 * r * N is %.0f KiB, more than scrypt may use here (%u KiB, a "
+					   "quarter of the board's memory: crypto.limits().argon2MemoryKiB)", fKiB,
+					   (unsigned) s_nArgon2MaxKiB);
+	}
+	if ((double) nN * nR * nP > MaxScryptWork)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: N * r * p must be at most 2^24");
+	}
+	CBytesArg Password (ctx);
+	boolean bException;
+	if (!Password.Get (argc > 0 ? argv[0] : JS_UNDEFINED, &bException))
+	{
+		return bException ? JS_EXCEPTION : ThrowBytesExpected (ctx, "scrypt", "password");
+	}
+	if (Password.Length () > MaxScryptPassword)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: the password may be at most %u bytes", (unsigned) MaxScryptPassword);
+	}
+	CBytesOnly Salt (ctx);
+	if (!Salt.Get (argc > 1 ? argv[1] : JS_UNDEFINED, "scrypt", "salt"))
+	{
+		return JS_EXCEPTION;
+	}
+	if (Salt.Length () > MaxScryptSalt)
+	{
+		return JS_ThrowRangeError (ctx, "scrypt: salt must be at most %u bytes", (unsigned) MaxScryptSalt);
+	}
+	TGkJobOptions JobOptions;
+	if (!GkJobOnProgress (ctx, Options, "scrypt", &JobOptions))
+	{
+		return JS_EXCEPTION;
+	}
+	TGkScryptJob *pState = new TGkScryptJob;
+	memset (pState, 0, sizeof *pState);
+	pState->nN = nN;
+	pState->nR = nR;
+	pState->nP = nP;
+	pState->nLength = nLength;
+	pState->nPassword = Password.Length ();
+	pState->pPassword = (u8 *) malloc (pState->nPassword ? pState->nPassword : 1);
+	pState->nSalt = Salt.Length ();
+	pState->pSalt = (u8 *) malloc (pState->nSalt ? pState->nSalt : 1);
+	if (pState->pPassword == 0 || pState->pSalt == 0)
+	{
+		free (pState->pPassword);
+		free (pState->pSalt);
+		delete pState;
+		GkJobOptionsFree (ctx, &JobOptions);
+		return JS_ThrowOutOfMemory (ctx);
+	}
+	memcpy (pState->pPassword, Password.Data (), pState->nPassword);
+	memcpy (pState->pSalt, Salt.Data (), pState->nSalt);
+	JSValue Promise = GkJobStart (ctx, &s_ScryptJob, pState, JobOptions);
+	GkJobOptionsFree (ctx, &JobOptions);
+	return Promise;
+}
+
 // The classes, once per runtime; their prototypes, once per context.
 static void InitClasses (JSContext *ctx)
 {
@@ -3207,6 +3510,7 @@ static const JSCFunctionListEntry s_CryptoFunctions[] =
 	JS_CFUNC_DEF ("hkdf", 5, js_crypto_hkdf),
 	JS_CFUNC_DEF ("argon2id", 3, js_crypto_argon2id),
 	JS_CFUNC_DEF ("openpgpS2kArgon2", 7, js_crypto_openpgp_s2k_argon2),
+	JS_CFUNC_DEF ("scrypt", 3, js_crypto_scrypt),
 	JS_CFUNC_DEF ("limits", 0, js_crypto_limits),
 	JS_CFUNC_DEF ("ripemd160", 1, js_crypto_ripemd160),
 	JS_CFUNC_DEF ("hash160", 1, js_crypto_hash160),
