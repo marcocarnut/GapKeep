@@ -1,0 +1,54 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: dwhci: a short packet ends an IN data stage with split transactions
+
+A low-speed device behind a high-speed hub is reached with split
+transactions through the hub's transaction translator, one packet a
+transaction. CDWHCITransferStageData::TransactionComplete() then counted
+packets down to the end of the requested length, and never stopped at a
+short packet, as the controller does by itself without splits. A device
+that has sent all it has answers the next IN with NAK until the status
+stage, so a request for more than the device returns timed out: on the
+rig, a DigiMacro (V-USB) behind a Genesys hub answered GET_DESCRIPTOR for
+the language IDs (wLength 255, 4 bytes sent) with NAK to every following
+complete-split. Circle's own string reads ask for the exact length (4,
+then bLength), so they never met it.
+
+A zero-length IN packet is now counted as 0 bytes, not a whole packet
+(the transfer size the controller leaves is right for IN; Linux dwc2
+reads it the same way), so it ends the stage too.
+
+--- a/lib/usb/dwhcixferstagedata.cpp
++++ b/lib/usb/dwhcixferstagedata.cpp
+@@ -301,7 +301,8 @@
+ 	    && m_nBytesPerTransaction > 0)
+ 	{
+ 		if (   m_bSplitTransaction
+-		    && m_bSplitComplete)
++		    && m_bSplitComplete
++		    && !m_bIn)		// gapkeep: an IN's count is right, 0 too (see below)
+ 		{
+ 			nBytesTransfered = m_nMaxPacketSize * nPacketsTransfered;
+ 		}
+@@ -353,6 +354,22 @@
+ 
+ 	m_nPackets -= nPacketsTransfered;
+ 
++	// gapkeep: a short packet (or a zero-length one) ends an IN data stage.
++	// Without split transactions the controller sees to that; with them
++	// each packet is a transaction of its own, and the next one was asked
++	// for anyway. A device that has sent all it had answers that with NAK
++	// until the status stage, so a request for more than the device has
++	// (a string descriptor read with wLength 255, through a hub's
++	// transaction translator) timed out.
++	if (   m_bSplitTransaction
++	    && m_bSplitComplete
++	    && m_bIn
++	    && nPacketsTransfered > 0
++	    && nBytesTransfered < m_nMaxPacketSize)
++	{
++		m_nPackets = 0;
++	}
++
+ 	if (!m_bSplitTransaction)
+ 	{
+ 		if (!IsIsochronous ())

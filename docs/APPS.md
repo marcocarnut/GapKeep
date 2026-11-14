@@ -388,6 +388,11 @@ interrupt, bulk or isochronous endpoints, and no standard requests but
 those that read (descriptors, status). What the device sends is data like
 anything typed: check it before using it, and don't log it.
 
+A low-speed device (most macro keyboards, anything built on V-USB) works
+plugged in directly, or behind a high-speed (USB 2.0) hub. Behind a hub
+that only runs at full speed, the Pi's USB controller cannot reach it
+without losing the whole bus, so GapKeep leaves it alone and logs why.
+
 **A listed device is claimed whole.** When it is plugged in (or is in at
 boot), and some available app's manifest lists it, the system gives it to
 apps and to nothing else: none of its interfaces gets a system driver.

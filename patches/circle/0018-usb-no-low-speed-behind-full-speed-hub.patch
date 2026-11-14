@@ -1,0 +1,56 @@
+From: GapKeep <noreply@gapkeep.org>
+Subject: usb: leave a low-speed device behind a full-speed hub alone
+
+A DigiMacro (V-USB, low speed) behind a cheap hub that only runs at full
+speed ("USB2.0 HUB", a05:7211) took the whole USB bus down, at power-on
+and when plugged in later: the keyboard on the same hub was lost too,
+until the next reboot (seen on the rig, 2026-11-13).
+
+Such a hub has no transaction translator, so the low-speed device is
+reached with PRE packets on a full-speed root port. A trace of the
+channel and port registers showed the first SETUP to the device end in a
+transaction error, with the root port disabled by the controller itself
+(HPRT 0x21405 -> 0x21401); no frames went out after that, and every other
+request timed out. Linux's dwc2 driver refuses the same case for the same
+reason (from NetBSD: low-speed packets on a full-speed root port make it
+stop responding).
+
+CUSBDevice::Initialize() now gives up on a low-speed device behind a hub
+when there is no split transfer (no high-speed hub with a translator on
+the way), before sending it anything, and says why. The hub and its
+other devices keep working. A high-speed (USB 2.0) hub, or plugging the
+device in directly, is unaffected. Pi 1-3 and Zero only (DWC OTG); xHCI
+handles this in hardware.
+
+--- a/lib/usb/usbdevice.cpp
++++ b/lib/usb/usbdevice.cpp
+@@ -177,10 +177,28 @@
+ 	}
+ #endif
+ 
++#if RASPPI <= 3
++	// gapkeep: a low-speed device behind a hub that runs at full speed (no
++	// transaction translator, so no split transfers) is reached with PRE
++	// packets on a full-speed root port. The DWC OTG controller can't do
++	// that: its root port disables itself at the first such packet, and
++	// every other device on the bus is lost with it (the keyboard too).
++	// Leave this one device alone; a high-speed (USB 2.0) hub works.
++	if (   m_Speed == USBSpeedLow
++	    && m_pHub != 0
++	    && !m_bSplitTransfer)
++	{
++		LogWrite (LogError, "Low-speed device behind a full-speed hub: not supported"
++				    " by this USB controller (use a USB 2.0 hub, or plug it in directly)");
++
++		return FALSE;
++	}
++#endif
++
+ 	assert (m_pDeviceDesc == 0);
+ 	m_pDeviceDesc = new TUSBDeviceDescriptor;
+ 	assert (m_pDeviceDesc != 0);
+-	
++
+ 	assert (m_pHost != 0);
+ 	assert (m_pEndpoint0 != 0);
+ 	

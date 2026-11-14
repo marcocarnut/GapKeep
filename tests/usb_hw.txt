@@ -1,7 +1,9 @@
 # Needs a test build (make TEST=1): the USB probe is built in.
-# Rig only: a DigiMacro (16c0:27db) on a USB hub with the rig's gadget
-# keyboard, the hub in the Zero's "USB" port (docs/RIG.md, "A USB device for
-# gk:usb"). The USB probe (tests/apps/usbprobe) as in the simulator
+# Rig only: a DigiMacro (16c0:27db) on a high-speed (USB 2.0) hub with the
+# rig's gadget keyboard, the hub in the Zero's "USB" port (docs/RIG.md, "A
+# USB device for gk:usb"). Behind a full-speed hub the DigiMacro is refused
+# (patches/circle/0018) and this fails. The USB probe (tests/apps/usbprobe)
+# as in the simulator
 # (tests/usb_usbip_device.txt), through Circle and a real hub: the board is
 # claimed whole (its keyboard ignored), its descriptors read, and its INFO
 # feature report answered.

@@ -103,7 +103,14 @@ int CGkUSBClaimed::Control (u8 ucRequestType, u8 ucRequest, u16 usValue, u16 usI
 	}
 	delete pSetup;
 
-	if (nResult > usLength)
+	// a failed request's result is negative (GkUSBStall, GkUSBTimeout...):
+	// nothing to copy. Copying it as a length (size_t) overwrote all of
+	// memory, so a device that let one IN request time out (a DigiMacro
+	// behind a hub, on the rig) or stalled one froze the system.
+	if (nResult < 0)
+	{
+	}
+	else if (nResult > usLength)
 	{
 		nResult = GkUSBError;
 	}
