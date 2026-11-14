@@ -47,6 +47,10 @@
 //                           stays plugged in, through unplugs and replugs
 //                           by the server, until
 //   usbip detach [<busid>]  pulls its cable (none given: every one)
+//   usbip refuse VVVV:PPPP N
+//                           as the Pi when a low-speed device is plugged
+//                           into port N of a full-speed hub with those
+//                           ids: refused (a notice, gk:usb's onRefused)
 //   quit                    exit
 //
 // Usage: gksim [--size WxH] [--card DIR] [--builtin DIR] [--app ID] [--lang TAG] [--epaper MODEL]
@@ -76,6 +80,7 @@
 //
 #include "sim.h"
 #include "../../src/runtime/epd.h"
+#include "../../src/runtime/usb.h"
 #include <circle/timer.h>
 #include <ff.h>
 #include <lvgl/lvgl/lvgl.h>
@@ -463,9 +468,25 @@ static int Command (char *pLine)
 				printf ("#error usbip detach: no such device\n");
 			}
 		}
+		else if (strncmp (pArgs, "refuse ", 7) == 0)
+		{
+			// as the Pi when a low-speed device is plugged in behind a
+			// full-speed hub (patches/circle/0018, 0020)
+			unsigned nVendor, nProduct, nPort;
+			if (   sscanf (pArgs + 7, "%x:%x %u", &nVendor, &nProduct, &nPort) == 3
+			    && nVendor <= 0xFFFF && nProduct <= 0xFFFF && nPort >= 1)
+			{
+				CGkUSB::Refused (nVendor, nProduct, nPort);
+			}
+			else
+			{
+				printf ("#error usbip refuse <hub vid>:<hub pid> <port>\n");
+			}
+		}
 		else
 		{
-			printf ("#error usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]\n");
+			printf ("#error usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]"
+				" | usbip refuse <hub vid>:<hub pid> <port>\n");
 		}
 	}
 	else if (strcmp (pLine, "quit") == 0)

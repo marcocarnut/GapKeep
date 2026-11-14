@@ -949,6 +949,7 @@ has none.
 | `open(device)` | A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, interruptIn, stopInterruptIn, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first). |
 | `onAttach(fn)` | Calls `fn` with each listed device plugged in while the app runs. Returns a function that removes it. |
 | `onDetach(fn)` | Calls `fn` with each listed device unplugged. Its handle's transfers fail from then on (`"detached"`); plugged in again it is a new device, with a new `id`. |
+| `onRefused(fn)` | Calls `fn` when a device is plugged in that the USB controller can't reach, and that the system therefore leaves alone: `{ reason, hub: { vid, pid }, port }`. The one reason so far, `"low-speed-behind-full-speed-hub"`: on the Pi Zero, a low-speed device (a V-USB board such as the DigiMacro, many keyboards and mice) behind a hub that runs at full speed (USB 1.1) only, which has no transaction translator; a USB 2.0 hub, or the Pi's own port, works. The device's ids can't be known (reading them is what would take the bus down), so every app whose manifest lists devices hears of it, whichever it was: `hub` is the hub's ids (`0` if unknown), `port` its port (from 1). The system shows a notice of its own as well. Returns a function that removes it. |
 
 ---
 

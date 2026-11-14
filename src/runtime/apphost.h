@@ -21,6 +21,7 @@
 #include <lvgl/lvgl.h>
 #include "../kbdindev.h"
 #include "bundle.h"
+#include "usb.h"
 
 extern "C" {
 #include <quickjs.h>
@@ -128,6 +129,14 @@ private:
 	void ClearError (void);
 	static void ErrorBannerEvent (lv_event_t *e);
 
+	// A USB device the controller can't reach (usb.h, TGkUSBRefusal):
+	// a notice at the top, whatever app runs, until a click, a key or
+	// UsbNoticeMs
+	void ShowUSBNotice (const TGkUSBRefusal &rRefusal);
+	void ClearUSBNotice (void);
+	static void USBNoticeEvent (lv_event_t *e);
+	static void USBNoticeTimer (lv_timer_t *pTimer);
+
 	static boolean KeyHook (const TGkKey &rKey, void *pParam);
 	static void HomeHandler (void *pParam);
 	static boolean StopHandler (void *pParam);
@@ -142,6 +151,8 @@ private:
 	TGkApp m_App;			// the running app (pBundle == 0: none)
 	lv_obj_t *m_pIdleScreen;	// shown while switching apps
 	lv_obj_t *m_pErrorBanner;	// on the top layer, survives app switches
+	lv_obj_t *m_pUSBNotice;		// the same
+	lv_timer_t *m_pUSBNoticeTimer;
 
 	const gk_app_t *m_pPendingLaunch;
 	volatile boolean m_bHomeRequested;	// set from IRQ context

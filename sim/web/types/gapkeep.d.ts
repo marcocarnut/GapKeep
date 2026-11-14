@@ -888,6 +888,8 @@ declare module "gk:usb" {
   export function onAttach(fn: (device: UsbDevice) => void): () => void;
   /** Calls `fn` with each listed device unplugged. Its handle's transfers fail from then on (`"detached"`); plugged in again it is a new device, with a new `id`. */
   export function onDetach(fn: (device: UsbDevice) => void): () => void;
+  /** Calls `fn` when a device is plugged in that the USB controller can't reach, and that the system therefore leaves alone: `{ reason, hub: { vid, pid }, port }`. The one reason so far, `"low-speed-behind-full-speed-hub"`: on the Pi Zero, a low-speed device (a V-USB board such as the DigiMacro, many keyboards and mice) behind a hub that runs at full speed (USB 1.1) only, which has no transaction translator; a USB 2.0 hub, or the Pi's own port, works. The device's ids can't be known (reading them is what would take the bus down), so every app whose manifest lists devices hears of it, whichever it was: `hub` is the hub's ids (`0` if unknown), `port` its port (from 1). The system shows a notice of its own as well. Returns a function that removes it. */
+  export function onRefused(fn: (refusal: { reason: "low-speed-behind-full-speed-hub"; hub: { vid: number; pid: number }; port: number }) => void): () => void;
 }
 
 declare module "gk:zlib" {

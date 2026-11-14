@@ -83,6 +83,8 @@ Scenario file: one command per line, '#' starts a comment.
                                 offers it again 0.5 s later
     usbip attach <host>:<port> [<busid>] | usbip detach [<busid>]
                                 the simulator's own commands (docs/SIMULATOR.md)
+    usbip refuse <vid>:<pid> <port>   as a low-speed device plugged into a
+                                full-speed hub with those ids, on the Pi
     pad <command>               simulator only: a line to the touch pad of a
                                 simulated DigiMacro (simavr-softusb's bridge:
                                 "pad hold", "pad tap", "pad .-"), through the

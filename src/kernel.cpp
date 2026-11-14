@@ -19,6 +19,7 @@
 #include "runtime/wheel.h"
 #include "usbclaim.h"
 #include <circle/usb/usbdevicefactory.h>
+#include <circle/usb/usbdevice.h>
 #include "crypto/wipe.h"
 
 // same rate as the serial bootloader (FLASHBAUD), so one terminal setting
@@ -181,6 +182,9 @@ boolean CKernel::Initialize (void)
 	if (bOK)
 	{
 		CUSBDeviceFactory::SetClaimHook (GkUSBClaimHook);
+		// a device the controller can't reach: a notice, and gk:usb's
+		// onRefused (patches/circle/0020)
+		CUSBDevice::SetRefusedHook (CGkUSB::Refused);
 		bOK = m_USBHCI.Initialize ();
 	}
 

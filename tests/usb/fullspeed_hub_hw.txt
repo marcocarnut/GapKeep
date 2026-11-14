@@ -1,0 +1,23 @@
+# Needs a test build (make TEST=1).
+# Rig only, and not among tests/*.txt: a DigiMacro (16c0:27db) on a hub that
+# runs at full speed only (USB 1.1, no transaction translator: a05:7211,
+# "USB2.0 HUB"), with the rig's gadget keyboard on the same hub, in the
+# Zero's "USB" port. The DigiMacro is left alone (patches/circle/0018), the
+# keyboard keeps working, and the system shows why (0020): a notice, which a
+# key dismisses.
+#
+#   tools/rig/run_hw_tests.sh tests/usb/fullspeed_hub_hw.txt
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+expect Low-speed device behind a full-speed hub: not supported 60
+expect usb: hub [0-9a-f]{4}:[0-9a-f]{4}, port \d: a low-speed device behind a full-speed hub can't be used \(a USB 2.0 hub can\) 60
+expect Keyboard attached 60
+expect launcher ready 60
+expect apphost: USB notice shown: hub [0-9a-f]{4}:[0-9a-f]{4}, port \d 20
+wait 1
+serialshot 01-notice
+key esc
+expect apphost: USB notice dismissed 20
+wait 1
+serialshot 02-dismissed
+reject usbdev.*DigiMacro
