@@ -5,9 +5,11 @@
 // and product ids an available app lists in its manifest ("usb"). A claimed
 // device is the app's alone: none of its interfaces gets a system driver,
 // so a keyboard among them types nothing (patches/circle/0014). Apps reach
-// it through control transfers on endpoint 0 only, at most
-// GK_USB_MAX_TRANSFER bytes each, with a timeout; nothing else (no
-// interrupt, bulk or isochronous endpoints).
+// it through control transfers on endpoint 0, at most GK_USB_MAX_TRANSFER
+// bytes each, with a timeout, and by reading what one interrupt IN
+// endpoint of the device sends (a packet of at most GK_USB_MAX_TRANSFER
+// bytes at a time, kept until the app takes it); nothing else (no
+// interrupt OUT, bulk or isochronous endpoints).
 //
 // The device itself is behind a CGkUSBPort: on the Pi, Circle's driver for
 // a claimed device (src/usbclaim.cpp); in the simulator, a device imported
@@ -33,6 +35,7 @@
 #define GK_USB_TIMEOUT_MS	1000	// an app's control transfer, each stage
 #define GK_USB_MAX_TIMEOUTS	2	// then the device's transfers fail at once,
 					// until it is plugged in again
+#define GK_USB_MAX_PACKETS	32	// an interrupt endpoint's, kept until taken
 
 enum TGkUSBSpeed
 {
@@ -48,7 +51,32 @@ enum
 	GkUSBStall = -1,	// the device refused the request
 	GkUSBTimeout = -2,	// no answer in time
 	GkUSBError = -3,	// anything else that went wrong on the bus
-	GkUSBGone = -4		// the device is not there
+	GkUSBGone = -4,		// the device is not there
+	GkUSBNone = -5		// TakeInterrupt(): no packet has come
+};
+
+// An interrupt endpoint's packets, as they come, until they are taken
+// (GK_USB_MAX_PACKETS; past that the newest are dropped, and counted). On
+// the Pi, Put() runs in the USB interrupt handler: the port makes Take()
+// and Clear() atomic with it.
+class CGkUSBPackets
+{
+public:
+	CGkUSBPackets (void) : m_nIn (0), m_nCount (0), m_nDropped (0) {}
+	~CGkUSBPackets (void) { Clear (); }
+
+	void Put (const u8 *pData, unsigned nLength);
+	int Take (u8 *pData, unsigned nSize);	// its length, or GkUSBNone
+	unsigned Clear (void);			// wiped; returns how many were dropped
+
+private:
+	struct TPacket
+	{
+		u8 Data[GK_USB_MAX_TRANSFER];
+		u8 nLength;
+	};
+	TPacket m_Packets[GK_USB_MAX_PACKETS];
+	unsigned m_nIn, m_nCount, m_nDropped;
 };
 
 // bmRequestType, as USB 2.0 9.3
@@ -75,6 +103,19 @@ public:
 			     u8 *pData, u16 usLength, unsigned nTimeoutMs) = 0;
 
 	virtual TGkUSBSpeed GetSpeed (void) const = 0;
+
+	// Starts reading an interrupt IN endpoint of the device (one of its
+	// configuration's, max_packet <= GK_USB_MAX_TRANSFER: CGkUSB checks),
+	// one at a time: what it sends is kept until taken. FALSE if it can't.
+	virtual boolean StartInterrupt (const gk_usb_endpoint_t &rEndpoint) = 0;
+
+	// Stops it (if reading), and wipes what was not taken
+	virtual void StopInterrupt (void) = 0;
+
+	// The oldest packet not taken, into pData (nSize bytes, at least the
+	// endpoint's max_packet): its length, GkUSBNone if none has come, or
+	// GkUSBError once the endpoint has failed (it is stopped then).
+	virtual int TakeInterrupt (u8 *pData, unsigned nSize) = 0;
 };
 
 // A claimed device, as apps see it
@@ -127,6 +168,15 @@ public:
 	static int Transfer (const char *pAppID, unsigned nID, u8 ucRequestType, u8 ucRequest,
 			     u16 usValue, u16 usIndex, u8 *pData, u16 usLength);
 
+	// An app's reading of the interrupt IN endpoint ucEndpoint (its
+	// address, 0x81...) of device nID: it must be one of the device's,
+	// with packets of at most GK_USB_MAX_TRANSFER bytes. One endpoint a
+	// device: another stops the first. 0, or a Gk USB result < 0 (logged).
+	static int StartInterrupt (const char *pAppID, unsigned nID, u8 ucEndpoint);
+	static void StopInterrupt (unsigned nID);
+	// as CGkUSBPort::TakeInterrupt(); GkUSBGone if the device has gone
+	static int TakeInterrupt (unsigned nID, u8 *pData, unsigned nSize);
+
 	// Attaches and detaches since the last call, oldest first: TRUE and
 	// *pEvent while there is one. Called by gk:usb, from the main loop.
 	static boolean TakeEvent (TGkUSBEvent *pEvent);
@@ -141,6 +191,7 @@ private:
 		CGkUSBPort *pPort;	// 0: free
 		TGkUSBInfo Info;
 		unsigned nTimeouts;
+		u8 ucInterrupt;		// the endpoint being read, or 0
 	};
 	static TSlot s_Slots[GK_USB_MAX_DEVICES];
 	static unsigned s_nNextID;

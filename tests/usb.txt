@@ -27,7 +27,13 @@ expect usbip: stub-1: 16 bytes for 8 asked 10
 expect usbtest: ok standard OUT is the system's 10
 expect usbtest: ok 16 waiting, no more 10
 expect usb: usbtest: controlIn refused: 16 transfers waiting 10
+expect usb: device 1: usbtest reads endpoint 0x81 \(packets of up to 8 bytes, every 10\) 10
+expect usbtest: ok interruptIn: a packet, then those kept 10
+expect usbtest: ok interruptIn: a burst while none awaits 10
+expect usbtest: ok stopInterruptIn: the one waiting rejects 10
+expect usbtest: ok interruptIn again, after a stop 10
 expect usbtest: ok a transfer waiting when closed 10
+expect usbtest: ok a packet awaited when closed 10
 expect usbtest: ok a timeout 10
 expect usbtest: ok it works after one timeout 10
 expect usb: device 1: timed out 2 times: no more transfers until it is plugged in again 10

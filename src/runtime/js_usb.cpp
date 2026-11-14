@@ -3,7 +3,14 @@
 //
 // The "gk:usb" module: control transfers to the USB devices an app's
 // manifest lists ("usb": ["16c0:27db"]), claimed for it by the system
-// (usb.h). See docs/API.md.
+// (usb.h), and the packets one interrupt IN endpoint of each sends. See
+// docs/API.md.
+//
+// interruptIn() is a promise of the endpoint's next packet. Reading starts
+// at the first call and goes on, in the port (on the Pi, in the USB
+// interrupt handler), until close() or stopInterruptIn(): packets that
+// come while no promise waits are kept for the next calls, so a device
+// that sends a burst (a keyboard typing) loses none of it.
 //
 // Transfers are promises. Each is queued, and the main loop does one per
 // pass (GkUSBUpdate, from the app host), so the screen is drawn between
@@ -57,6 +64,19 @@ struct TGkUSBHandle
 {
 	unsigned nSerial;		// 0: free
 	unsigned nDevice;
+	u8 ucInterrupt;			// the endpoint read, or 0
+	boolean bWaiting;		// an interruptIn() promise waits: these
+	JSValue Resolve, Reject;
+};
+
+// an interruptIn() promise whose reading was stopped: rejected at the next
+// pass (as a control transfer closed while it waited), not inside the
+// call that stopped it, before the app could await it
+struct TGkUSBStopped
+{
+	boolean bUsed;
+	const char *pCode, *pMessage;
+	JSValue Resolve, Reject;
 };
 
 struct TGkUSBState
@@ -66,6 +86,7 @@ struct TGkUSBState
 	unsigned nNextHandle;
 	TGkUSBRequest Queue[MaxQueued];
 	unsigned nQueueIn, nQueued;
+	TGkUSBStopped Stopped[MaxHandles];
 };
 
 static TGkUSBState *GetState (JSContext *ctx)
@@ -129,6 +150,23 @@ static JSValue NewInfo (JSContext *ctx, const TGkUSBInfo &rInfo)
 		JS_SetPropertyUint32 (ctx, Interfaces, i, If);
 	}
 	JS_SetPropertyStr (ctx, Obj, "interfaces", Interfaces);
+	static const char *const Types[] = {"control", "isochronous", "bulk", "interrupt"};
+	JSValue Endpoints = JS_NewArray (ctx);
+	for (unsigned i = 0; i < rInfo.Config.endpoint_count; i++)
+	{
+		const gk_usb_endpoint_t *pEp = &rInfo.Config.endpoints[i];
+		JSValue Ep = JS_NewObject (ctx);
+		JS_SetPropertyStr (ctx, Ep, "address", JS_NewUint32 (ctx, pEp->address));
+		JS_SetPropertyStr (ctx, Ep, "interface", JS_NewUint32 (ctx, pEp->interface));
+		JS_SetPropertyStr (ctx, Ep, "direction",
+				   JS_NewString (ctx, pEp->address & GK_USB_EP_IN ? "in" : "out"));
+		JS_SetPropertyStr (ctx, Ep, "type",
+				   JS_NewString (ctx, Types[pEp->attributes & GK_USB_EP_TYPE_MASK]));
+		JS_SetPropertyStr (ctx, Ep, "maxPacketSize", JS_NewUint32 (ctx, pEp->max_packet));
+		JS_SetPropertyStr (ctx, Ep, "interval", JS_NewUint32 (ctx, pEp->interval));
+		JS_SetPropertyUint32 (ctx, Endpoints, i, Ep);
+	}
+	JS_SetPropertyStr (ctx, Obj, "endpoints", Endpoints);
 	return Obj;
 }
 
@@ -546,6 +584,153 @@ static JSValue js_usb_set_feature (JSContext *ctx, JSValueConst this_val, int ar
 	return Result;
 }
 
+// --- the interrupt endpoint ---------------------------------------------------
+
+// Its promise settled: with a packet (nResult >= 0, pIn), or rejected with
+// the code nResult says (or pCode)
+static void SettleInterrupt (JSContext *ctx, TGkUSBHandle *pHandle, int nResult, const u8 *pIn,
+			     const char *pCode = 0, const char *pMessage = 0)
+{
+	if (!pHandle->bWaiting)
+	{
+		return;
+	}
+	pHandle->bWaiting = FALSE;
+	JSValue Resolve = pHandle->Resolve, Reject = pHandle->Reject;
+	pHandle->Resolve = pHandle->Reject = JS_UNDEFINED;
+	JSValue Value;
+	if (nResult >= 0)
+	{
+		JSValue Buffer = JS_NewArrayBufferCopy (ctx, pIn, nResult);
+		JSValue Args[3] = {Buffer, JS_NewUint32 (ctx, 0), JS_NewUint32 (ctx, nResult)};
+		Value = JS_NewTypedArray (ctx, 3, Args, JS_TYPED_ARRAY_UINT8);
+		JS_FreeValue (ctx, Buffer);
+	}
+	else
+	{
+		if (pCode == 0)
+		{
+			pCode = nResult == GkUSBGone ? "detached" : "error";
+			pMessage = nResult == GkUSBGone ? "usb: the device was detached"
+							: "usb: the endpoint failed";
+		}
+		Value = NewError (ctx, pCode, pMessage);
+	}
+	JSValue Result = CAppHost::Get ()->Call (nResult >= 0 ? Resolve : Reject, JS_UNDEFINED,
+						 1, &Value);
+	JS_FreeValue (ctx, Result);
+	JS_FreeValue (ctx, Value);
+	JS_FreeValue (ctx, Resolve);
+	JS_FreeValue (ctx, Reject);
+}
+
+// The handle stops reading: its promise, if one waits, rejected (pCode)
+static void ReleaseInterrupt (JSContext *ctx, TGkUSBHandle *pHandle, const char *pCode,
+			      const char *pMessage)
+{
+	if (pHandle->ucInterrupt != 0)
+	{
+		CGkUSB::StopInterrupt (pHandle->nDevice);
+		pHandle->ucInterrupt = 0;
+	}
+	if (!pHandle->bWaiting)
+	{
+		return;
+	}
+	TGkUSBState *pState = GetState (ctx);
+	for (unsigned i = 0; i < MaxHandles; i++)
+	{
+		TGkUSBStopped *p = &pState->Stopped[i];
+		if (!p->bUsed)
+		{
+			p->bUsed = TRUE;
+			p->pCode = pCode;
+			p->pMessage = pMessage;
+			p->Resolve = pHandle->Resolve;
+			p->Reject = pHandle->Reject;
+			pHandle->Resolve = pHandle->Reject = JS_UNDEFINED;
+			pHandle->bWaiting = FALSE;
+			return;
+		}
+	}
+	SettleInterrupt (ctx, pHandle, GkUSBError, 0, pCode, pMessage);	// all taken: at once
+}
+
+// interruptIn(endpoint)
+static JSValue js_usb_interrupt_in (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv,
+				    int magic, JSValue *func_data)
+{
+	static const char Function[] = "interruptIn";
+	unsigned nSerial, nEndpoint;
+	const TGkUSBInfo *pInfo = HandleDevice (ctx, func_data, Function, &nSerial);
+	if (   pInfo == 0
+	    || !GetInt (ctx, argc > 0 ? argv[0] : JS_UNDEFINED, "the endpoint (its address)", 255,
+			&nEndpoint, Function))
+	{
+		return JS_EXCEPTION;
+	}
+	TGkUSBHandle *pHandle = FindHandle (GetState (ctx), nSerial);
+	assert (pHandle != 0);
+	if (pHandle->bWaiting)
+	{
+		return JS_ThrowTypeError (ctx, "%s: a packet is awaited already: await it first",
+					  Function);
+	}
+	boolean bFound = FALSE;
+	for (unsigned i = 0; i < pInfo->Config.endpoint_count; i++)
+	{
+		const gk_usb_endpoint_t *p = &pInfo->Config.endpoints[i];
+		bFound = bFound || (   p->address == nEndpoint
+				    && (p->attributes & GK_USB_EP_TYPE_MASK) == GK_USB_EP_INTERRUPT
+				    && (p->address & GK_USB_EP_IN)
+				    && p->max_packet <= GK_USB_MAX_TRANSFER);
+	}
+	if (!bFound)
+	{
+		return JS_ThrowRangeError (ctx, "%s: 0x%02x is not an interrupt IN endpoint of the device"
+					   " (of at most %u bytes a packet)", Function, nEndpoint,
+					   GK_USB_MAX_TRANSFER);
+	}
+	if (pHandle->ucInterrupt != nEndpoint)
+	{
+		pHandle->ucInterrupt = 0;
+		int nResult = CGkUSB::StartInterrupt (CAppHost::GetApp (ctx)->pBundle->id,
+						      pHandle->nDevice, (u8) nEndpoint);
+		if (nResult < 0)
+		{
+			return JS_Throw (ctx, NewError (ctx, nResult == GkUSBGone ? "detached" : "error",
+							nResult == GkUSBGone ? "usb: the device was detached"
+									     : "usb: the endpoint can't be read"));
+		}
+		pHandle->ucInterrupt = (u8) nEndpoint;
+	}
+
+	JSValue Funcs[2];
+	JSValue Promise = JS_NewPromiseCapability (ctx, Funcs);
+	if (JS_IsException (Promise))
+	{
+		return Promise;
+	}
+	pHandle->Resolve = Funcs[0];
+	pHandle->Reject = Funcs[1];
+	pHandle->bWaiting = TRUE;
+	return Promise;
+}
+
+// stopInterruptIn(): no more is read; a promise waiting rejects ("closed")
+static JSValue js_usb_stop_interrupt (JSContext *ctx, JSValueConst this_val, int argc,
+				      JSValueConst *argv, int magic, JSValue *func_data)
+{
+	uint32_t nSerial = 0;
+	JS_ToUint32 (ctx, &nSerial, func_data[0]);
+	TGkUSBHandle *pHandle = FindHandle (GetState (ctx), nSerial);
+	if (pHandle != 0)
+	{
+		ReleaseInterrupt (ctx, pHandle, "closed", "usb: reading the endpoint was stopped");
+	}
+	return JS_UNDEFINED;
+}
+
 // close(): the handle's transfers still waiting are rejected ("closed")
 static JSValue js_usb_close (JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv,
 			     int magic, JSValue *func_data)
@@ -556,6 +741,7 @@ static JSValue js_usb_close (JSContext *ctx, JSValueConst this_val, int argc, JS
 	TGkUSBHandle *pHandle = FindHandle (pState, nSerial);
 	if (pHandle != 0)
 	{
+		ReleaseInterrupt (ctx, pHandle, "closed", "usb: the device was closed");
 		pHandle->nSerial = 0;
 	}
 	return JS_UNDEFINED;
@@ -613,6 +799,7 @@ static JSValue js_usb_open (JSContext *ctx, JSValueConst this_val, int argc, JSV
 		}
 		if (pHandle->nSerial != 0 && CGkUSB::Find (pHandle->nDevice) == 0)
 		{
+			ReleaseInterrupt (ctx, pHandle, "detached", "usb: the device was detached");
 			pHandle->nSerial = 0;		// its device is gone
 		}
 		if (pFree == 0 && pHandle->nSerial == 0)
@@ -623,12 +810,17 @@ static JSValue js_usb_open (JSContext *ctx, JSValueConst this_val, int argc, JSV
 	assert (pFree != 0);		// as many as there can be devices
 	pFree->nSerial = pState->nNextHandle++;
 	pFree->nDevice = nID;
+	pFree->ucInterrupt = 0;
+	pFree->bWaiting = FALSE;
+	pFree->Resolve = pFree->Reject = JS_UNDEFINED;
 
 	struct { const char *pName; int nArgs; JSCFunctionData *pFunc; } Methods[] = {
 		{"controlIn", 2, js_usb_control_in},
 		{"controlOut", 2, js_usb_control_out},
 		{"getFeatureReport", 3, js_usb_get_feature},
 		{"setFeatureReport", 3, js_usb_set_feature},
+		{"interruptIn", 1, js_usb_interrupt_in},
+		{"stopInterruptIn", 0, js_usb_stop_interrupt},
 		{"close", 0, js_usb_close},
 	};
 	JSValue Serial = JS_NewUint32 (ctx, pFree->nSerial);
@@ -784,6 +976,55 @@ void GkUSBUpdate (TGkApp *pApp)
 		JS_FreeValue (ctx, Info);
 	}
 
+	// interruptIn() promises whose reading was stopped
+	for (unsigned i = 0; pState != 0 && i < MaxHandles; i++)
+	{
+		TGkUSBStopped *p = &pState->Stopped[i];
+		if (!p->bUsed)
+		{
+			continue;
+		}
+		JSContext *ctx = pApp->pContext;
+		JSValue Resolve = p->Resolve, Reject = p->Reject;
+		JSValue Error = NewError (ctx, p->pCode, p->pMessage);
+		p->bUsed = FALSE;
+		p->Resolve = p->Reject = JS_UNDEFINED;
+		JSValue Result = CAppHost::Get ()->Call (Reject, JS_UNDEFINED, 1, &Error);
+		JS_FreeValue (ctx, Result);
+		JS_FreeValue (ctx, Error);
+		JS_FreeValue (ctx, Resolve);
+		JS_FreeValue (ctx, Reject);
+		if (pApp->pUSB == 0)
+		{
+			return;			// the app ended in a callback
+		}
+	}
+
+	// interrupt packets, to the promises waiting for them
+	for (unsigned i = 0; pState != 0 && i < MaxHandles; i++)
+	{
+		TGkUSBHandle *pHandle = &pState->Handles[i];
+		if (pHandle->nSerial == 0 || !pHandle->bWaiting)
+		{
+			continue;
+		}
+		u8 Packet[GK_USB_MAX_TRANSFER];
+		int nResult = CGkUSB::TakeInterrupt (pHandle->nDevice, Packet, sizeof Packet);
+		if (nResult != GkUSBNone)
+		{
+			if (nResult < 0)
+			{
+				pHandle->ucInterrupt = 0;	// stopped (failed) or gone
+			}
+			SettleInterrupt (pApp->pContext, pHandle, nResult, Packet);
+		}
+		gk_wipe (Packet, sizeof Packet);
+		if (pApp->pUSB == 0)
+		{
+			return;			// the app ended in a callback
+		}
+	}
+
 	// one transfer a pass
 	if (pState == 0 || pState->nQueued == 0)
 	{
@@ -829,6 +1070,24 @@ void GkUSBFree (TGkApp *pApp)
 		for (unsigned i = 0; i < MaxHandlers; i++)
 		{
 			JS_FreeValue (ctx, pState->Handlers[k][i]);
+		}
+	}
+	for (unsigned i = 0; i < MaxHandles; i++)
+	{
+		TGkUSBHandle *pHandle = &pState->Handles[i];
+		if (pHandle->nSerial != 0 && pHandle->ucInterrupt != 0)
+		{
+			CGkUSB::StopInterrupt (pHandle->nDevice);
+		}
+		if (pHandle->bWaiting)
+		{
+			JS_FreeValue (ctx, pHandle->Resolve);
+			JS_FreeValue (ctx, pHandle->Reject);
+		}
+		if (pState->Stopped[i].bUsed)
+		{
+			JS_FreeValue (ctx, pState->Stopped[i].Resolve);
+			JS_FreeValue (ctx, pState->Stopped[i].Reject);
 		}
 	}
 	while (pState->nQueued > 0)

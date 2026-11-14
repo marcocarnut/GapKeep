@@ -102,6 +102,31 @@ static int ParseConfig (const Bytes &b, gk_usb_config_t *pConfig)
 				Fail ("an interface that is not in the descriptor", b);
 			}
 		}
+		if (pConfig->endpoint_count > GK_USB_MAX_ENDPOINTS)
+		{
+			Fail ("too many endpoints", b);
+		}
+		for (unsigned i = 0; i < pConfig->endpoint_count; i++)
+		{
+			const gk_usb_endpoint_t *pEp = &pConfig->endpoints[i];
+			bool bIf = false;
+			for (unsigned k = 0; k < pConfig->interface_count; k++)
+			{
+				bIf = bIf || pConfig->interfaces[k].number == pEp->interface;
+			}
+			// of a kept interface, not endpoint 0, and in the input as an
+			// endpoint descriptor
+			bool bFound = false;
+			for (size_t j = 0; j + 7 <= b.size () && !bFound; j++)
+			{
+				bFound =    b[j] >= 7 && b[j + 1] == 5 && b[j + 2] == pEp->address
+					 && b[j + 3] == pEp->attributes && b[j + 6] == pEp->interval;
+			}
+			if (!bIf || (pEp->address & 0x0F) == 0 || pEp->max_packet > 0x7FF || !bFound)
+			{
+				Fail ("an endpoint that is not in the descriptor", b);
+			}
+		}
 	}
 	else
 	{
@@ -203,6 +228,42 @@ static void FixedCases (void)
 	    || Config.interfaces[0].cls != 3 || Config.interfaces[1].cls != 0xFF || Config.value != 1)
 	{
 		Fail ("the stub's configuration", StubConfig);
+	}
+	if (   Config.endpoint_count != 1 || Config.endpoints[0].interface != 0
+	    || Config.endpoints[0].address != 0x81 || Config.endpoints[0].attributes != 3
+	    || Config.endpoints[0].max_packet != 8 || Config.endpoints[0].interval != 10)
+	{
+		Fail ("the stub's interrupt endpoint", StubConfig);
+	}
+	{
+		// an endpoint descriptor of 6 bytes
+		Bytes S = StubConfig;
+		S[27] = 6;
+		S.erase (S.begin () + 33);
+		S[2] = (uint8_t) S.size ();
+		if (ParseConfig (S, &Config) == 0)
+		{
+			Fail ("an endpoint descriptor of 6 bytes", S);
+		}
+	}
+	{
+		// an alternate setting's endpoints are not kept
+		Bytes A = StubConfig;
+		Bytes Alt {9, 4, 0, 1, 1, 3, 1, 1, 0, 7, 5, 0x82, 3, 8, 0, 10};
+		A.insert (A.end (), Alt.begin (), Alt.end ());
+		A[2] = (uint8_t) A.size ();
+		if (ParseConfig (A, &Config) != 0 || Config.endpoint_count != 1)
+		{
+			Fail ("an alternate setting's endpoint kept", A);
+		}
+		// nor is an endpoint before any interface allowed
+		Bytes E {9, 2, 0, 0, 1, 1, 0, 0x80, 50, 7, 5, 0x81, 3, 8, 0, 10,
+			 9, 4, 0, 0, 1, 3, 1, 1, 0};
+		E[2] = (uint8_t) E.size ();
+		if (ParseConfig (E, &Config) == 0)
+		{
+			Fail ("an endpoint before any interface", E);
+		}
 	}
 	Bytes Cut (StubConfig.begin (), StubConfig.end () - 1);
 	Cut[2] = (uint8_t) Cut.size ();

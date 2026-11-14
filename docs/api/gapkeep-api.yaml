@@ -1036,10 +1036,13 @@ modules:
       plugged in (those plugged in at boot too): none of its interfaces gets
       a system driver, so a keyboard or mouse in it is ignored, and what it
       types never reaches the system. Every app that lists it can use it, as
-      apps run one at a time. Only endpoint 0 is reached: control transfers
-      of at most 64 bytes, each stage given 1 s ([ARCHITECTURE.md](ARCHITECTURE.md),
-      "Security model"). After two timeouts a device's transfers fail at once,
-      until it is plugged in again.
+      apps run one at a time. What is reached is endpoint 0, by control
+      transfers of at most 64 bytes, each stage given 1 s, and one interrupt
+      IN endpoint at a time, read (`interruptIn()`): what a keyboard in the
+      device types comes to the app as its reports, and nowhere else
+      ([ARCHITECTURE.md](ARCHITECTURE.md), "Security model"). After two
+      timeouts a device's control transfers fail at once, until it is
+      plugged in again.
 
       ```js
       usb.onAttach(async (device) => {
@@ -1078,15 +1081,17 @@ modules:
       | `controlOut(setup, data?)` | A control transfer writing `data` (a `Uint8Array`, `ArrayBuffer` or array of bytes; 0 to 64). Resolves to the number of bytes sent. |
       | `getFeatureReport(id, length, iface?)` | HID GET_REPORT of feature report `id` on interface `iface` (default: the first HID interface). Resolves to the data stage as the device sent it: with report ids, most devices put the id first. |
       | `setFeatureReport(id, data, iface?)` | HID SET_REPORT: the data stage is the id (unless it is 0) followed by `data`, at most 64 bytes in all, as Linux and WebHID send it. Resolves to `undefined`. |
-      | `close()` | Closes the handle; its transfers still waiting reject with `"closed"`. |
+      | `interruptIn(endpoint)` | The next packet from an interrupt IN endpoint (its address, as in `device.endpoints`: `0x81`...; packets of at most 64 bytes). Resolves to a `Uint8Array`, when the device sends one. The first call starts reading the endpoint, and reading goes on until `stopInterruptIn()` or `close()`: packets that come while no call waits are kept for the next ones (32; past that they are dropped, and the log says how many), so a burst (a key typed, pressed and released) is not lost. One call waits at a time (a `TypeError` otherwise), and one endpoint is read at a time: another stops the first. A `RangeError` if `endpoint` is not an interrupt IN endpoint of the device. |
+      | `stopInterruptIn()` | Stops reading the endpoint, and drops what was kept; a call still waiting rejects with `"closed"`. |
+      | `close()` | Closes the handle; its transfers still waiting reject with `"closed"`, and its endpoint is no longer read. |
 
       Nothing a transfer carries is logged: the log has the request's numbers
       and length when one fails or is refused. In the simulator, devices come
       over USB/IP ([SIMULATOR.md](SIMULATOR.md#usb-devices)); the browser IDE
       has none.
     exports:
-      - {name: list, signature: list(), ts: '() => UsbDevice[]', md: 'The devices plugged in that the manifest lists: `{ id, vid, pid, manufacturer, product, serial, speed, interfaces }`. `id` is new each time a device is plugged in; `manufacturer` and `product` are what the device says (`""` if nothing), with characters that could change how text reads (control, bidi, invisible) as `?`; `serial` likewise, or `null`; `speed` `"low"`, `"full"`, `"high"` or `"super"`; `interfaces` `[{ number, class, subclass, protocol }]` (alternate setting 0 of each).'}
-      - {name: open, signature: open(device), ts: '(device: UsbDevice | number) => UsbHandle', md: 'A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first).'}
+      - {name: list, signature: list(), ts: '() => UsbDevice[]', md: 'The devices plugged in that the manifest lists: `{ id, vid, pid, manufacturer, product, serial, speed, interfaces, endpoints }`. `id` is new each time a device is plugged in; `manufacturer` and `product` are what the device says (`""` if nothing), with characters that could change how text reads (control, bidi, invisible) as `?`; `serial` likewise, or `null`; `speed` `"low"`, `"full"`, `"high"` or `"super"`; `interfaces` `[{ number, class, subclass, protocol }]` (alternate setting 0 of each); `endpoints` `[{ address, interface, direction, type, maxPacketSize, interval }]`, those of these interfaces (`direction` `"in"` or `"out"`, `type` `"interrupt"`, `"bulk"` or `"isochronous"`; at most 16).'}
+      - {name: open, signature: open(device), ts: '(device: UsbDevice | number) => UsbHandle', md: 'A handle on a device of `list()` or of an event (or its `id`): `{ device, controlIn, controlOut, getFeatureReport, setFeatureReport, interruptIn, stopInterruptIn, close }`, above. A `TypeError` if it is not plugged in, not listed, or open already (`close()` it first).'}
       - {name: onAttach, signature: onAttach(fn), ts: '(fn: (device: UsbDevice) => void) => () => void', md: 'Calls `fn` with each listed device plugged in while the app runs. Returns a function that removes it.'}
       - {name: onDetach, signature: onDetach(fn), ts: '(fn: (device: UsbDevice) => void) => () => void', md: 'Calls `fn` with each listed device unplugged. Its handle''s transfers fail from then on (`"detached"`); plugged in again it is a new device, with a new `id`.'}
 
@@ -1212,6 +1217,9 @@ shared_ts:
       readonly serial: string | null;
       readonly speed: "low" | "full" | "high" | "super";
       readonly interfaces: { number: number; class: number; subclass: number; protocol: number }[];
+      readonly endpoints: { address: number; interface: number; direction: "in" | "out";
+                            type: "interrupt" | "bulk" | "isochronous"; maxPacketSize: number;
+                            interval: number }[];
     }
   UsbSetup: |
     {
@@ -1232,6 +1240,9 @@ shared_ts:
       getFeatureReport(id: number, length: number, iface?: number): Promise<Uint8Array>;
       /** HID SET_REPORT (feature): the id (unless 0), then data; 64 bytes in all at most */
       setFeatureReport(id: number, data: Uint8Array | ArrayBuffer | number[], iface?: number): Promise<void>;
+      /** the next packet from an interrupt IN endpoint (0x81...); reading goes on, and what comes is kept, until stopInterruptIn() or close() */
+      interruptIn(endpoint: number): Promise<Uint8Array>;
+      stopInterruptIn(): void;
       close(): void;
     }
   AppInfo: |

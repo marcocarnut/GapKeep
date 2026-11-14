@@ -5,6 +5,7 @@
 //
 #include "usb.h"
 #include "appstore.h"
+#include "../crypto/wipe.h"
 #include <circle/logger.h>
 #include <circle/util.h>
 #include <assert.h>
@@ -177,6 +178,7 @@ boolean CGkUSB::Attach (CGkUSBPort *pPort)
 	pSlot->pPort = pPort;
 	pSlot->Info = Info;
 	pSlot->nTimeouts = 0;
+	pSlot->ucInterrupt = 0;
 
 	// names the device gives are shown as text (usbdesc.h); the serial
 	// number by its length only
@@ -200,6 +202,11 @@ void CGkUSB::Detach (CGkUSBPort *pPort)
 		if (pSlot->pPort == pPort)
 		{
 			CLogger::Get ()->Write (FromUSB, LogNotice, "device %u: detached", pSlot->Info.nID);
+			if (pSlot->ucInterrupt != 0)
+			{
+				pPort->StopInterrupt ();
+				pSlot->ucInterrupt = 0;
+			}
 			QueueEvent (FALSE, pSlot->Info);
 			pSlot->pPort = 0;
 			return;
@@ -279,6 +286,142 @@ int CGkUSB::Transfer (const char *pAppID, unsigned nID, u8 ucRequestType, u8 ucR
 	}
 
 	return nResult;
+}
+
+int CGkUSB::StartInterrupt (const char *pAppID, unsigned nID, u8 ucEndpoint)
+{
+	TSlot *pSlot = 0;
+	for (unsigned i = 0; i < GK_USB_MAX_DEVICES; i++)
+	{
+		if (s_Slots[i].pPort != 0 && s_Slots[i].Info.nID == nID)
+		{
+			pSlot = &s_Slots[i];
+		}
+	}
+	if (pSlot == 0)
+	{
+		return GkUSBGone;
+	}
+	if (pSlot->ucInterrupt == ucEndpoint)
+	{
+		return 0;
+	}
+
+	const gk_usb_endpoint_t *pEndpoint = 0;
+	for (unsigned i = 0; i < pSlot->Info.Config.endpoint_count; i++)
+	{
+		const gk_usb_endpoint_t *p = &pSlot->Info.Config.endpoints[i];
+		if (   p->address == ucEndpoint
+		    && (p->address & GK_USB_EP_IN)
+		    && (p->attributes & GK_USB_EP_TYPE_MASK) == GK_USB_EP_INTERRUPT
+		    && p->max_packet > 0
+		    && p->max_packet <= GK_USB_MAX_TRANSFER)
+		{
+			pEndpoint = p;
+		}
+	}
+	if (pEndpoint == 0)
+	{
+		CLogger::Get ()->Write (FromUSB, LogWarning, "device %u: %s: endpoint 0x%02x is not an"
+					" interrupt IN endpoint of at most %u bytes", nID, pAppID,
+					ucEndpoint, GK_USB_MAX_TRANSFER);
+		return GkUSBError;
+	}
+
+	if (pSlot->ucInterrupt != 0)
+	{
+		pSlot->pPort->StopInterrupt ();
+		pSlot->ucInterrupt = 0;
+	}
+	if (!pSlot->pPort->StartInterrupt (*pEndpoint))
+	{
+		CLogger::Get ()->Write (FromUSB, LogWarning, "device %u: %s: cannot read endpoint 0x%02x",
+					nID, pAppID, ucEndpoint);
+		return GkUSBError;
+	}
+	pSlot->ucInterrupt = ucEndpoint;
+	// what the endpoint sends is the app's: never logged
+	CLogger::Get ()->Write (FromUSB, LogNotice, "device %u: %s reads endpoint 0x%02x (packets"
+				" of up to %u bytes, every %u)", nID, pAppID, ucEndpoint,
+				pEndpoint->max_packet, pEndpoint->interval);
+	return 0;
+}
+
+void CGkUSB::StopInterrupt (unsigned nID)
+{
+	for (unsigned i = 0; i < GK_USB_MAX_DEVICES; i++)
+	{
+		TSlot *pSlot = &s_Slots[i];
+		if (pSlot->pPort != 0 && pSlot->Info.nID == nID && pSlot->ucInterrupt != 0)
+		{
+			pSlot->pPort->StopInterrupt ();
+			pSlot->ucInterrupt = 0;
+		}
+	}
+}
+
+int CGkUSB::TakeInterrupt (unsigned nID, u8 *pData, unsigned nSize)
+{
+	for (unsigned i = 0; i < GK_USB_MAX_DEVICES; i++)
+	{
+		TSlot *pSlot = &s_Slots[i];
+		if (pSlot->pPort != 0 && pSlot->Info.nID == nID)
+		{
+			if (pSlot->ucInterrupt == 0)
+			{
+				return GkUSBError;
+			}
+			int nResult = pSlot->pPort->TakeInterrupt (pData, nSize);
+			if (nResult == GkUSBError)
+			{
+				CLogger::Get ()->Write (FromUSB, LogWarning, "device %u: endpoint 0x%02x"
+							" failed: no more is read", nID, pSlot->ucInterrupt);
+				pSlot->pPort->StopInterrupt ();
+				pSlot->ucInterrupt = 0;
+			}
+			return nResult;
+		}
+	}
+	return GkUSBGone;
+}
+
+// --- CGkUSBPackets ----------------------------------------------------------
+
+void CGkUSBPackets::Put (const u8 *pData, unsigned nLength)
+{
+	if (m_nCount == GK_USB_MAX_PACKETS || nLength > GK_USB_MAX_TRANSFER)
+	{
+		m_nDropped++;
+		return;
+	}
+	TPacket *pPacket = &m_Packets[(m_nIn + m_nCount) % GK_USB_MAX_PACKETS];
+	memcpy (pPacket->Data, pData, nLength);
+	pPacket->nLength = (u8) nLength;
+	m_nCount++;
+}
+
+int CGkUSBPackets::Take (u8 *pData, unsigned nSize)
+{
+	if (m_nCount == 0)
+	{
+		return GkUSBNone;
+	}
+	TPacket *pPacket = &m_Packets[m_nIn];
+	int nLength = pPacket->nLength <= nSize ? pPacket->nLength : (int) nSize;
+	memcpy (pData, pPacket->Data, nLength);
+	gk_wipe (pPacket, sizeof *pPacket);
+	m_nIn = (m_nIn + 1) % GK_USB_MAX_PACKETS;
+	m_nCount--;
+	return nLength;
+}
+
+unsigned CGkUSBPackets::Clear (void)
+{
+	gk_wipe (m_Packets, sizeof m_Packets);
+	m_nIn = m_nCount = 0;
+	unsigned nDropped = m_nDropped;
+	m_nDropped = 0;
+	return nDropped;
 }
 
 void CGkUSB::QueueEvent (boolean bAttached, const TGkUSBInfo &rInfo)

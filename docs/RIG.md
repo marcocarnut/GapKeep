@@ -203,5 +203,13 @@ usbprobe: feature report 2: sent 37 bytes, got 36; the answer echoes INFO (0x40)
 
 With the rig the Zero's one USB port carries the gadget keyboard, so a
 device for gk:usb needs a hub between them: the gadget and the device on
-the hub, the hub in the Zero's "USB" port. A DigiMacro is low speed, so
-behind a full- or high-speed hub its transfers go as split transactions.
+the hub, the hub in the Zero's "USB" port. A DigiMacro is low speed, so the hub
+must be a high-speed (USB 2.0) one: its transaction translator takes the
+DigiMacro's transfers as split transactions. Behind a hub that runs at
+full speed (the Zero's log says `found (FS)` for it; a cheap "USB2.0 HUB",
+a05:7211, is one) the controller could only reach it with PRE packets,
+which disable its root port and lose the whole bus: GapKeep refuses the
+device instead (`Low-speed device behind a full-speed hub: not
+supported`, `patches/circle/0018`) and the rest of the hub keeps working.
+The rig's hub is a Genesys Logic one (05e3:0610, `found (HS)`), in the
+Zero's port, with the gadget and the DigiMacro on it.
