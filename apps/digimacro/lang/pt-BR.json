@@ -281,6 +281,7 @@
     "Restored, and read back. The board is restarting, to come back with its restored serial number...": "Restaurada, e lida de volta. A placa está reiniciando, para voltar com o número de série restaurado...",
     "{{secret}} needs the board's key: make one, or scan its QR code, in Secrets' key": "{{secret}} precisa da chave da placa: crie uma, ou leia o QR code dela, em Chave dos segredos",
     "DigiMacro is a programmable USB keyboard and mouse: learn all about it at the address in the QR code:": "O DigiMacro é um teclado e mouse USB programável: saiba tudo sobre ele no endereço do código QR:",
-    "This app configures it, and is especially useful with GapKeep: the secrets you put in your macros stay out of reach of the online world.": "Este app o configura, e é especialmente útil com o GapKeep: os segredos que você põe nas suas macros ficam fora do alcance do mundo online."
+    "This app configures it, and is especially useful with GapKeep: the secrets you put in your macros stay out of reach of the online world.": "Este app o configura, e é especialmente útil com o GapKeep: os segredos que você põe nas suas macros ficam fora do alcance do mundo online.",
+    "Something was plugged into a USB 1.1 hub, which can't reach a low-speed device such as the DigiMacro: if it was the board, plug it into a USB 2.0 hub, or straight into the Pi.": "Algo foi conectado a um hub USB 1.1, que não alcança um dispositivo de baixa velocidade como o DigiMacro: se foi a placa, conecte-a a um hub USB 2.0, ou direto no Pi."
   }
 }

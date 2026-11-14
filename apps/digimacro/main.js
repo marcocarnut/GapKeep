@@ -175,6 +175,18 @@ usb.onDetach((d) => {
   disconnected();
 });
 
+// A device the Pi can't reach was plugged in: its ids are not known, but
+// with no board here it is likely the DigiMacro, behind a USB 1.1 hub
+// (GapKeep's own notice says the same, on any screen). A system older
+// than onRefused has none.
+if (typeof usb.onRefused === "function") {
+  usb.onRefused((r) => {
+    console.log(`digimacro: a device refused (${r.reason}), port ${r.port}`);
+    if (S.handle) return;
+    notice(t("Something was plugged into a USB 1.1 hub, which can't reach a low-speed device such as the DigiMacro: if it was the board, plug it into a USB 2.0 hub, or straight into the Pi."), RED);
+  });
+}
+
 // The password once the window is open: true if the board took it. A wrong
 // one is forgotten, so it is never tried twice and never counted twice.
 async function tryUnlock() {
